@@ -34,14 +34,6 @@ void loop() {
   if (startup) {
     Serial.println();
     Serial.println("Custom program test");
-    // program.pushF32(0.1);
-    // program.pushF32(0.2);
-    // program.pushF32(0.3);
-    // program.pushF32(0.4);
-    // program.pushF32(0.5);
-    // program.push(ADD, F32);
-
-
     Serial.println("Variables  = { a: 1, b: 2, c: 3, d: 4, e: 5, f: 6 }");
     Serial.println("Function   = 10 * (1 - 'a' * ('b' + 'c' * ('c' + 'd' * ('d'-'e' *('e'-'f')))) / 'd')");
     Serial.println("RPN        = 10|1|'a'|'b'|'c'|'c'|'d'|'d'|'e'|'e'|'f'|-|*|-|*|+|*|+|'d'|/|*|-|*");
