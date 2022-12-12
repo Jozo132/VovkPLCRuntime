@@ -567,7 +567,7 @@ enum PLCRuntimeInstructionSet {
     EXIT = 0xFF         // Exit the program. This will cease the execution of the program and return an optional exit error code (uint8_t)
 };
 
-#ifdef __RUNTIME_TEST_ADVANCED_DEBUGGING__
+
 void print_OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
     switch (opcode) {
         case NOP: Serial.print(F("NOP")); break;
@@ -660,7 +660,6 @@ void print_OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
         default: Serial.print(F("UNKNOWN OPCODE")); break;
     }
 }
-#endif
 
 uint8_t get_OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
     switch (opcode) {

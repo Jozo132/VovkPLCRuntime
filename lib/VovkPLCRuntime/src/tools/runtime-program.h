@@ -89,15 +89,10 @@ public:
         if (index >= program_size) return RTE_INVALID_LINE_NUMBER;
         uint8_t opcode = program[index];
         uint8_t opcode_size = get_OPCODE_SIZE((PLCRuntimeInstructionSet) opcode);
-#ifdef __RUNTIME_TEST_ADVANCED_DEBUGGING__
         Serial.print(F("Opcode["));
         print_OPCODE_NAME((PLCRuntimeInstructionSet) opcode);
         if (opcode_size > 0) Serial.print(F("] <Buffer "));
         else Serial.print(F("] <Empty"));
-#else
-        if (opcode_size > 0)Serial.print(F("Opcode <Buffer "));
-        else Serial.print(F("Opcode <Empty"));
-#endif
         for (uint8_t i = 0; i < opcode_size; i++) {
             uint8_t value = program[index + i];
             if (value < 0x10) Serial.print('0');
