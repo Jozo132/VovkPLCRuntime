@@ -23,25 +23,25 @@
 
 // RuntimeError status codes
 enum RuntimeError {
-    SUCCESS = 0,
-    STACK_OVERFLOW,
-    STACK_UNDERFLOW,
-    CALL_STACK_OVERFLOW,
-    CALL_STACK_UNDERFLOW,
-    INVALID_INSTRUCTION,
-    INVALID_DATA_TYPE,
-    INVALID_MEMORY_ADDRESS,
-    INVALID_MEMORY_SIZE,
-    INVALID_STACK_SIZE,
-    EMPTY_STACK,
-    EXECUTION_ERROR,
-    EXECUTION_TIMEOUT,
-    PROGRAM_SIZE_EXCEEDED,
-    UNKNOWN_INSTRUCTION,
-    INVALID_LINE_NUMBER,
-    EMPTY_PROGRAM,
-    PROGRAM_POINTER_OUT_OF_BOUNDS,
-    PROGRAM_EXITED,
+    RTE_SUCCESS = 0,
+    RTE_STACK_OVERFLOW,
+    RTE_STACK_UNDERFLOW,
+    RTE_CALL_STACK_OVERFLOW,
+    RTE_CALL_STACK_UNDERFLOW,
+    RTE_INVALID_INSTRUCTION,
+    RTE_INVALID_DATA_TYPE,
+    RTE_INVALID_MEMORY_ADDRESS,
+    RTE_INVALID_MEMORY_SIZE,
+    RTE_INVALID_STACK_SIZE,
+    RTE_EMPTY_STACK,
+    RTE_EXECUTION_ERROR,
+    RTE_EXECUTION_TIMEOUT,
+    RTE_PROGRAM_SIZE_EXCEEDED,
+    RTE_UNKNOWN_INSTRUCTION,
+    RTE_INVALID_LINE_NUMBER,
+    RTE_EMPTY_PROGRAM,
+    RTE_PROGRAM_POINTER_OUT_OF_BOUNDS,
+    RTE_PROGRAM_EXITED,
 };
 
 void fstrcpy(char* buff, const char* fstr) {
@@ -124,22 +124,22 @@ public:
     void println() { stack->println(); }
 
     RuntimeError pushCall(uint16_t return_address) {
-        if (call_stack->size() >= max_call_stack_size) return STACK_OVERFLOW;
+        if (call_stack->size() >= max_call_stack_size) return RTE_STACK_OVERFLOW;
         call_stack->push(return_address);
-        return SUCCESS;
+        return RTE_SUCCESS;
     }
 
     uint16_t popCall() {
-        if (call_stack->size() == 0) return STACK_UNDERFLOW;
+        if (call_stack->size() == 0) return RTE_STACK_UNDERFLOW;
         uint16_t return_address = call_stack->pop();
         return return_address;
     }
 
     // Push an uint8_t value to the stack
     RuntimeError push(uint8_t value) {
-        if (stack->size() >= max_size) return STACK_OVERFLOW;
+        if (stack->size() >= max_size) return RTE_STACK_OVERFLOW;
         stack->push(value);
-        return SUCCESS;
+        return RTE_SUCCESS;
     }
     // Pop an uint8_t value from the stack
     uint8_t pop() {
@@ -151,9 +151,9 @@ public:
 
     // Push a boolean value to the stack
     RuntimeError pushBool(bool value) {
-        if (stack->size() >= max_size) return STACK_OVERFLOW;
+        if (stack->size() >= max_size) return RTE_STACK_OVERFLOW;
         stack->push(value);
-        return SUCCESS;
+        return RTE_SUCCESS;
     }
     // Pop a boolean value from the stack
     bool popBool() {
@@ -166,9 +166,9 @@ public:
 
     // Push an uint8_t value to the stack
     RuntimeError pushU8(uint8_t value) {
-        if (stack->size() + 1 > max_size) return STACK_OVERFLOW;
+        if (stack->size() + 1 > max_size) return RTE_STACK_OVERFLOW;
         stack->push(value);
-        return SUCCESS;
+        return RTE_SUCCESS;
     }
     // Pop an uint8_t value from the stack
     uint8_t popU8() {
@@ -180,10 +180,10 @@ public:
 
     // Push an uint16_t value to the stack
     RuntimeError pushU16(uint16_t value) {
-        if (stack->size() + 2 > max_size) return STACK_OVERFLOW;
+        if (stack->size() + 2 > max_size) return RTE_STACK_OVERFLOW;
         stack->push(value >> 8);
         stack->push(value & 0xFF);
-        return SUCCESS;
+        return RTE_SUCCESS;
     }
     // Pop an uint16_t value from the stack
     uint16_t popU16() {
@@ -200,12 +200,12 @@ public:
 
     // Push an uint32_t value to the stack
     RuntimeError pushU32(uint32_t value) {
-        if (stack->size() + 4 > max_size) return STACK_OVERFLOW;
+        if (stack->size() + 4 > max_size) return RTE_STACK_OVERFLOW;
         stack->push(value >> 24);
         stack->push((value >> 16) & 0xFF);
         stack->push((value >> 8) & 0xFF);
         stack->push(value & 0xFF);
-        return SUCCESS;
+        return RTE_SUCCESS;
     }
     // Pop an uint32_t value from the stack
     uint32_t popU32() {
@@ -226,7 +226,7 @@ public:
 
     // Push an uint64_t value to the stack
     RuntimeError pushU64(uint64_t value) {
-        if (stack->size() + 8 > max_size) return STACK_OVERFLOW;
+        if (stack->size() + 8 > max_size) return RTE_STACK_OVERFLOW;
         stack->push(value >> 56);
         stack->push((value >> 48) & 0xFF);
         stack->push((value >> 40) & 0xFF);
@@ -235,7 +235,7 @@ public:
         stack->push((value >> 16) & 0xFF);
         stack->push((value >> 8) & 0xFF);
         stack->push(value & 0xFF);
-        return SUCCESS;
+        return RTE_SUCCESS;
     }
     // Pop an uint64_t value from the stack
     uint64_t popU64() {
@@ -342,97 +342,97 @@ struct Extract_t {
     // Extract bool value from program bytecode
     RuntimeError BOOL(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, bool& value) {
         uint16_t size = 1;
-        if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;
+        if (index + size > bytecode_size) return RTE_PROGRAM_SIZE_EXCEEDED;
         value = bytecode[index];
         index += size;
-        return SUCCESS;
+        return RTE_SUCCESS;
     }
 
     // Extract uint8_t value from program bytecode
     RuntimeError U8(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, uint8_t& value) {
         uint16_t size = 1;
-        if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;
+        if (index + size > bytecode_size) return RTE_PROGRAM_SIZE_EXCEEDED;
         value = bytecode[index];
         index += size;
-        return SUCCESS;
+        return RTE_SUCCESS;
     }
     // Extract uint16_t value from program bytecode
     RuntimeError U16(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, uint16_t& value) {
         uint16_t size = 2;
-        if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;
+        if (index + size > bytecode_size) return RTE_PROGRAM_SIZE_EXCEEDED;
         value = ((uint16_t) bytecode[index] << 8) | bytecode[index + 1];
         index += size;
-        return SUCCESS;
+        return RTE_SUCCESS;
     }
     // Extract uint32_t value from program bytecode
     RuntimeError U32(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, uint32_t& value) {
         uint16_t size = 4;
-        if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;
+        if (index + size > bytecode_size) return RTE_PROGRAM_SIZE_EXCEEDED;
         value = ((uint32_t) bytecode[index] << 24) | ((uint32_t) bytecode[index + 1] << 16) | ((uint32_t) bytecode[index + 2] << 8) | bytecode[index + 3];
         index += 4;
-        return SUCCESS;
+        return RTE_SUCCESS;
     }
     // Extract uint64_t value from program bytecode
     RuntimeError U64(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, uint64_t& value) {
         uint16_t size = 8;
-        if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;
+        if (index + size > bytecode_size) return RTE_PROGRAM_SIZE_EXCEEDED;
         value = ((uint64_t) bytecode[index] << 56) | ((uint64_t) bytecode[index + 1] << 48) | ((uint64_t) bytecode[index + 2] << 40) | ((uint64_t) bytecode[index + 3] << 32) | ((uint64_t) bytecode[index + 4] << 24) | ((uint64_t) bytecode[index + 5] << 16) | ((uint64_t) bytecode[index + 6] << 8) | bytecode[index + 7];
         index += size;
-        return SUCCESS;
+        return RTE_SUCCESS;
     }
 
     // Extract int8_t value from program bytecode
     RuntimeError S8(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, int8_t& value) {
         uint16_t size = 1;
-        if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;
+        if (index + size > bytecode_size) return RTE_PROGRAM_SIZE_EXCEEDED;
         value = (int8_t) bytecode[index];
         index += size;
-        return SUCCESS;
+        return RTE_SUCCESS;
     }
     // Extract int16_t value from program bytecode
     RuntimeError S16(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, int16_t& value) {
         uint16_t size = 2;
-        if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;
+        if (index + size > bytecode_size) return RTE_PROGRAM_SIZE_EXCEEDED;
         value = ((int16_t) bytecode[index] << 8) | bytecode[index + 1];
         index += size;
-        return SUCCESS;
+        return RTE_SUCCESS;
     }
     // Extract int32_t value from program bytecode
     RuntimeError S32(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, int32_t& value) {
         uint16_t size = 4;
-        if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;
+        if (index + size > bytecode_size) return RTE_PROGRAM_SIZE_EXCEEDED;
         value = ((int32_t) bytecode[index] << 24) | ((int32_t) bytecode[index + 1] << 16) | ((int32_t) bytecode[index + 2] << 8) | bytecode[index + 3];
         index += size;
-        return SUCCESS;
+        return RTE_SUCCESS;
     }
     // Extract int64_t value from program bytecode
     RuntimeError S64(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, int64_t& value) {
         uint16_t size = 8;
-        if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;
+        if (index + size > bytecode_size) return RTE_PROGRAM_SIZE_EXCEEDED;
         value = ((int64_t) bytecode[index] << 56) | ((int64_t) bytecode[index + 1] << 48) | ((int64_t) bytecode[index + 2] << 40) | ((int64_t) bytecode[index + 3] << 32) | ((int64_t) bytecode[index + 4] << 24) | ((int64_t) bytecode[index + 5] << 16) | ((int64_t) bytecode[index + 6] << 8) | bytecode[index + 7];
         index += size;
-        return SUCCESS;
+        return RTE_SUCCESS;
     }
 
     // Extract float value from program bytecode
     RuntimeError F32(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, float& value) {
         uint16_t size = 4;
-        if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;
+        if (index + size > bytecode_size) return RTE_PROGRAM_SIZE_EXCEEDED;
         U32_to_F32 cvt;
         cvt.U32 = ((uint32_t) bytecode[index] << 24) | ((uint32_t) bytecode[index + 1] << 16) | ((uint32_t) bytecode[index + 2] << 8) | bytecode[index + 3];
         value = cvt.F32;
         index += size;
-        return SUCCESS;
+        return RTE_SUCCESS;
     }
     // Extract double value from program bytecode
     RuntimeError F64(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, double& value) {
         uint16_t size = 8;
-        if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;
+        if (index + size > bytecode_size) return RTE_PROGRAM_SIZE_EXCEEDED;
         U64_to_F64 cvt;
         cvt.U64 = ((uint64_t) bytecode[index] << 56) | ((uint64_t) bytecode[index + 1] << 48) | ((uint64_t) bytecode[index + 2] << 40) | ((uint64_t) bytecode[index + 3] << 32) | ((uint64_t) bytecode[index + 4] << 24) | ((uint64_t) bytecode[index + 5] << 16) | ((uint64_t) bytecode[index + 6] << 8) | bytecode[index + 7];
         value = cvt.F64;
         index += size;
-        return SUCCESS;
+        return RTE_SUCCESS;
     }
 
 } Extract;

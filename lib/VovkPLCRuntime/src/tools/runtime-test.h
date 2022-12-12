@@ -102,8 +102,8 @@ struct RuntimeTest_t {
         while (!finished) {
             program_pointer = program.getLine();
             RuntimeError status = runtime.step(program);
-            if (status == PROGRAM_EXITED) finished = true;
-            bool problem = status != SUCCESS && status != PROGRAM_EXITED;
+            if (status == RTE_PROGRAM_EXITED) finished = true;
+            bool problem = status != RTE_SUCCESS && status != RTE_PROGRAM_EXITED;
             TRY_CATCH(problem, {
                     const char* error = getRuntimeErrorName(status);
                     Serial.print(F("Error at program pointer "));
@@ -148,28 +148,28 @@ struct RuntimeTest_t {
 } Tester;
 
 
-RuntimeTestCase<uint8_t> case_add_U8 = { "add_U8 => (1 + 2) * 3", SUCCESS, 9, [](RuntimeProgram& program) {
+RuntimeTestCase<uint8_t> case_add_U8 = { "add_U8 => (1 + 2) * 3", RTE_SUCCESS, 9, [](RuntimeProgram& program) {
     program.pushU8(1);
     program.pushU8(2);
     program.push(ADD, U8);
     program.pushU8(3);
     program.push(MUL, U8);
 } };
-RuntimeTestCase<uint16_t> case_add_U16 = { "add_U16 => (1 + 2) * 3", SUCCESS, 9, [](RuntimeProgram& program) {
+RuntimeTestCase<uint16_t> case_add_U16 = { "add_U16 => (1 + 2) * 3", RTE_SUCCESS, 9, [](RuntimeProgram& program) {
     program.pushU16(1);
     program.pushU16(2);
     program.push(ADD, U16);
     program.pushU16(3);
     program.push(MUL, U16);
 } };
-// RuntimeTestCase<uint32_t> case_add_U32 = { "add_U32 => (1 + 2) * 3", SUCCESS, 9, [](RuntimeProgram& program) {
+// RuntimeTestCase<uint32_t> case_add_U32 = { "add_U32 => (1 + 2) * 3", RTE_SUCCESS, 9, [](RuntimeProgram& program) {
 //     program.pushU32(1);
 //     program.pushU32(2);
 //     program.push(ADD,U32);
 //     program.pushU32(3);
 //     program.push(MUL,U32);
 // } };
-// RuntimeTestCase<uint64_t> case_add_U64 = { "add_U64 => (1 + 2) * 3", SUCCESS, 9, [](RuntimeProgram& program) {
+// RuntimeTestCase<uint64_t> case_add_U64 = { "add_U64 => (1 + 2) * 3", RTE_SUCCESS, 9, [](RuntimeProgram& program) {
 //     program.pushU64(1);
 //     program.pushU64(2);
 //     program.push(ADD, U64);
@@ -177,28 +177,28 @@ RuntimeTestCase<uint16_t> case_add_U16 = { "add_U16 => (1 + 2) * 3", SUCCESS, 9,
 //     program.push(MUL, U64);
 // } };
 
-RuntimeTestCase<int8_t> case_sub_S8 = { "sub_S8 => (1 - 2) * 3", SUCCESS, -3, [](RuntimeProgram& program) {
+RuntimeTestCase<int8_t> case_sub_S8 = { "sub_S8 => (1 - 2) * 3", RTE_SUCCESS, -3, [](RuntimeProgram& program) {
     program.pushS8(1);
     program.pushS8(2);
     program.push(SUB,S8);
     program.pushS8(3);
     program.push(MUL,S8);
 } };
-RuntimeTestCase<int16_t> case_sub_S16 = { "sub_S16 => (1 - 2) * 3", SUCCESS, -3, [](RuntimeProgram& program) {
+RuntimeTestCase<int16_t> case_sub_S16 = { "sub_S16 => (1 - 2) * 3", RTE_SUCCESS, -3, [](RuntimeProgram& program) {
     program.pushS16(1);
     program.pushS16(2);
     program.push(SUB,S16);
     program.pushS16(3);
     program.push(MUL,S16);
 } };
-// RuntimeTestCase<int32_t> case_sub_S32 = { "sub_S32 => (1 - 2) * 3", SUCCESS, -3, [](RuntimeProgram& program) {
+// RuntimeTestCase<int32_t> case_sub_S32 = { "sub_S32 => (1 - 2) * 3", RTE_SUCCESS, -3, [](RuntimeProgram& program) {
 //     program.pushS32(1);
 //     program.pushS32(2);
 //     program.push(SUB,S32);
 //     program.pushS32(3);
 //     program.push(MUL,S32);
 // } };
-// RuntimeTestCase<int64_t> case_sub_S64 = { "sub_S64 => (1 - 2) * 3", SUCCESS, -3, [](RuntimeProgram& program) {
+// RuntimeTestCase<int64_t> case_sub_S64 = { "sub_S64 => (1 - 2) * 3", RTE_SUCCESS, -3, [](RuntimeProgram& program) {
 //     program.pushS64(1);
 //     program.pushS64(2);
 //     program.push(SUB,S64);
@@ -206,14 +206,14 @@ RuntimeTestCase<int16_t> case_sub_S16 = { "sub_S16 => (1 - 2) * 3", SUCCESS, -3,
 //     program.push(MUL,S64);
 // } };
 
-RuntimeTestCase<float> case_sub_F32 = { "sub_F32 => (0.1 + 0.2) * -1", SUCCESS, -0.3, [](RuntimeProgram& program) {
+RuntimeTestCase<float> case_sub_F32 = { "sub_F32 => (0.1 + 0.2) * -1", RTE_SUCCESS, -0.3, [](RuntimeProgram& program) {
     program.pushF32(0.1);
     program.pushF32(0.2);
     program.push(ADD,F32);
     program.pushF32(-1);
     program.push(MUL,F32);
 } };
-// RuntimeTestCase<double> case_sub_F64 = { "sub_F64 => (0.1 + 0.2) * -1", SUCCESS, -0.3, [](RuntimeProgram& program) {
+// RuntimeTestCase<double> case_sub_F64 = { "sub_F64 => (0.1 + 0.2) * -1", RTE_SUCCESS, -0.3, [](RuntimeProgram& program) {
 //     program.pushF64(0.1);
 //     program.pushF64(0.2);
 //     program.push(ADD,F64);
@@ -222,68 +222,68 @@ RuntimeTestCase<float> case_sub_F32 = { "sub_F32 => (0.1 + 0.2) * -1", SUCCESS, 
 // } };
 
 // Bitwise operations
-RuntimeTestCase<uint8_t> case_bitwise_and_X8 = { "bitwise_and_X8", SUCCESS, 0b00000101, [](RuntimeProgram& program) {
+RuntimeTestCase<uint8_t> case_bitwise_and_X8 = { "bitwise_and_X8", RTE_SUCCESS, 0b00000101, [](RuntimeProgram& program) {
     program.pushU8(0b00001111);
     program.pushU8(0b01010101);
     program.push(BW_AND_X8);
 } };
-RuntimeTestCase<uint16_t> case_bitwise_and_X16 = { "bitwise_and_X16", SUCCESS, 0x000F, [](RuntimeProgram& program) {
+RuntimeTestCase<uint16_t> case_bitwise_and_X16 = { "bitwise_and_X16", RTE_SUCCESS, 0x000F, [](RuntimeProgram& program) {
     program.pushU16(0x00FF);
     program.pushU16(0xF00F);
     program.push(BW_AND_X16);
 } };
-RuntimeTestCase<uint32_t> case_bitwise_and_X32 = { "bitwise_and_X32", SUCCESS, 0x0F0F0000, [](RuntimeProgram& program) {
+RuntimeTestCase<uint32_t> case_bitwise_and_X32 = { "bitwise_and_X32", RTE_SUCCESS, 0x0F0F0000, [](RuntimeProgram& program) {
     program.pushU32(0x0F0F0F0F);
     program.pushU32(0xFFFF0000);
     program.push(BW_AND_X32);
 } };
-// RuntimeTestCase<uint64_t> case_bitwise_and_X64 = { "bitwise_and_X64", SUCCESS, 0b00000101, [](RuntimeProgram& program) {
+// RuntimeTestCase<uint64_t> case_bitwise_and_X64 = { "bitwise_and_X64", RTE_SUCCESS, 0b00000101, [](RuntimeProgram& program) {
 //     program.pushU64(0b00001111);
 //     program.pushU64(0b01010101);
 //     program.push(BW_AND_X64);
 // } };
 
 // Logic (boolean) operations
-RuntimeTestCase<bool> case_logic_and = { "logic_and => true && false", SUCCESS, false, [](RuntimeProgram& program) {
+RuntimeTestCase<bool> case_logic_and = { "logic_and => true && false", RTE_SUCCESS, false, [](RuntimeProgram& program) {
     program.pushBool(true);
     program.pushBool(false);
     program.push(LOGIC_AND);
 } };
-RuntimeTestCase<bool> case_logic_and_2 = { "logic_and => true && true", SUCCESS, true, [](RuntimeProgram& program) {
+RuntimeTestCase<bool> case_logic_and_2 = { "logic_and => true && true", RTE_SUCCESS, true, [](RuntimeProgram& program) {
     program.pushBool(true);
     program.pushBool(true);
     program.push(LOGIC_AND);
 } };
-RuntimeTestCase<bool> case_logic_or = { "logic_or => true || false", SUCCESS, true, [](RuntimeProgram& program) {
+RuntimeTestCase<bool> case_logic_or = { "logic_or => true || false", RTE_SUCCESS, true, [](RuntimeProgram& program) {
     program.pushBool(true);
     program.pushBool(false);
     program.push(LOGIC_OR);
 } };
-RuntimeTestCase<bool> case_logic_or_2 = { "logic_or => false || false", SUCCESS, false, [](RuntimeProgram& program) {
+RuntimeTestCase<bool> case_logic_or_2 = { "logic_or => false || false", RTE_SUCCESS, false, [](RuntimeProgram& program) {
     program.pushBool(false);
     program.pushBool(false);
     program.push(LOGIC_OR);
 } };
 
 // Comparison operations
-RuntimeTestCase<bool> case_cmp_eq = { "cmp_eq => 1 == 1", SUCCESS, true, [](RuntimeProgram& program) {
+RuntimeTestCase<bool> case_cmp_eq = { "cmp_eq => 1 == 1", RTE_SUCCESS, true, [](RuntimeProgram& program) {
     program.pushBool(1);
     program.pushBool(1);
     program.push(CMP_EQ, BOOL);
 } };
-RuntimeTestCase<bool> case_cmp_eq_2 = { "cmp_eq => 0.3 == 0.3", SUCCESS, true, [](RuntimeProgram& program) {
+RuntimeTestCase<bool> case_cmp_eq_2 = { "cmp_eq => 0.3 == 0.3", RTE_SUCCESS, true, [](RuntimeProgram& program) {
     program.pushF32(0.3);
     program.pushF32(0.3);
     program.push(CMP_EQ, F32);
 } };
-RuntimeTestCase<bool> case_cmp_eq_3 = { "cmp_eq => 0.29 == 0.31", SUCCESS, false, [](RuntimeProgram& program) {
+RuntimeTestCase<bool> case_cmp_eq_3 = { "cmp_eq => 0.29 == 0.31", RTE_SUCCESS, false, [](RuntimeProgram& program) {
     program.pushF32(0.29);
     program.pushF32(0.31);
     program.push(CMP_EQ, F32);
 } };
 
 // Jump operations
-RuntimeTestCase<uint8_t> case_jump = { "jump => 1", SUCCESS, 1, [](RuntimeProgram& program) {
+RuntimeTestCase<uint8_t> case_jump = { "jump => 1", RTE_SUCCESS, 1, [](RuntimeProgram& program) {
     program.pushU8(1); // 0 [+2]
     program.pushJMP(9); // 2 [+3]
     program.pushU8(1); // 5 [+2]

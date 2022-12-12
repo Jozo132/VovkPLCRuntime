@@ -193,14 +193,14 @@ RuntimeError VovkPLCRuntime::run(uint8_t* program, uint16_t program_size) {
     uint16_t index = 0;
     while (index < program_size) {
         RuntimeError status = step(program, program_size, index);
-        if (status != SUCCESS) {
-            if (status == PROGRAM_EXITED) {
-                return SUCCESS;
+        if (status != RTE_SUCCESS) {
+            if (status == RTE_PROGRAM_EXITED) {
+                return RTE_SUCCESS;
             }
             return status;
         }
     }
-    return SUCCESS;
+    return RTE_SUCCESS;
 }
 
 
@@ -211,12 +211,12 @@ RuntimeError VovkPLCRuntime::step(RuntimeProgram& program) { return step(program
 
 // Execute one PLC instruction at index, returns an error code (0 on success)
 RuntimeError VovkPLCRuntime::step(uint8_t* program, uint16_t program_size, uint16_t& index) {
-    if (program_size == 0) return EMPTY_PROGRAM;
-    if (index >= program_size) return PROGRAM_SIZE_EXCEEDED;
+    if (program_size == 0) return RTE_EMPTY_PROGRAM;
+    if (index >= program_size) return RTE_PROGRAM_SIZE_EXCEEDED;
     uint8_t opcode = program[index];
     index++;
     switch (opcode) {
-        case NOP: return SUCCESS;
+        case NOP: return RTE_SUCCESS;
         case LOGIC_AND: return PLCMethods.LOGIC_AND(this->stack);
         case LOGIC_OR: return PLCMethods.LOGIC_OR(this->stack);
         case LOGIC_NOT: return PLCMethods.LOGIC_NOT(this->stack);
@@ -266,9 +266,9 @@ RuntimeError VovkPLCRuntime::step(uint8_t* program, uint16_t program_size, uint1
         case CMP_LT: return PLCMethods.handle_CMP_LT(this->stack, program, program_size, index);
         case CMP_LTE: return PLCMethods.handle_CMP_LTE(this->stack, program, program_size, index);
         case EXIT: {
-            return PROGRAM_EXITED;
+            return RTE_PROGRAM_EXITED;
             // return PLCMethods.handle_EXIT(this->stack, program, program_size, index);
         }
-        default: return UNKNOWN_INSTRUCTION;
+        default: return RTE_UNKNOWN_INSTRUCTION;
     }
 }
