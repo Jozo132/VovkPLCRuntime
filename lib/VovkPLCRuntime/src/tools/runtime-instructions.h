@@ -99,14 +99,8 @@ const char* getRuntimeErrorName(RuntimeError error) {
 }
 
 union uint32_t_to_float { uint32_t type_uint32_t; float type_float; };
-union float_to_uint32_t { float type_float; uint32_t type_uint32_t; };
 union uint64_t_to_double { uint64_t type_uint64_t; double type_double; };
-union double_to_uint64_t { double type_double; uint64_t type_uint64_t; };
-
-union u8A_to_u16 {
-    uint8_t u8A[2];
-    uint16_t u16;
-};
+union u8A_to_u16 { uint8_t u8A[2]; uint16_t u16; };
 
 
 #ifdef __arm__
