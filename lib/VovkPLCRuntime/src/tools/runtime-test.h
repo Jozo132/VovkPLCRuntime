@@ -219,7 +219,7 @@ RuntimeTestCase<float> case_sub_F32 = { "sub_F32 => (0.1 + 0.2) * -1", RTE_SUCCE
     program.pushF32(-1);
     program.push(MUL,F32);
 } };
-RuntimeTestCase<double> case_sub_F64 = { "sub_F64 => (0.1 + 0.2) * -1", RTE_SUCCESS, -0.3, [](RuntimeProgram& program) {
+RuntimeTestCase<double> case_sub_F64 = { "sub_F64 => (0.1 + 0.2) * -1", RTE_SUCCESS, -0.30000000000000004, [](RuntimeProgram& program) {
     program.pushF64(0.1);
     program.pushF64(0.2);
     program.push(ADD,F64);
