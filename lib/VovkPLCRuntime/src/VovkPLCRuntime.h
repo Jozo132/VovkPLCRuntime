@@ -20,5 +20,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #pragma once
+
+#if !defined(__RUNTIME_TEST__) && defined(__RUNTIME_FULL_UNIT_TEST__)
+#define __RUNTIME_TEST__
+#endif
+
 #include "tools/runtime-lib.h"
 #include "tools/runtime-test.h"

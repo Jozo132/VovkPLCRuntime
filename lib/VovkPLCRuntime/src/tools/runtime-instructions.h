@@ -42,6 +42,8 @@ enum RuntimeError {
     RTE_EMPTY_PROGRAM,
     RTE_PROGRAM_POINTER_OUT_OF_BOUNDS,
     RTE_PROGRAM_EXITED,
+    RTE_UNDEFINED_STATE,
+    RTE_INVALID_CHECKSUM,
 };
 
 void fstrcpy(char* buff, const char* fstr) {
@@ -78,13 +80,15 @@ const char* const RuntimeErrorNames [] PROGMEM = {
     "EMPTY_PROGRAM",
     "PROGRAM_POINTER_OUT_OF_BOUNDS",
     "PROGRAM_EXITED",
+    "UNDEFINED_STATE",
+    "INVALID_CHECKSUM",
 };
 
 const char* const unknows_error_code_str PROGMEM = "UNKNOWN_ERROR_CODE";
 
 const char* getRuntimeErrorName(RuntimeError error) {
-    char* output = new char[35];
-    if (error < 0 || error > 18) fstrcpy(output, unknows_error_code_str);
+    char* output = new char[40];
+    if (error < 0 || error > 20) fstrcpy(output, unknows_error_code_str);
     else fstrcpy(output, RuntimeErrorNames[error]);
     return output;
 }
@@ -104,6 +108,24 @@ union U8A_to_U16 {
     uint16_t U16;
 };
 
+
+#ifdef __arm__
+// should use uinstd.h to define sbrk but Due causes a conflict
+extern "C" char* sbrk(int incr);
+#else  // __ARM__
+extern char* __brkval;
+#endif  // __arm__
+
+int freeMemory() {
+    char top;
+#ifdef __arm__
+    return &top - reinterpret_cast<char*>(sbrk(0));
+#elif defined(CORE_TEENSY) || (ARDUINO > 103 && ARDUINO != 151)
+    return &top - __brkval;
+#else  // __arm__
+    return __brkval ? &top - __brkval : &top - __malloc_heap_start;
+#endif  // __arm__
+}
 
 class MyStack {
 public:
