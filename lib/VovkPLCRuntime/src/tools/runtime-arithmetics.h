@@ -21,324 +21,326 @@
 
 #pragma once
 
+
+
 struct PLCMethods_t {
 
-    RuntimeError PUSH_BOOL(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
+    RuntimeError PUSH_bool(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         bool value = 0;
-        RuntimeError extract_status = Extract.BOOL(program, program_size, index, value);
-        if (extract_status != RTE_SUCCESS) return extract_status;
-        return stack->pushBool(value);
+        RuntimeError extract_status = Extract.type_bool(program, program_size, index, value);
+        if (extract_status != STATUS_SUCCESS) return extract_status;
+        return stack->push_bool(value);
     }
-    RuntimeError PUSH_U8(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
+    RuntimeError PUSH_uint8_t(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         uint8_t value = 0;
-        RuntimeError extract_status = Extract.U8(program, program_size, index, value);
-        if (extract_status != RTE_SUCCESS) return extract_status;
-        return stack->push(value);
+        RuntimeError extract_status = Extract.type_uint8_t(program, program_size, index, value);
+        if (extract_status != STATUS_SUCCESS) return extract_status;
+        return stack->push_uint8_t(value);
     }
-    RuntimeError PUSH_U16(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
+    RuntimeError PUSH_uint16_t(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         uint16_t value = 0;
-        RuntimeError extract_status = Extract.U16(program, program_size, index, value);
-        if (extract_status != RTE_SUCCESS) return extract_status;
-        return stack->pushU16(value);
+        RuntimeError extract_status = Extract.type_uint16_t(program, program_size, index, value);
+        if (extract_status != STATUS_SUCCESS) return extract_status;
+        return stack->push_uint16_t(value);
     }
-    RuntimeError PUSH_U32(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
+    RuntimeError PUSH_uint32_t(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         uint32_t value = 0;
-        RuntimeError extract_status = Extract.U32(program, program_size, index, value);
-        if (extract_status != RTE_SUCCESS) return extract_status;
-        return stack->pushU32(value);
+        RuntimeError extract_status = Extract.type_uint32_t(program, program_size, index, value);
+        if (extract_status != STATUS_SUCCESS) return extract_status;
+        return stack->push_uint32_t(value);
     }
-    RuntimeError PUSH_U64(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
+    RuntimeError PUSH_uint64_t(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         uint64_t value = 0;
-        RuntimeError extract_status = Extract.U64(program, program_size, index, value);
-        if (extract_status != RTE_SUCCESS) return extract_status;
-        return stack->pushU64(value);
+        RuntimeError extract_status = Extract.type_uint64_t(program, program_size, index, value);
+        if (extract_status != STATUS_SUCCESS) return extract_status;
+        return stack->push_uint64_t(value);
     }
-    RuntimeError PUSH_S8(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
+    RuntimeError PUSH_int8_t(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         int8_t value = 0;
-        RuntimeError extract_status = Extract.S8(program, program_size, index, value);
-        if (extract_status != RTE_SUCCESS) return extract_status;
-        return stack->pushS8(value);
+        RuntimeError extract_status = Extract.type_int8_t(program, program_size, index, value);
+        if (extract_status != STATUS_SUCCESS) return extract_status;
+        return stack->push_int8_t(value);
     }
-    RuntimeError PUSH_S16(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
+    RuntimeError PUSH_int16_t(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         int16_t value = 0;
-        RuntimeError extract_status = Extract.S16(program, program_size, index, value);
-        if (extract_status != RTE_SUCCESS) return extract_status;
-        return stack->pushS16(value);
+        RuntimeError extract_status = Extract.type_int16_t(program, program_size, index, value);
+        if (extract_status != STATUS_SUCCESS) return extract_status;
+        return stack->push_int16_t(value);
     }
-    RuntimeError PUSH_S32(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
+    RuntimeError PUSH_int32_t(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         int32_t value = 0;
-        RuntimeError extract_status = Extract.S32(program, program_size, index, value);
-        if (extract_status != RTE_SUCCESS) return extract_status;
-        return stack->pushS32(value);
+        RuntimeError extract_status = Extract.type_int32_t(program, program_size, index, value);
+        if (extract_status != STATUS_SUCCESS) return extract_status;
+        return stack->push_int32_t(value);
     }
-    RuntimeError PUSH_S64(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
+    RuntimeError PUSH_int64_t(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         int64_t value = 0;
-        RuntimeError extract_status = Extract.S64(program, program_size, index, value);
-        if (extract_status != RTE_SUCCESS) return extract_status;
-        return stack->pushS64(value);
+        RuntimeError extract_status = Extract.type_int64_t(program, program_size, index, value);
+        if (extract_status != STATUS_SUCCESS) return extract_status;
+        return stack->push_int64_t(value);
     }
-    RuntimeError PUSH_F32(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
+    RuntimeError PUSH_float(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         float value = 0;
-        RuntimeError extract_status = Extract.F32(program, program_size, index, value);
-        if (extract_status != RTE_SUCCESS) return extract_status;
-        return stack->pushF32(value);
+        RuntimeError extract_status = Extract.type_float(program, program_size, index, value);
+        if (extract_status != STATUS_SUCCESS) return extract_status;
+        return stack->push_float(value);
     }
-    RuntimeError PUSH_F64(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
+    RuntimeError PUSH_double(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         double value = 0;
-        RuntimeError extract_status = Extract.F64(program, program_size, index, value);
-        if (extract_status != RTE_SUCCESS) return extract_status;
-        return stack->pushF64(value);
+        RuntimeError extract_status = Extract.type_double(program, program_size, index, value);
+        if (extract_status != STATUS_SUCCESS) return extract_status;
+        return stack->push_double(value);
     }
 
 
-    RuntimeError ADD_U8(RuntimeStack* stack) {
-        uint8_t b = stack->popU8();
-        uint8_t a = stack->popU8();
+    RuntimeError ADD_uint8_t(RuntimeStack* stack) {
+        uint8_t b = stack->pop_uint8_t();
+        uint8_t a = stack->pop_uint8_t();
         stack->push(a + b);
-        return RTE_SUCCESS;
+        return STATUS_SUCCESS;
     }
-    RuntimeError SUB_U8(RuntimeStack* stack) {
-        uint8_t b = stack->popU8();
-        uint8_t a = stack->popU8();
+    RuntimeError SUB_uint8_t(RuntimeStack* stack) {
+        uint8_t b = stack->pop_uint8_t();
+        uint8_t a = stack->pop_uint8_t();
         stack->push(a - b);
-        return RTE_SUCCESS;
+        return STATUS_SUCCESS;
     }
-    RuntimeError MUL_U8(RuntimeStack* stack) {
-        uint8_t b = stack->popU8();
-        uint8_t a = stack->popU8();
+    RuntimeError MUL_uint8_t(RuntimeStack* stack) {
+        uint8_t b = stack->pop_uint8_t();
+        uint8_t a = stack->pop_uint8_t();
         stack->push(a * b);
-        return RTE_SUCCESS;
+        return STATUS_SUCCESS;
     }
-    RuntimeError DIV_U8(RuntimeStack* stack) {
-        uint8_t b = stack->popU8();
-        uint8_t a = stack->popU8();
+    RuntimeError DIV_uint8_t(RuntimeStack* stack) {
+        uint8_t b = stack->pop_uint8_t();
+        uint8_t a = stack->pop_uint8_t();
         stack->push(a / b);
-        return RTE_SUCCESS;
+        return STATUS_SUCCESS;
     }
 
-    RuntimeError ADD_U16(RuntimeStack* stack) {
-        uint16_t b = stack->popU16();
-        uint16_t a = stack->popU16();
-        stack->pushU16(a + b);
-        return RTE_SUCCESS;
+    RuntimeError ADD_uint16_t(RuntimeStack* stack) {
+        uint16_t b = stack->pop_uint16_t();
+        uint16_t a = stack->pop_uint16_t();
+        stack->push_uint16_t(a + b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError SUB_U16(RuntimeStack* stack) {
-        uint16_t b = stack->popU16();
-        uint16_t a = stack->popU16();
-        stack->pushU16(a - b);
-        return RTE_SUCCESS;
+    RuntimeError SUB_uint16_t(RuntimeStack* stack) {
+        uint16_t b = stack->pop_uint16_t();
+        uint16_t a = stack->pop_uint16_t();
+        stack->push_uint16_t(a - b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError MUL_U16(RuntimeStack* stack) {
-        uint16_t b = stack->popU16();
-        uint16_t a = stack->popU16();
-        stack->pushU16(a * b);
-        return RTE_SUCCESS;
+    RuntimeError MUL_uint16_t(RuntimeStack* stack) {
+        uint16_t b = stack->pop_uint16_t();
+        uint16_t a = stack->pop_uint16_t();
+        stack->push_uint16_t(a * b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError DIV_U16(RuntimeStack* stack) {
-        uint16_t b = stack->popU16();
-        uint16_t a = stack->popU16();
-        stack->pushU16(a / b);
-        return RTE_SUCCESS;
-    }
-
-    RuntimeError ADD_U32(RuntimeStack* stack) {
-        uint32_t b = stack->popU32();
-        uint32_t a = stack->popU32();
-        stack->pushU32(a + b);
-        return RTE_SUCCESS;
-    }
-    RuntimeError SUB_U32(RuntimeStack* stack) {
-        uint32_t b = stack->popU32();
-        uint32_t a = stack->popU32();
-        stack->pushU32(a - b);
-        return RTE_SUCCESS;
-    }
-    RuntimeError MUL_U32(RuntimeStack* stack) {
-        uint32_t b = stack->popU32();
-        uint32_t a = stack->popU32();
-        stack->pushU32(a * b);
-        return RTE_SUCCESS;
-    }
-    RuntimeError DIV_U32(RuntimeStack* stack) {
-        uint32_t b = stack->popU32();
-        uint32_t a = stack->popU32();
-        stack->pushU32(a / b);
-        return RTE_SUCCESS;
+    RuntimeError DIV_uint16_t(RuntimeStack* stack) {
+        uint16_t b = stack->pop_uint16_t();
+        uint16_t a = stack->pop_uint16_t();
+        stack->push_uint16_t(a / b);
+        return STATUS_SUCCESS;
     }
 
-    RuntimeError ADD_U64(RuntimeStack* stack) {
-        uint64_t b = stack->popU64();
-        uint64_t a = stack->popU64();
-        stack->pushU64(a + b);
-        return RTE_SUCCESS;
+    RuntimeError ADD_uint32_t(RuntimeStack* stack) {
+        uint32_t b = stack->pop_uint32_t();
+        uint32_t a = stack->pop_uint32_t();
+        stack->push_uint32_t(a + b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError SUB_U64(RuntimeStack* stack) {
-        uint64_t b = stack->popU64();
-        uint64_t a = stack->popU64();
-        stack->pushU64(a - b);
-        return RTE_SUCCESS;
+    RuntimeError SUB_uint32_t(RuntimeStack* stack) {
+        uint32_t b = stack->pop_uint32_t();
+        uint32_t a = stack->pop_uint32_t();
+        stack->push_uint32_t(a - b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError MUL_U64(RuntimeStack* stack) {
-        uint64_t b = stack->popU64();
-        uint64_t a = stack->popU64();
-        stack->pushU64(a * b);
-        return RTE_SUCCESS;
+    RuntimeError MUL_uint32_t(RuntimeStack* stack) {
+        uint32_t b = stack->pop_uint32_t();
+        uint32_t a = stack->pop_uint32_t();
+        stack->push_uint32_t(a * b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError DIV_U64(RuntimeStack* stack) {
-        uint64_t b = stack->popU64();
-        uint64_t a = stack->popU64();
-        stack->pushU64(a / b);
-        return RTE_SUCCESS;
-    }
-
-    RuntimeError ADD_S8(RuntimeStack* stack) {
-        int8_t b = stack->popS8();
-        int8_t a = stack->popS8();
-        stack->pushS8(a + b);
-        return RTE_SUCCESS;
-    }
-    RuntimeError SUB_S8(RuntimeStack* stack) {
-        int8_t b = stack->popS8();
-        int8_t a = stack->popS8();
-        stack->pushS8(a - b);
-        return RTE_SUCCESS;
-    }
-    RuntimeError MUL_S8(RuntimeStack* stack) {
-        int8_t b = stack->popS8();
-        int8_t a = stack->popS8();
-        stack->pushS8(a * b);
-        return RTE_SUCCESS;
-    }
-    RuntimeError DIV_S8(RuntimeStack* stack) {
-        int8_t b = stack->popS8();
-        int8_t a = stack->popS8();
-        stack->pushS8(a / b);
-        return RTE_SUCCESS;
+    RuntimeError DIV_uint32_t(RuntimeStack* stack) {
+        uint32_t b = stack->pop_uint32_t();
+        uint32_t a = stack->pop_uint32_t();
+        stack->push_uint32_t(a / b);
+        return STATUS_SUCCESS;
     }
 
-    RuntimeError ADD_S16(RuntimeStack* stack) {
-        int16_t b = stack->popS16();
-        int16_t a = stack->popS16();
-        stack->pushS16(a + b);
-        return RTE_SUCCESS;
+    RuntimeError ADD_uint64_t(RuntimeStack* stack) {
+        uint64_t b = stack->pop_uint64_t();
+        uint64_t a = stack->pop_uint64_t();
+        stack->push_uint64_t(a + b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError SUB_S16(RuntimeStack* stack) {
-        int16_t b = stack->popS16();
-        int16_t a = stack->popS16();
-        stack->pushS16(a - b);
-        return RTE_SUCCESS;
+    RuntimeError SUB_uint64_t(RuntimeStack* stack) {
+        uint64_t b = stack->pop_uint64_t();
+        uint64_t a = stack->pop_uint64_t();
+        stack->push_uint64_t(a - b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError MUL_S16(RuntimeStack* stack) {
-        int16_t b = stack->popS16();
-        int16_t a = stack->popS16();
-        stack->pushS16(a * b);
-        return RTE_SUCCESS;
+    RuntimeError MUL_uint64_t(RuntimeStack* stack) {
+        uint64_t b = stack->pop_uint64_t();
+        uint64_t a = stack->pop_uint64_t();
+        stack->push_uint64_t(a * b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError DIV_S16(RuntimeStack* stack) {
-        int16_t b = stack->popS16();
-        int16_t a = stack->popS16();
-        stack->pushS16(a / b);
-        return RTE_SUCCESS;
-    }
-
-    RuntimeError ADD_S32(RuntimeStack* stack) {
-        int32_t b = stack->popS32();
-        int32_t a = stack->popS32();
-        stack->pushS32(a + b);
-        return RTE_SUCCESS;
-    }
-    RuntimeError SUB_S32(RuntimeStack* stack) {
-        int32_t b = stack->popS32();
-        int32_t a = stack->popS32();
-        stack->pushS32(a - b);
-        return RTE_SUCCESS;
-    }
-    RuntimeError MUL_S32(RuntimeStack* stack) {
-        int32_t b = stack->popS32();
-        int32_t a = stack->popS32();
-        stack->pushS32(a * b);
-        return RTE_SUCCESS;
-    }
-    RuntimeError DIV_S32(RuntimeStack* stack) {
-        int32_t b = stack->popS32();
-        int32_t a = stack->popS32();
-        stack->pushS32(a / b);
-        return RTE_SUCCESS;
+    RuntimeError DIV_uint64_t(RuntimeStack* stack) {
+        uint64_t b = stack->pop_uint64_t();
+        uint64_t a = stack->pop_uint64_t();
+        stack->push_uint64_t(a / b);
+        return STATUS_SUCCESS;
     }
 
-    RuntimeError ADD_S64(RuntimeStack* stack) {
-        int64_t b = stack->popS64();
-        int64_t a = stack->popS64();
-        stack->pushS64(a + b);
-        return RTE_SUCCESS;
+    RuntimeError ADD_int8_t(RuntimeStack* stack) {
+        int8_t b = stack->pop_int8_t();
+        int8_t a = stack->pop_int8_t();
+        stack->push_int8_t(a + b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError SUB_S64(RuntimeStack* stack) {
-        int64_t b = stack->popS64();
-        int64_t a = stack->popS64();
-        stack->pushS64(a - b);
-        return RTE_SUCCESS;
+    RuntimeError SUB_int8_t(RuntimeStack* stack) {
+        int8_t b = stack->pop_int8_t();
+        int8_t a = stack->pop_int8_t();
+        stack->push_int8_t(a - b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError MUL_S64(RuntimeStack* stack) {
-        int64_t b = stack->popS64();
-        int64_t a = stack->popS64();
-        stack->pushS64(a * b);
-        return RTE_SUCCESS;
+    RuntimeError MUL_int8_t(RuntimeStack* stack) {
+        int8_t b = stack->pop_int8_t();
+        int8_t a = stack->pop_int8_t();
+        stack->push_int8_t(a * b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError DIV_S64(RuntimeStack* stack) {
-        int64_t b = stack->popS64();
-        int64_t a = stack->popS64();
-        stack->pushS64(a / b);
-        return RTE_SUCCESS;
-    }
-
-    RuntimeError ADD_F32(RuntimeStack* stack) {
-        float b = stack->popF32();
-        float a = stack->popF32();
-        stack->pushF32(a + b);
-        return RTE_SUCCESS;
-    }
-    RuntimeError SUB_F32(RuntimeStack* stack) {
-        float b = stack->popF32();
-        float a = stack->popF32();
-        stack->pushF32(a - b);
-        return RTE_SUCCESS;
-    }
-    RuntimeError MUL_F32(RuntimeStack* stack) {
-        float b = stack->popF32();
-        float a = stack->popF32();
-        stack->pushF32(a * b);
-        return RTE_SUCCESS;
-    }
-    RuntimeError DIV_F32(RuntimeStack* stack) {
-        float b = stack->popF32();
-        float a = stack->popF32();
-        stack->pushF32(a / b);
-        return RTE_SUCCESS;
+    RuntimeError DIV_int8_t(RuntimeStack* stack) {
+        int8_t b = stack->pop_int8_t();
+        int8_t a = stack->pop_int8_t();
+        stack->push_int8_t(a / b);
+        return STATUS_SUCCESS;
     }
 
-    RuntimeError ADD_F64(RuntimeStack* stack) {
-        double b = stack->popF64();
-        double a = stack->popF64();
-        stack->pushF64(a + b);
-        return RTE_SUCCESS;
+    RuntimeError ADD_int16_t(RuntimeStack* stack) {
+        int16_t b = stack->pop_int16_t();
+        int16_t a = stack->pop_int16_t();
+        stack->push_int16_t(a + b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError SUB_F64(RuntimeStack* stack) {
-        double b = stack->popF64();
-        double a = stack->popF64();
-        stack->pushF64(a - b);
-        return RTE_SUCCESS;
+    RuntimeError SUB_int16_t(RuntimeStack* stack) {
+        int16_t b = stack->pop_int16_t();
+        int16_t a = stack->pop_int16_t();
+        stack->push_int16_t(a - b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError MUL_F64(RuntimeStack* stack) {
-        double b = stack->popF64();
-        double a = stack->popF64();
-        stack->pushF64(a * b);
-        return RTE_SUCCESS;
+    RuntimeError MUL_int16_t(RuntimeStack* stack) {
+        int16_t b = stack->pop_int16_t();
+        int16_t a = stack->pop_int16_t();
+        stack->push_int16_t(a * b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError DIV_F64(RuntimeStack* stack) {
-        double b = stack->popF64();
-        double a = stack->popF64();
-        stack->pushF64(a / b);
-        return RTE_SUCCESS;
+    RuntimeError DIV_int16_t(RuntimeStack* stack) {
+        int16_t b = stack->pop_int16_t();
+        int16_t a = stack->pop_int16_t();
+        stack->push_int16_t(a / b);
+        return STATUS_SUCCESS;
+    }
+
+    RuntimeError ADD_int32_t(RuntimeStack* stack) {
+        int32_t b = stack->pop_int32_t();
+        int32_t a = stack->pop_int32_t();
+        stack->push_int32_t(a + b);
+        return STATUS_SUCCESS;
+    }
+    RuntimeError SUB_int32_t(RuntimeStack* stack) {
+        int32_t b = stack->pop_int32_t();
+        int32_t a = stack->pop_int32_t();
+        stack->push_int32_t(a - b);
+        return STATUS_SUCCESS;
+    }
+    RuntimeError MUL_int32_t(RuntimeStack* stack) {
+        int32_t b = stack->pop_int32_t();
+        int32_t a = stack->pop_int32_t();
+        stack->push_int32_t(a * b);
+        return STATUS_SUCCESS;
+    }
+    RuntimeError DIV_int32_t(RuntimeStack* stack) {
+        int32_t b = stack->pop_int32_t();
+        int32_t a = stack->pop_int32_t();
+        stack->push_int32_t(a / b);
+        return STATUS_SUCCESS;
+    }
+
+    RuntimeError ADD_int64_t(RuntimeStack* stack) {
+        int64_t b = stack->pop_int64_t();
+        int64_t a = stack->pop_int64_t();
+        stack->push_int64_t(a + b);
+        return STATUS_SUCCESS;
+    }
+    RuntimeError SUB_int64_t(RuntimeStack* stack) {
+        int64_t b = stack->pop_int64_t();
+        int64_t a = stack->pop_int64_t();
+        stack->push_int64_t(a - b);
+        return STATUS_SUCCESS;
+    }
+    RuntimeError MUL_int64_t(RuntimeStack* stack) {
+        int64_t b = stack->pop_int64_t();
+        int64_t a = stack->pop_int64_t();
+        stack->push_int64_t(a * b);
+        return STATUS_SUCCESS;
+    }
+    RuntimeError DIV_int64_t(RuntimeStack* stack) {
+        int64_t b = stack->pop_int64_t();
+        int64_t a = stack->pop_int64_t();
+        stack->push_int64_t(a / b);
+        return STATUS_SUCCESS;
+    }
+
+    RuntimeError ADD_float(RuntimeStack* stack) {
+        float b = stack->pop_float();
+        float a = stack->pop_float();
+        stack->push_float(a + b);
+        return STATUS_SUCCESS;
+    }
+    RuntimeError SUB_float(RuntimeStack* stack) {
+        float b = stack->pop_float();
+        float a = stack->pop_float();
+        stack->push_float(a - b);
+        return STATUS_SUCCESS;
+    }
+    RuntimeError MUL_float(RuntimeStack* stack) {
+        float b = stack->pop_float();
+        float a = stack->pop_float();
+        stack->push_float(a * b);
+        return STATUS_SUCCESS;
+    }
+    RuntimeError DIV_float(RuntimeStack* stack) {
+        float b = stack->pop_float();
+        float a = stack->pop_float();
+        stack->push_float(a / b);
+        return STATUS_SUCCESS;
+    }
+
+    RuntimeError ADD_double(RuntimeStack* stack) {
+        double b = stack->pop_double();
+        double a = stack->pop_double();
+        stack->push_double(a + b);
+        return STATUS_SUCCESS;
+    }
+    RuntimeError SUB_double(RuntimeStack* stack) {
+        double b = stack->pop_double();
+        double a = stack->pop_double();
+        stack->push_double(a - b);
+        return STATUS_SUCCESS;
+    }
+    RuntimeError MUL_double(RuntimeStack* stack) {
+        double b = stack->pop_double();
+        double a = stack->pop_double();
+        stack->push_double(a * b);
+        return STATUS_SUCCESS;
+    }
+    RuntimeError DIV_double(RuntimeStack* stack) {
+        double b = stack->pop_double();
+        double a = stack->pop_double();
+        stack->push_double(a / b);
+        return STATUS_SUCCESS;
     }
 
 
@@ -349,829 +351,829 @@ struct PLCMethods_t {
 
     RuntimeError handle_ADD(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         static uint16_t size = 1;
-        if (index + size > program_size) return RTE_PROGRAM_POINTER_OUT_OF_BOUNDS;
+        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         uint8_t data_type = program[index++];
         switch (data_type) {
-            case BOOL:
-            case U8: return ADD_U8(stack);
-            case U16: return ADD_U16(stack);
-            case U32: return ADD_U32(stack);
-            case U64: return ADD_U64(stack);
-            case S8: return ADD_S8(stack);
-            case S16: return ADD_S16(stack);
-            case S32: return ADD_S32(stack);
-            case S64: return ADD_S64(stack);
-            case F32: return ADD_F32(stack);
-            case F64: return ADD_F64(stack);
-            default: return RTE_INVALID_DATA_TYPE;
+            case type_bool:
+            case type_uint8_t: return ADD_uint8_t(stack);
+            case type_uint16_t: return ADD_uint16_t(stack);
+            case type_uint32_t: return ADD_uint32_t(stack);
+            case type_uint64_t: return ADD_uint64_t(stack);
+            case type_int8_t: return ADD_int8_t(stack);
+            case type_int16_t: return ADD_int16_t(stack);
+            case type_int32_t: return ADD_int32_t(stack);
+            case type_int64_t: return ADD_int64_t(stack);
+            case type_float: return ADD_float(stack);
+            case type_double: return ADD_double(stack);
+            default: return INVALID_DATA_TYPE;
         }
     }
 
     RuntimeError handle_SUB(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         static uint16_t size = 1;
-        if (index + size > program_size) return RTE_PROGRAM_POINTER_OUT_OF_BOUNDS;
+        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         uint8_t data_type = program[index++];
         switch (data_type) {
-            case BOOL:
-            case U8: return SUB_U8(stack);
-            case U16: return SUB_U16(stack);
-            case U32: return SUB_U32(stack);
-            case U64: return SUB_U64(stack);
-            case S8: return SUB_S8(stack);
-            case S16: return SUB_S16(stack);
-            case S32: return SUB_S32(stack);
-            case S64: return SUB_S64(stack);
-            case F32: return SUB_F32(stack);
-            case F64: return SUB_F64(stack);
-            default: return RTE_INVALID_DATA_TYPE;
+            case type_bool:
+            case type_uint8_t: return SUB_uint8_t(stack);
+            case type_uint16_t: return SUB_uint16_t(stack);
+            case type_uint32_t: return SUB_uint32_t(stack);
+            case type_uint64_t: return SUB_uint64_t(stack);
+            case type_int8_t: return SUB_int8_t(stack);
+            case type_int16_t: return SUB_int16_t(stack);
+            case type_int32_t: return SUB_int32_t(stack);
+            case type_int64_t: return SUB_int64_t(stack);
+            case type_float: return SUB_float(stack);
+            case type_double: return SUB_double(stack);
+            default: return INVALID_DATA_TYPE;
         }
     }
 
     RuntimeError handle_MUL(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         static uint16_t size = 1;
-        if (index + size > program_size) return RTE_PROGRAM_POINTER_OUT_OF_BOUNDS;
+        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         uint8_t data_type = program[index++];
         switch (data_type) {
-            case BOOL:
-            case U8: return MUL_U8(stack);
-            case U16: return MUL_U16(stack);
-            case U32: return MUL_U32(stack);
-            case U64: return MUL_U64(stack);
-            case S8: return MUL_S8(stack);
-            case S16: return MUL_S16(stack);
-            case S32: return MUL_S32(stack);
-            case S64: return MUL_S64(stack);
-            case F32: return MUL_F32(stack);
-            case F64: return MUL_F64(stack);
-            default: return RTE_INVALID_DATA_TYPE;
+            case type_bool:
+            case type_uint8_t: return MUL_uint8_t(stack);
+            case type_uint16_t: return MUL_uint16_t(stack);
+            case type_uint32_t: return MUL_uint32_t(stack);
+            case type_uint64_t: return MUL_uint64_t(stack);
+            case type_int8_t: return MUL_int8_t(stack);
+            case type_int16_t: return MUL_int16_t(stack);
+            case type_int32_t: return MUL_int32_t(stack);
+            case type_int64_t: return MUL_int64_t(stack);
+            case type_float: return MUL_float(stack);
+            case type_double: return MUL_double(stack);
+            default: return INVALID_DATA_TYPE;
         }
     }
 
     RuntimeError handle_DIV(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         static uint16_t size = 1;
-        if (index + size > program_size) return RTE_PROGRAM_POINTER_OUT_OF_BOUNDS;
+        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         uint8_t data_type = program[index++];
         switch (data_type) {
-            case BOOL:
-            case U8: return DIV_U8(stack);
-            case U16: return DIV_U16(stack);
-            case U32: return DIV_U32(stack);
-            case U64: return DIV_U64(stack);
-            case S8: return DIV_S8(stack);
-            case S16: return DIV_S16(stack);
-            case S32: return DIV_S32(stack);
-            case S64: return DIV_S64(stack);
-            case F32: return DIV_F32(stack);
-            case F64: return DIV_F64(stack);
-            default: return RTE_INVALID_DATA_TYPE;
+            case type_bool:
+            case type_uint8_t: return DIV_uint8_t(stack);
+            case type_uint16_t: return DIV_uint16_t(stack);
+            case type_uint32_t: return DIV_uint32_t(stack);
+            case type_uint64_t: return DIV_uint64_t(stack);
+            case type_int8_t: return DIV_int8_t(stack);
+            case type_int16_t: return DIV_int16_t(stack);
+            case type_int32_t: return DIV_int32_t(stack);
+            case type_int64_t: return DIV_int64_t(stack);
+            case type_float: return DIV_float(stack);
+            case type_double: return DIV_double(stack);
+            default: return INVALID_DATA_TYPE;
         }
     }
 
 
 
     RuntimeError BW_AND_X8(RuntimeStack* stack) {
-        uint8_t b = stack->popU8();
-        uint8_t a = stack->popU8();
-        stack->pushU8(a & b);
-        return RTE_SUCCESS;
+        uint8_t b = stack->pop_uint8_t();
+        uint8_t a = stack->pop_uint8_t();
+        stack->push_uint8_t(a & b);
+        return STATUS_SUCCESS;
     }
     RuntimeError BW_AND_X16(RuntimeStack* stack) {
-        uint16_t b = stack->popU16();
-        uint16_t a = stack->popU16();
-        stack->pushU16(a & b);
-        return RTE_SUCCESS;
+        uint16_t b = stack->pop_uint16_t();
+        uint16_t a = stack->pop_uint16_t();
+        stack->push_uint16_t(a & b);
+        return STATUS_SUCCESS;
     }
     RuntimeError BW_AND_X32(RuntimeStack* stack) {
-        uint32_t b = stack->popU32();
-        uint32_t a = stack->popU32();
-        stack->pushU32(a & b);
-        return RTE_SUCCESS;
+        uint32_t b = stack->pop_uint32_t();
+        uint32_t a = stack->pop_uint32_t();
+        stack->push_uint32_t(a & b);
+        return STATUS_SUCCESS;
     }
     RuntimeError BW_AND_X64(RuntimeStack* stack) {
-        uint64_t b = stack->popU64();
-        uint64_t a = stack->popU64();
-        stack->pushU64(a & b);
-        return RTE_SUCCESS;
+        uint64_t b = stack->pop_uint64_t();
+        uint64_t a = stack->pop_uint64_t();
+        stack->push_uint64_t(a & b);
+        return STATUS_SUCCESS;
     }
 
     RuntimeError BW_OR_X8(RuntimeStack* stack) {
-        uint8_t b = stack->popU8();
-        uint8_t a = stack->popU8();
-        stack->pushU8(a | b);
-        return RTE_SUCCESS;
+        uint8_t b = stack->pop_uint8_t();
+        uint8_t a = stack->pop_uint8_t();
+        stack->push_uint8_t(a | b);
+        return STATUS_SUCCESS;
     }
     RuntimeError BW_OR_X16(RuntimeStack* stack) {
-        uint16_t b = stack->popU16();
-        uint16_t a = stack->popU16();
-        stack->pushU16(a | b);
-        return RTE_SUCCESS;
+        uint16_t b = stack->pop_uint16_t();
+        uint16_t a = stack->pop_uint16_t();
+        stack->push_uint16_t(a | b);
+        return STATUS_SUCCESS;
     }
     RuntimeError BW_OR_X32(RuntimeStack* stack) {
-        uint32_t b = stack->popU32();
-        uint32_t a = stack->popU32();
-        stack->pushU32(a | b);
-        return RTE_SUCCESS;
+        uint32_t b = stack->pop_uint32_t();
+        uint32_t a = stack->pop_uint32_t();
+        stack->push_uint32_t(a | b);
+        return STATUS_SUCCESS;
     }
     RuntimeError BW_OR_X64(RuntimeStack* stack) {
-        uint64_t b = stack->popU64();
-        uint64_t a = stack->popU64();
-        stack->pushU64(a | b);
-        return RTE_SUCCESS;
+        uint64_t b = stack->pop_uint64_t();
+        uint64_t a = stack->pop_uint64_t();
+        stack->push_uint64_t(a | b);
+        return STATUS_SUCCESS;
     }
 
     RuntimeError BW_XOR_X8(RuntimeStack* stack) {
-        uint8_t b = stack->popU8();
-        uint8_t a = stack->popU8();
-        stack->pushU8(a ^ b);
-        return RTE_SUCCESS;
+        uint8_t b = stack->pop_uint8_t();
+        uint8_t a = stack->pop_uint8_t();
+        stack->push_uint8_t(a ^ b);
+        return STATUS_SUCCESS;
     }
     RuntimeError BW_XOR_X16(RuntimeStack* stack) {
-        uint16_t b = stack->popU16();
-        uint16_t a = stack->popU16();
-        stack->pushU16(a ^ b);
-        return RTE_SUCCESS;
+        uint16_t b = stack->pop_uint16_t();
+        uint16_t a = stack->pop_uint16_t();
+        stack->push_uint16_t(a ^ b);
+        return STATUS_SUCCESS;
     }
     RuntimeError BW_XOR_X32(RuntimeStack* stack) {
-        uint32_t b = stack->popU32();
-        uint32_t a = stack->popU32();
-        stack->pushU32(a ^ b);
-        return RTE_SUCCESS;
+        uint32_t b = stack->pop_uint32_t();
+        uint32_t a = stack->pop_uint32_t();
+        stack->push_uint32_t(a ^ b);
+        return STATUS_SUCCESS;
     }
     RuntimeError BW_XOR_X64(RuntimeStack* stack) {
-        uint64_t b = stack->popU64();
-        uint64_t a = stack->popU64();
-        stack->pushU64(a ^ b);
-        return RTE_SUCCESS;
+        uint64_t b = stack->pop_uint64_t();
+        uint64_t a = stack->pop_uint64_t();
+        stack->push_uint64_t(a ^ b);
+        return STATUS_SUCCESS;
     }
 
     RuntimeError BW_NOT_X8(RuntimeStack* stack) {
-        uint8_t a = stack->popU8();
-        stack->pushU8(~a);
-        return RTE_SUCCESS;
+        uint8_t a = stack->pop_uint8_t();
+        stack->push_uint8_t(~a);
+        return STATUS_SUCCESS;
     }
     RuntimeError BW_NOT_X16(RuntimeStack* stack) {
-        uint16_t a = stack->popU16();
-        stack->pushU16(~a);
-        return RTE_SUCCESS;
+        uint16_t a = stack->pop_uint16_t();
+        stack->push_uint16_t(~a);
+        return STATUS_SUCCESS;
     }
     RuntimeError BW_NOT_X32(RuntimeStack* stack) {
-        uint32_t a = stack->popU32();
-        stack->pushU32(~a);
-        return RTE_SUCCESS;
+        uint32_t a = stack->pop_uint32_t();
+        stack->push_uint32_t(~a);
+        return STATUS_SUCCESS;
     }
     RuntimeError BW_NOT_X64(RuntimeStack* stack) {
-        uint64_t a = stack->popU64();
-        stack->pushU64(~a);
-        return RTE_SUCCESS;
+        uint64_t a = stack->pop_uint64_t();
+        stack->push_uint64_t(~a);
+        return STATUS_SUCCESS;
     }
 
     RuntimeError BW_LSHIFT_X8(RuntimeStack* stack) {
-        uint8_t b = stack->popU8();
-        uint8_t a = stack->popU8();
-        stack->pushU8(a << b);
-        return RTE_SUCCESS;
+        uint8_t b = stack->pop_uint8_t();
+        uint8_t a = stack->pop_uint8_t();
+        stack->push_uint8_t(a << b);
+        return STATUS_SUCCESS;
     }
     RuntimeError BW_LSHIFT_X16(RuntimeStack* stack) {
-        uint16_t b = stack->popU16();
-        uint16_t a = stack->popU16();
-        stack->pushU16(a << b);
-        return RTE_SUCCESS;
+        uint16_t b = stack->pop_uint16_t();
+        uint16_t a = stack->pop_uint16_t();
+        stack->push_uint16_t(a << b);
+        return STATUS_SUCCESS;
     }
     RuntimeError BW_LSHIFT_X32(RuntimeStack* stack) {
-        uint32_t b = stack->popU32();
-        uint32_t a = stack->popU32();
-        stack->pushU32(a << b);
-        return RTE_SUCCESS;
+        uint32_t b = stack->pop_uint32_t();
+        uint32_t a = stack->pop_uint32_t();
+        stack->push_uint32_t(a << b);
+        return STATUS_SUCCESS;
     }
     RuntimeError BW_LSHIFT_X64(RuntimeStack* stack) {
-        uint64_t b = stack->popU64();
-        uint64_t a = stack->popU64();
-        stack->pushU64(a << b);
-        return RTE_SUCCESS;
+        uint64_t b = stack->pop_uint64_t();
+        uint64_t a = stack->pop_uint64_t();
+        stack->push_uint64_t(a << b);
+        return STATUS_SUCCESS;
     }
 
     RuntimeError BW_RSHIFT_X8(RuntimeStack* stack) {
-        uint8_t b = stack->popU8();
-        uint8_t a = stack->popU8();
-        stack->pushU8(a >> b);
-        return RTE_SUCCESS;
+        uint8_t b = stack->pop_uint8_t();
+        uint8_t a = stack->pop_uint8_t();
+        stack->push_uint8_t(a >> b);
+        return STATUS_SUCCESS;
     }
     RuntimeError BW_RSHIFT_X16(RuntimeStack* stack) {
-        uint16_t b = stack->popU16();
-        uint16_t a = stack->popU16();
-        stack->pushU16(a >> b);
-        return RTE_SUCCESS;
+        uint16_t b = stack->pop_uint16_t();
+        uint16_t a = stack->pop_uint16_t();
+        stack->push_uint16_t(a >> b);
+        return STATUS_SUCCESS;
     }
     RuntimeError BW_RSHIFT_X32(RuntimeStack* stack) {
-        uint32_t b = stack->popU32();
-        uint32_t a = stack->popU32();
-        stack->pushU32(a >> b);
-        return RTE_SUCCESS;
+        uint32_t b = stack->pop_uint32_t();
+        uint32_t a = stack->pop_uint32_t();
+        stack->push_uint32_t(a >> b);
+        return STATUS_SUCCESS;
     }
     RuntimeError BW_RSHIFT_X64(RuntimeStack* stack) {
-        uint64_t b = stack->popU64();
-        uint64_t a = stack->popU64();
-        stack->pushU64(a >> b);
-        return RTE_SUCCESS;
+        uint64_t b = stack->pop_uint64_t();
+        uint64_t a = stack->pop_uint64_t();
+        stack->push_uint64_t(a >> b);
+        return STATUS_SUCCESS;
     }
 
     // Boolean operators
     RuntimeError LOGIC_AND(RuntimeStack* stack) {
-        uint8_t b = stack->popU8() != 0;
-        uint8_t a = stack->popU8() != 0;
-        stack->pushU8(a && b);
-        return RTE_SUCCESS;
+        uint8_t b = stack->pop_uint8_t() != 0;
+        uint8_t a = stack->pop_uint8_t() != 0;
+        stack->push_uint8_t(a && b);
+        return STATUS_SUCCESS;
     }
     RuntimeError LOGIC_OR(RuntimeStack* stack) {
-        uint8_t b = stack->popU8() != 0;
-        uint8_t a = stack->popU8() != 0;
-        stack->pushU8(a || b);
-        return RTE_SUCCESS;
+        uint8_t b = stack->pop_uint8_t() != 0;
+        uint8_t a = stack->pop_uint8_t() != 0;
+        stack->push_uint8_t(a || b);
+        return STATUS_SUCCESS;
     }
     RuntimeError LOGIC_XOR(RuntimeStack* stack) {
-        uint8_t b = stack->popU8() != 0;
-        uint8_t a = stack->popU8() != 0;
-        stack->pushU8(a ^ b);
-        return RTE_SUCCESS;
+        uint8_t b = stack->pop_uint8_t() != 0;
+        uint8_t a = stack->pop_uint8_t() != 0;
+        stack->push_uint8_t(a ^ b);
+        return STATUS_SUCCESS;
     }
     RuntimeError LOGIC_NOT(RuntimeStack* stack) {
-        uint8_t a = stack->popU8() != 0;
-        stack->pushU8(!a);
-        return RTE_SUCCESS;
+        uint8_t a = stack->pop_uint8_t() != 0;
+        stack->push_uint8_t(!a);
+        return STATUS_SUCCESS;
     }
 
-    RuntimeError CMP_EQ_U8(RuntimeStack* stack) {
-        uint8_t b = stack->popU8();
-        uint8_t a = stack->popU8();
-        stack->pushU8(a == b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_EQ_uint8_t(RuntimeStack* stack) {
+        uint8_t b = stack->pop_uint8_t();
+        uint8_t a = stack->pop_uint8_t();
+        stack->push_uint8_t(a == b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_EQ_U16(RuntimeStack* stack) {
-        uint16_t b = stack->popU16();
-        uint16_t a = stack->popU16();
-        stack->pushU8(a == b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_EQ_uint16_t(RuntimeStack* stack) {
+        uint16_t b = stack->pop_uint16_t();
+        uint16_t a = stack->pop_uint16_t();
+        stack->push_uint8_t(a == b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_EQ_U32(RuntimeStack* stack) {
-        uint32_t b = stack->popU32();
-        uint32_t a = stack->popU32();
-        stack->pushU8(a == b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_EQ_uint32_t(RuntimeStack* stack) {
+        uint32_t b = stack->pop_uint32_t();
+        uint32_t a = stack->pop_uint32_t();
+        stack->push_uint8_t(a == b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_EQ_U64(RuntimeStack* stack) {
-        uint64_t b = stack->popU64();
-        uint64_t a = stack->popU64();
-        stack->pushU8(a == b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_EQ_uint64_t(RuntimeStack* stack) {
+        uint64_t b = stack->pop_uint64_t();
+        uint64_t a = stack->pop_uint64_t();
+        stack->push_uint8_t(a == b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_EQ_S8(RuntimeStack* stack) {
-        int8_t b = stack->popS8();
-        int8_t a = stack->popS8();
-        stack->pushU8(a == b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_EQ_int8_t(RuntimeStack* stack) {
+        int8_t b = stack->pop_int8_t();
+        int8_t a = stack->pop_int8_t();
+        stack->push_uint8_t(a == b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_EQ_S16(RuntimeStack* stack) {
-        int16_t b = stack->popS16();
-        int16_t a = stack->popS16();
-        stack->pushU8(a == b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_EQ_int16_t(RuntimeStack* stack) {
+        int16_t b = stack->pop_int16_t();
+        int16_t a = stack->pop_int16_t();
+        stack->push_uint8_t(a == b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_EQ_S32(RuntimeStack* stack) {
-        int32_t b = stack->popS32();
-        int32_t a = stack->popS32();
-        stack->pushU8(a == b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_EQ_int32_t(RuntimeStack* stack) {
+        int32_t b = stack->pop_int32_t();
+        int32_t a = stack->pop_int32_t();
+        stack->push_uint8_t(a == b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_EQ_S64(RuntimeStack* stack) {
-        int64_t b = stack->popS64();
-        int64_t a = stack->popS64();
-        stack->pushU8(a == b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_EQ_int64_t(RuntimeStack* stack) {
+        int64_t b = stack->pop_int64_t();
+        int64_t a = stack->pop_int64_t();
+        stack->push_uint8_t(a == b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_EQ_F32(RuntimeStack* stack) {
-        float b = stack->popF32();
-        float a = stack->popF32();
-        stack->pushU8(a == b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_EQ_float(RuntimeStack* stack) {
+        float b = stack->pop_float();
+        float a = stack->pop_float();
+        stack->push_uint8_t(a == b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_EQ_F64(RuntimeStack* stack) {
-        double b = stack->popF64();
-        double a = stack->popF64();
-        stack->pushU8(a == b);
-        return RTE_SUCCESS;
-    }
-
-    RuntimeError CMP_NEQ_U8(RuntimeStack* stack) {
-        uint8_t b = stack->popU8();
-        uint8_t a = stack->popU8();
-        stack->pushU8(a != b);
-        return RTE_SUCCESS;
-    }
-    RuntimeError CMP_NEQ_U16(RuntimeStack* stack) {
-        uint16_t b = stack->popU16();
-        uint16_t a = stack->popU16();
-        stack->pushU8(a != b);
-        return RTE_SUCCESS;
-    }
-    RuntimeError CMP_NEQ_U32(RuntimeStack* stack) {
-        uint32_t b = stack->popU32();
-        uint32_t a = stack->popU32();
-        stack->pushU8(a != b);
-        return RTE_SUCCESS;
-    }
-    RuntimeError CMP_NEQ_U64(RuntimeStack* stack) {
-        uint64_t b = stack->popU64();
-        uint64_t a = stack->popU64();
-        stack->pushU8(a != b);
-        return RTE_SUCCESS;
-    }
-    RuntimeError CMP_NEQ_S8(RuntimeStack* stack) {
-        int8_t b = stack->popS8();
-        int8_t a = stack->popS8();
-        stack->pushU8(a != b);
-        return RTE_SUCCESS;
-    }
-    RuntimeError CMP_NEQ_S16(RuntimeStack* stack) {
-        int16_t b = stack->popS16();
-        int16_t a = stack->popS16();
-        stack->pushU8(a != b);
-        return RTE_SUCCESS;
-    }
-    RuntimeError CMP_NEQ_S32(RuntimeStack* stack) {
-        int32_t b = stack->popS32();
-        int32_t a = stack->popS32();
-        stack->pushU8(a != b);
-        return RTE_SUCCESS;
-    }
-    RuntimeError CMP_NEQ_S64(RuntimeStack* stack) {
-        int64_t b = stack->popS64();
-        int64_t a = stack->popS64();
-        stack->pushU8(a != b);
-        return RTE_SUCCESS;
-    }
-    RuntimeError CMP_NEQ_F32(RuntimeStack* stack) {
-        float b = stack->popF32();
-        float a = stack->popF32();
-        stack->pushU8(a != b);
-        return RTE_SUCCESS;
-    }
-    RuntimeError CMP_NEQ_F64(RuntimeStack* stack) {
-        double b = stack->popF64();
-        double a = stack->popF64();
-        stack->pushU8(a != b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_EQ_double(RuntimeStack* stack) {
+        double b = stack->pop_double();
+        double a = stack->pop_double();
+        stack->push_uint8_t(a == b);
+        return STATUS_SUCCESS;
     }
 
-    RuntimeError CMP_GT_U8(RuntimeStack* stack) {
-        uint8_t b = stack->popU8();
-        uint8_t a = stack->popU8();
-        stack->pushU8(a > b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_NEQ_uint8_t(RuntimeStack* stack) {
+        uint8_t b = stack->pop_uint8_t();
+        uint8_t a = stack->pop_uint8_t();
+        stack->push_uint8_t(a != b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_GT_U16(RuntimeStack* stack) {
-        uint16_t b = stack->popU16();
-        uint16_t a = stack->popU16();
-        stack->pushU8(a > b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_NEQ_uint16_t(RuntimeStack* stack) {
+        uint16_t b = stack->pop_uint16_t();
+        uint16_t a = stack->pop_uint16_t();
+        stack->push_uint8_t(a != b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_GT_U32(RuntimeStack* stack) {
-        uint32_t b = stack->popU32();
-        uint32_t a = stack->popU32();
-        stack->pushU8(a > b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_NEQ_uint32_t(RuntimeStack* stack) {
+        uint32_t b = stack->pop_uint32_t();
+        uint32_t a = stack->pop_uint32_t();
+        stack->push_uint8_t(a != b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_GT_U64(RuntimeStack* stack) {
-        uint64_t b = stack->popU64();
-        uint64_t a = stack->popU64();
-        stack->pushU8(a > b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_NEQ_uint64_t(RuntimeStack* stack) {
+        uint64_t b = stack->pop_uint64_t();
+        uint64_t a = stack->pop_uint64_t();
+        stack->push_uint8_t(a != b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_GT_S8(RuntimeStack* stack) {
-        int8_t b = stack->popS8();
-        int8_t a = stack->popS8();
-        stack->pushU8(a > b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_NEQ_int8_t(RuntimeStack* stack) {
+        int8_t b = stack->pop_int8_t();
+        int8_t a = stack->pop_int8_t();
+        stack->push_uint8_t(a != b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_GT_S16(RuntimeStack* stack) {
-        int16_t b = stack->popS16();
-        int16_t a = stack->popS16();
-        stack->pushU8(a > b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_NEQ_int16_t(RuntimeStack* stack) {
+        int16_t b = stack->pop_int16_t();
+        int16_t a = stack->pop_int16_t();
+        stack->push_uint8_t(a != b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_GT_S32(RuntimeStack* stack) {
-        int32_t b = stack->popS32();
-        int32_t a = stack->popS32();
-        stack->pushU8(a > b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_NEQ_int32_t(RuntimeStack* stack) {
+        int32_t b = stack->pop_int32_t();
+        int32_t a = stack->pop_int32_t();
+        stack->push_uint8_t(a != b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_GT_S64(RuntimeStack* stack) {
-        int64_t b = stack->popS64();
-        int64_t a = stack->popS64();
-        stack->pushU8(a > b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_NEQ_int64_t(RuntimeStack* stack) {
+        int64_t b = stack->pop_int64_t();
+        int64_t a = stack->pop_int64_t();
+        stack->push_uint8_t(a != b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_GT_F32(RuntimeStack* stack) {
-        float b = stack->popF32();
-        float a = stack->popF32();
-        stack->pushU8(a > b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_NEQ_float(RuntimeStack* stack) {
+        float b = stack->pop_float();
+        float a = stack->pop_float();
+        stack->push_uint8_t(a != b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_GT_F64(RuntimeStack* stack) {
-        double b = stack->popF64();
-        double a = stack->popF64();
-        stack->pushU8(a > b);
-        return RTE_SUCCESS;
-    }
-
-    RuntimeError CMP_LT_U8(RuntimeStack* stack) {
-        uint8_t b = stack->popU8();
-        uint8_t a = stack->popU8();
-        stack->pushU8(a < b);
-        return RTE_SUCCESS;
-    }
-    RuntimeError CMP_LT_U16(RuntimeStack* stack) {
-        uint16_t b = stack->popU16();
-        uint16_t a = stack->popU16();
-        stack->pushU8(a < b);
-        return RTE_SUCCESS;
-    }
-    RuntimeError CMP_LT_U32(RuntimeStack* stack) {
-        uint32_t b = stack->popU32();
-        uint32_t a = stack->popU32();
-        stack->pushU8(a < b);
-        return RTE_SUCCESS;
-    }
-    RuntimeError CMP_LT_U64(RuntimeStack* stack) {
-        uint64_t b = stack->popU64();
-        uint64_t a = stack->popU64();
-        stack->pushU8(a < b);
-        return RTE_SUCCESS;
-    }
-    RuntimeError CMP_LT_S8(RuntimeStack* stack) {
-        int8_t b = stack->popS8();
-        int8_t a = stack->popS8();
-        stack->pushU8(a < b);
-        return RTE_SUCCESS;
-    }
-    RuntimeError CMP_LT_S16(RuntimeStack* stack) {
-        int16_t b = stack->popS16();
-        int16_t a = stack->popS16();
-        stack->pushU8(a < b);
-        return RTE_SUCCESS;
-    }
-    RuntimeError CMP_LT_S32(RuntimeStack* stack) {
-        int32_t b = stack->popS32();
-        int32_t a = stack->popS32();
-        stack->pushU8(a < b);
-        return RTE_SUCCESS;
-    }
-    RuntimeError CMP_LT_S64(RuntimeStack* stack) {
-        int64_t b = stack->popS64();
-        int64_t a = stack->popS64();
-        stack->pushU8(a < b);
-        return RTE_SUCCESS;
-    }
-    RuntimeError CMP_LT_F32(RuntimeStack* stack) {
-        float b = stack->popF32();
-        float a = stack->popF32();
-        stack->pushU8(a < b);
-        return RTE_SUCCESS;
-    }
-    RuntimeError CMP_LT_F64(RuntimeStack* stack) {
-        double b = stack->popF64();
-        double a = stack->popF64();
-        stack->pushU8(a < b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_NEQ_double(RuntimeStack* stack) {
+        double b = stack->pop_double();
+        double a = stack->pop_double();
+        stack->push_uint8_t(a != b);
+        return STATUS_SUCCESS;
     }
 
-    RuntimeError CMP_GTE_U8(RuntimeStack* stack) {
-        uint8_t b = stack->popU8();
-        uint8_t a = stack->popU8();
-        stack->pushU8(a >= b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_GT_uint8_t(RuntimeStack* stack) {
+        uint8_t b = stack->pop_uint8_t();
+        uint8_t a = stack->pop_uint8_t();
+        stack->push_uint8_t(a > b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_GTE_U16(RuntimeStack* stack) {
-        uint16_t b = stack->popU16();
-        uint16_t a = stack->popU16();
-        stack->pushU8(a >= b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_GT_uint16_t(RuntimeStack* stack) {
+        uint16_t b = stack->pop_uint16_t();
+        uint16_t a = stack->pop_uint16_t();
+        stack->push_uint8_t(a > b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_GTE_U32(RuntimeStack* stack) {
-        uint32_t b = stack->popU32();
-        uint32_t a = stack->popU32();
-        stack->pushU8(a >= b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_GT_uint32_t(RuntimeStack* stack) {
+        uint32_t b = stack->pop_uint32_t();
+        uint32_t a = stack->pop_uint32_t();
+        stack->push_uint8_t(a > b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_GTE_U64(RuntimeStack* stack) {
-        uint64_t b = stack->popU64();
-        uint64_t a = stack->popU64();
-        stack->pushU8(a >= b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_GT_uint64_t(RuntimeStack* stack) {
+        uint64_t b = stack->pop_uint64_t();
+        uint64_t a = stack->pop_uint64_t();
+        stack->push_uint8_t(a > b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_GTE_S8(RuntimeStack* stack) {
-        int8_t b = stack->popS8();
-        int8_t a = stack->popS8();
-        stack->pushU8(a >= b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_GT_int8_t(RuntimeStack* stack) {
+        int8_t b = stack->pop_int8_t();
+        int8_t a = stack->pop_int8_t();
+        stack->push_uint8_t(a > b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_GTE_S16(RuntimeStack* stack) {
-        int16_t b = stack->popS16();
-        int16_t a = stack->popS16();
-        stack->pushU8(a >= b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_GT_int16_t(RuntimeStack* stack) {
+        int16_t b = stack->pop_int16_t();
+        int16_t a = stack->pop_int16_t();
+        stack->push_uint8_t(a > b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_GTE_S32(RuntimeStack* stack) {
-        int32_t b = stack->popS32();
-        int32_t a = stack->popS32();
-        stack->pushU8(a >= b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_GT_int32_t(RuntimeStack* stack) {
+        int32_t b = stack->pop_int32_t();
+        int32_t a = stack->pop_int32_t();
+        stack->push_uint8_t(a > b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_GTE_S64(RuntimeStack* stack) {
-        int64_t b = stack->popS64();
-        int64_t a = stack->popS64();
-        stack->pushU8(a >= b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_GT_int64_t(RuntimeStack* stack) {
+        int64_t b = stack->pop_int64_t();
+        int64_t a = stack->pop_int64_t();
+        stack->push_uint8_t(a > b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_GTE_F32(RuntimeStack* stack) {
-        float b = stack->popF32();
-        float a = stack->popF32();
-        stack->pushU8(a >= b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_GT_float(RuntimeStack* stack) {
+        float b = stack->pop_float();
+        float a = stack->pop_float();
+        stack->push_uint8_t(a > b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_GTE_F64(RuntimeStack* stack) {
-        double b = stack->popF64();
-        double a = stack->popF64();
-        stack->pushU8(a >= b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_GT_double(RuntimeStack* stack) {
+        double b = stack->pop_double();
+        double a = stack->pop_double();
+        stack->push_uint8_t(a > b);
+        return STATUS_SUCCESS;
     }
 
-    RuntimeError CMP_LTE_U8(RuntimeStack* stack) {
-        uint8_t b = stack->popU8();
-        uint8_t a = stack->popU8();
-        stack->pushU8(a <= b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_LT_uint8_t(RuntimeStack* stack) {
+        uint8_t b = stack->pop_uint8_t();
+        uint8_t a = stack->pop_uint8_t();
+        stack->push_uint8_t(a < b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_LTE_U16(RuntimeStack* stack) {
-        uint16_t b = stack->popU16();
-        uint16_t a = stack->popU16();
-        stack->pushU8(a <= b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_LT_uint16_t(RuntimeStack* stack) {
+        uint16_t b = stack->pop_uint16_t();
+        uint16_t a = stack->pop_uint16_t();
+        stack->push_uint8_t(a < b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_LTE_U32(RuntimeStack* stack) {
-        uint32_t b = stack->popU32();
-        uint32_t a = stack->popU32();
-        stack->pushU8(a <= b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_LT_uint32_t(RuntimeStack* stack) {
+        uint32_t b = stack->pop_uint32_t();
+        uint32_t a = stack->pop_uint32_t();
+        stack->push_uint8_t(a < b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_LTE_U64(RuntimeStack* stack) {
-        uint64_t b = stack->popU64();
-        uint64_t a = stack->popU64();
-        stack->pushU8(a <= b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_LT_uint64_t(RuntimeStack* stack) {
+        uint64_t b = stack->pop_uint64_t();
+        uint64_t a = stack->pop_uint64_t();
+        stack->push_uint8_t(a < b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_LTE_S8(RuntimeStack* stack) {
-        int8_t b = stack->popS8();
-        int8_t a = stack->popS8();
-        stack->pushU8(a <= b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_LT_int8_t(RuntimeStack* stack) {
+        int8_t b = stack->pop_int8_t();
+        int8_t a = stack->pop_int8_t();
+        stack->push_uint8_t(a < b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_LTE_S16(RuntimeStack* stack) {
-        int16_t b = stack->popS16();
-        int16_t a = stack->popS16();
-        stack->pushU8(a <= b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_LT_int16_t(RuntimeStack* stack) {
+        int16_t b = stack->pop_int16_t();
+        int16_t a = stack->pop_int16_t();
+        stack->push_uint8_t(a < b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_LTE_S32(RuntimeStack* stack) {
-        int32_t b = stack->popS32();
-        int32_t a = stack->popS32();
-        stack->pushU8(a <= b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_LT_int32_t(RuntimeStack* stack) {
+        int32_t b = stack->pop_int32_t();
+        int32_t a = stack->pop_int32_t();
+        stack->push_uint8_t(a < b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_LTE_S64(RuntimeStack* stack) {
-        int64_t b = stack->popS64();
-        int64_t a = stack->popS64();
-        stack->pushU8(a <= b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_LT_int64_t(RuntimeStack* stack) {
+        int64_t b = stack->pop_int64_t();
+        int64_t a = stack->pop_int64_t();
+        stack->push_uint8_t(a < b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_LTE_F32(RuntimeStack* stack) {
-        float b = stack->popF32();
-        float a = stack->popF32();
-        stack->pushU8(a <= b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_LT_float(RuntimeStack* stack) {
+        float b = stack->pop_float();
+        float a = stack->pop_float();
+        stack->push_uint8_t(a < b);
+        return STATUS_SUCCESS;
     }
-    RuntimeError CMP_LTE_F64(RuntimeStack* stack) {
-        double b = stack->popF64();
-        double a = stack->popF64();
-        stack->pushU8(a <= b);
-        return RTE_SUCCESS;
+    RuntimeError CMP_LT_double(RuntimeStack* stack) {
+        double b = stack->pop_double();
+        double a = stack->pop_double();
+        stack->push_uint8_t(a < b);
+        return STATUS_SUCCESS;
+    }
+
+    RuntimeError CMP_GTE_uint8_t(RuntimeStack* stack) {
+        uint8_t b = stack->pop_uint8_t();
+        uint8_t a = stack->pop_uint8_t();
+        stack->push_uint8_t(a >= b);
+        return STATUS_SUCCESS;
+    }
+    RuntimeError CMP_GTE_uint16_t(RuntimeStack* stack) {
+        uint16_t b = stack->pop_uint16_t();
+        uint16_t a = stack->pop_uint16_t();
+        stack->push_uint8_t(a >= b);
+        return STATUS_SUCCESS;
+    }
+    RuntimeError CMP_GTE_uint32_t(RuntimeStack* stack) {
+        uint32_t b = stack->pop_uint32_t();
+        uint32_t a = stack->pop_uint32_t();
+        stack->push_uint8_t(a >= b);
+        return STATUS_SUCCESS;
+    }
+    RuntimeError CMP_GTE_uint64_t(RuntimeStack* stack) {
+        uint64_t b = stack->pop_uint64_t();
+        uint64_t a = stack->pop_uint64_t();
+        stack->push_uint8_t(a >= b);
+        return STATUS_SUCCESS;
+    }
+    RuntimeError CMP_GTE_int8_t(RuntimeStack* stack) {
+        int8_t b = stack->pop_int8_t();
+        int8_t a = stack->pop_int8_t();
+        stack->push_uint8_t(a >= b);
+        return STATUS_SUCCESS;
+    }
+    RuntimeError CMP_GTE_int16_t(RuntimeStack* stack) {
+        int16_t b = stack->pop_int16_t();
+        int16_t a = stack->pop_int16_t();
+        stack->push_uint8_t(a >= b);
+        return STATUS_SUCCESS;
+    }
+    RuntimeError CMP_GTE_int32_t(RuntimeStack* stack) {
+        int32_t b = stack->pop_int32_t();
+        int32_t a = stack->pop_int32_t();
+        stack->push_uint8_t(a >= b);
+        return STATUS_SUCCESS;
+    }
+    RuntimeError CMP_GTE_int64_t(RuntimeStack* stack) {
+        int64_t b = stack->pop_int64_t();
+        int64_t a = stack->pop_int64_t();
+        stack->push_uint8_t(a >= b);
+        return STATUS_SUCCESS;
+    }
+    RuntimeError CMP_GTE_float(RuntimeStack* stack) {
+        float b = stack->pop_float();
+        float a = stack->pop_float();
+        stack->push_uint8_t(a >= b);
+        return STATUS_SUCCESS;
+    }
+    RuntimeError CMP_GTE_double(RuntimeStack* stack) {
+        double b = stack->pop_double();
+        double a = stack->pop_double();
+        stack->push_uint8_t(a >= b);
+        return STATUS_SUCCESS;
+    }
+
+    RuntimeError CMP_LTE_uint8_t(RuntimeStack* stack) {
+        uint8_t b = stack->pop_uint8_t();
+        uint8_t a = stack->pop_uint8_t();
+        stack->push_uint8_t(a <= b);
+        return STATUS_SUCCESS;
+    }
+    RuntimeError CMP_LTE_uint16_t(RuntimeStack* stack) {
+        uint16_t b = stack->pop_uint16_t();
+        uint16_t a = stack->pop_uint16_t();
+        stack->push_uint8_t(a <= b);
+        return STATUS_SUCCESS;
+    }
+    RuntimeError CMP_LTE_uint32_t(RuntimeStack* stack) {
+        uint32_t b = stack->pop_uint32_t();
+        uint32_t a = stack->pop_uint32_t();
+        stack->push_uint8_t(a <= b);
+        return STATUS_SUCCESS;
+    }
+    RuntimeError CMP_LTE_uint64_t(RuntimeStack* stack) {
+        uint64_t b = stack->pop_uint64_t();
+        uint64_t a = stack->pop_uint64_t();
+        stack->push_uint8_t(a <= b);
+        return STATUS_SUCCESS;
+    }
+    RuntimeError CMP_LTE_int8_t(RuntimeStack* stack) {
+        int8_t b = stack->pop_int8_t();
+        int8_t a = stack->pop_int8_t();
+        stack->push_uint8_t(a <= b);
+        return STATUS_SUCCESS;
+    }
+    RuntimeError CMP_LTE_int16_t(RuntimeStack* stack) {
+        int16_t b = stack->pop_int16_t();
+        int16_t a = stack->pop_int16_t();
+        stack->push_uint8_t(a <= b);
+        return STATUS_SUCCESS;
+    }
+    RuntimeError CMP_LTE_int32_t(RuntimeStack* stack) {
+        int32_t b = stack->pop_int32_t();
+        int32_t a = stack->pop_int32_t();
+        stack->push_uint8_t(a <= b);
+        return STATUS_SUCCESS;
+    }
+    RuntimeError CMP_LTE_int64_t(RuntimeStack* stack) {
+        int64_t b = stack->pop_int64_t();
+        int64_t a = stack->pop_int64_t();
+        stack->push_uint8_t(a <= b);
+        return STATUS_SUCCESS;
+    }
+    RuntimeError CMP_LTE_float(RuntimeStack* stack) {
+        float b = stack->pop_float();
+        float a = stack->pop_float();
+        stack->push_uint8_t(a <= b);
+        return STATUS_SUCCESS;
+    }
+    RuntimeError CMP_LTE_double(RuntimeStack* stack) {
+        double b = stack->pop_double();
+        double a = stack->pop_double();
+        stack->push_uint8_t(a <= b);
+        return STATUS_SUCCESS;
     }
 
     // Comparison operators
     RuntimeError handle_CMP_EQ(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         static uint16_t size = 1;
-        if (index + size > program_size) return RTE_PROGRAM_POINTER_OUT_OF_BOUNDS;
+        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         uint8_t data_type = program[index++];
         switch (data_type) {
-            case BOOL:
-            case U8: return CMP_EQ_U8(stack);
-            case U16: return CMP_EQ_U16(stack);
-            case U32: return CMP_EQ_U32(stack);
-            case U64: return CMP_EQ_U64(stack);
-            case S8: return CMP_EQ_S8(stack);
-            case S16: return CMP_EQ_S16(stack);
-            case S32: return CMP_EQ_S32(stack);
-            case S64: return CMP_EQ_S64(stack);
-            case F32: return CMP_EQ_F32(stack);
-            case F64: return CMP_EQ_F64(stack);
-            default: return RTE_INVALID_DATA_TYPE;
+            case type_bool:
+            case type_uint8_t: return CMP_EQ_uint8_t(stack);
+            case type_uint16_t: return CMP_EQ_uint16_t(stack);
+            case type_uint32_t: return CMP_EQ_uint32_t(stack);
+            case type_uint64_t: return CMP_EQ_uint64_t(stack);
+            case type_int8_t: return CMP_EQ_int8_t(stack);
+            case type_int16_t: return CMP_EQ_int16_t(stack);
+            case type_int32_t: return CMP_EQ_int32_t(stack);
+            case type_int64_t: return CMP_EQ_int64_t(stack);
+            case type_float: return CMP_EQ_float(stack);
+            case type_double: return CMP_EQ_double(stack);
+            default: return INVALID_DATA_TYPE;
         }
     }
     RuntimeError handle_CMP_NEQ(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         static uint16_t size = 1;
-        if (index + size > program_size) return RTE_PROGRAM_POINTER_OUT_OF_BOUNDS;
+        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         uint8_t data_type = program[index++];
         switch (data_type) {
-            case BOOL:
-            case U8: return CMP_NEQ_U8(stack);
-            case U16: return CMP_NEQ_U16(stack);
-            case U32: return CMP_NEQ_U32(stack);
-            case U64: return CMP_NEQ_U64(stack);
-            case S8: return CMP_NEQ_S8(stack);
-            case S16: return CMP_NEQ_S16(stack);
-            case S32: return CMP_NEQ_S32(stack);
-            case S64: return CMP_NEQ_S64(stack);
-            case F32: return CMP_NEQ_F32(stack);
-            case F64: return CMP_NEQ_F64(stack);
-            default: return RTE_INVALID_DATA_TYPE;
+            case type_bool:
+            case type_uint8_t: return CMP_NEQ_uint8_t(stack);
+            case type_uint16_t: return CMP_NEQ_uint16_t(stack);
+            case type_uint32_t: return CMP_NEQ_uint32_t(stack);
+            case type_uint64_t: return CMP_NEQ_uint64_t(stack);
+            case type_int8_t: return CMP_NEQ_int8_t(stack);
+            case type_int16_t: return CMP_NEQ_int16_t(stack);
+            case type_int32_t: return CMP_NEQ_int32_t(stack);
+            case type_int64_t: return CMP_NEQ_int64_t(stack);
+            case type_float: return CMP_NEQ_float(stack);
+            case type_double: return CMP_NEQ_double(stack);
+            default: return INVALID_DATA_TYPE;
         }
     }
     RuntimeError handle_CMP_GT(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         static uint16_t size = 1;
-        if (index + size > program_size) return RTE_PROGRAM_POINTER_OUT_OF_BOUNDS;
+        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         uint8_t data_type = program[index++];
         switch (data_type) {
-            case BOOL:
-            case U8: return CMP_GT_U8(stack);
-            case U16: return CMP_GT_U16(stack);
-            case U32: return CMP_GT_U32(stack);
-            case U64: return CMP_GT_U64(stack);
-            case S8: return CMP_GT_S8(stack);
-            case S16: return CMP_GT_S16(stack);
-            case S32: return CMP_GT_S32(stack);
-            case S64: return CMP_GT_S64(stack);
-            case F32: return CMP_GT_F32(stack);
-            case F64: return CMP_GT_F64(stack);
-            default: return RTE_INVALID_DATA_TYPE;
+            case type_bool:
+            case type_uint8_t: return CMP_GT_uint8_t(stack);
+            case type_uint16_t: return CMP_GT_uint16_t(stack);
+            case type_uint32_t: return CMP_GT_uint32_t(stack);
+            case type_uint64_t: return CMP_GT_uint64_t(stack);
+            case type_int8_t: return CMP_GT_int8_t(stack);
+            case type_int16_t: return CMP_GT_int16_t(stack);
+            case type_int32_t: return CMP_GT_int32_t(stack);
+            case type_int64_t: return CMP_GT_int64_t(stack);
+            case type_float: return CMP_GT_float(stack);
+            case type_double: return CMP_GT_double(stack);
+            default: return INVALID_DATA_TYPE;
         }
     }
     RuntimeError handle_CMP_GTE(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         static uint16_t size = 1;
-        if (index + size > program_size) return RTE_PROGRAM_POINTER_OUT_OF_BOUNDS;
+        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         uint8_t data_type = program[index++];
         switch (data_type) {
-            case BOOL:
-            case U8: return CMP_GTE_U8(stack);
-            case U16: return CMP_GTE_U16(stack);
-            case U32: return CMP_GTE_U32(stack);
-            case U64: return CMP_GTE_U64(stack);
-            case S8: return CMP_GTE_S8(stack);
-            case S16: return CMP_GTE_S16(stack);
-            case S32: return CMP_GTE_S32(stack);
-            case S64: return CMP_GTE_S64(stack);
-            case F32: return CMP_GTE_F32(stack);
-            case F64: return CMP_GTE_F64(stack);
-            default: return RTE_INVALID_DATA_TYPE;
+            case type_bool:
+            case type_uint8_t: return CMP_GTE_uint8_t(stack);
+            case type_uint16_t: return CMP_GTE_uint16_t(stack);
+            case type_uint32_t: return CMP_GTE_uint32_t(stack);
+            case type_uint64_t: return CMP_GTE_uint64_t(stack);
+            case type_int8_t: return CMP_GTE_int8_t(stack);
+            case type_int16_t: return CMP_GTE_int16_t(stack);
+            case type_int32_t: return CMP_GTE_int32_t(stack);
+            case type_int64_t: return CMP_GTE_int64_t(stack);
+            case type_float: return CMP_GTE_float(stack);
+            case type_double: return CMP_GTE_double(stack);
+            default: return INVALID_DATA_TYPE;
         }
     }
     RuntimeError handle_CMP_LT(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         static uint16_t size = 1;
-        if (index + size > program_size) return RTE_PROGRAM_POINTER_OUT_OF_BOUNDS;
+        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         uint8_t data_type = program[index++];
         switch (data_type) {
-            case BOOL:
-            case U8: return CMP_LT_U8(stack);
-            case U16: return CMP_LT_U16(stack);
-            case U32: return CMP_LT_U32(stack);
-            case U64: return CMP_LT_U64(stack);
-            case S8: return CMP_LT_S8(stack);
-            case S16: return CMP_LT_S16(stack);
-            case S32: return CMP_LT_S32(stack);
-            case S64: return CMP_LT_S64(stack);
-            case F32: return CMP_LT_F32(stack);
-            case F64: return CMP_LT_F64(stack);
-            default: return RTE_INVALID_DATA_TYPE;
+            case type_bool:
+            case type_uint8_t: return CMP_LT_uint8_t(stack);
+            case type_uint16_t: return CMP_LT_uint16_t(stack);
+            case type_uint32_t: return CMP_LT_uint32_t(stack);
+            case type_uint64_t: return CMP_LT_uint64_t(stack);
+            case type_int8_t: return CMP_LT_int8_t(stack);
+            case type_int16_t: return CMP_LT_int16_t(stack);
+            case type_int32_t: return CMP_LT_int32_t(stack);
+            case type_int64_t: return CMP_LT_int64_t(stack);
+            case type_float: return CMP_LT_float(stack);
+            case type_double: return CMP_LT_double(stack);
+            default: return INVALID_DATA_TYPE;
         }
     }
     RuntimeError handle_CMP_LTE(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         static uint16_t size = 1;
-        if (index + size > program_size) return RTE_PROGRAM_POINTER_OUT_OF_BOUNDS;
+        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         uint8_t data_type = program[index++];
         switch (data_type) {
-            case BOOL:
-            case U8: return CMP_LTE_U8(stack);
-            case U16: return CMP_LTE_U16(stack);
-            case U32: return CMP_LTE_U32(stack);
-            case U64: return CMP_LTE_U64(stack);
-            case S8: return CMP_LTE_S8(stack);
-            case S16: return CMP_LTE_S16(stack);
-            case S32: return CMP_LTE_S32(stack);
-            case S64: return CMP_LTE_S64(stack);
-            case F32: return CMP_LTE_F32(stack);
-            case F64: return CMP_LTE_F64(stack);
-            default: return RTE_INVALID_DATA_TYPE;
+            case type_bool:
+            case type_uint8_t: return CMP_LTE_uint8_t(stack);
+            case type_uint16_t: return CMP_LTE_uint16_t(stack);
+            case type_uint32_t: return CMP_LTE_uint32_t(stack);
+            case type_uint64_t: return CMP_LTE_uint64_t(stack);
+            case type_int8_t: return CMP_LTE_int8_t(stack);
+            case type_int16_t: return CMP_LTE_int16_t(stack);
+            case type_int32_t: return CMP_LTE_int32_t(stack);
+            case type_int64_t: return CMP_LTE_int64_t(stack);
+            case type_float: return CMP_LTE_float(stack);
+            case type_double: return CMP_LTE_double(stack);
+            default: return INVALID_DATA_TYPE;
         }
     }
 
 
     RuntimeError handle_JMP(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         static uint16_t size = 2;
-        if (index + size > program_size) return RTE_PROGRAM_POINTER_OUT_OF_BOUNDS;
-        U8A_to_U16 cvt;
-        cvt.U8A[1] = program[index];
-        cvt.U8A[0] = program[index + 1];
-        index = cvt.U16;
-        if (index >= program_size) return RTE_PROGRAM_POINTER_OUT_OF_BOUNDS;
-        return RTE_SUCCESS;
+        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        u8A_to_u16 cvt;
+        cvt.u8A[1] = program[index];
+        cvt.u8A[0] = program[index + 1];
+        index = cvt.u16;
+        if (index >= program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        return STATUS_SUCCESS;
     }
     RuntimeError handle_JMP_IF(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         static uint16_t size = 2;
-        if (index + size > program_size) return RTE_PROGRAM_POINTER_OUT_OF_BOUNDS;
-        U8A_to_U16 cvt;
-        cvt.U8A[1] = program[index];
-        cvt.U8A[0] = program[index + 1];
-        if (stack->popBool()) {
-            index = cvt.U16;
-            if (index >= program_size) return RTE_PROGRAM_POINTER_OUT_OF_BOUNDS;
+        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        u8A_to_u16 cvt;
+        cvt.u8A[1] = program[index];
+        cvt.u8A[0] = program[index + 1];
+        if (stack->pop_bool()) {
+            index = cvt.u16;
+            if (index >= program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         }
-        return RTE_SUCCESS;
+        return STATUS_SUCCESS;
     }
     RuntimeError handle_JMP_IF_NOT(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         static uint16_t size = 2;
-        if (index + size > program_size) return RTE_PROGRAM_POINTER_OUT_OF_BOUNDS;
-        U8A_to_U16 cvt;
-        cvt.U8A[1] = program[index];
-        cvt.U8A[0] = program[index + 1];
-        if (!stack->popBool()) {
-            index = cvt.U16;
-            if (index >= program_size) return RTE_PROGRAM_POINTER_OUT_OF_BOUNDS;
+        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        u8A_to_u16 cvt;
+        cvt.u8A[1] = program[index];
+        cvt.u8A[0] = program[index + 1];
+        if (!stack->pop_bool()) {
+            index = cvt.u16;
+            if (index >= program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         }
-        return RTE_SUCCESS;
+        return STATUS_SUCCESS;
     }
 
     RuntimeError handle_CALL(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         static uint16_t size = 2;
-        if (index + size > program_size) return RTE_PROGRAM_POINTER_OUT_OF_BOUNDS;
-        U8A_to_U16 cvt;
-        cvt.U8A[1] = program[index];
-        cvt.U8A[0] = program[index + 1];
-        index = cvt.U16;
-        if (index >= program_size) return RTE_PROGRAM_POINTER_OUT_OF_BOUNDS;
+        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        u8A_to_u16 cvt;
+        cvt.u8A[1] = program[index];
+        cvt.u8A[0] = program[index + 1];
+        index = cvt.u16;
+        if (index >= program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         RuntimeError call_store_status = stack->pushCall(index);
-        if (call_store_status != RTE_SUCCESS) return call_store_status;
-        if (index >= program_size) return RTE_PROGRAM_POINTER_OUT_OF_BOUNDS;
-        return RTE_SUCCESS;
+        if (call_store_status != STATUS_SUCCESS) return call_store_status;
+        if (index >= program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        return STATUS_SUCCESS;
     }
     RuntimeError handle_CALL_IF(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         static uint16_t size = 2;
-        if (index + size > program_size) return RTE_PROGRAM_POINTER_OUT_OF_BOUNDS;
-        U8A_to_U16 cvt;
-        cvt.U8A[1] = program[index];
-        cvt.U8A[0] = program[index + 1];
-        if (stack->popBool()) {
-            index = cvt.U16;
-            if (index == 0 || index >= program_size) return RTE_PROGRAM_POINTER_OUT_OF_BOUNDS;
+        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        u8A_to_u16 cvt;
+        cvt.u8A[1] = program[index];
+        cvt.u8A[0] = program[index + 1];
+        if (stack->pop_bool()) {
+            index = cvt.u16;
+            if (index == 0 || index >= program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
             RuntimeError call_store_status = stack->pushCall(index);
-            if (call_store_status != RTE_SUCCESS) return call_store_status;
-            if (index >= program_size) return RTE_PROGRAM_POINTER_OUT_OF_BOUNDS;
+            if (call_store_status != STATUS_SUCCESS) return call_store_status;
+            if (index >= program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         }
-        return RTE_SUCCESS;
+        return STATUS_SUCCESS;
     }
     RuntimeError handle_CALL_IF_NOT(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         static uint16_t size = 2;
-        if (index + size > program_size) return RTE_PROGRAM_POINTER_OUT_OF_BOUNDS;
-        U8A_to_U16 cvt;
-        cvt.U8A[1] = program[index];
-        cvt.U8A[0] = program[index + 1];
-        if (!stack->popBool()) {
-            index = cvt.U16;
-            if (index == 0 || index >= program_size) return RTE_PROGRAM_POINTER_OUT_OF_BOUNDS;
+        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        u8A_to_u16 cvt;
+        cvt.u8A[1] = program[index];
+        cvt.u8A[0] = program[index + 1];
+        if (!stack->pop_bool()) {
+            index = cvt.u16;
+            if (index == 0 || index >= program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
             RuntimeError call_store_status = stack->pushCall(index);
-            if (call_store_status != RTE_SUCCESS) return call_store_status;
-            if (index >= program_size) return RTE_PROGRAM_POINTER_OUT_OF_BOUNDS;
+            if (call_store_status != STATUS_SUCCESS) return call_store_status;
+            if (index >= program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         }
-        return RTE_SUCCESS;
+        return STATUS_SUCCESS;
     }
     RuntimeError handle_RET(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
-        if (stack->call_stack->size() == 0) return RTE_CALL_STACK_UNDERFLOW;
+        if (stack->call_stack->size() == 0) return CALL_STACK_UNDERFLOW;
         uint16_t ret_index = stack->popCall();
         index = ret_index;
-        if (index >= program_size) return RTE_PROGRAM_POINTER_OUT_OF_BOUNDS;
-        return RTE_SUCCESS;
+        if (index >= program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        return STATUS_SUCCESS;
     }
 
 
     RuntimeError handle_EXIT(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
-        if (index >= program_size) return RTE_SUCCESS;
+        if (index >= program_size) return STATUS_SUCCESS;
         uint8_t exit_code = program[index++];
         return (RuntimeError) exit_code;
     }

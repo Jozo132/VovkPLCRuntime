@@ -32,14 +32,38 @@ class VovkPLCRuntime {
 public:
     RuntimeStack* stack; // Active memory stack for PLC execution
     uint16_t max_stack_size = 0; // Maximum stack size
-    uint8_t* memory = NULL; // PLC memory to manipulate
+    uint8_t* memory = nullptr; // PLC memory to manipulate
     uint16_t memory_size = 0; // Memory size in bytes
+    RuntimeProgram* program = nullptr; // Active PLC program
     VovkPLCRuntime(uint16_t max_stack_size = 32, uint8_t* memory = nullptr, uint16_t memory_size = 0) {
         stack = new RuntimeStack(max_stack_size);
         this->memory = memory;
         this->memory_size = memory_size;
         this->max_stack_size = max_stack_size;
     }
+    VovkPLCRuntime(uint16_t max_stack_size, uint16_t memory_size) {
+        stack = new RuntimeStack(max_stack_size);
+        memory = new uint8_t[memory_size];
+        this->memory_size = memory_size;
+        this->max_stack_size = max_stack_size;
+    }
+    VovkPLCRuntime(uint16_t max_stack_size, uint16_t memory_size, uint8_t* program, uint16_t program_size) {
+        stack = new RuntimeStack(max_stack_size);
+        memory = new uint8_t[memory_size];
+        this->memory_size = memory_size;
+        this->max_stack_size = max_stack_size;
+        this->program = new RuntimeProgram(program, program_size);
+    }
+    VovkPLCRuntime(uint16_t max_stack_size, RuntimeProgram& program) {
+        stack = new RuntimeStack(max_stack_size);
+        this->max_stack_size = max_stack_size;
+        this->program = &program;
+    }
+
+    void attachProgram(RuntimeProgram& program) {
+        this->program = &program;
+    }
+
     // Clear the stack
     void clear();
     // Clear the stack and reset the program line
@@ -52,10 +76,26 @@ public:
     RuntimeError step(RuntimeProgram& program);
     // Run/Continue the whole PLC program from where it left off, returns an error code (0 on success)
     RuntimeError run(RuntimeProgram& program);
+    // Execute one PLC instruction at index, returns an error code (0 on success)
+    RuntimeError step(uint16_t& index) {
+        if (program == NULL) return NO_PROGRAM;
+        return step(program->program, program->program_size, index);
+    }
+    // Execute the whole PLC program, returns an error code (0 on success)
+    RuntimeError run() {
+        if (program == NULL) return NO_PROGRAM;
+        return run(program->program, program->program_size);
+    }
     // Run the whole PLC program from the beginning, returns an error code (0 on success)
     RuntimeError cleanRun(RuntimeProgram& program) {
         clear(program);
         return run(program);
+    }
+    // Run the whole PLC program from the beginning, returns an error code (0 on success)
+    RuntimeError cleanRun() {
+        if (program == NULL) return NO_PROGRAM;
+        clear();
+        return run(program->program, program->program_size);
     }
     // Read a custom type T value from the stack. This will pop the stack by sizeof(T) bytes and return the value.
     template <typename T> T read() {
@@ -72,109 +112,28 @@ public:
 };
 
 
-
-
-
-
-
-
-
 /*
 // Readable RPN code example:
 //                - bytecode []            - stack: []
 //  (U8 4)        - bytecode [ 02, 04 ]    - stack: [4]
 //  (U8 6)        - bytecode [ 02, 06 ]    - stack: [4, 6]
-//  (ADD_U8)      - bytecode [ A1 ]        - stack: [10]
+//  (ADD_U8)      - bytecode [ A1, 02 ]    - stack: [10]
 //  (U8 2)        - bytecode [ 02, 02 ]    - stack: [10, 2]
-//  (MUL_U8)      - bytecode [ A3 ]        - stack: [20]
+//  (MUL_U8)      - bytecode [ A3, 02 ]    - stack: [20]
 //  (U8 5)        - bytecode [ 02, 05 ]    - stack: [20, 5]
-//  (DIV_U8)      - bytecode [ A4 ]        - stack: [4]
+//  (DIV_U8)      - bytecode [ A4, 02 ]    - stack: [4]
 //  (U8 3)        - bytecode [ 02, 03 ]    - stack: [4, 3]
-//  (SUB_U8)      - bytecode [ A2 ]        - stack: [1]
+//  (SUB_U8)      - bytecode [ A2, 02 ]    - stack: [1]
 
 // Bytecode buffer:
 //  02 04 02 06 A1 02 02 A3 02 05 A4 02 03 A2
-
-
-// Instruction set:
-enum PLCRuntimeInstructionSet {
-    UNDEFINED = 0x00,   // Undefined instruction, same as NOP
-
-    BOOL = 0x01,        // Constant boolean value
-
-    U8 = 0x02,          // Constant uint8_t value
-    S8 = 0x03,          // Constant int8_t value
-
-    U16 = 0x04,         // Constant uint16_t integer value
-    S16 = 0x05,         // Constant int16_t integer value
-
-    U32 = 0x06,         // Constant uint32_t integer value
-    S32 = 0x07,         // Constant int32_t integer value
-
-    U64 = 0x08,         // Constant uint64_t integer value
-    S64 = 0x09,         // Constant int64_t integer value
-
-    F32 = 0x0A,         // Constant float value
-    F64 = 0x0B,         // Constant double value
-
-    ADD_U8 = 0xA1,         // Addition for uint8_t
-    SUB_U8 = 0xA2,         // Subtraction for uint8_t
-    MUL_U8 = 0xA3,         // Multiplication for uint8_t
-    DIV_U8 = 0xA4,         // Division for uint8_t
-
-    ADD_U16 = 0xA5,        // Addition for uint16_t
-    SUB_U16 = 0xA6,        // Subtraction for uint16_t
-    MUL_U16 = 0xA7,        // Multiplication for uint16_t
-    DIV_U16 = 0xA8,        // Division for uint16_t
-
-    ADD_U32 = 0xA9,        // Addition for uint32_t
-    SUB_U32 = 0xAA,        // Subtraction for uint32_t
-    MUL_U32 = 0xAB,        // Multiplication for uint32_t
-    DIV_U32 = 0xAC,        // Division for uint32_t
-
-    ADD_U64 = 0xAD,        // Addition for uint64_t
-    SUB_U64 = 0xAE,        // Subtraction for uint64_t
-    MUL_U64 = 0xAF,        // Multiplication for uint64_t
-    DIV_U64 = 0xB0,        // Division for uint64_t
-
-    ADD_S8 = 0xB1,         // Addition for int8_t
-    SUB_S8 = 0xB2,         // Subtraction for int8_t
-    MUL_S8 = 0xB3,         // Multiplication for int8_t
-    DIV_S8 = 0xB4,         // Division for int8_t
-
-    ADD_S16 = 0xB5,        // Addition for int16_t
-    SUB_S16 = 0xB6,        // Subtraction for int16_t
-    MUL_S16 = 0xB7,        // Multiplication for int16_t
-    DIV_S16 = 0xB8,        // Division for int16_t
-
-    ADD_S32 = 0xB9,        // Addition for int32_t
-    SUB_S32 = 0xBA,        // Subtraction for int32_t
-    MUL_S32 = 0xBB,        // Multiplication for int32_t
-    DIV_S32 = 0xBC,        // Division for int32_t
-
-    ADD_S64 = 0xBD,        // Addition for int64_t
-    SUB_S64 = 0xBE,        // Subtraction for int64_t
-    MUL_S64 = 0xBF,        // Multiplication for int64_t
-    DIV_S64 = 0xC0,        // Division for int64_t
-
-    ADD_F32 = 0xC1,        // Addition for float
-    SUB_F32 = 0xC2,        // Subtraction for float
-    MUL_F32 = 0xC3,        // Multiplication for float
-    DIV_F32 = 0xC4,        // Division for float
-
-    ADD_F64 = 0xC5,        // Addition for double
-    SUB_F64 = 0xC6,        // Subtraction for double
-    MUL_F64 = 0xC7,        // Multiplication for double
-    DIV_F64 = 0xC8,        // Division for double
-};
 */
 
-
-
-
-
 // Clear the runtime stack
-void VovkPLCRuntime::clear() { stack->clear(); }
+void VovkPLCRuntime::clear() {
+    if (program != nullptr) program->resetLine();
+    stack->clear();
+}
 // Clear the runtime stack and reset the program line
 void VovkPLCRuntime::clear(RuntimeProgram& program) {
     program.resetLine();
@@ -193,14 +152,14 @@ RuntimeError VovkPLCRuntime::run(uint8_t* program, uint16_t program_size) {
     uint16_t index = 0;
     while (index < program_size) {
         RuntimeError status = step(program, program_size, index);
-        if (status != RTE_SUCCESS) {
-            if (status == RTE_PROGRAM_EXITED) {
-                return RTE_SUCCESS;
+        if (status != STATUS_SUCCESS) {
+            if (status == PROGRAM_EXITED) {
+                return STATUS_SUCCESS;
             }
             return status;
         }
     }
-    return RTE_SUCCESS;
+    return STATUS_SUCCESS;
 }
 
 
@@ -211,12 +170,12 @@ RuntimeError VovkPLCRuntime::step(RuntimeProgram& program) { return step(program
 
 // Execute one PLC instruction at index, returns an error code (0 on success)
 RuntimeError VovkPLCRuntime::step(uint8_t* program, uint16_t program_size, uint16_t& index) {
-    if (program_size == 0) return RTE_EMPTY_PROGRAM;
-    if (index >= program_size) return RTE_PROGRAM_SIZE_EXCEEDED;
+    if (program_size == 0) return EMPTY_PROGRAM;
+    if (index >= program_size) return PROGRAM_SIZE_EXCEEDED;
     uint8_t opcode = program[index];
     index++;
     switch (opcode) {
-        case NOP: return RTE_SUCCESS;
+        case NOP: return STATUS_SUCCESS;
         case LOGIC_AND: return PLCMethods.LOGIC_AND(this->stack);
         case LOGIC_OR: return PLCMethods.LOGIC_OR(this->stack);
         case LOGIC_NOT: return PLCMethods.LOGIC_NOT(this->stack);
@@ -228,17 +187,17 @@ RuntimeError VovkPLCRuntime::step(uint8_t* program, uint16_t program_size, uint1
         case CALL_IF: return PLCMethods.handle_CALL_IF(this->stack, program, program_size, index);
         case CALL_IF_NOT: return PLCMethods.handle_CALL_IF_NOT(this->stack, program, program_size, index);
         case RET: return PLCMethods.handle_RET(this->stack, program, program_size, index);
-        case BOOL: return PLCMethods.PUSH_BOOL(this->stack, program, program_size, index);
-        case U8: return PLCMethods.PUSH_U8(this->stack, program, program_size, index);
-        case S8: return PLCMethods.PUSH_S8(this->stack, program, program_size, index);
-        case U16: return PLCMethods.PUSH_U16(this->stack, program, program_size, index);
-        case S16: return PLCMethods.PUSH_S16(this->stack, program, program_size, index);
-        case U32: return PLCMethods.PUSH_U32(this->stack, program, program_size, index);
-        case S32: return PLCMethods.PUSH_S32(this->stack, program, program_size, index);
-        case U64: return PLCMethods.PUSH_U64(this->stack, program, program_size, index);
-        case S64: return PLCMethods.PUSH_S64(this->stack, program, program_size, index);
-        case F32: return PLCMethods.PUSH_F32(this->stack, program, program_size, index);
-        case F64: return PLCMethods.PUSH_F64(this->stack, program, program_size, index);
+        case type_bool: return PLCMethods.PUSH_bool(this->stack, program, program_size, index);
+        case type_uint8_t: return PLCMethods.PUSH_uint8_t(this->stack, program, program_size, index);
+        case type_int8_t: return PLCMethods.PUSH_int8_t(this->stack, program, program_size, index);
+        case type_uint16_t: return PLCMethods.PUSH_uint16_t(this->stack, program, program_size, index);
+        case type_int16_t: return PLCMethods.PUSH_int16_t(this->stack, program, program_size, index);
+        case type_uint32_t: return PLCMethods.PUSH_uint32_t(this->stack, program, program_size, index);
+        case type_int32_t: return PLCMethods.PUSH_int32_t(this->stack, program, program_size, index);
+        case type_uint64_t: return PLCMethods.PUSH_uint64_t(this->stack, program, program_size, index);
+        case type_int64_t: return PLCMethods.PUSH_int64_t(this->stack, program, program_size, index);
+        case type_float: return PLCMethods.PUSH_float(this->stack, program, program_size, index);
+        case type_double: return PLCMethods.PUSH_double(this->stack, program, program_size, index);
         case ADD: return PLCMethods.handle_ADD(this->stack, program, program_size, index);
         case SUB: return PLCMethods.handle_SUB(this->stack, program, program_size, index);
         case MUL: return PLCMethods.handle_MUL(this->stack, program, program_size, index);
@@ -266,9 +225,9 @@ RuntimeError VovkPLCRuntime::step(uint8_t* program, uint16_t program_size, uint1
         case CMP_LT: return PLCMethods.handle_CMP_LT(this->stack, program, program_size, index);
         case CMP_LTE: return PLCMethods.handle_CMP_LTE(this->stack, program, program_size, index);
         case EXIT: {
-            return RTE_PROGRAM_EXITED;
+            return PROGRAM_EXITED;
             // return PLCMethods.handle_EXIT(this->stack, program, program_size, index);
         }
-        default: return RTE_UNKNOWN_INSTRUCTION;
+        default: return UNKNOWN_INSTRUCTION;
     }
 }

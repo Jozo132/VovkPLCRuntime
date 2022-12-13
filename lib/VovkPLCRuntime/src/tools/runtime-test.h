@@ -22,14 +22,14 @@
 #pragma once
 
 #if defined(__RUNTIME_FULL_UNIT_TEST___)
-#warning "###################### RUNTIME FULL UNIT TEST ENABLED ######################"
-#elif defined(__RUNTIME_DEBUG__)
-#warning "###################### RUNTIME DEBUG MODE ENABLED - Pleas do not use this in production code. This is only for testing purposes and might cause unexpected behaviour."
+#warning RUNTIME FULL UNIT TEST ENABLED
+#endif // __RUNTIME_FULL_UNIT_TEST___
+
+#if defined(__RUNTIME_DEBUG__)
+#warning RUNTIME DEBUG MODE ENABLED - Pleas do not use this in production code.This is only for testing purposesand might cause unexpected behaviour.
 #endif // __RUNTIME_DEBUG__
 
-
-#ifdef __RUNTIME_DEBUG__
-template <typename T> struct RuntimeTestCase {
+template <typename T> struct TestCase {
     const char* name;
     RuntimeError expected_error;
     T expected_result;
@@ -40,7 +40,7 @@ template <typename T> struct RuntimeTestCase {
 #define REPRINT(count, str) for (uint8_t i = 0; i < count; i++) { Serial.print(str); }
 #define REPRINTLN(count, str) REPRINT(count, str); Serial.println();
 
-void print_U64(uint64_t big_number) {
+void print__uint64_t(uint64_t big_number) {
     const uint16_t NUM_DIGITS = log10(big_number) + 1;
     char sz[NUM_DIGITS + 1];
     sz[NUM_DIGITS] = 0;
@@ -48,31 +48,34 @@ void print_U64(uint64_t big_number) {
         sz[i] = '0' + (big_number % 10);
     Serial.print(sz);
 }
-void println_U64(uint64_t big_number) {
-    print_U64(big_number);
+void println__uint64_t(uint64_t big_number) {
+    print__uint64_t(big_number);
     Serial.println();
 }
 
-void print_S64(int64_t big_number) {
+void print__int64_t(int64_t big_number) {
     if (big_number < 0) {
         Serial.print('-');
         big_number = -big_number;
     }
-    print_U64(big_number);
+    print__uint64_t(big_number);
 }
-void println_S64(int64_t big_number) {
-    print_S64(big_number);
+void println__int64_t(int64_t big_number) {
+    print__int64_t(big_number);
     Serial.println();
 }
 
-struct RuntimeTest {
-    static const uint16_t memory_size = 16;
+#ifdef __RUNTIME_FULL_UNIT_TEST___
+struct UnitTest {
+    // static const uint16_t memory_size = 16;
     static const uint16_t stack_size = 32;
     static const uint16_t program_size = 64;
-    uint8_t memory[memory_size];
-    VovkPLCRuntime runtime = VovkPLCRuntime(stack_size, memory, memory_size);
+    // uint8_t memory[memory_size];
     RuntimeProgram program = RuntimeProgram(program_size);
-    template <typename T> void run(const RuntimeTestCase<T>& test) {
+    VovkPLCRuntime runtime = VovkPLCRuntime(stack_size/* , memory, memory_size */, program);
+
+#ifdef __RUNTIME_DEBUG__
+    template <typename T> void run(const TestCase<T>& test) {
         REPRINTLN(50, '-');
         program.erase();
         test.build(program);
@@ -84,34 +87,47 @@ struct RuntimeTest {
         Serial.print(F("Expected result: ")); println(test.expected_result);
         Serial.print(F("Test passed: ")); Serial.println(passed ? F("YES") : F("NO - TEST DID NOT PASS !!!"));
     }
+#endif
 
-    template <typename T> void review(const RuntimeTestCase<T>& test) {
+    template <typename T> void review(const TestCase<T>& test) {
         size_t offset = Serial.print("Test \"");
         offset += Serial.print(test.name);
         offset += Serial.print('"');
         program.erase();
         test.build(program);
-        runtime.cleanRun(program);
+        long t = micros();
+        runtime.cleanRun();
         T output = runtime.read<T>();
+        t = micros() - t;
+        float ms = (float) t * 0.001;
         bool passed = test.expected_result == output;
         for (; offset < 40; offset++) Serial.print(' ');
-        Serial.println(passed ? F("Passed") : F("FAILED !!!"));
+        Serial.print(passed ? F("Passed") : F("FAILED !!!"));
+        Serial.print(F(" - ")); Serial.print(ms, 3); Serial.println(F(" ms"));
     }
 
+    static RuntimeError fullProgramDebug(VovkPLCRuntime& runtime) {
+        if (runtime.program == nullptr) {
+            Serial.println(F("No program loaded in the runtime"));
+            return NO_PROGRAM;
+        }
+        return fullProgramDebug(runtime, *runtime.program);
+    }
     static RuntimeError fullProgramDebug(VovkPLCRuntime& runtime, RuntimeProgram& program) {
         runtime.clear(program);
         program.println();
+#ifdef __RUNTIME_DEBUG__
         uint16_t program_pointer = 0;
         bool finished = false;
-        RuntimeError status = RTE_SUCCESS;
+        RuntimeError status = STATUS_SUCCESS;
         while (!finished) {
             program_pointer = program.getLine();
             long t = micros();
             status = runtime.step(program);
             t = micros() - t;
             float ms = (float) t * 0.001;
-            if (status == RTE_PROGRAM_EXITED) finished = true;
-            bool problem = status != RTE_SUCCESS && status != RTE_PROGRAM_EXITED;
+            if (status == PROGRAM_EXITED) finished = true;
+            bool problem = status != STATUS_SUCCESS && status != PROGRAM_EXITED;
             if (problem) {
                 const char* error = getRuntimeErrorName(status);
                 Serial.print(F("Error at program pointer "));
@@ -135,169 +151,124 @@ struct RuntimeTest {
         long t = micros();
         runtime.cleanRun(program);
         t = micros() - t;
+#else
+        long t = micros();
+        RuntimeError status = runtime.cleanRun(program);
+        t = micros() - t;
+#endif
         float ms = (float) t * 0.001;
         Serial.print(F("Leftover ")); runtime.printStack(); Serial.println();
         Serial.print(F("Time to execute program: ")); Serial.print(ms, 3); Serial.println(F(" ms"));
-        if (status != RTE_SUCCESS) { Serial.print(F("Debug failed with error: ")); Serial.println(getRuntimeErrorName(status)); }
+        if (status != STATUS_SUCCESS) { Serial.print(F("Debug failed with error: ")); Serial.println(getRuntimeErrorName(status)); }
         return status;
     }
 
     template <typename T> void println(T result) { Serial.println(result); }
-    void println(uint64_t result) { println_U64(result); }
-    void println(int64_t result) { println_S64(result); }
+    void println(uint64_t result) { println__uint64_t(result); }
+    void println(int64_t result) { println__int64_t(result); }
 };
 
+UnitTest Tester;
 
-#ifdef __RUNTIME_FULL_UNIT_TEST___
+const TestCase<uint8_t>* case_demo_uint8_t = new TestCase<uint8_t>({ "demo_uint8_t => (1 + 2) * 3", STATUS_SUCCESS, 9, [](RuntimeProgram& program) {
+    program.push_uint8_t(1);
+    program.push_uint8_t(2);
+    program.push(ADD, type_uint8_t);
+    program.push_uint8_t(3);
+    program.push(MUL, type_uint8_t);
+} });
+const TestCase<uint16_t>* case_demo_uint16_t = new TestCase<uint16_t>({ "demo_uint16_t => (1 + 2) * 3", STATUS_SUCCESS, 9, [](RuntimeProgram& program) {
+    program.push_uint16_t(1);
+    program.push_uint16_t(2);
+    program.push(ADD, type_uint16_t);
+    program.push_uint16_t(3);
+    program.push(MUL, type_uint16_t);
+} });
 
-RuntimeTest Tester;
+const TestCase<uint32_t>* case_demo_uint32_t = new TestCase<uint32_t>({ "demo_uint32_t => (1 + 2) * 3", STATUS_SUCCESS, 9, [](RuntimeProgram& program) {
+    program.push_uint32_t(1);
+    program.push_uint32_t(2);
+    program.push(ADD, type_uint32_t);
+    program.push_uint32_t(3);
+    program.push(MUL, type_uint32_t);
+} });
+const TestCase<uint64_t>* case_demo_uint64_t = new TestCase<uint64_t>({ "demo_uint64_t => (1 + 2) * 3", STATUS_SUCCESS, 9, [](RuntimeProgram& program) {
+    program.push_uint64_t(1);
+    program.push_uint64_t(2);
+    program.push(ADD, type_uint64_t);
+    program.push_uint64_t(3);
+    program.push(MUL, type_uint64_t);
+} });
 
-RuntimeTestCase<uint8_t> case_add_U8 = { "add_U8 => (1 + 2) * 3", RTE_SUCCESS, 9, [](RuntimeProgram& program) {
-    program.pushU8(1);
-    program.pushU8(2);
-    program.push(ADD, U8);
-    program.pushU8(3);
-    program.push(MUL, U8);
-} };
-RuntimeTestCase<uint16_t> case_add_U16 = { "add_U16 => (1 + 2) * 3", RTE_SUCCESS, 9, [](RuntimeProgram& program) {
-    program.pushU16(1);
-    program.pushU16(2);
-    program.push(ADD, U16);
-    program.pushU16(3);
-    program.push(MUL, U16);
-} };
+const TestCase<int8_t>* case_demo_int8_t = new TestCase<int8_t>({ "demo_int8_t => (1 - 2) * 3", STATUS_SUCCESS, -3, [](RuntimeProgram& program) {
+    program.push_int8_t(1);
+    program.push_int8_t(2);
+    program.push(SUB, type_int8_t);
+    program.push_int8_t(3);
+    program.push(MUL, type_int8_t);
+} });
 
-RuntimeTestCase<uint32_t> case_add_U32 = { "add_U32 => (1 + 2) * 3", RTE_SUCCESS, 9, [](RuntimeProgram& program) {
-    program.pushU32(1);
-    program.pushU32(2);
-    program.push(ADD,U32);
-    program.pushU32(3);
-    program.push(MUL,U32);
-} };
-RuntimeTestCase<uint64_t> case_add_U64 = { "add_U64 => (1 + 2) * 3", RTE_SUCCESS, 9, [](RuntimeProgram& program) {
-    program.pushU64(1);
-    program.pushU64(2);
-    program.push(ADD, U64);
-    program.pushU64(3);
-    program.push(MUL, U64);
-} };
-
-RuntimeTestCase<int8_t> case_sub_S8 = { "sub_S8 => (1 - 2) * 3", RTE_SUCCESS, -3, [](RuntimeProgram& program) {
-    program.pushS8(1);
-    program.pushS8(2);
-    program.push(SUB,S8);
-    program.pushS8(3);
-    program.push(MUL,S8);
-} };
-RuntimeTestCase<int16_t> case_sub_S16 = { "sub_S16 => (1 - 2) * 3", RTE_SUCCESS, -3, [](RuntimeProgram& program) {
-    program.pushS16(1);
-    program.pushS16(2);
-    program.push(SUB,S16);
-    program.pushS16(3);
-    program.push(MUL,S16);
-} };
-
-RuntimeTestCase<int32_t> case_sub_S32 = { "sub_S32 => (1 - 2) * 3", RTE_SUCCESS, -3, [](RuntimeProgram& program) {
-    program.pushS32(1);
-    program.pushS32(2);
-    program.push(SUB,S32);
-    program.pushS32(3);
-    program.push(MUL,S32);
-} };
-RuntimeTestCase<int64_t> case_sub_S64 = { "sub_S64 => (1 - 2) * 3", RTE_SUCCESS, -3, [](RuntimeProgram& program) {
-    program.pushS64(1);
-    program.pushS64(2);
-    program.push(SUB,S64);
-    program.pushS64(3);
-    program.push(MUL,S64);
-} };
-
-RuntimeTestCase<float> case_sub_F32 = { "sub_F32 => (0.1 + 0.2) * -1", RTE_SUCCESS, -0.3, [](RuntimeProgram& program) {
-    program.pushF32(0.1);
-    program.pushF32(0.2);
-    program.push(ADD,F32);
-    program.pushF32(-1);
-    program.push(MUL,F32);
-} };
-RuntimeTestCase<double> case_sub_F64 = { "sub_F64 => (0.1 + 0.2) * -1", RTE_SUCCESS, -0.30000000000000004, [](RuntimeProgram& program) {
-    program.pushF64(0.1);
-    program.pushF64(0.2);
-    program.push(ADD,F64);
-    program.pushF64(-1);
-    program.push(MUL,F64);
-} };
+const TestCase<float>* case_demo_float = new TestCase<float>({ "demo_float => (0.1 + 0.2) * -1", STATUS_SUCCESS, -0.3, [](RuntimeProgram& program) {
+    program.push_float(0.1);
+    program.push_float(0.2);
+    program.push(ADD, type_float);
+    program.push_float(-1);
+    program.push(MUL, type_float);
+} });
+const TestCase<double>* case_demo_double = new TestCase<double>({ "demo_double => (0.1 + 0.2) * -1", STATUS_SUCCESS, -0.30000000000000004, [](RuntimeProgram& program) {
+    program.push_double(0.1);
+    program.push_double(0.2);
+    program.push(ADD, type_double);
+    program.push_double(-1);
+    program.push(MUL, type_double);
+} });
 
 // Bitwise operations
-RuntimeTestCase<uint8_t> case_bitwise_and_X8 = { "bitwise_and_X8", RTE_SUCCESS, 0b00000101, [](RuntimeProgram& program) {
-    program.pushU8(0b00001111);
-    program.pushU8(0b01010101);
+const TestCase<uint8_t>* case_bitwise_and_X8 = new TestCase<uint8_t>({ "bitwise_and_X8", STATUS_SUCCESS, 0b00000101, [](RuntimeProgram& program) {
+    program.push_uint8_t(0b00001111);
+    program.push_uint8_t(0b01010101);
     program.push(BW_AND_X8);
-} };
-RuntimeTestCase<uint16_t> case_bitwise_and_X16 = { "bitwise_and_X16", RTE_SUCCESS, 0x000F, [](RuntimeProgram& program) {
-    program.pushU16(0x00FF);
-    program.pushU16(0xF00F);
+} });
+const TestCase<uint16_t>* case_bitwise_and_X16 = new TestCase<uint16_t>({ "bitwise_and_X16", STATUS_SUCCESS, 0x000F, [](RuntimeProgram& program) {
+    program.push_uint16_t(0x00FF);
+    program.push_uint16_t(0xF00F);
     program.push(BW_AND_X16);
-} };
-RuntimeTestCase<uint32_t> case_bitwise_and_X32 = { "bitwise_and_X32", RTE_SUCCESS, 0x0F0F0000, [](RuntimeProgram& program) {
-    program.pushU32(0x0F0F0F0F);
-    program.pushU32(0xFFFF0000);
-    program.push(BW_AND_X32);
-} };
-RuntimeTestCase<uint64_t> case_bitwise_and_X64 = { "bitwise_and_X64", RTE_SUCCESS, 0b00000101, [](RuntimeProgram& program) {
-    program.pushU64(0b00001111);
-    program.pushU64(0b01010101);
-    program.push(BW_AND_X64);
-} };
+} });
 
 // Logic (boolean) operations
-RuntimeTestCase<bool> case_logic_and = { "logic_and => true && false", RTE_SUCCESS, false, [](RuntimeProgram& program) {
-    program.pushBool(true);
-    program.pushBool(false);
+const TestCase<bool>* case_logic_and = new TestCase<bool>({ "logic_and => true && true", STATUS_SUCCESS, true, [](RuntimeProgram& program) {
+    program.push_bool(true);
+    program.push_bool(true);
     program.push(LOGIC_AND);
-} };
-RuntimeTestCase<bool> case_logic_and_2 = { "logic_and => true && true", RTE_SUCCESS, true, [](RuntimeProgram& program) {
-    program.pushBool(true);
-    program.pushBool(true);
-    program.push(LOGIC_AND);
-} };
-RuntimeTestCase<bool> case_logic_or = { "logic_or => true || false", RTE_SUCCESS, true, [](RuntimeProgram& program) {
-    program.pushBool(true);
-    program.pushBool(false);
+} });
+const TestCase<bool>* case_logic_or = new TestCase<bool>({ "logic_or => true || false", STATUS_SUCCESS, true, [](RuntimeProgram& program) {
+    program.push_bool(true);
+    program.push_bool(false);
     program.push(LOGIC_OR);
-} };
-RuntimeTestCase<bool> case_logic_or_2 = { "logic_or => false || false", RTE_SUCCESS, false, [](RuntimeProgram& program) {
-    program.pushBool(false);
-    program.pushBool(false);
-    program.push(LOGIC_OR);
-} };
+} });
 
 // Comparison operations
-RuntimeTestCase<bool> case_cmp_eq = { "cmp_eq => 1 == 1", RTE_SUCCESS, true, [](RuntimeProgram& program) {
-    program.pushBool(1);
-    program.pushBool(1);
-    program.push(CMP_EQ, BOOL);
-} };
-RuntimeTestCase<bool> case_cmp_eq_2 = { "cmp_eq => 0.3 == 0.3", RTE_SUCCESS, true, [](RuntimeProgram& program) {
-    program.pushF32(0.3);
-    program.pushF32(0.3);
-    program.push(CMP_EQ, F32);
-} };
-RuntimeTestCase<bool> case_cmp_eq_3 = { "cmp_eq => 0.29 == 0.31", RTE_SUCCESS, false, [](RuntimeProgram& program) {
-    program.pushF32(0.29);
-    program.pushF32(0.31);
-    program.push(CMP_EQ, F32);
-} };
+const TestCase<bool>* case_cmp_eq = new TestCase<bool>({ "cmp_eq => 1 == 1", STATUS_SUCCESS, true, [](RuntimeProgram& program) {
+    program.push_bool(1);
+    program.push_bool(1);
+    program.push(CMP_EQ, type_bool);
+} });
+const TestCase<bool>* case_cmp_eq_1 = new TestCase<bool>({ "cmp_eq => 0.29 == 0.31", STATUS_SUCCESS, false, [](RuntimeProgram& program) {
+    program.push_float(0.29);
+    program.push_float(0.31);
+    program.push(CMP_EQ, type_float);
+} });
 
 // Jump operations
-RuntimeTestCase<uint8_t> case_jump = { "jump => 1", RTE_PROGRAM_EXITED, 1, [](RuntimeProgram& program) {
-    program.pushU8(1); // 0 [+2]
+const TestCase<uint8_t>* case_jump = new TestCase<uint8_t>({ "jump => 1", PROGRAM_EXITED, 1, [](RuntimeProgram& program) {
+    program.push_uint8_t(1); // 0 [+2]
     program.pushJMP(13); // 2 [+3]
-    program.pushU8(1); // 5 [+2]
-    program.push(ADD, U8); // 7 [+2]
-    program.pushU8(3); // 9 [+2]
-    program.push(MUL, U8); // 11 [+2]
+    program.push_uint8_t(1); // 5 [+2]
+    program.push(ADD, type_uint8_t); // 7 [+2]
+    program.push_uint8_t(3); // 9 [+2]
+    program.push(MUL, type_uint8_t); // 11 [+2]
     program.push(EXIT); // 13 [+1]
-} };
+} });
 
 
 void runtime_test() {
@@ -330,62 +301,46 @@ void runtime_test() {
         }
         if (opcode == 0xFF) break;
     }
+#ifdef __RUNTIME_DEBUG__
     REPRINTLN(50, '-');
     Serial.println(F("Executing Runtime Unit Tests..."));
-    Tester.run(case_add_U8);
-    Tester.run(case_add_U16);
-    Tester.run(case_add_U32);
-    Tester.run(case_add_U64);
-    Tester.run(case_sub_S8);
-    Tester.run(case_sub_S16);
-    Tester.run(case_sub_S32);
-    Tester.run(case_sub_S64);
-    Tester.run(case_sub_F32);
-    Tester.run(case_sub_F64);
-    Tester.run(case_bitwise_and_X8);
-    Tester.run(case_bitwise_and_X16);
-    Tester.run(case_bitwise_and_X32);
-    Tester.run(case_bitwise_and_X64);
-    Tester.run(case_logic_and);
-    Tester.run(case_logic_and_2);
-    Tester.run(case_logic_or);
-    Tester.run(case_logic_or_2);
-    Tester.run(case_cmp_eq);
-    Tester.run(case_cmp_eq_2);
-    Tester.run(case_cmp_eq_3);
-    Tester.run(case_jump);
+    Tester.run(*case_demo_uint8_t);
+    Tester.run(*case_demo_uint16_t);
+    Tester.run(*case_demo_uint32_t);
+    Tester.run(*case_demo_uint64_t);
+    Tester.run(*case_demo_int8_t);
+    Tester.run(*case_demo_float);
+    Tester.run(*case_demo_double);
+    Tester.run(*case_bitwise_and_X8);
+    Tester.run(*case_bitwise_and_X16);
+    Tester.run(*case_logic_and);
+    Tester.run(*case_logic_or);
+    Tester.run(*case_cmp_eq);
+    Tester.run(*case_jump);
     Serial.println(F("Runtime Unit Tests Completed."));
+#endif
     REPRINTLN(50, '-');
     Serial.println(F("Report:"));
     REPRINTLN(50, '-');
-    Tester.review(case_add_U8);
-    Tester.review(case_add_U16);
-    Tester.review(case_add_U32);
-    Tester.review(case_add_U64);
-    Tester.review(case_sub_S8);
-    Tester.review(case_sub_S16);
-    Tester.review(case_sub_S32);
-    Tester.review(case_sub_S64);
-    Tester.review(case_sub_F32);
-    Tester.review(case_sub_F64);
-    Tester.review(case_bitwise_and_X8);
-    Tester.review(case_bitwise_and_X16);
-    Tester.review(case_bitwise_and_X32);
-    Tester.review(case_bitwise_and_X64);
-    Tester.review(case_logic_and);
-    Tester.review(case_logic_and_2);
-    Tester.review(case_logic_or);
-    Tester.review(case_logic_or_2);
-    Tester.review(case_cmp_eq);
-    Tester.review(case_cmp_eq_2);
-    Tester.review(case_cmp_eq_3);
-    Tester.review(case_jump);
+    Tester.review(*case_demo_uint8_t); delete case_demo_uint8_t;
+    Tester.review(*case_demo_uint16_t); delete case_demo_uint16_t;
+    Tester.review(*case_demo_uint32_t); delete case_demo_uint32_t;
+    Tester.review(*case_demo_uint64_t); delete case_demo_uint64_t;
+    Tester.review(*case_demo_int8_t); delete case_demo_int8_t;
+    Tester.review(*case_demo_float); delete case_demo_float;
+    Tester.review(*case_demo_double); delete case_demo_double;
+    Tester.review(*case_bitwise_and_X8); delete case_bitwise_and_X8;
+    Tester.review(*case_bitwise_and_X16); delete case_bitwise_and_X16;
+    Tester.review(*case_logic_and); delete case_logic_and;
+    Tester.review(*case_logic_or); delete case_logic_or;
+    Tester.review(*case_cmp_eq); delete case_cmp_eq;
+    Tester.review(*case_jump); delete case_jump;
     REPRINTLN(50, '-');
     Serial.println(F("Runtime Unit Tests Report Completed."));
     REPRINTLN(50, '-');
 };
 
-#else // __RUNTIME_DEBUG__
+#else // __RUNTIME_UNIT_TEST__
 
 bool runtime_test_called = false;
 void runtime_test() {
@@ -393,20 +348,7 @@ void runtime_test() {
     Serial.println(F("Unit tests are disabled."));
     runtime_test_called = true;
 };
-
-#endif
-
-
-#else // Production mode
-
-
-    bool runtime_test_called = false;
-void runtime_test() {
-    if (runtime_test_called) return;
-    Serial.println(F("Unit tests are disabled in production mode."));
-    runtime_test_called = true;
-}
-class RuntimeTest {
+class UnitTest {
 public:
     static RuntimeError fullProgramDebug(VovkPLCRuntime& runtime, RuntimeProgram& program) {
         program.print();
@@ -417,4 +359,4 @@ public:
     }
 };
 
-#endif
+#endif // __RUNTIME_UNIT_TEST__

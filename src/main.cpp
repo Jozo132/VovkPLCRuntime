@@ -1,7 +1,11 @@
 // Main file for testing the VovkPLCRuntime library
 
-#define __RUNTIME_DEBUG__
-// #define __RUNTIME_FULL_UNIT_TEST___ // Avoid using this with microcontrollers with limited RAM!
+
+
+
+
+// #define __RUNTIME_DEBUG__
+#define __RUNTIME_FULL_UNIT_TEST___ // Avoid using this with microcontrollers with limited RAM!
 
 #include <VovkPLCRuntime.h>
 
@@ -15,9 +19,10 @@ void setup() {
   runtime_test();
 }
 
-
-VovkPLCRuntime runtime(64); // Stack size
-RuntimeProgram program(128); // Program size
+#ifdef __RUNTIME_FULL_UNIT_TEST___
+RuntimeProgram program(86); // Program size
+VovkPLCRuntime runtime(64, program); // Stack size
+#endif
 
 bool startup = true;
 
@@ -26,6 +31,7 @@ void loop() {
   digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
   delay(500);
 
+#ifdef __RUNTIME_FULL_UNIT_TEST___
   // Custom program test
   if (startup) {
     Serial.println();
@@ -39,42 +45,49 @@ void loop() {
     float a = 1; float b = 2; float c = 3; float d = 4; float e = 5; float f = 6;
     float expected = 10 * (1 - a * (b + c * (c + d * (d - e * (e - f)))) / d);
 
-    /*
+
     // Hand-coded RPN instructions:
-    program.erase();
-    program.pushF32(10);
-    program.pushF32(1);
-    program.pushF32(a);
-    program.pushF32(b);
-    program.pushF32(c);
-    program.pushF32(c);
-    program.pushF32(d);
-    program.pushF32(d);
-    program.pushF32(e);
-    program.pushF32(e);
-    program.pushF32(f);
-    program.push(SUB, F32);
-    program.push(MUL, F32);
-    program.push(SUB, F32);
-    program.push(MUL, F32);
-    program.push(ADD, F32);
-    program.push(MUL, F32);
-    program.push(ADD, F32);
-    program.pushF32(d);
-    program.push(DIV, F32);
-    program.push(MUL, F32);
-    program.push(SUB, F32);
-    program.push(MUL, F32);
+    runtime.program->erase();
+    runtime.program->push_float(10);
+    runtime.program->push_float(1);
+    runtime.program->push_float(a);
+    runtime.program->push_float(b);
+    runtime.program->push_float(c);
+    runtime.program->push_float(c);
+    runtime.program->push_float(d);
+    runtime.program->push_float(d);
+    runtime.program->push_float(e);
+    runtime.program->push_float(e);
+    runtime.program->push_float(f);
+    runtime.program->push(SUB, type_float);
+    runtime.program->push(MUL, type_float);
+    runtime.program->push(SUB, type_float);
+    runtime.program->push(MUL, type_float);
+    runtime.program->push(ADD, type_float);
+    runtime.program->push(MUL, type_float);
+    runtime.program->push(ADD, type_float);
+    runtime.program->push_float(d);
+    runtime.program->push(DIV, type_float);
+    runtime.program->push(MUL, type_float);
+    runtime.program->push(SUB, type_float);
+    runtime.program->push(MUL, type_float);
+
+
+    /*
+      // Compiled RPN bytecode:
+      static const uint8_t bytecode [] = { 0x0A,0x41,0x20,0x00,0x00,0x0A,0x3F,0x80,0x00,0x00,0x0A,0x3F,0x80,0x00,0x00,0x0A,0x40,0x00,0x00,0x00,0x0A,0x40,0x40,0x00,0x00,0x0A,0x40,0x40,0x00,0x00,0x0A,0x40,0x80,0x00,0x00,0x0A,0x40,0x80,0x00,0x00,0x0A,0x40,0xA0,0x00,0x00,0x0A,0x40,0xA0,0x00,0x00,0x0A,0x40,0xC0,0x00,0x00,0x21,0x0A,0x22,0x0A,0x21,0x0A,0x22,0x0A,0x20,0x0A,0x22,0x0A,0x20,0x0A,0x0A,0x40,0x80,0x00,0x00,0x23,0x0A,0x22,0x0A,0x21,0x0A,0x22,0x0A };
+      static const uint16_t size = 82;
+      static const uint32_t checksum = 2677;
+      program.load(bytecode, size, checksum);
+      // program.loadUnsafe(bytecode, size);
     */
 
-    // Compiled RPN bytecode:
-    static const uint8_t bytecode [] = { 0x0A,0x41,0x20,0x00,0x00,0x0A,0x3F,0x80,0x00,0x00,0x0A,0x3F,0x80,0x00,0x00,0x0A,0x40,0x00,0x00,0x00,0x0A,0x40,0x40,0x00,0x00,0x0A,0x40,0x40,0x00,0x00,0x0A,0x40,0x80,0x00,0x00,0x0A,0x40,0x80,0x00,0x00,0x0A,0x40,0xA0,0x00,0x00,0x0A,0x40,0xA0,0x00,0x00,0x0A,0x40,0xC0,0x00,0x00,0x21,0x0A,0x22,0x0A,0x21,0x0A,0x22,0x0A,0x20,0x0A,0x22,0x0A,0x20,0x0A,0x0A,0x40,0x80,0x00,0x00,0x23,0x0A,0x22,0x0A,0x21,0x0A,0x22,0x0A };
-    static const uint16_t size = 82;
-    static const uint32_t checksum = 2677;
-    program.load(bytecode, size, checksum);
-    // program.loadUnsafe(bytecode, size);
-
-    RuntimeTest::fullProgramDebug(runtime, program);
+#ifdef __RUNTIME_DEBUG__
+    RuntimeError status = UnitTest::fullProgramDebug(runtime);
+#else
+    Serial.print(F("Loaded bytecode: ")); program.println();
+    RuntimeError status = runtime.cleanRun();
+#endif
     float output = runtime.read<float>();
 
     Serial.print(F("Result: ")); Serial.println(output);
@@ -88,13 +101,12 @@ void loop() {
   float result = -1;
   long t = micros();
   for (int i = 0; i < cycles; i++) {
-    runtime.cleanRun(program);
+    runtime.cleanRun();
     result = runtime.read<float>();
   }
-  runtime.cleanRun(program);
-  result = runtime.read<float>();
   t = micros() - t;
   float ms = t / 1000.0;
   int mem = freeMemory();
-  Serial.print("Program executed for "); Serial.print(cycles); Serial.print(" cycles in "); Serial.print(ms, 3); Serial.print(" ms. Result: "); Serial.print(result); Serial.print("  Free memory: "); Serial.print(mem); Serial.println(" bytes.");
+  Serial.print(F("Program executed for ")); Serial.print(cycles); Serial.print(F(" cycles in ")); Serial.print(ms, 3); Serial.print(F(" ms. Result: ")); Serial.print(result); Serial.print(F("  Free memory: ")); Serial.print(mem); Serial.println(F(" bytes."));
+#endif
 }

@@ -21,29 +21,56 @@
 
 #pragma once
 
-// RuntimeError status codes
 enum RuntimeError {
-    RTE_SUCCESS = 0,
-    RTE_STACK_OVERFLOW,
-    RTE_STACK_UNDERFLOW,
-    RTE_CALL_STACK_OVERFLOW,
-    RTE_CALL_STACK_UNDERFLOW,
-    RTE_INVALID_INSTRUCTION,
-    RTE_INVALID_DATA_TYPE,
-    RTE_INVALID_MEMORY_ADDRESS,
-    RTE_INVALID_MEMORY_SIZE,
-    RTE_INVALID_STACK_SIZE,
-    RTE_EMPTY_STACK,
-    RTE_EXECUTION_ERROR,
-    RTE_EXECUTION_TIMEOUT,
-    RTE_PROGRAM_SIZE_EXCEEDED,
-    RTE_UNKNOWN_INSTRUCTION,
-    RTE_INVALID_LINE_NUMBER,
-    RTE_EMPTY_PROGRAM,
-    RTE_PROGRAM_POINTER_OUT_OF_BOUNDS,
-    RTE_PROGRAM_EXITED,
-    RTE_UNDEFINED_STATE,
-    RTE_INVALID_CHECKSUM,
+    STATUS_SUCCESS = 0,
+    STACK_OVERFLOW,
+    STACK_UNDERFLOW,
+    CALL_STACK_OVERFLOW,
+    CALL_STACK_UNDERFLOW,
+    INVALID_INSTRUCTION,
+    INVALID_DATA_TYPE,
+    INVALID_MEMORY_ADDRESS,
+    INVALID_MEMORY_SIZE,
+    INVALID_STACK_SIZE,
+    EMPTY_STACK,
+    EXECUTION_ERROR,
+    EXECUTION_TIMEOUT,
+    PROGRAM_SIZE_EXCEEDED,
+    UNKNOWN_INSTRUCTION,
+    INVALID_LINE_NUMBER,
+    EMPTY_PROGRAM,
+    PROGRAM_POINTER_OUT_OF_BOUNDS,
+    PROGRAM_EXITED,
+    UNDEFINED_STATE,
+    INVALID_CHECKSUM,
+    NO_PROGRAM,
+};
+
+#define STRINGIFY(X) #X
+
+const char* const RuntimeErrorNames [] PROGMEM = {
+    STRINGIFY(STATUS_SUCCESS),
+     STRINGIFY(STACK_OVERFLOW),
+     STRINGIFY(STACK_UNDERFLOW),
+     STRINGIFY(CALL_STACK_OVERFLOW),
+     STRINGIFY(CALL_STACK_UNDERFLOW),
+     STRINGIFY(INVALID_INSTRUCTION),
+     STRINGIFY(INVALID_DATA_TYPE),
+     STRINGIFY(INVALID_MEMORY_ADDRESS),
+     STRINGIFY(INVALID_MEMORY_SIZE),
+     STRINGIFY(INVALID_STACK_SIZE),
+     STRINGIFY(EMPTY_STACK),
+     STRINGIFY(EXECUTION_ERROR),
+     STRINGIFY(EXECUTION_TIMEOUT),
+     STRINGIFY(PROGRAM_SIZE_EXCEEDED),
+     STRINGIFY(UNKNOWN_INSTRUCTION),
+     STRINGIFY(INVALID_LINE_NUMBER),
+     STRINGIFY(EMPTY_PROGRAM),
+     STRINGIFY(PROGRAM_POINTER_OUT_OF_BOUNDS),
+     STRINGIFY(PROGRAM_EXITED),
+     STRINGIFY(UNDEFINED_STATE),
+     STRINGIFY(INVALID_CHECKSUM),
+     STRINGIFY(NO_PROGRAM),
 };
 
 void fstrcpy(char* buff, const char* fstr) {
@@ -59,53 +86,26 @@ void fstrcpy(char* buff, const char* fstr) {
     }
 }
 
-// RuntimeError status names for printing stored in PROGMEM
-const char* const RuntimeErrorNames [] PROGMEM = {
-    "SUCCESS",
-    "STACK_OVERFLOW",
-    "STACK_UNDERFLOW",
-    "CALL_STACK_OVERFLOW",
-    "CALL_STACK_UNDERFLOW",
-    "INVALID_INSTRUCTION",
-    "INVALID_DATA_TYPE",
-    "INVALID_MEMORY_ADDRESS",
-    "INVALID_MEMORY_SIZE",
-    "INVALID_STACK_SIZE",
-    "EMPTY_STACK",
-    "EXECUTION_ERROR",
-    "EXECUTION_TIMEOUT",
-    "PROGRAM_SIZE_EXCEEDED",
-    "UNKNOWN_INSTRUCTION",
-    "INVALID_LINE_NUMBER",
-    "EMPTY_PROGRAM",
-    "PROGRAM_POINTER_OUT_OF_BOUNDS",
-    "PROGRAM_EXITED",
-    "UNDEFINED_STATE",
-    "INVALID_CHECKSUM",
-};
+#define SIZE_OF_ARRAY(a) (sizeof(a) / sizeof(a[0]))
+
 
 const char* const unknows_error_code_str PROGMEM = "UNKNOWN_ERROR_CODE";
 
 const char* getRuntimeErrorName(RuntimeError error) {
     char* output = new char[40];
-    if (error < 0 || error > 20) fstrcpy(output, unknows_error_code_str);
+    if (error < 0 || error > SIZE_OF_ARRAY(RuntimeErrorNames)) fstrcpy(output, unknows_error_code_str);
     else fstrcpy(output, RuntimeErrorNames[error]);
     return output;
 }
 
-union U32_to_F32 {
-    uint32_t U32;
-    float F32;
-};
+union uint32_t_to_float { uint32_t type_uint32_t; float type_float; };
+union float_to_uint32_t { float type_float; uint32_t type_uint32_t; };
+union uint64_t_to_double { uint64_t type_uint64_t; double type_double; };
+union double_to_uint64_t { double type_double; uint64_t type_uint64_t; };
 
-union U64_to_F64 {
-    uint64_t U64;
-    double F64;
-};
-
-union U8A_to_U16 {
-    uint8_t U8A[2];
-    uint16_t U16;
+union u8A_to_u16 {
+    uint8_t u8A[2];
+    uint16_t u16;
 };
 
 
@@ -133,6 +133,7 @@ public:
     Stack<uint16_t>* call_stack;
     uint16_t max_size = 0;
     uint16_t max_call_stack_size = 0;
+
     // Create a stack with a maximum size
     RuntimeStack(uint16_t max_size, uint16_t call_stack_size = 10) {
         stack = new Stack<uint8_t>(max_size);
@@ -141,96 +142,88 @@ public:
         this->max_call_stack_size = call_stack_size;
     }
 
-
     void print() { stack->print(); }
     void println() { stack->println(); }
 
     RuntimeError pushCall(uint16_t return_address) {
-        if (call_stack->size() >= max_call_stack_size) return RTE_STACK_OVERFLOW;
+        if (call_stack->size() >= max_call_stack_size) return STACK_OVERFLOW;
         call_stack->push(return_address);
-        return RTE_SUCCESS;
+        return STATUS_SUCCESS;
     }
 
     uint16_t popCall() {
-        if (call_stack->size() == 0) return RTE_STACK_UNDERFLOW;
-        uint16_t return_address = call_stack->pop();
-        return return_address;
+        if (call_stack->size() == 0) return STACK_UNDERFLOW;
+        return call_stack->pop();
     }
 
     // Push an uint8_t value to the stack
     RuntimeError push(uint8_t value) {
-        if (stack->size() >= max_size) return RTE_STACK_OVERFLOW;
+        if (stack->size() >= max_size) return STACK_OVERFLOW;
         stack->push(value);
-        return RTE_SUCCESS;
+        return STATUS_SUCCESS;
     }
     // Pop an uint8_t value from the stack
-    uint8_t pop() {
-        uint8_t value = stack->pop();
-        return value;
-    }
+    uint8_t pop() { return stack->pop(); }
     // Peek the top uint8_t value from the stack
     uint8_t peek() { return stack->peek(); }
 
     // Push a boolean value to the stack
-    RuntimeError pushBool(bool value) {
-        if (stack->size() >= max_size) return RTE_STACK_OVERFLOW;
+    RuntimeError push_bool(bool value) {
+        if (stack->size() >= max_size) return STACK_OVERFLOW;
         stack->push(value);
-        return RTE_SUCCESS;
+        return STATUS_SUCCESS;
     }
     // Pop a boolean value from the stack
-    bool popBool() {
+    bool pop_bool() {
         bool value = stack->pop();
         return value;
     }
     // Peek the top boolean value from the stack
-    bool peekBool() { return stack->peek(); }
+    bool peek_bool() { return stack->peek(); }
 
 
     // Push an uint8_t value to the stack
-    RuntimeError pushU8(uint8_t value) {
-        if (stack->size() + 1 > max_size) return RTE_STACK_OVERFLOW;
+    RuntimeError push_uint8_t(uint8_t value) {
+        if (stack->size() + 1 > max_size) return STACK_OVERFLOW;
         stack->push(value);
-        return RTE_SUCCESS;
+        return STATUS_SUCCESS;
     }
     // Pop an uint8_t value from the stack
-    uint8_t popU8() {
-        uint8_t value = stack->pop();
-        return value;
-    }
+    uint8_t pop_uint8_t() { return stack->pop(); }
     // Peek the top uint8_t value from the stack
-    uint8_t peekU8() { return stack->peek(); }
+    uint8_t peek_uint8_t() { return stack->peek(); }
 
     // Push an uint16_t value to the stack
-    RuntimeError pushU16(uint16_t value) {
-        if (stack->size() + 2 > max_size) return RTE_STACK_OVERFLOW;
+    RuntimeError push_uint16_t(uint16_t value) {
+        if (stack->size() + 2 > max_size) return STACK_OVERFLOW;
         stack->push(value >> 8);
         stack->push(value & 0xFF);
-        return RTE_SUCCESS;
+        return STATUS_SUCCESS;
     }
     // Pop an uint16_t value from the stack
-    uint16_t popU16() {
+    uint16_t pop_uint16_t() {
         uint16_t b = stack->pop();
         uint16_t a = stack->pop();
         return (a << 8) | b;
     }
     // Peek the top uint16_t value from the stack
-    uint16_t peekU16() {
+    uint16_t peek_uint16_t() {
         uint16_t b = stack->peek(0);
         uint16_t a = stack->peek(1);
         return (a << 8) | b;
     }
 
     // Push an uint32_t value to the stack
-    RuntimeError pushU32(uint32_t value) {
-        if (stack->size() + 4 > max_size) return RTE_STACK_OVERFLOW;
+    RuntimeError push_uint32_t(uint32_t value) {
+        if (stack->size() + 4 > max_size) return STACK_OVERFLOW;
         stack->push(value >> 24);
         stack->push((value >> 16) & 0xFF);
         stack->push((value >> 8) & 0xFF);
         stack->push(value & 0xFF);
-        return RTE_SUCCESS;
+        return STATUS_SUCCESS;
     }
     // Pop an uint32_t value from the stack
-    uint32_t popU32() {
+    uint32_t pop_uint32_t() {
         uint32_t d = stack->pop();
         uint32_t c = stack->pop();
         uint32_t b = stack->pop();
@@ -238,7 +231,7 @@ public:
         return (a << 24) | (b << 16) | (c << 8) | d;
     }
     // Peek the top uint32_t value from the stack
-    uint32_t peekU32() {
+    uint32_t peek_uint32_t() {
         uint32_t d = stack->peek(0);
         uint32_t c = stack->peek(1);
         uint32_t b = stack->peek(2);
@@ -247,8 +240,8 @@ public:
     }
 
     // Push an uint64_t value to the stack
-    RuntimeError pushU64(uint64_t value) {
-        if (stack->size() + 8 > max_size) return RTE_STACK_OVERFLOW;
+    RuntimeError push_uint64_t(uint64_t value) {
+        if (stack->size() + 8 > max_size) return STACK_OVERFLOW;
         stack->push(value >> 56);
         stack->push((value >> 48) & 0xFF);
         stack->push((value >> 40) & 0xFF);
@@ -257,10 +250,10 @@ public:
         stack->push((value >> 16) & 0xFF);
         stack->push((value >> 8) & 0xFF);
         stack->push(value & 0xFF);
-        return RTE_SUCCESS;
+        return STATUS_SUCCESS;
     }
     // Pop an uint64_t value from the stack
-    uint64_t popU64() {
+    uint64_t pop_uint64_t() {
         uint64_t h = stack->pop();
         uint64_t g = stack->pop();
         uint64_t f = stack->pop();
@@ -272,7 +265,7 @@ public:
         return (a << 56) | (b << 48) | (c << 40) | (d << 32) | (e << 24) | (f << 16) | (g << 8) | h;
     }
     // Peek the top uint64_t value from the stack
-    uint64_t peekU64() {
+    uint64_t peek_uint64_t() {
         uint64_t h = stack->peek(0);
         uint64_t g = stack->peek(1);
         uint64_t f = stack->peek(2);
@@ -284,178 +277,203 @@ public:
         return (a << 56) | (b << 48) | (c << 40) | (d << 32) | (e << 24) | (f << 16) | (g << 8) | h;
     }
 
-    // Push an int8_t value to the stack
-    RuntimeError pushS8(int8_t value) { return push((uint8_t) value); }
-    // Pop an int8_t value from the stack
-    int8_t popS8() { return (int8_t) pop(); }
-    // Peek the top int8_t value from the stack
-    int8_t peekS8() { return (int8_t) peek(); }
+    RuntimeError push_int8_t(int8_t value) { return push_uint8_t((uint8_t) value); }
+    RuntimeError push_int16_t(int16_t value) { return push_uint16_t((uint16_t) value); }
+    RuntimeError push_int32_t(int32_t value) { return push_uint32_t((uint32_t) value); }
+    RuntimeError push_int64_t(int64_t value) { return push_uint64_t((uint64_t) value); }
+    RuntimeError push_float(float value) { uint32_t_to_float cvt; cvt.type_float = value; return push_uint32_t(cvt.type_uint32_t); }
+    RuntimeError push_double(double value) { uint64_t_to_double cvt; cvt.type_double = value; return push_uint64_t(cvt.type_uint64_t); }
 
-    // Push an int16_t value to the stack
-    RuntimeError pushS16(int16_t value) { return pushU16((uint16_t) value); }
-    // Pop an int16_t value from the stack
-    int16_t popS16() { return (int16_t) popU16(); }
-    // Peek the top int16_t value from the stack
-    int16_t peekS16() { return (int16_t) peekU16(); }
+    int8_t pop_int8_t() { return (int8_t) pop_uint8_t(); }
+    int16_t pop_int16_t() { return (int16_t) pop_uint16_t(); }
+    int32_t pop_int32_t() { return (int32_t) pop_uint32_t(); }
+    int64_t pop_int64_t() { return (int64_t) pop_uint64_t(); }
+    float pop_float() { uint32_t_to_float cvt; cvt.type_uint32_t = pop_uint32_t(); return cvt.type_float; }
+    double pop_double() { uint64_t_to_double cvt; cvt.type_uint64_t = pop_uint64_t(); return cvt.type_double; }
+    void clear() { while (!stack->empty()) stack->pop(); while (!call_stack->empty()) call_stack->pop(); }
 
-    // Push an int32_t value to the stack
-    RuntimeError pushS32(int32_t value) { return pushU32((uint32_t) value); }
-    // Pop an int32_t value from the stack
-    int32_t popS32() { return (int32_t) popU32(); }
-    // Peek the top int32_t value from the stack
-    int32_t peekS32() { return (int32_t) peekU32(); }
+    int8_t peek_int8_t() { return (int8_t) peek_uint8_t(); }
+    int16_t peek_int16_t() { return (int16_t) peek_uint16_t(); }
+    int32_t peek_int32_t() { return (int32_t) peek_uint32_t(); }
+    int64_t peek_int64_t() { return (int64_t) peek_uint64_t(); }
+    float peek_float() { uint32_t_to_float cvt; cvt.type_uint32_t = peek_uint32_t(); return cvt.type_float; }
+    double peek_double() { uint64_t_to_double cvt; cvt.type_uint64_t = peek_uint64_t(); return cvt.type_double; }
 
-    // Push an int64_t value to the stack
-    RuntimeError pushS64(int64_t value) { return pushU64((uint64_t) value); }
-    // Pop an int64_t value from the stack
-    int64_t popS64() { return (int64_t) popU64(); }
-    // Peek the top int64_t value from the stack
-    int64_t peekS64() { return (int64_t) peekU64(); }
-
-    // Push a float value to the stack
-    RuntimeError pushF32(float value) {
-        U32_to_F32 cvt;
-        cvt.F32 = value;
-        return pushU32(cvt.U32);
-    }
-    // Pop a float value from the stack
-    float popF32() {
-        U32_to_F32 cvt;
-        cvt.U32 = popU32();
-        return cvt.F32;
-    }
-    // Peek the top float value from the stack
-    float peekF32() {
-        U32_to_F32 cvt;
-        cvt.U32 = peekU32();
-        return cvt.F32;
-    }
-
-    // Push a double value to the stack
-    RuntimeError pushF64(double value) {
-        U64_to_F64 cvt;
-        cvt.F64 = value;
-        return pushU64(cvt.U64);
-    }
-    // Pop a double value from the stack
-    double popF64() {
-        U64_to_F64 cvt;
-        cvt.U64 = popU64();
-        return cvt.F64;
-    }
-    // Peek the top double value from the stack
-    double peekF64() {
-        U64_to_F64 cvt;
-        cvt.U64 = peekU64();
-        return cvt.F64;
-    }
-
-    // Clear the stack
-    void clear() {
-        while (!stack->empty()) stack->pop();
-        while (!call_stack->empty()) call_stack->pop();
-    }
     uint16_t size() { return stack->size(); }
 };
 
+#define EXTRACT_TYPE_8(type)                                                                                \
+    RuntimeError type_##type(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, type& value) {     \
+        uint16_t size = sizeof(type);                                                                       \
+        if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;                                     \
+        value = bytecode[index];                                                                            \
+        index += size;                                                                                      \
+        return STATUS_SUCCESS;                                                                              \
+    }
 
+#define EXTRACT_TYPE_16(type)                                                                               \
+    RuntimeError type_##type(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, type& value) {     \
+        uint16_t size = sizeof(type);                                                                       \
+        if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;                                     \
+        value = ((uint16_t) bytecode[index] << 8) | bytecode[index + 1];                                    \
+        index += size;                                                                                      \
+        return STATUS_SUCCESS;                                                                              \
+    }
+
+#define EXTRACT_TYPE_32(type)                                                                                                                               \
+    RuntimeError type_##type(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, type& value) {                                                     \
+        uint16_t size = sizeof(type);                                                                                                                       \
+        if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;                                                                                     \
+        value = ((type) bytecode[index] << 24) | ((type) bytecode[index + 1] << 16) | ((type) bytecode[index + 2] << 8) | ((type) bytecode[index + 3]);     \
+        index += size;                                                                                                                                      \
+        return STATUS_SUCCESS;                                                                                                                              \
+    }
+
+#define EXTRACT_TYPE_32_CVT(type)                                                                                                                                                     \
+    RuntimeError type_##type(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, type& value) {                                                                               \
+        uint16_t size = sizeof(type);                                                                                                                                                 \
+        if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;                                                                                                               \
+        uint32_t_to_##type cvt;                                                                                                                                                     \
+        cvt.type_uint32_t = ((uint32_t) bytecode[index] << 24) | ((uint32_t) bytecode[index + 1] << 16) | ((uint32_t) bytecode[index + 2] << 8) | ((uint32_t) bytecode[index + 3]);   \
+        value = cvt.type_##type;                                                                                                                                                      \
+        index += size;                                                                                                                                                                \
+        return STATUS_SUCCESS;                                                                                                                                                        \
+    }
+
+#define EXTRACT_TYPE_64(type)                                                                                                                                       \
+    RuntimeError type_##type(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, type& value) {                                                             \
+        uint16_t size = sizeof(type);                                                                                                                               \
+        if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;                                                                                             \
+        value = ((type) bytecode[index] << 56) | ((type) bytecode[index + 1] << 48) | ((type) bytecode[index + 2] << 40) | ((type) bytecode[index + 3] << 32) |     \
+                ((type) bytecode[index + 4] << 24) | ((type) bytecode[index + 5] << 16) | ((type) bytecode[index + 6] << 8) | ((type) bytecode[index + 7]);         \
+        index += size;                                                                                                                                              \
+        return STATUS_SUCCESS;                                                                                                                                      \
+    }
+
+#define EXTRACT_TYPE_64_CVT(type)                                                                                                                                                           \
+    RuntimeError type_##type(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, type& value) {                                                                                     \
+        uint16_t size = sizeof(type);                                                                                                                                                       \
+        if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;                                                                                                                     \
+        uint64_t_to_##type cvt;                                                                                                                                                           \
+        cvt.type_uint64_t = ((uint64_t) bytecode[index] << 56) | ((uint64_t) bytecode[index + 1] << 48) | ((uint64_t) bytecode[index + 2] << 40) | ((uint64_t) bytecode[index + 3] << 32) | \
+                            ((uint64_t) bytecode[index + 4] << 24) | ((uint64_t) bytecode[index + 5] << 16) | ((uint64_t) bytecode[index + 6] << 8) | ((uint64_t) bytecode[index + 7]);     \
+        value = cvt.type_##type;                                                                                                                                                            \
+        index += size;                                                                                                                                                                      \
+        return STATUS_SUCCESS;                                                                                                                                                              \
+    }
 
 struct Extract_t {
-    // Extract bool value from program bytecode
-    RuntimeError BOOL(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, bool& value) {
-        uint16_t size = 1;
-        if (index + size > bytecode_size) return RTE_PROGRAM_SIZE_EXCEEDED;
-        value = bytecode[index];
-        index += size;
-        return RTE_SUCCESS;
-    }
+    // // Extract bool value from program bytecode
+    // RuntimeError type_bool(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, bool& value) {
+    //     uint16_t size = 1;
+    //     if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;
+    //     value = bytecode[index];
+    //     index += size;
+    //     return STATUS_SUCCESS;
+    // }
 
-    // Extract uint8_t value from program bytecode
-    RuntimeError U8(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, uint8_t& value) {
-        uint16_t size = 1;
-        if (index + size > bytecode_size) return RTE_PROGRAM_SIZE_EXCEEDED;
-        value = bytecode[index];
-        index += size;
-        return RTE_SUCCESS;
-    }
-    // Extract uint16_t value from program bytecode
-    RuntimeError U16(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, uint16_t& value) {
-        uint16_t size = 2;
-        if (index + size > bytecode_size) return RTE_PROGRAM_SIZE_EXCEEDED;
-        value = ((uint16_t) bytecode[index] << 8) | bytecode[index + 1];
-        index += size;
-        return RTE_SUCCESS;
-    }
-    // Extract uint32_t value from program bytecode
-    RuntimeError U32(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, uint32_t& value) {
-        uint16_t size = 4;
-        if (index + size > bytecode_size) return RTE_PROGRAM_SIZE_EXCEEDED;
-        value = ((uint32_t) bytecode[index] << 24) | ((uint32_t) bytecode[index + 1] << 16) | ((uint32_t) bytecode[index + 2] << 8) | bytecode[index + 3];
-        index += 4;
-        return RTE_SUCCESS;
-    }
-    // Extract uint64_t value from program bytecode
-    RuntimeError U64(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, uint64_t& value) {
-        uint16_t size = 8;
-        if (index + size > bytecode_size) return RTE_PROGRAM_SIZE_EXCEEDED;
-        value = ((uint64_t) bytecode[index] << 56) | ((uint64_t) bytecode[index + 1] << 48) | ((uint64_t) bytecode[index + 2] << 40) | ((uint64_t) bytecode[index + 3] << 32) | ((uint64_t) bytecode[index + 4] << 24) | ((uint64_t) bytecode[index + 5] << 16) | ((uint64_t) bytecode[index + 6] << 8) | bytecode[index + 7];
-        index += size;
-        return RTE_SUCCESS;
-    }
+    // // Extract uint8_t value from program bytecode
+    // RuntimeError type_uint8_t(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, uint8_t& value) {
+    //     uint16_t size = 1;
+    //     if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;
+    //     value = bytecode[index];
+    //     index += size;
+    //     return STATUS_SUCCESS;
+    // }
 
-    // Extract int8_t value from program bytecode
-    RuntimeError S8(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, int8_t& value) {
-        uint16_t size = 1;
-        if (index + size > bytecode_size) return RTE_PROGRAM_SIZE_EXCEEDED;
-        value = (int8_t) bytecode[index];
-        index += size;
-        return RTE_SUCCESS;
-    }
-    // Extract int16_t value from program bytecode
-    RuntimeError S16(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, int16_t& value) {
-        uint16_t size = 2;
-        if (index + size > bytecode_size) return RTE_PROGRAM_SIZE_EXCEEDED;
-        value = ((int16_t) bytecode[index] << 8) | bytecode[index + 1];
-        index += size;
-        return RTE_SUCCESS;
-    }
-    // Extract int32_t value from program bytecode
-    RuntimeError S32(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, int32_t& value) {
-        uint16_t size = 4;
-        if (index + size > bytecode_size) return RTE_PROGRAM_SIZE_EXCEEDED;
-        value = ((int32_t) bytecode[index] << 24) | ((int32_t) bytecode[index + 1] << 16) | ((int32_t) bytecode[index + 2] << 8) | bytecode[index + 3];
-        index += size;
-        return RTE_SUCCESS;
-    }
-    // Extract int64_t value from program bytecode
-    RuntimeError S64(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, int64_t& value) {
-        uint16_t size = 8;
-        if (index + size > bytecode_size) return RTE_PROGRAM_SIZE_EXCEEDED;
-        value = ((int64_t) bytecode[index] << 56) | ((int64_t) bytecode[index + 1] << 48) | ((int64_t) bytecode[index + 2] << 40) | ((int64_t) bytecode[index + 3] << 32) | ((int64_t) bytecode[index + 4] << 24) | ((int64_t) bytecode[index + 5] << 16) | ((int64_t) bytecode[index + 6] << 8) | bytecode[index + 7];
-        index += size;
-        return RTE_SUCCESS;
-    }
+    EXTRACT_TYPE_8(bool)
+    EXTRACT_TYPE_8(uint8_t)
+    EXTRACT_TYPE_8(int8_t)
 
-    // Extract float value from program bytecode
-    RuntimeError F32(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, float& value) {
-        uint16_t size = 4;
-        if (index + size > bytecode_size) return RTE_PROGRAM_SIZE_EXCEEDED;
-        U32_to_F32 cvt;
-        cvt.U32 = ((uint32_t) bytecode[index] << 24) | ((uint32_t) bytecode[index + 1] << 16) | ((uint32_t) bytecode[index + 2] << 8) | bytecode[index + 3];
-        value = cvt.F32;
-        index += size;
-        return RTE_SUCCESS;
-    }
-    // Extract double value from program bytecode
-    RuntimeError F64(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, double& value) {
-        uint16_t size = 8;
-        if (index + size > bytecode_size) return RTE_PROGRAM_SIZE_EXCEEDED;
-        U64_to_F64 cvt;
-        cvt.U64 = ((uint64_t) bytecode[index] << 56) | ((uint64_t) bytecode[index + 1] << 48) | ((uint64_t) bytecode[index + 2] << 40) | ((uint64_t) bytecode[index + 3] << 32) | ((uint64_t) bytecode[index + 4] << 24) | ((uint64_t) bytecode[index + 5] << 16) | ((uint64_t) bytecode[index + 6] << 8) | bytecode[index + 7];
-        value = cvt.F64;
-        index += size;
-        return RTE_SUCCESS;
-    }
+    EXTRACT_TYPE_16(uint16_t)
+    EXTRACT_TYPE_16(int16_t)
+
+    EXTRACT_TYPE_32(uint32_t)
+    EXTRACT_TYPE_32(int32_t)
+    EXTRACT_TYPE_32_CVT(float)
+
+    EXTRACT_TYPE_64(uint64_t)
+    EXTRACT_TYPE_64(int64_t)
+    EXTRACT_TYPE_64_CVT(double)
+
+    // // Extract uint16_t value from program bytecode
+    // RuntimeError type_uint16_t(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, uint16_t& value) {
+    //     uint16_t size = 2;
+    //     if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;
+    //     value = ((uint16_t) bytecode[index] << 8) | bytecode[index + 1];
+    //     index += size;
+    //     return STATUS_SUCCESS;
+    // }
+    // // Extract uint32_t value from program bytecode
+    // RuntimeError type_uint32_t(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, uint32_t& value) {
+    //     uint16_t size = 4;
+    //     if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;
+    //     value = ((uint32_t) bytecode[index] << 24) | ((uint32_t) bytecode[index + 1] << 16) | ((uint32_t) bytecode[index + 2] << 8) | bytecode[index + 3];
+    //     index += 4;
+    //     return STATUS_SUCCESS;
+    // }
+    // // Extract uint64_t value from program bytecode
+    // RuntimeError type_uint64_t(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, uint64_t& value) {
+    //     uint16_t size = 8;
+    //     if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;
+    //     value = ((uint64_t) bytecode[index] << 56) | ((uint64_t) bytecode[index + 1] << 48) | ((uint64_t) bytecode[index + 2] << 40) | ((uint64_t) bytecode[index + 3] << 32) | ((uint64_t) bytecode[index + 4] << 24) | ((uint64_t) bytecode[index + 5] << 16) | ((uint64_t) bytecode[index + 6] << 8) | bytecode[index + 7];
+    //     index += size;
+    //     return STATUS_SUCCESS;
+    // }
+
+    // // Extract int8_t value from program bytecode
+    // RuntimeError type_int8_t(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, int8_t& value) {
+    //     uint16_t size = 1;
+    //     if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;
+    //     value = (int8_t) bytecode[index];
+    //     index += size;
+    //     return STATUS_SUCCESS;
+    // }
+    // // Extract int16_t value from program bytecode
+    // RuntimeError type_int16_t(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, int16_t& value) {
+    //     uint16_t size = 2;
+    //     if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;
+    //     value = ((int16_t) bytecode[index] << 8) | bytecode[index + 1];
+    //     index += size;
+    //     return STATUS_SUCCESS;
+    // }
+    // // Extract int32_t value from program bytecode
+    // RuntimeError type_int32_t(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, int32_t& value) {
+    //     uint16_t size = 4;
+    //     if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;
+    //     value = ((int32_t) bytecode[index] << 24) | ((int32_t) bytecode[index + 1] << 16) | ((int32_t) bytecode[index + 2] << 8) | bytecode[index + 3];
+    //     index += size;
+    //     return STATUS_SUCCESS;
+    // }
+    // // Extract int64_t value from program bytecode
+    // RuntimeError type_int64_t(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, int64_t& value) {
+    //     uint16_t size = 8;
+    //     if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;
+    //     value = ((int64_t) bytecode[index] << 56) | ((int64_t) bytecode[index + 1] << 48) | ((int64_t) bytecode[index + 2] << 40) | ((int64_t) bytecode[index + 3] << 32) | ((int64_t) bytecode[index + 4] << 24) | ((int64_t) bytecode[index + 5] << 16) | ((int64_t) bytecode[index + 6] << 8) | bytecode[index + 7];
+    //     index += size;
+    //     return STATUS_SUCCESS;
+    // }
+
+    // // Extract float value from program bytecode
+    // RuntimeError type_float(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, float& value) {
+    //     uint16_t size = 4;
+    //     if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;
+    //     uint32_t_to_float cvt;
+    //     cvt.type_uint32_t = ((uint32_t) bytecode[index] << 24) | ((uint32_t) bytecode[index + 1] << 16) | ((uint32_t) bytecode[index + 2] << 8) | bytecode[index + 3];
+    //     value = cvt.type_float;
+    //     index += size;
+    //     return STATUS_SUCCESS;
+    // }
+    // // Extract double value from program bytecode
+    // RuntimeError type_double(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, double& value) {
+    //     uint16_t size = 8;
+    //     if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;
+    //     uint64_t_to_double cvt;
+    //     cvt.type_uint64_t = ((uint64_t) bytecode[index] << 56) | ((uint64_t) bytecode[index + 1] << 48) | ((uint64_t) bytecode[index + 2] << 40) | ((uint64_t) bytecode[index + 3] << 32) | ((uint64_t) bytecode[index + 4] << 24) | ((uint64_t) bytecode[index + 5] << 16) | ((uint64_t) bytecode[index + 6] << 8) | bytecode[index + 7];
+    //     value = cvt.type_double;
+    //     index += size;
+    //     return STATUS_SUCCESS;
+    // }
 
 } Extract;
 
@@ -464,15 +482,15 @@ struct Extract_t {
 
 // Readable RPN code example:
 //                - bytecode []            - stack: []
-//  (U8 4)        - bytecode [ 02, 04 ]    - stack: [4]    
-//  (U8 6)        - bytecode [ 02, 06 ]    - stack: [4, 6]
-//  (ADD U8)      - bytecode [ A1, 02 ]    - stack: [10]
-//  (U8 2)        - bytecode [ 02, 02 ]    - stack: [10, 2]
-//  (MUL U8)      - bytecode [ A3, 02 ]    - stack: [20]
-//  (U8 5)        - bytecode [ 02, 05 ]    - stack: [20, 5]
-//  (DIV U8)      - bytecode [ A4, 02 ]    - stack: [4]
-//  (U8 3)        - bytecode [ 02, 03 ]    - stack: [4, 3]
-//  (SUB U8)      - bytecode [ A2, 02 ]    - stack: [1]
+//  (uint8_t 4)        - bytecode [ 02, 04 ]    - stack: [4]    
+//  (uint8_t 6)        - bytecode [ 02, 06 ]    - stack: [4, 6]
+//  (ADD uint8_t)      - bytecode [ A1, 02 ]    - stack: [10]
+//  (uint8_t 2)        - bytecode [ 02, 02 ]    - stack: [10, 2]
+//  (MUL uint8_t)      - bytecode [ A3, 02 ]    - stack: [20]
+//  (uint8_t 5)        - bytecode [ 02, 05 ]    - stack: [20, 5]
+//  (DIV uint8_t)      - bytecode [ A4, 02 ]    - stack: [4]
+//  (uint8_t 3)        - bytecode [ 02, 03 ]    - stack: [4, 3]
+//  (SUB uint8_t)      - bytecode [ A2, 02 ]    - stack: [1]
 
 // Bytecode buffer:
 //  02 04 02 06 A1 02 02 02 A3 02 02 05 A4 02 02 03 A2 02
@@ -483,17 +501,17 @@ enum PLCRuntimeInstructionSet {
     NOP = 0x00,         // NOP - no operation
 
     // Data types
-    BOOL,               // Constant boolean value
-    U8,                 // Constant uint8_t value
-    S8,                 // Constant int8_t value
-    U16,                // Constant uint16_t integer value
-    S16,                // Constant int16_t integer value
-    U32,                // Constant uint32_t integer value
-    S32,                // Constant int32_t integer value
-    U64,                // Constant uint64_t integer value
-    S64,                // Constant int64_t integer value
-    F32,                // Constant float value
-    F64,                // Constant double value
+    type_bool,          // Constant boolean value
+    type_uint8_t,       // Constant uint8_t value
+    type_uint16_t,      // Constant int8_t value
+    type_uint32_t,      // Constant uint16_t integer value
+    type_uint64_t,      // Constant int16_t integer value
+    type_int8_t,        // Constant uint32_t integer value
+    type_int16_t,       // Constant int32_t integer value
+    type_int32_t,       // Constant uint64_t integer value
+    type_int64_t,       // Constant int64_t integer value
+    type_float,         // Constant float value
+    type_double,        // Constant double value
 
     POINTER = 0x10,     // Pointer (uint16_t) to variable, requires data type as argument
 
@@ -504,7 +522,7 @@ enum PLCRuntimeInstructionSet {
     DIV,                // Division, requires data type as argument
     MOD,                // Modulo, requires data type as argument
 
-    POW,                // Power for given type. Example: POW U8
+    POW,                // Power for given type. Example: POW uint8_t
     SQRT,               // Square root
     MIN,                // Minimum 
     MAX,                // Maximum 
@@ -593,17 +611,17 @@ enum PLCRuntimeInstructionSet {
 bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
     switch (opcode) {
         case NOP:
-        case BOOL:
-        case U8:
-        case S8:
-        case U16:
-        case S16:
-        case U32:
-        case S32:
-        case U64:
-        case S64:
-        case F32:
-        case F64:
+        case type_bool:
+        case type_uint8_t:
+        case type_int8_t:
+        case type_uint16_t:
+        case type_int16_t:
+        case type_uint32_t:
+        case type_int32_t:
+        case type_uint64_t:
+        case type_int64_t:
+        case type_float:
+        case type_double:
         case POINTER:
         case ADD:
         case SUB:
@@ -687,17 +705,17 @@ bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
 const __FlashStringHelper* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
     switch (opcode) {
         case NOP: return F("NOP");
-        case BOOL: return F("PUSH BOOL");
-        case U8: return F("PUSH U8");
-        case S8: return F("PUSH S8");
-        case U16: return F("PUSH U16");
-        case S16: return F("PUSH S16");
-        case U32: return F("PUSH U32");
-        case S32: return F("PUSH S32");
-        case U64: return F("PUSH U64");
-        case S64: return F("PUSH S64");
-        case F32: return F("PUSH F32");
-        case F64: return F("PUSH F64");
+        case type_bool: return F("PUSH boolean");
+        case type_uint8_t: return F("PUSH uint8_t");
+        case type_int8_t: return F("PUSH int8_t");
+        case type_uint16_t: return F("PUSH uint16_t");
+        case type_int16_t: return F("PUSH int16_t");
+        case type_uint32_t: return F("PUSH uint32_t");
+        case type_int32_t: return F("PUSH int32_t");
+        case type_uint64_t: return F("PUSH uint64_t");
+        case type_int64_t: return F("PUSH int64_t");
+        case type_float: return F("PUSH float");
+        case type_double: return F("PUSH double");
         case POINTER: return F("POINTER");
         case ADD: return F("ADD");
         case SUB: return F("SUB");
@@ -781,17 +799,17 @@ const __FlashStringHelper* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
 uint8_t OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
     switch (opcode) {
         case NOP: return 1;
-        case BOOL: return 2;
-        case U8: return 2;
-        case S8: return 2;
-        case U16: return 3;
-        case S16: return 3;
-        case U32: return 5;
-        case S32: return 5;
-        case U64: return 9;
-        case S64: return 9;
-        case F32: return 5;
-        case F64: return 9;
+        case type_bool: return 2;
+        case type_uint8_t: return 2;
+        case type_int8_t: return 2;
+        case type_uint16_t: return 3;
+        case type_int16_t: return 3;
+        case type_uint32_t: return 5;
+        case type_int32_t: return 5;
+        case type_uint64_t: return 9;
+        case type_int64_t: return 9;
+        case type_float: return 5;
+        case type_double: return 9;
         case POINTER: return 3;
         case ADD: return 2;
         case SUB: return 2;

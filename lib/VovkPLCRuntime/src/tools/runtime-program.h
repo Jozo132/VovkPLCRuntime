@@ -27,7 +27,7 @@ public:
     uint16_t MAX_PROGRAM_SIZE = 0; // Max program size in bytes
     uint16_t program_size = 0; // Current program size in bytes
     uint16_t program_line = 0; // Active program line
-    RuntimeError status = RTE_UNDEFINED_STATE;
+    RuntimeError status = UNDEFINED_STATE;
 
     RuntimeProgram(const uint8_t* program = nullptr, uint16_t program_size = 0) {
         load(program, program_size);
@@ -46,9 +46,9 @@ public:
 
     RuntimeError loadUnsafe(const uint8_t* program, uint16_t program_size) {
         this->program = (uint8_t*) program;
-        if (program_size > MAX_PROGRAM_SIZE) status = RTE_PROGRAM_SIZE_EXCEEDED;
-        else if (program_size == 0) status = RTE_UNDEFINED_STATE;
-        else status = RTE_SUCCESS;
+        if (program_size > MAX_PROGRAM_SIZE) status = PROGRAM_SIZE_EXCEEDED;
+        else if (program_size == 0) status = UNDEFINED_STATE;
+        else status = STATUS_SUCCESS;
         this->MAX_PROGRAM_SIZE = program_size;
         this->program_size = program_size;
         return status;
@@ -57,7 +57,7 @@ public:
     RuntimeError load(const uint8_t* program, uint16_t program_size, uint32_t checksum = 0) {
         uint32_t calculated_checksum = calculateChecksum(program, program_size);
         if (calculated_checksum != checksum) {
-            status = RTE_INVALID_CHECKSUM;
+            status = INVALID_CHECKSUM;
             Serial.println(F("Failed to load program: CHECKSUM MISMATCH"));
             return status;
         }
@@ -66,36 +66,36 @@ public:
 
     // Hot update the running program. This is a very dangerous operation, so use it with caution!
     RuntimeError modify(uint16_t index, uint8_t value) {
-        if (index >= program_size) return RTE_INVALID_LINE_NUMBER;
+        if (index >= program_size) return INVALID_LINE_NUMBER;
         program[index] = value;
-        return RTE_SUCCESS;
+        return STATUS_SUCCESS;
     }
 
     // Hot update the running program. This is a very dangerous operation, so use it with caution!
     RuntimeError modify(uint16_t index, uint8_t* data, uint16_t size) {
-        if (index + size > program_size) return RTE_INVALID_LINE_NUMBER;
+        if (index + size > program_size) return INVALID_LINE_NUMBER;
         for (uint16_t i = 0; i < size; i++) program[index + i] = data[i];
-        return RTE_SUCCESS;
+        return STATUS_SUCCESS;
     }
 
     template <typename T> RuntimeError modifyValue(uint16_t index, T value) {
-        if (index + sizeof(T) > program_size) return RTE_INVALID_LINE_NUMBER;
+        if (index + sizeof(T) > program_size) return INVALID_LINE_NUMBER;
         memcpy(&program[index], &value, sizeof(T));
-        return RTE_SUCCESS;
+        return STATUS_SUCCESS;
     }
 
 
     void erase() {
         program_size = 0;
         program_line = 0;
-        status = RTE_UNDEFINED_STATE;
+        status = UNDEFINED_STATE;
     }
 
     // Set the active PLC Program line number
     RuntimeError setLine(uint16_t line_number) {
-        if (line_number < 0 || line_number >= MAX_PROGRAM_SIZE) return RTE_INVALID_LINE_NUMBER;
+        if (line_number < 0 || line_number >= MAX_PROGRAM_SIZE) return INVALID_LINE_NUMBER;
         program_line = line_number;
-        return RTE_SUCCESS;
+        return STATUS_SUCCESS;
     }
 
     // Get the active PLC Program line number
@@ -134,7 +134,7 @@ public:
     uint8_t sizeOfCurrentBytecode() { return OPCODE_SIZE(getCurrentBytecode()); }
 
     RuntimeError printOpcodeAt(uint16_t index) {
-        if (index >= program_size) return RTE_INVALID_LINE_NUMBER;
+        if (index >= program_size) return INVALID_LINE_NUMBER;
         PLCRuntimeInstructionSet opcode = (PLCRuntimeInstructionSet) program[index];
         bool valid_opcode = OPCODE_EXISTS(opcode);
         if (!valid_opcode) {
@@ -142,7 +142,7 @@ public:
             if (opcode < 0x10) Serial.print('0');
             Serial.print(opcode, HEX);
             Serial.print(F("] <Invalid>"));
-            return RTE_INVALID_INSTRUCTION;
+            return INVALID_INSTRUCTION;
         }
         uint8_t opcode_size = OPCODE_SIZE(opcode);
         Serial.print(F("Opcode["));
@@ -156,7 +156,7 @@ public:
             if (i < opcode_size - 1) Serial.print(' ');
         }
         Serial.print('>');
-        return RTE_SUCCESS;
+        return STATUS_SUCCESS;
     }
     RuntimeError printlnOpcodeAt(uint16_t index) {
         RuntimeError error = printOpcodeAt(index);
@@ -169,138 +169,138 @@ public:
     // Push a new sequence of bytes to the PLC Program
     RuntimeError push(uint8_t* code, uint16_t code_size) {
         if (program_size + code_size > MAX_PROGRAM_SIZE) {
-            status = RTE_PROGRAM_SIZE_EXCEEDED;
+            status = PROGRAM_SIZE_EXCEEDED;
             return status;
         }
         memcpy(program + program_size, code, code_size);
         program_size += code_size;
-        status = RTE_SUCCESS;
+        status = STATUS_SUCCESS;
         return status;
     }
 
     // Push a new instruction to the PLC Program
     RuntimeError push(uint8_t instruction) {
         if (program_size + 1 > MAX_PROGRAM_SIZE) {
-            status = RTE_PROGRAM_SIZE_EXCEEDED;
+            status = PROGRAM_SIZE_EXCEEDED;
             return status;
         }
         program[program_size] = instruction;
         program_size++;
-        status = RTE_SUCCESS;
+        status = STATUS_SUCCESS;
         return status;
     }
 
     // Push a new instruction to the PLC Program
     RuntimeError push(uint8_t instruction, uint8_t data_type) {
         if (program_size + 2 > MAX_PROGRAM_SIZE) {
-            status = RTE_PROGRAM_SIZE_EXCEEDED;
+            status = PROGRAM_SIZE_EXCEEDED;
             return status;
         }
         program[program_size] = instruction;
         program[program_size + 1] = data_type;
         program_size += 2;
-        status = RTE_SUCCESS;
+        status = STATUS_SUCCESS;
         return status;
     }
 
     // Push a boolean value to the PLC Program
-    RuntimeError pushBool(bool value) {
-        return pushU8(value ? 1 : 0);
+    RuntimeError push_bool(bool value) {
+        return push_uint8_t(value ? 1 : 0);
     }
 
     // Push an uint8_t value to the PLC Program
-    RuntimeError pushU8(uint8_t value) {
+    RuntimeError push_uint8_t(uint8_t value) {
         if (program_size + 2 > MAX_PROGRAM_SIZE) {
-            status = RTE_PROGRAM_SIZE_EXCEEDED;
+            status = PROGRAM_SIZE_EXCEEDED;
             return status;
         }
-        program[program_size] = U8;
+        program[program_size] = type_uint8_t;
         program[program_size + 1] = value;
         program_size += 2;
-        status = RTE_SUCCESS;
+        status = STATUS_SUCCESS;
         return status;
     }
 
     // Push an int8_t value to the PLC Program
-    RuntimeError pushS8(int8_t value) {
+    RuntimeError push_int8_t(int8_t value) {
         if (program_size + 2 > MAX_PROGRAM_SIZE) {
-            status = RTE_PROGRAM_SIZE_EXCEEDED;
+            status = PROGRAM_SIZE_EXCEEDED;
             return status;
         }
-        program[program_size] = S8;
+        program[program_size] = type_int8_t;
         program[program_size + 1] = value;
         program_size += 2;
-        status = RTE_SUCCESS;
+        status = STATUS_SUCCESS;
         return status;
     }
 
     // Push an uint16_t value to the PLC Program
-    RuntimeError pushU16(uint16_t value) {
+    RuntimeError push_uint16_t(uint16_t value) {
         if (program_size + 3 > MAX_PROGRAM_SIZE) {
-            status = RTE_PROGRAM_SIZE_EXCEEDED;
+            status = PROGRAM_SIZE_EXCEEDED;
             return status;
         }
-        program[program_size] = U16;
+        program[program_size] = type_uint16_t;
         program[program_size + 1] = value >> 8;
         program[program_size + 2] = value & 0xFF;
         program_size += 3;
-        status = RTE_SUCCESS;
+        status = STATUS_SUCCESS;
         return status;
     }
 
     // Push an int16_t value to the PLC Program
-    RuntimeError pushS16(int16_t value) {
+    RuntimeError push_int16_t(int16_t value) {
         if (program_size + 3 > MAX_PROGRAM_SIZE) {
-            status = RTE_PROGRAM_SIZE_EXCEEDED;
+            status = PROGRAM_SIZE_EXCEEDED;
             return status;
         }
-        program[program_size] = S16;
+        program[program_size] = type_int16_t;
         program[program_size + 1] = value >> 8;
         program[program_size + 2] = value & 0xFF;
         program_size += 3;
-        status = RTE_SUCCESS;
+        status = STATUS_SUCCESS;
         return status;
     }
 
     // Push an uint32_t value to the PLC Program
-    RuntimeError pushU32(uint32_t value) {
+    RuntimeError push_uint32_t(uint32_t value) {
         if (program_size + 5 > MAX_PROGRAM_SIZE) {
-            status = RTE_PROGRAM_SIZE_EXCEEDED;
+            status = PROGRAM_SIZE_EXCEEDED;
             return status;
         }
-        program[program_size] = U32;
+        program[program_size] = type_uint32_t;
         program[program_size + 1] = value >> 24;
         program[program_size + 2] = (value >> 16) & 0xFF;
         program[program_size + 3] = (value >> 8) & 0xFF;
         program[program_size + 4] = value & 0xFF;
         program_size += 5;
-        status = RTE_SUCCESS;
+        status = STATUS_SUCCESS;
         return status;
     }
 
     // Push an int32_t value to the PLC Program
-    RuntimeError pushS32(int32_t value) {
+    RuntimeError push_int32_t(int32_t value) {
         if (program_size + 5 > MAX_PROGRAM_SIZE) {
-            status = RTE_PROGRAM_SIZE_EXCEEDED;
+            status = PROGRAM_SIZE_EXCEEDED;
             return status;
         }
-        program[program_size] = S32;
+        program[program_size] = type_int32_t;
         program[program_size + 1] = value >> 24;
         program[program_size + 2] = (value >> 16) & 0xFF;
         program[program_size + 3] = (value >> 8) & 0xFF;
         program[program_size + 4] = value & 0xFF;
         program_size += 5;
-        status = RTE_SUCCESS;
+        status = STATUS_SUCCESS;
         return status;
     }
 
     // Push an uint64_t value to the PLC Program
-    RuntimeError pushU64(uint64_t value) {
+    RuntimeError push_uint64_t(uint64_t value) {
         if (program_size + 9 > MAX_PROGRAM_SIZE) {
-            status = RTE_PROGRAM_SIZE_EXCEEDED;
+            status = PROGRAM_SIZE_EXCEEDED;
             return status;
         }
-        program[program_size] = U64;
+        program[program_size] = type_uint64_t;
         program[program_size + 1] = value >> 56;
         program[program_size + 2] = (value >> 48) & 0xFF;
         program[program_size + 3] = (value >> 40) & 0xFF;
@@ -310,17 +310,17 @@ public:
         program[program_size + 7] = (value >> 8) & 0xFF;
         program[program_size + 8] = value & 0xFF;
         program_size += 9;
-        status = RTE_SUCCESS;
+        status = STATUS_SUCCESS;
         return status;
     }
 
     // Push an int64_t value to the PLC Program
-    RuntimeError pushS64(int64_t value) {
+    RuntimeError push_int64_t(int64_t value) {
         if (program_size + 9 > MAX_PROGRAM_SIZE) {
-            status = RTE_PROGRAM_SIZE_EXCEEDED;
+            status = PROGRAM_SIZE_EXCEEDED;
             return status;
         }
-        program[program_size] = S64;
+        program[program_size] = type_int64_t;
         program[program_size + 1] = value >> 56;
         program[program_size + 2] = (value >> 48) & 0xFF;
         program[program_size + 3] = (value >> 40) & 0xFF;
@@ -330,34 +330,34 @@ public:
         program[program_size + 7] = (value >> 8) & 0xFF;
         program[program_size + 8] = value & 0xFF;
         program_size += 9;
-        status = RTE_SUCCESS;
+        status = STATUS_SUCCESS;
         return status;
     }
 
     // Push a float value to the PLC Program
-    RuntimeError pushF32(float value) {
+    RuntimeError push_float(float value) {
         if (program_size + 5 > MAX_PROGRAM_SIZE) {
-            status = RTE_PROGRAM_SIZE_EXCEEDED;
+            status = PROGRAM_SIZE_EXCEEDED;
             return status;
         }
-        program[program_size] = F32;
+        program[program_size] = type_float;
         uint32_t* value_ptr = (uint32_t*) &value;
         program[program_size + 1] = *value_ptr >> 24;
         program[program_size + 2] = (*value_ptr >> 16) & 0xFF;
         program[program_size + 3] = (*value_ptr >> 8) & 0xFF;
         program[program_size + 4] = *value_ptr & 0xFF;
         program_size += 5;
-        status = RTE_SUCCESS;
+        status = STATUS_SUCCESS;
         return status;
     }
 
     // Push a double value to the PLC Program
-    RuntimeError pushF64(double value) {
+    RuntimeError push_double(double value) {
         if (program_size + 9 > MAX_PROGRAM_SIZE) {
-            status = RTE_PROGRAM_SIZE_EXCEEDED;
+            status = PROGRAM_SIZE_EXCEEDED;
             return status;
         }
-        program[program_size] = F64;
+        program[program_size] = type_double;
         uint64_t* value_ptr = (uint64_t*) &value;
         program[program_size + 1] = *value_ptr >> 56;
         program[program_size + 2] = (*value_ptr >> 48) & 0xFF;
@@ -368,45 +368,45 @@ public:
         program[program_size + 7] = (*value_ptr >> 8) & 0xFF;
         program[program_size + 8] = *value_ptr & 0xFF;
         program_size += 9;
-        status = RTE_SUCCESS;
+        status = STATUS_SUCCESS;
         return status;
     }
 
     // Push flow control instructions to the PLC Program
     RuntimeError pushJMP(uint16_t program_address) {
         if (program_size + 3 > MAX_PROGRAM_SIZE) {
-            status = RTE_PROGRAM_SIZE_EXCEEDED;
+            status = PROGRAM_SIZE_EXCEEDED;
             return status;
         }
         program[program_size] = JMP;
         program[program_size + 1] = program_address >> 8;
         program[program_size + 2] = program_address & 0xFF;
         program_size += 3;
-        status = RTE_SUCCESS;
+        status = STATUS_SUCCESS;
         return status;
     }
     RuntimeError pushJMP_IF(uint16_t program_address) {
         if (program_size + 3 > MAX_PROGRAM_SIZE) {
-            status = RTE_PROGRAM_SIZE_EXCEEDED;
+            status = PROGRAM_SIZE_EXCEEDED;
             return status;
         }
         program[program_size] = JMP_IF;
         program[program_size + 1] = program_address >> 8;
         program[program_size + 2] = program_address & 0xFF;
         program_size += 3;
-        status = RTE_SUCCESS;
+        status = STATUS_SUCCESS;
         return status;
     }
     RuntimeError pushJMP_IF_NOT(uint16_t program_address) {
         if (program_size + 3 > MAX_PROGRAM_SIZE) {
-            status = RTE_PROGRAM_SIZE_EXCEEDED;
+            status = PROGRAM_SIZE_EXCEEDED;
             return status;
         }
         program[program_size] = JMP_IF_NOT;
         program[program_size + 1] = program_address >> 8;
         program[program_size + 2] = program_address & 0xFF;
         program_size += 3;
-        status = RTE_SUCCESS;
+        status = STATUS_SUCCESS;
         return status;
     }
 };
