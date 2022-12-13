@@ -1,7 +1,7 @@
 // Main file for testing the VovkPLCRuntime library
 
-#define __RUNTIME_TEST__
-#define __RUNTIME_FULL_UNIT_TEST___ // Avoid using this with microcontrollers with limited RAM!
+#define __RUNTIME_DEBUG__
+// #define __RUNTIME_FULL_UNIT_TEST___ // Avoid using this with microcontrollers with limited RAM!
 
 #include <VovkPLCRuntime.h>
 
@@ -29,11 +29,11 @@ void loop() {
   // Custom program test
   if (startup) {
     Serial.println();
-    Serial.println("Custom program test");
-    Serial.println("Variables  = { a: 1, b: 2, c: 3, d: 4, e: 5, f: 6 }");
-    Serial.println("Function   = 10 * (1 - 'a' * ('b' + 'c' * ('c' + 'd' * ('d'-'e' *('e'-'f')))) / 'd')");
-    Serial.println("RPN        = 10|1|'a'|'b'|'c'|'c'|'d'|'d'|'e'|'e'|'f'|-|*|-|*|+|*|+|'d'|/|*|-|*");
-    Serial.println("Result     = -287.5");
+    Serial.println(F("Custom program test"));
+    Serial.println(F("Variables  = { a: 1, b: 2, c: 3, d: 4, e: 5, f: 6 }"));
+    Serial.println(F("Function   = 10 * (1 - 'a' * ('b' + 'c' * ('c' + 'd' * ('d'-'e' *('e'-'f')))) / 'd')"));
+    Serial.println(F("RPN        = 10|1|'a'|'b'|'c'|'c'|'d'|'d'|'e'|'e'|'f'|-|*|-|*|+|*|+|'d'|/|*|-|*"));
+    Serial.println(F("Result     = -287.5"));
     Serial.println();
 
     float a = 1; float b = 2; float c = 3; float d = 4; float e = 5; float f = 6;
@@ -96,5 +96,5 @@ void loop() {
   t = micros() - t;
   float ms = t / 1000.0;
   int mem = freeMemory();
-  Serial.print("Program executed for "); Serial.print(cycles); Serial.print(" cycles in "); Serial.print(ms, 3); Serial.print(" ms. Result: "); Serial.print(result); Serial.print("\t\t   Free memory: "); Serial.print(mem); Serial.println(" bytes.");
+  Serial.print("Program executed for "); Serial.print(cycles); Serial.print(" cycles in "); Serial.print(ms, 3); Serial.print(" ms. Result: "); Serial.print(result); Serial.print("  Free memory: "); Serial.print(mem); Serial.println(" bytes.");
 }

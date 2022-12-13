@@ -23,12 +23,12 @@
 
 #if defined(__RUNTIME_FULL_UNIT_TEST___)
 #warning "RUNTIME FULL UNIT TEST ENABLED - Pleas do not use this in production code. This is only for testing purposes and might cause unexpected behaviour."
-#elif defined(__RUNTIME_TEST__)
+#elif defined(__RUNTIME_DEBUG__)
 #warning "RUNTIME TEST ENABLED - Pleas do not use this in production code. This is only for testing purposes and might cause unexpected behaviour."
-#endif // __RUNTIME_TEST__
+#endif // __RUNTIME_DEBUG__
 
 
-#ifdef __RUNTIME_TEST__
+#ifdef __RUNTIME_DEBUG__
 template <typename T> struct RuntimeTestCase {
     const char* name;
     RuntimeError expected_error;
@@ -37,6 +37,8 @@ template <typename T> struct RuntimeTestCase {
     void (*build)(RuntimeProgram&);
 };
 
+#define REPRINT(count, str) for (uint8_t i = 0; i < count; i++) { Serial.print(str); }
+#define REPRINTLN(count, str) REPRINT(count, str); Serial.println();
 
 void print_U64(uint64_t big_number) {
     const uint16_t NUM_DIGITS = log10(big_number) + 1;
@@ -71,7 +73,7 @@ struct RuntimeTest {
     VovkPLCRuntime runtime = VovkPLCRuntime(stack_size, memory, memory_size);
     RuntimeProgram program = RuntimeProgram(program_size);
     template <typename T> void run(const RuntimeTestCase<T>& test) {
-        Serial.println("--------------------------------------------------");
+        REPRINTLN(50, '-');
         program.erase();
         test.build(program);
         Serial.print(F("Running test: ")); Serial.println(test.name);
@@ -299,6 +301,8 @@ RuntimeTestCase<uint8_t> case_jump = { "jump => 1", RTE_PROGRAM_EXITED, 1, [](Ru
 
 
 void runtime_test() {
+    Serial.println(F("--------------------------------------------------"));
+    Serial.println(F("Executing Runtime Unit Tests..."));
     Tester.run(case_add_U8);
     Tester.run(case_add_U16);
     Tester.run(case_add_U32);
@@ -325,8 +329,10 @@ void runtime_test() {
     Tester.run(case_cmp_eq_3);
     Tester.run(case_jump);
 
+    Serial.println(F("Runtime Unit Tests Completed."));
     Serial.println(F("--------------------------------------------------"));
-
+    Serial.println(F("Report:"));
+    Serial.println(F("--------------------------------------------------"));
     Tester.review(case_add_U8);
     Tester.review(case_add_U16);
     Tester.review(case_add_U32);
@@ -356,7 +362,7 @@ void runtime_test() {
     Serial.println(F("--------------------------------------------------"));
 }
 
-#else // __RUNTIME_TEST__
+#else // __RUNTIME_DEBUG__
 
 bool runtime_test_called = false;
 void runtime_test() {
