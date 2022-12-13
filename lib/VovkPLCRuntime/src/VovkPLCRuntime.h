@@ -21,9 +21,5 @@
 
 #pragma once
 
-#if defined(__RUNTIME_FULL_UNIT_TEST__) && !defined(__RUNTIME_DEBUG__)
-#define __RUNTIME_DEBUG__
-#endif
-
 #include "tools/runtime-lib.h"
 #include "tools/runtime-test.h"
