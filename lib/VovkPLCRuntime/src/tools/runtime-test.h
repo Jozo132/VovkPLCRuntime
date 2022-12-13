@@ -22,9 +22,9 @@
 #pragma once
 
 #if defined(__RUNTIME_FULL_UNIT_TEST___)
-#warning "RUNTIME FULL UNIT TEST ENABLED - Pleas do not use this in production code. This is only for testing purposes and might cause unexpected behaviour."
+#warning "###################### RUNTIME FULL UNIT TEST ENABLED ######################"
 #elif defined(__RUNTIME_DEBUG__)
-#warning "RUNTIME TEST ENABLED - Pleas do not use this in production code. This is only for testing purposes and might cause unexpected behaviour."
+#warning "###################### RUNTIME DEBUG MODE ENABLED - Pleas do not use this in production code. This is only for testing purposes and might cause unexpected behaviour."
 #endif // __RUNTIME_DEBUG__
 
 
@@ -301,7 +301,36 @@ RuntimeTestCase<uint8_t> case_jump = { "jump => 1", RTE_PROGRAM_EXITED, 1, [](Ru
 
 
 void runtime_test() {
-    Serial.println(F("--------------------------------------------------"));
+    REPRINTLN(50, '-');
+    Serial.println(F("Runtime Unit Test"));
+    REPRINTLN(50, '-');
+    Serial.println(F("Bytecode Instruction Set:"));
+    size_t position = 0;
+    bool was_valid = true;
+    for (uint8_t opcode = 0x00; opcode < 256; opcode++) {
+        bool is_valid = OPCODE_EXISTS((PLCRuntimeInstructionSet) opcode);
+        if (is_valid && !was_valid) Serial.println();
+        was_valid = is_valid;
+        if (is_valid) {
+            position = Serial.print(F("   0x"));
+            if (opcode < 0x10) position += Serial.print('0');
+            position += Serial.print(opcode, HEX);
+            position += Serial.print(F(":  "));
+            position += Serial.print(OPCODE_NAME((PLCRuntimeInstructionSet) opcode));
+            uint8_t size = OPCODE_SIZE((PLCRuntimeInstructionSet) opcode);
+            if (size > 0) {
+                for (; position < 26; position++) Serial.print(' ');
+                Serial.print(F("("));
+                Serial.print(size);
+                Serial.print(F(" byte"));
+                if (size > 1) Serial.print('s');
+                Serial.print(')');
+            }
+            Serial.println();
+        }
+        if (opcode == 0xFF) break;
+    }
+    REPRINTLN(50, '-');
     Serial.println(F("Executing Runtime Unit Tests..."));
     Tester.run(case_add_U8);
     Tester.run(case_add_U16);
@@ -313,26 +342,22 @@ void runtime_test() {
     Tester.run(case_sub_S64);
     Tester.run(case_sub_F32);
     Tester.run(case_sub_F64);
-
     Tester.run(case_bitwise_and_X8);
     Tester.run(case_bitwise_and_X16);
     Tester.run(case_bitwise_and_X32);
     Tester.run(case_bitwise_and_X64);
-
     Tester.run(case_logic_and);
     Tester.run(case_logic_and_2);
     Tester.run(case_logic_or);
     Tester.run(case_logic_or_2);
-
     Tester.run(case_cmp_eq);
     Tester.run(case_cmp_eq_2);
     Tester.run(case_cmp_eq_3);
     Tester.run(case_jump);
-
     Serial.println(F("Runtime Unit Tests Completed."));
-    Serial.println(F("--------------------------------------------------"));
+    REPRINTLN(50, '-');
     Serial.println(F("Report:"));
-    Serial.println(F("--------------------------------------------------"));
+    REPRINTLN(50, '-');
     Tester.review(case_add_U8);
     Tester.review(case_add_U16);
     Tester.review(case_add_U32);
@@ -343,24 +368,22 @@ void runtime_test() {
     Tester.review(case_sub_S64);
     Tester.review(case_sub_F32);
     Tester.review(case_sub_F64);
-
     Tester.review(case_bitwise_and_X8);
     Tester.review(case_bitwise_and_X16);
     Tester.review(case_bitwise_and_X32);
     Tester.review(case_bitwise_and_X64);
-
     Tester.review(case_logic_and);
     Tester.review(case_logic_and_2);
     Tester.review(case_logic_or);
     Tester.review(case_logic_or_2);
-
     Tester.review(case_cmp_eq);
     Tester.review(case_cmp_eq_2);
     Tester.review(case_cmp_eq_3);
     Tester.review(case_jump);
-
-    Serial.println(F("--------------------------------------------------"));
-}
+    REPRINTLN(50, '-');
+    Serial.println(F("Runtime Unit Tests Report Completed."));
+    REPRINTLN(50, '-');
+};
 
 #else // __RUNTIME_DEBUG__
 
@@ -369,7 +392,7 @@ void runtime_test() {
     if (runtime_test_called) return;
     Serial.println(F("Unit tests are disabled."));
     runtime_test_called = true;
-}
+};
 
 #endif
 

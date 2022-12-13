@@ -127,14 +127,14 @@ int freeMemory() {
 #endif  // __arm__
 }
 
-class MyStack {
+class RuntimeStack {
 public:
     Stack<uint8_t>* stack;
     Stack<uint16_t>* call_stack;
     uint16_t max_size = 0;
     uint16_t max_call_stack_size = 0;
     // Create a stack with a maximum size
-    MyStack(uint16_t max_size, uint16_t call_stack_size = 10) {
+    RuntimeStack(uint16_t max_size, uint16_t call_stack_size = 10) {
         stack = new Stack<uint8_t>(max_size);
         call_stack = new Stack<uint16_t>(call_stack_size);
         this->max_size = max_size;
@@ -590,100 +590,195 @@ enum PLCRuntimeInstructionSet {
 };
 
 
-void print_OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
+bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
     switch (opcode) {
-        case NOP: Serial.print(F("NOP")); break;
-        case BOOL: Serial.print(F("BOOL")); break;
-        case U8: Serial.print(F("U8")); break;
-        case S8: Serial.print(F("S8")); break;
-        case U16: Serial.print(F("U16")); break;
-        case S16: Serial.print(F("S16")); break;
-        case U32: Serial.print(F("U32")); break;
-        case S32: Serial.print(F("S32")); break;
-        case U64: Serial.print(F("U64")); break;
-        case S64: Serial.print(F("S64")); break;
-        case F32: Serial.print(F("F32")); break;
-        case F64: Serial.print(F("F64")); break;
-        case POINTER: Serial.print(F("POINTER")); break;
-        case ADD: Serial.print(F("ADD")); break;
-        case SUB: Serial.print(F("SUB")); break;
-        case MUL: Serial.print(F("MUL")); break;
-        case DIV: Serial.print(F("DIV")); break;
-        case MOD: Serial.print(F("MOD")); break;
-        case POW: Serial.print(F("POW")); break;
-        case SQRT: Serial.print(F("SQRT")); break;
-        case MIN: Serial.print(F("MIN")); break;
-        case MAX: Serial.print(F("MAX")); break;
-        case ABS: Serial.print(F("ABS")); break;
-        case MAP: Serial.print(F("MAP")); break;
-        case CON: Serial.print(F("CON")); break;
-        case RAND: Serial.print(F("RAND")); break;
-        case RAND1: Serial.print(F("RAND1")); break;
-        case RAND2: Serial.print(F("RAND2")); break;
-        case LN: Serial.print(F("LN")); break;
-        case LOG10: Serial.print(F("LOG10")); break;
-        case LOG2: Serial.print(F("LOG2")); break;
-        case EXP: Serial.print(F("EXP")); break;
-        case SIN: Serial.print(F("SIN")); break;
-        case COS: Serial.print(F("COS")); break;
-        case TAN: Serial.print(F("TAN")); break;
-        case ASIN: Serial.print(F("ASIN")); break;
-        case ACOS: Serial.print(F("ACOS")); break;
-        case ATAN: Serial.print(F("ATAN")); break;
-        case ATAN2: Serial.print(F("ATAN2")); break;
-        case SINH: Serial.print(F("SINH")); break;
-        case COSH: Serial.print(F("COSH")); break;
-        case TANH: Serial.print(F("TANH")); break;
-        case ASINH: Serial.print(F("ASINH")); break;
-        case ACOSH: Serial.print(F("ACOSH")); break;
-        case ATANH: Serial.print(F("ATANH")); break;
-        case BW_AND_X8: Serial.print(F("BW_AND_X8")); break;
-        case BW_AND_X16: Serial.print(F("BW_AND_X16")); break;
-        case BW_AND_X32: Serial.print(F("BW_AND_X32")); break;
-        case BW_AND_X64: Serial.print(F("BW_AND_X64")); break;
-        case BW_OR_X8: Serial.print(F("BW_OR_X8")); break;
-        case BW_OR_X16: Serial.print(F("BW_OR_X16")); break;
-        case BW_OR_X32: Serial.print(F("BW_OR_X32")); break;
-        case BW_OR_X64: Serial.print(F("BW_OR_X64")); break;
-        case BW_XOR_X8: Serial.print(F("BW_XOR_X8")); break;
-        case BW_XOR_X16: Serial.print(F("BW_XOR_X16")); break;
-        case BW_XOR_X32: Serial.print(F("BW_XOR_X32")); break;
-        case BW_XOR_X64: Serial.print(F("BW_XOR_X64")); break;
-        case BW_NOT_X8: Serial.print(F("BW_NOT_X8")); break;
-        case BW_NOT_X16: Serial.print(F("BW_NOT_X16")); break;
-        case BW_NOT_X32: Serial.print(F("BW_NOT_X32")); break;
-        case BW_NOT_X64: Serial.print(F("BW_NOT_X64")); break;
-        case BW_LSHIFT_X8: Serial.print(F("BW_LSHIFT_X8")); break;
-        case BW_LSHIFT_X16: Serial.print(F("BW_LSHIFT_X16")); break;
-        case BW_LSHIFT_X32: Serial.print(F("BW_LSHIFT_X32")); break;
-        case BW_LSHIFT_X64: Serial.print(F("BW_LSHIFT_X64")); break;
-        case BW_RSHIFT_X8: Serial.print(F("BW_RSHIFT_X8")); break;
-        case BW_RSHIFT_X16: Serial.print(F("BW_RSHIFT_X16")); break;
-        case BW_RSHIFT_X32: Serial.print(F("BW_RSHIFT_X32")); break;
-        case BW_RSHIFT_X64: Serial.print(F("BW_RSHIFT_X64")); break;
-        case LOGIC_AND: Serial.print(F("LOGIC_AND")); break;
-        case LOGIC_OR: Serial.print(F("LOGIC_OR")); break;
-        case LOGIC_XOR: Serial.print(F("LOGIC_XOR")); break;
-        case LOGIC_NOT: Serial.print(F("LOGIC_NOT")); break;
-        case CMP_EQ: Serial.print(F("CMP_EQ")); break;
-        case CMP_NEQ: Serial.print(F("CMP_NEQ")); break;
-        case CMP_GT: Serial.print(F("CMP_GT")); break;
-        case CMP_LT: Serial.print(F("CMP_LT")); break;
-        case CMP_GTE: Serial.print(F("CMP_GTE")); break;
-        case CMP_LTE: Serial.print(F("CMP_LTE")); break;
-        case JMP: Serial.print(F("JMP")); break;
-        case JMP_IF: Serial.print(F("JMP_IF")); break;
-        case JMP_IF_NOT: Serial.print(F("JMP_IF_NOT")); break;
-        case CALL: Serial.print(F("CALL")); break;
-        case CALL_IF: Serial.print(F("CALL_IF")); break;
-        case CALL_IF_NOT: Serial.print(F("CALL_IF_NOT")); break;
-        case RET: Serial.print(F("RET")); break;
-        case EXIT: Serial.print(F("EXIT")); break;
-        default: Serial.print(F("UNKNOWN OPCODE")); break;
+        case NOP:
+        case BOOL:
+        case U8:
+        case S8:
+        case U16:
+        case S16:
+        case U32:
+        case S32:
+        case U64:
+        case S64:
+        case F32:
+        case F64:
+        case POINTER:
+        case ADD:
+        case SUB:
+        case MUL:
+        case DIV:
+        case MOD:
+        case POW:
+        case SQRT:
+        case MIN:
+        case MAX:
+        case ABS:
+        case MAP:
+        case CON:
+        case RAND:
+        case RAND1:
+        case RAND2:
+        case LN:
+        case LOG10:
+        case LOG2:
+        case EXP:
+        case SIN:
+        case COS:
+        case TAN:
+        case ASIN:
+        case ACOS:
+        case ATAN:
+        case ATAN2:
+        case SINH:
+        case COSH:
+        case TANH:
+        case ASINH:
+        case ACOSH:
+        case ATANH:
+        case BW_AND_X8:
+        case BW_AND_X16:
+        case BW_AND_X32:
+        case BW_AND_X64:
+        case BW_OR_X8:
+        case BW_OR_X16:
+        case BW_OR_X32:
+        case BW_OR_X64:
+        case BW_XOR_X8:
+        case BW_XOR_X16:
+        case BW_XOR_X32:
+        case BW_XOR_X64:
+        case BW_NOT_X8:
+        case BW_NOT_X16:
+        case BW_NOT_X32:
+        case BW_NOT_X64:
+        case BW_LSHIFT_X8:
+        case BW_LSHIFT_X16:
+        case BW_LSHIFT_X32:
+        case BW_LSHIFT_X64:
+        case BW_RSHIFT_X8:
+        case BW_RSHIFT_X16:
+        case BW_RSHIFT_X32:
+        case BW_RSHIFT_X64:
+        case LOGIC_AND:
+        case LOGIC_OR:
+        case LOGIC_XOR:
+        case LOGIC_NOT:
+        case CMP_EQ:
+        case CMP_NEQ:
+        case CMP_GT:
+        case CMP_LT:
+        case CMP_GTE:
+        case CMP_LTE:
+        case JMP:
+        case JMP_IF:
+        case JMP_IF_NOT:
+        case CALL:
+        case CALL_IF:
+        case CALL_IF_NOT:
+        case RET:
+        case EXIT: return true;
+        default: break;
     }
+    return false;
 }
 
-uint8_t get_OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
+const __FlashStringHelper* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
+    switch (opcode) {
+        case NOP: return F("NOP");
+        case BOOL: return F("PUSH BOOL");
+        case U8: return F("PUSH U8");
+        case S8: return F("PUSH S8");
+        case U16: return F("PUSH U16");
+        case S16: return F("PUSH S16");
+        case U32: return F("PUSH U32");
+        case S32: return F("PUSH S32");
+        case U64: return F("PUSH U64");
+        case S64: return F("PUSH S64");
+        case F32: return F("PUSH F32");
+        case F64: return F("PUSH F64");
+        case POINTER: return F("POINTER");
+        case ADD: return F("ADD");
+        case SUB: return F("SUB");
+        case MUL: return F("MUL");
+        case DIV: return F("DIV");
+        case MOD: return F("MOD");
+        case POW: return F("POW");
+        case SQRT: return F("SQRT");
+        case MIN: return F("MIN");
+        case MAX: return F("MAX");
+        case ABS: return F("ABS");
+        case MAP: return F("MAP");
+        case CON: return F("CON");
+        case RAND: return F("RAND");
+        case RAND1: return F("RAND1");
+        case RAND2: return F("RAND2");
+        case LN: return F("LN");
+        case LOG10: return F("LOG10");
+        case LOG2: return F("LOG2");
+        case EXP: return F("EXP");
+        case SIN: return F("SIN");
+        case COS: return F("COS");
+        case TAN: return F("TAN");
+        case ASIN: return F("ASIN");
+        case ACOS: return F("ACOS");
+        case ATAN: return F("ATAN");
+        case ATAN2: return F("ATAN2");
+        case SINH: return F("SINH");
+        case COSH: return F("COSH");
+        case TANH: return F("TANH");
+        case ASINH: return F("ASINH");
+        case ACOSH: return F("ACOSH");
+        case ATANH: return F("ATANH");
+        case BW_AND_X8: return F("BW_AND_X8");
+        case BW_AND_X16: return F("BW_AND_X16");
+        case BW_AND_X32: return F("BW_AND_X32");
+        case BW_AND_X64: return F("BW_AND_X64");
+        case BW_OR_X8: return F("BW_OR_X8");
+        case BW_OR_X16: return F("BW_OR_X16");
+        case BW_OR_X32: return F("BW_OR_X32");
+        case BW_OR_X64: return F("BW_OR_X64");
+        case BW_XOR_X8: return F("BW_XOR_X8");
+        case BW_XOR_X16: return F("BW_XOR_X16");
+        case BW_XOR_X32: return F("BW_XOR_X32");
+        case BW_XOR_X64: return F("BW_XOR_X64");
+        case BW_NOT_X8: return F("BW_NOT_X8");
+        case BW_NOT_X16: return F("BW_NOT_X16");
+        case BW_NOT_X32: return F("BW_NOT_X32");
+        case BW_NOT_X64: return F("BW_NOT_X64");
+        case BW_LSHIFT_X8: return F("BW_LSHIFT_X8");
+        case BW_LSHIFT_X16: return F("BW_LSHIFT_X16");
+        case BW_LSHIFT_X32: return F("BW_LSHIFT_X32");
+        case BW_LSHIFT_X64: return F("BW_LSHIFT_X64");
+        case BW_RSHIFT_X8: return F("BW_RSHIFT_X8");
+        case BW_RSHIFT_X16: return F("BW_RSHIFT_X16");
+        case BW_RSHIFT_X32: return F("BW_RSHIFT_X32");
+        case BW_RSHIFT_X64: return F("BW_RSHIFT_X64");
+        case LOGIC_AND: return F("LOGIC_AND");
+        case LOGIC_OR: return F("LOGIC_OR");
+        case LOGIC_XOR: return F("LOGIC_XOR");
+        case LOGIC_NOT: return F("LOGIC_NOT");
+        case CMP_EQ: return F("CMP_EQ");
+        case CMP_NEQ: return F("CMP_NEQ");
+        case CMP_GT: return F("CMP_GT");
+        case CMP_LT: return F("CMP_LT");
+        case CMP_GTE: return F("CMP_GTE");
+        case CMP_LTE: return F("CMP_LTE");
+        case JMP: return F("JMP");
+        case JMP_IF: return F("JMP_IF");
+        case JMP_IF_NOT: return F("JMP_IF_NOT");
+        case CALL: return F("CALL");
+        case CALL_IF: return F("CALL_IF");
+        case CALL_IF_NOT: return F("CALL_IF_NOT");
+        case RET: return F("RET");
+        case EXIT: return F("EXIT");
+        default: break;
+    }
+    return F("UNKNOWN OPCODE");
+}
+
+uint8_t OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
     switch (opcode) {
         case NOP: return 1;
         case BOOL: return 2;
@@ -773,6 +868,7 @@ uint8_t get_OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
         case CALL_IF_NOT: return 3;
         case RET: return 1;
         case EXIT: return 1;
-        default: return 0;
+        default: break;
     }
+    return 0;
 }

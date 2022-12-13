@@ -30,12 +30,12 @@
 
 class VovkPLCRuntime {
 public:
-    MyStack* stack; // Active memory stack for PLC execution
+    RuntimeStack* stack; // Active memory stack for PLC execution
     uint16_t max_stack_size = 0; // Maximum stack size
     uint8_t* memory = NULL; // PLC memory to manipulate
     uint16_t memory_size = 0; // Memory size in bytes
     VovkPLCRuntime(uint16_t max_stack_size = 32, uint8_t* memory = nullptr, uint16_t memory_size = 0) {
-        stack = new MyStack(max_stack_size);
+        stack = new RuntimeStack(max_stack_size);
         this->memory = memory;
         this->memory_size = memory_size;
         this->max_stack_size = max_stack_size;

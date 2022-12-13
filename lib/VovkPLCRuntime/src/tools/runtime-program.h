@@ -64,6 +64,27 @@ public:
         return loadUnsafe(program, program_size);
     }
 
+    // Hot update the running program. This is a very dangerous operation, so use it with caution!
+    RuntimeError modify(uint16_t index, uint8_t value) {
+        if (index >= program_size) return RTE_INVALID_LINE_NUMBER;
+        program[index] = value;
+        return RTE_SUCCESS;
+    }
+
+    // Hot update the running program. This is a very dangerous operation, so use it with caution!
+    RuntimeError modify(uint16_t index, uint8_t* data, uint16_t size) {
+        if (index + size > program_size) return RTE_INVALID_LINE_NUMBER;
+        for (uint16_t i = 0; i < size; i++) program[index + i] = data[i];
+        return RTE_SUCCESS;
+    }
+
+    template <typename T> RuntimeError modifyValue(uint16_t index, T value) {
+        if (index + sizeof(T) > program_size) return RTE_INVALID_LINE_NUMBER;
+        memcpy(&program[index], &value, sizeof(T));
+        return RTE_SUCCESS;
+    }
+
+
     void erase() {
         program_size = 0;
         program_line = 0;
@@ -110,14 +131,22 @@ public:
         return (PLCRuntimeInstructionSet) program[program_line];
     }
 
-    uint8_t sizeOfCurrentBytecode() { return get_OPCODE_SIZE(getCurrentBytecode()); }
+    uint8_t sizeOfCurrentBytecode() { return OPCODE_SIZE(getCurrentBytecode()); }
 
     RuntimeError printOpcodeAt(uint16_t index) {
         if (index >= program_size) return RTE_INVALID_LINE_NUMBER;
-        uint8_t opcode = program[index];
-        uint8_t opcode_size = get_OPCODE_SIZE((PLCRuntimeInstructionSet) opcode);
+        PLCRuntimeInstructionSet opcode = (PLCRuntimeInstructionSet) program[index];
+        bool valid_opcode = OPCODE_EXISTS(opcode);
+        if (!valid_opcode) {
+            Serial.print(F("Opcode[0x"));
+            if (opcode < 0x10) Serial.print('0');
+            Serial.print(opcode, HEX);
+            Serial.print(F("] <Invalid>"));
+            return RTE_INVALID_INSTRUCTION;
+        }
+        uint8_t opcode_size = OPCODE_SIZE(opcode);
         Serial.print(F("Opcode["));
-        print_OPCODE_NAME((PLCRuntimeInstructionSet) opcode);
+        Serial.print(OPCODE_NAME(opcode));
         if (opcode_size > 0) Serial.print(F("] <Buffer "));
         else Serial.print(F("] <Empty"));
         for (uint8_t i = 0; i < opcode_size; i++) {
