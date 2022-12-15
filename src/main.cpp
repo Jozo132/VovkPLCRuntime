@@ -4,7 +4,7 @@
 
 
 
-// #define __RUNTIME_DEBUG__
+#define __RUNTIME_DEBUG__
 #define __RUNTIME_FULL_UNIT_TEST___ // Avoid using this with microcontrollers with limited RAM!
 
 #include <VovkPLCRuntime.h>
@@ -14,7 +14,7 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   Serial.begin(115200);
   while (!Serial) delay(10); // wait for serial port to connect. Needed for native USB port only
-
+  
   // Start the runtime tests
   runtime_test();
 }
@@ -28,13 +28,15 @@ bool startup = true;
 
 void loop() {
   // Blink the LED to indicate that the tests are done
-  digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+  digitalWrite(LED_BUILTIN, LOW);
+  delay(20);
+  digitalWrite(LED_BUILTIN, HIGH);
   delay(500);
 
 #ifdef __RUNTIME_FULL_UNIT_TEST___
   // Custom program test
   if (startup) {
-    Serial.println();
+    runtime.startup();
     Serial.println(F("Custom program test"));
     Serial.println(F("Variables  = { a: 1, b: 2, c: 3, d: 4, e: 5, f: 6 }"));
     Serial.println(F("Function   = 10 * (1 - 'a' * ('b' + 'c' * ('c' + 'd' * ('d'-'e' *('e'-'f')))) / 'd')"));

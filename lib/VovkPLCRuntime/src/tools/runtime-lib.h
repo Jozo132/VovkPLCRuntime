@@ -21,43 +21,62 @@
 
 #pragma once
 
-#include <Arduino.h>
-
-#include "runtime-stack.h"
+#include "runtime-tools.h"
+#include "stack/stack-struct.h"
+#include "runtime-memory.h"
 #include "runtime-instructions.h"
-#include "runtime-arithmetics.h"
+#include "stack/runtime-stack.h"
+#include "arithmetics/runtime-arithmetics.h"
 #include "runtime-program.h"
 
 class VovkPLCRuntime {
+private:
+    bool started_up = false;
 public:
+    void disableStartupMessage() {
+        started_up = true;
+    }
+    void startup() {
+        if (Serial && !started_up) {
+            started_up = true;
+            REPRINTLN(70, ':');
+            Serial.println(F(":: Using VovkPLCRuntime Library - Author J.Vovk <jozo132@gmail.com> ::"));
+            REPRINTLN(70, ':');
+        }
+    }
     RuntimeStack* stack; // Active memory stack for PLC execution
     uint16_t max_stack_size = 0; // Maximum stack size
-    uint8_t* memory = nullptr; // PLC memory to manipulate
-    uint16_t memory_size = 0; // Memory size in bytes
+    Stack<uint8_t> memory; // PLC memory to manipulate
     RuntimeProgram* program = nullptr; // Active PLC program
-    VovkPLCRuntime(uint16_t max_stack_size = 32, uint8_t* memory = nullptr, uint16_t memory_size = 0) {
-        stack = new RuntimeStack(max_stack_size);
-        this->memory = memory;
-        this->memory_size = memory_size;
-        this->max_stack_size = max_stack_size;
+    void formatMemory(uint16_t size, uint8_t* data = nullptr) {
+        if (size == 0) return;
+        memory.format(size);
+        if (data == nullptr) return;
+        for (uint16_t i = 0; i < size; i++)
+            memory.push(data[i]);
     }
-    VovkPLCRuntime(uint16_t max_stack_size, uint16_t memory_size) {
+
+    VovkPLCRuntime(uint16_t max_stack_size, uint16_t memory_size = 0) {
         stack = new RuntimeStack(max_stack_size);
-        memory = new uint8_t[memory_size];
-        this->memory_size = memory_size;
         this->max_stack_size = max_stack_size;
+        formatMemory(memory_size);
     }
     VovkPLCRuntime(uint16_t max_stack_size, uint16_t memory_size, uint8_t* program, uint16_t program_size) {
         stack = new RuntimeStack(max_stack_size);
-        memory = new uint8_t[memory_size];
-        this->memory_size = memory_size;
         this->max_stack_size = max_stack_size;
         this->program = new RuntimeProgram(program, program_size);
+        formatMemory(memory_size);
     }
     VovkPLCRuntime(uint16_t max_stack_size, RuntimeProgram& program) {
         stack = new RuntimeStack(max_stack_size);
         this->max_stack_size = max_stack_size;
         this->program = &program;
+    }
+    VovkPLCRuntime(uint16_t max_stack_size, uint16_t memory_size, RuntimeProgram& program) {
+        stack = new RuntimeStack(max_stack_size);
+        this->max_stack_size = max_stack_size;
+        this->program = &program;
+        formatMemory(memory_size);
     }
 
     void attachProgram(RuntimeProgram& program) {
@@ -83,22 +102,26 @@ public:
     }
     // Execute the whole PLC program, returns an error code (0 on success)
     RuntimeError run() {
+        startup();
         if (program == NULL) return NO_PROGRAM;
         return run(program->program, program->program_size);
     }
     // Run the whole PLC program from the beginning, returns an error code (0 on success)
     RuntimeError cleanRun(RuntimeProgram& program) {
+        startup();
         clear(program);
         return run(program);
     }
     // Run the whole PLC program from the beginning, returns an error code (0 on success)
     RuntimeError cleanRun() {
+        startup();
         if (program == NULL) return NO_PROGRAM;
         clear();
         return run(program->program, program->program_size);
     }
     // Read a custom type T value from the stack. This will pop the stack by sizeof(T) bytes and return the value.
     template <typename T> T read() {
+        startup();
         if (stack->size() < (uint16_t) sizeof(T)) return 0;
         uint8_t temp[sizeof(T)];
         for (uint16_t i = 0; i < (uint16_t) sizeof(T); i++)
@@ -108,26 +131,8 @@ public:
     }
 
     // Print the stack buffer to the serial port
-    void printStack();
+    int printStack();
 };
-
-
-/*
-// Readable RPN code example:
-//                - bytecode []            - stack: []
-//  (U8 4)        - bytecode [ 02, 04 ]    - stack: [4]
-//  (U8 6)        - bytecode [ 02, 06 ]    - stack: [4, 6]
-//  (ADD_U8)      - bytecode [ A1, 02 ]    - stack: [10]
-//  (U8 2)        - bytecode [ 02, 02 ]    - stack: [10, 2]
-//  (MUL_U8)      - bytecode [ A3, 02 ]    - stack: [20]
-//  (U8 5)        - bytecode [ 02, 05 ]    - stack: [20, 5]
-//  (DIV_U8)      - bytecode [ A4, 02 ]    - stack: [4]
-//  (U8 3)        - bytecode [ 02, 03 ]    - stack: [4, 3]
-//  (SUB_U8)      - bytecode [ A2, 02 ]    - stack: [1]
-
-// Bytecode buffer:
-//  02 04 02 06 A1 02 02 A3 02 05 A4 02 03 A2
-*/
 
 // Clear the runtime stack
 void VovkPLCRuntime::clear() {
@@ -141,7 +146,7 @@ void VovkPLCRuntime::clear(RuntimeProgram& program) {
 }
 
 // Print the stack
-void VovkPLCRuntime::printStack() { stack->print(); }
+int VovkPLCRuntime::printStack() { return stack->print(); }
 
 
 // Execute the whole PLC program, returns an erro code (0 on success)
@@ -149,6 +154,7 @@ RuntimeError VovkPLCRuntime::run(RuntimeProgram& program) { return run(program.p
 
 // Execute the whole PLC program, returns an erro code (0 on success)
 RuntimeError VovkPLCRuntime::run(uint8_t* program, uint16_t program_size) {
+    startup();
     uint16_t index = 0;
     while (index < program_size) {
         RuntimeError status = step(program, program_size, index);
@@ -176,57 +182,59 @@ RuntimeError VovkPLCRuntime::step(uint8_t* program, uint16_t program_size, uint1
     index++;
     switch (opcode) {
         case NOP: return STATUS_SUCCESS;
-        case LOGIC_AND: return PLCMethods.LOGIC_AND(this->stack);
-        case LOGIC_OR: return PLCMethods.LOGIC_OR(this->stack);
-        case LOGIC_NOT: return PLCMethods.LOGIC_NOT(this->stack);
-        case LOGIC_XOR: return PLCMethods.LOGIC_XOR(this->stack);
-        case JMP: return PLCMethods.handle_JMP(this->stack, program, program_size, index);
-        case JMP_IF: return PLCMethods.handle_JMP_IF(this->stack, program, program_size, index);
-        case JMP_IF_NOT: return PLCMethods.handle_JMP_IF_NOT(this->stack, program, program_size, index);
-        case CALL: return PLCMethods.handle_CALL(this->stack, program, program_size, index);
-        case CALL_IF: return PLCMethods.handle_CALL_IF(this->stack, program, program_size, index);
-        case CALL_IF_NOT: return PLCMethods.handle_CALL_IF_NOT(this->stack, program, program_size, index);
-        case RET: return PLCMethods.handle_RET(this->stack, program, program_size, index);
-        case type_bool: return PLCMethods.PUSH_bool(this->stack, program, program_size, index);
-        case type_uint8_t: return PLCMethods.PUSH_uint8_t(this->stack, program, program_size, index);
-        case type_int8_t: return PLCMethods.PUSH_int8_t(this->stack, program, program_size, index);
-        case type_uint16_t: return PLCMethods.PUSH_uint16_t(this->stack, program, program_size, index);
-        case type_int16_t: return PLCMethods.PUSH_int16_t(this->stack, program, program_size, index);
-        case type_uint32_t: return PLCMethods.PUSH_uint32_t(this->stack, program, program_size, index);
-        case type_int32_t: return PLCMethods.PUSH_int32_t(this->stack, program, program_size, index);
-        case type_uint64_t: return PLCMethods.PUSH_uint64_t(this->stack, program, program_size, index);
-        case type_int64_t: return PLCMethods.PUSH_int64_t(this->stack, program, program_size, index);
-        case type_float: return PLCMethods.PUSH_float(this->stack, program, program_size, index);
-        case type_double: return PLCMethods.PUSH_double(this->stack, program, program_size, index);
-        case ADD: return PLCMethods.handle_ADD(this->stack, program, program_size, index);
-        case SUB: return PLCMethods.handle_SUB(this->stack, program, program_size, index);
-        case MUL: return PLCMethods.handle_MUL(this->stack, program, program_size, index);
-        case DIV: return PLCMethods.handle_DIV(this->stack, program, program_size, index);
-        case BW_AND_X8: return PLCMethods.BW_AND_X8(this->stack);
-        case BW_AND_X16: return PLCMethods.BW_AND_X16(this->stack);
-        case BW_AND_X32: return PLCMethods.BW_AND_X32(this->stack);
-        case BW_AND_X64: return PLCMethods.BW_AND_X64(this->stack);
-        case BW_OR_X8: return PLCMethods.BW_OR_X8(this->stack);
-        case BW_OR_X16: return PLCMethods.BW_OR_X16(this->stack);
-        case BW_OR_X32: return PLCMethods.BW_OR_X32(this->stack);
-        case BW_OR_X64: return PLCMethods.BW_OR_X64(this->stack);
-        case BW_XOR_X8: return PLCMethods.BW_XOR_X8(this->stack);
-        case BW_XOR_X16: return PLCMethods.BW_XOR_X16(this->stack);
-        case BW_XOR_X32: return PLCMethods.BW_XOR_X32(this->stack);
-        case BW_XOR_X64: return PLCMethods.BW_XOR_X64(this->stack);
-        case BW_NOT_X8: return PLCMethods.BW_NOT_X8(this->stack);
-        case BW_NOT_X16: return PLCMethods.BW_NOT_X16(this->stack);
-        case BW_NOT_X32: return PLCMethods.BW_NOT_X32(this->stack);
-        case BW_NOT_X64: return PLCMethods.BW_NOT_X64(this->stack);
-        case CMP_EQ: return PLCMethods.handle_CMP_EQ(this->stack, program, program_size, index);
-        case CMP_NEQ: return PLCMethods.handle_CMP_NEQ(this->stack, program, program_size, index);
-        case CMP_GT: return PLCMethods.handle_CMP_GT(this->stack, program, program_size, index);
-        case CMP_GTE: return PLCMethods.handle_CMP_GTE(this->stack, program, program_size, index);
-        case CMP_LT: return PLCMethods.handle_CMP_LT(this->stack, program, program_size, index);
-        case CMP_LTE: return PLCMethods.handle_CMP_LTE(this->stack, program, program_size, index);
+        case LOGIC_AND: return PLCMethods::LOGIC_AND(this->stack);
+        case LOGIC_OR: return PLCMethods::LOGIC_OR(this->stack);
+        case LOGIC_NOT: return PLCMethods::LOGIC_NOT(this->stack);
+        case LOGIC_XOR: return PLCMethods::LOGIC_XOR(this->stack);
+        case PUT: return PLCMethods::PUT(this->stack, program, program_size, index);
+        case GET: return PLCMethods::GET(this->stack, program, program_size, index);
+        case JMP: return PLCMethods::handle_JMP(this->stack, program, program_size, index);
+        case JMP_IF: return PLCMethods::handle_JMP_IF(this->stack, program, program_size, index);
+        case JMP_IF_NOT: return PLCMethods::handle_JMP_IF_NOT(this->stack, program, program_size, index);
+        case CALL: return PLCMethods::handle_CALL(this->stack, program, program_size, index);
+        case CALL_IF: return PLCMethods::handle_CALL_IF(this->stack, program, program_size, index);
+        case CALL_IF_NOT: return PLCMethods::handle_CALL_IF_NOT(this->stack, program, program_size, index);
+        case RET: return PLCMethods::handle_RET(this->stack, program, program_size, index);
+        case type_bool: return PLCMethods::PUSH_bool(this->stack, program, program_size, index);
+        case type_uint8_t: return PLCMethods::PUSH_uint8_t(this->stack, program, program_size, index);
+        case type_int8_t: return PLCMethods::PUSH_int8_t(this->stack, program, program_size, index);
+        case type_uint16_t: return PLCMethods::PUSH_uint16_t(this->stack, program, program_size, index);
+        case type_int16_t: return PLCMethods::PUSH_int16_t(this->stack, program, program_size, index);
+        case type_uint32_t: return PLCMethods::PUSH_uint32_t(this->stack, program, program_size, index);
+        case type_int32_t: return PLCMethods::PUSH_int32_t(this->stack, program, program_size, index);
+        case type_uint64_t: return PLCMethods::PUSH_uint64_t(this->stack, program, program_size, index);
+        case type_int64_t: return PLCMethods::PUSH_int64_t(this->stack, program, program_size, index);
+        case type_float: return PLCMethods::PUSH_float(this->stack, program, program_size, index);
+        case type_double: return PLCMethods::PUSH_double(this->stack, program, program_size, index);
+        case ADD: return PLCMethods::handle_ADD(this->stack, program, program_size, index);
+        case SUB: return PLCMethods::handle_SUB(this->stack, program, program_size, index);
+        case MUL: return PLCMethods::handle_MUL(this->stack, program, program_size, index);
+        case DIV: return PLCMethods::handle_DIV(this->stack, program, program_size, index);
+        case BW_AND_X8: return PLCMethods::BW_AND_X8(this->stack);
+        case BW_AND_X16: return PLCMethods::BW_AND_X16(this->stack);
+        case BW_AND_X32: return PLCMethods::BW_AND_X32(this->stack);
+        case BW_AND_X64: return PLCMethods::BW_AND_X64(this->stack);
+        case BW_OR_X8: return PLCMethods::BW_OR_X8(this->stack);
+        case BW_OR_X16: return PLCMethods::BW_OR_X16(this->stack);
+        case BW_OR_X32: return PLCMethods::BW_OR_X32(this->stack);
+        case BW_OR_X64: return PLCMethods::BW_OR_X64(this->stack);
+        case BW_XOR_X8: return PLCMethods::BW_XOR_X8(this->stack);
+        case BW_XOR_X16: return PLCMethods::BW_XOR_X16(this->stack);
+        case BW_XOR_X32: return PLCMethods::BW_XOR_X32(this->stack);
+        case BW_XOR_X64: return PLCMethods::BW_XOR_X64(this->stack);
+        case BW_NOT_X8: return PLCMethods::BW_NOT_X8(this->stack);
+        case BW_NOT_X16: return PLCMethods::BW_NOT_X16(this->stack);
+        case BW_NOT_X32: return PLCMethods::BW_NOT_X32(this->stack);
+        case BW_NOT_X64: return PLCMethods::BW_NOT_X64(this->stack);
+        case CMP_EQ: return PLCMethods::handle_CMP_EQ(this->stack, program, program_size, index);
+        case CMP_NEQ: return PLCMethods::handle_CMP_NEQ(this->stack, program, program_size, index);
+        case CMP_GT: return PLCMethods::handle_CMP_GT(this->stack, program, program_size, index);
+        case CMP_GTE: return PLCMethods::handle_CMP_GTE(this->stack, program, program_size, index);
+        case CMP_LT: return PLCMethods::handle_CMP_LT(this->stack, program, program_size, index);
+        case CMP_LTE: return PLCMethods::handle_CMP_LTE(this->stack, program, program_size, index);
         case EXIT: {
             return PROGRAM_EXITED;
-            // return PLCMethods.handle_EXIT(this->stack, program, program_size, index);
+            // return PLCMethods::handle_EXIT(this->stack, program, program_size, index);
         }
         default: return UNKNOWN_INSTRUCTION;
     }

@@ -37,9 +37,6 @@ template <typename T> struct TestCase {
     void (*build)(RuntimeProgram&);
 };
 
-#define REPRINT(count, str) for (uint8_t i = 0; i < count; i++) { Serial.print(str); }
-#define REPRINTLN(count, str) REPRINT(count, str); Serial.println();
-
 void print__uint64_t(uint64_t big_number) {
     const uint16_t NUM_DIGITS = log10(big_number) + 1;
     char sz[NUM_DIGITS + 1];
@@ -67,16 +64,19 @@ void println__int64_t(int64_t big_number) {
 
 #ifdef __RUNTIME_FULL_UNIT_TEST___
 struct UnitTest {
-    // static const uint16_t memory_size = 16;
+    static const uint16_t memory_size = 16;
     static const uint16_t stack_size = 32;
     static const uint16_t program_size = 64;
-    // uint8_t memory[memory_size];
     RuntimeProgram program = RuntimeProgram(program_size);
-    VovkPLCRuntime runtime = VovkPLCRuntime(stack_size/* , memory, memory_size */, program);
-
+    VovkPLCRuntime runtime = VovkPLCRuntime(stack_size, memory_size, program);
+    UnitTest() {
+        program.erase();
+        runtime.formatMemory(memory_size);
+    }
 #ifdef __RUNTIME_DEBUG__
     template <typename T> void run(const TestCase<T>& test) {
-        REPRINTLN(50, '-');
+        Serial.println();
+        REPRINTLN(70, '#');
         program.erase();
         test.build(program);
         Serial.print(F("Running test: ")); Serial.println(test.name);
@@ -85,7 +85,8 @@ struct UnitTest {
         bool passed = status == test.expected_error && test.expected_result == output;
         Serial.print(F("Program result: ")); println(output);
         Serial.print(F("Expected result: ")); println(test.expected_result);
-        Serial.print(F("Test passed: ")); Serial.println(passed ? F("YES") : F("NO - TEST DID NOT PASS !!!"));
+        Serial.print(F("Test status: ")); Serial.println(passed ? F("Passed") : F("--------------------> !!! FAILED !!! <--------------------"));
+        Serial.println();
     }
 #endif
 
@@ -117,34 +118,39 @@ struct UnitTest {
         runtime.clear(program);
         program.println();
 #ifdef __RUNTIME_DEBUG__
-        uint16_t program_pointer = 0;
+        uint16_t program_size = program.getProgramSize();
+        program.explain();
+        Serial.println(F("Starting detailed program debug..."));
+        uint16_t index = 0;
         bool finished = false;
         RuntimeError status = STATUS_SUCCESS;
         while (!finished) {
-            program_pointer = program.getLine();
+            index = program.getLine();
             long t = micros();
             status = runtime.step(program);
             t = micros() - t;
             float ms = (float) t * 0.001;
             if (status == PROGRAM_EXITED) finished = true;
             bool problem = status != STATUS_SUCCESS && status != PROGRAM_EXITED;
+            Serial.printf("    Step %4d [%02X %02X]: ", index, index >> 8, index & 0xFF);
             if (problem) {
-                const char* error = getRuntimeErrorName(status);
+                const char* error = RUNTIME_ERROR_NAME(status);
                 Serial.print(F("Error at program pointer "));
-                Serial.print(program_pointer);
+                Serial.print(index);
                 Serial.print(F(": "));
                 Serial.println(error);
                 return status;
             }
-            Serial.print(F("Stack trace @Program ["));
-            Serial.print(program_pointer);
-            Serial.print(F("]: "));
-            runtime.printStack();
-            Serial.print(F("   <= "));
-            program.printOpcodeAt(program_pointer);
-            Serial.print(F("  (executed in "));
+            Serial.print(F("Executed in ["));
+            if (ms < 10)  Serial.print(' ');
             Serial.print(ms, 3);
-            Serial.print(F(" ms)"));
+            Serial.print(F(" ms]  "));
+            int length = program.printOpcodeAt(index);
+            Serial.print(' ');
+            Serial.print(' ');
+            while (length < 59) length += Serial.print('-');
+            while (length < 61) length += Serial.print(' ');
+            runtime.printStack();
             Serial.println();
             if (program.finished()) finished = true;
         }
@@ -159,7 +165,7 @@ struct UnitTest {
         float ms = (float) t * 0.001;
         Serial.print(F("Leftover ")); runtime.printStack(); Serial.println();
         Serial.print(F("Time to execute program: ")); Serial.print(ms, 3); Serial.println(F(" ms"));
-        if (status != STATUS_SUCCESS) { Serial.print(F("Debug failed with error: ")); Serial.println(getRuntimeErrorName(status)); }
+        if (status != STATUS_SUCCESS) { Serial.print(F("Debug failed with error: ")); Serial.println(RUNTIME_ERROR_NAME(status)); }
         return status;
     }
 
@@ -260,49 +266,65 @@ const TestCase<bool>* case_cmp_eq_1 = new TestCase<bool>({ "cmp_eq => 0.29 == 0.
 } });
 
 // Jump operations
-const TestCase<uint8_t>* case_jump = new TestCase<uint8_t>({ "jump => 1", PROGRAM_EXITED, 1, [](RuntimeProgram& program) {
+const TestCase<uint8_t>* case_jump = new TestCase<uint8_t>({ "jump => push 1 and jump to exit", PROGRAM_EXITED, 1, [](RuntimeProgram& program) {
     program.push_uint8_t(1); // 0 [+2]
-    program.pushJMP(13); // 2 [+3]
+    uint16_t jump_index = program.size();
+    program.pushJMP(0); // 2 [+3]
     program.push_uint8_t(1); // 5 [+2]
     program.push(ADD, type_uint8_t); // 7 [+2]
     program.push_uint8_t(3); // 9 [+2]
     program.push(MUL, type_uint8_t); // 11 [+2]
+    uint16_t exit_index = program.size();
     program.push(EXIT); // 13 [+1]
+    program.modifyValue(jump_index + 1, exit_index); // Change the jump address to the exit address
+} });
+const TestCase<uint8_t>* case_jump_if = new TestCase<uint8_t>({ "jump_if => for loop sum", PROGRAM_EXITED, 100, [](RuntimeProgram& program) {
+    // uint8_t sum = 0; 
+    // for (uint8_t i = 0; i < 10; i++) {
+    //   sum += (uint8_t) 10;
+    // }
+    // return sum;
+    static const uint8_t sum_ptr = 0;
+    static const uint8_t i_ptr = 1;
+    uint16_t loop_jump = 0;
+    uint16_t loop_destination = 0;
+    uint16_t end_jump = 0;
+    uint16_t end_destination = 0;
+    program.push_uint8_t(0);            // Add 0 to the stack           [0]  
+    program.pushPUT(sum_ptr);           // Store 0 in sum_ptr           []
+    program.push_uint8_t(0);            // Add 0 to the stack           [0]
+    program.pushPUT(i_ptr);             // Store 0 in i_ptr             []
+    loop_destination = program.size();  // :loop
+    program.pushGET(i_ptr);             // Load i_ptr to the stack      [0]
+    program.push_uint8_t(10);           // Add 10 to the stack          [0, 10]
+    program.push(CMP_LT, type_uint8_t); // Compare 0 < 10               [1]
+    loop_jump = program.size();
+    program.pushJMP_IF_NOT(0);          // Jump to :end if 1 == 0       []
+    program.pushGET(i_ptr);             // Load i_ptr to the stack      [0]
+    program.push_uint8_t(1);            // Add 1 to the stack           [0, 1]
+    program.push(ADD, type_uint8_t);    // Add 0 + 1                    [1]
+    program.pushPUT(i_ptr);             // Store 1 in i_ptr             []
+    program.pushGET(sum_ptr);           // Load sum_ptr to the stack    [0]
+    program.push_uint8_t(10);           // Add 10 to the stack          [0, 10]
+    program.push(ADD, type_uint8_t);    // Add 0 + 10                   [10]
+    program.pushPUT(sum_ptr);           // Store 10 in sum_ptr          []
+    program.pushJMP(loop_destination);  // Jump to :loop                []
+    end_destination = program.size();   // :end
+    program.pushGET(sum_ptr);           // Load sum_ptr to the stack    [0]
+    program.push(EXIT);                 // Exit the program
+    program.modifyValue(loop_jump + 1, end_destination); // Change the jump address to the exit address
 } });
 
 
 void runtime_test() {
-    REPRINTLN(50, '-');
+    Tester.runtime.startup();
+    REPRINTLN(70, '-');
     Serial.println(F("Runtime Unit Test"));
-    REPRINTLN(50, '-');
-    Serial.println(F("Bytecode Instruction Set:"));
-    size_t position = 0;
-    bool was_valid = true;
-    for (uint8_t opcode = 0x00; opcode < 256; opcode++) {
-        bool is_valid = OPCODE_EXISTS((PLCRuntimeInstructionSet) opcode);
-        if (is_valid && !was_valid) Serial.println();
-        was_valid = is_valid;
-        if (is_valid) {
-            position = Serial.print(F("   0x"));
-            if (opcode < 0x10) position += Serial.print('0');
-            position += Serial.print(opcode, HEX);
-            position += Serial.print(F(":  "));
-            position += Serial.print(OPCODE_NAME((PLCRuntimeInstructionSet) opcode));
-            uint8_t size = OPCODE_SIZE((PLCRuntimeInstructionSet) opcode);
-            if (size > 0) {
-                for (; position < 26; position++) Serial.print(' ');
-                Serial.print(F("("));
-                Serial.print(size);
-                Serial.print(F(" byte"));
-                if (size > 1) Serial.print('s');
-                Serial.print(')');
-            }
-            Serial.println();
-        }
-        if (opcode == 0xFF) break;
-    }
+    REPRINTLN(70, '-');
+    logRuntimeInstructionSet();
+    REPRINTLN(70, '-');
 #ifdef __RUNTIME_DEBUG__
-    REPRINTLN(50, '-');
+    REPRINTLN(70, '#');
     Serial.println(F("Executing Runtime Unit Tests..."));
     Tester.run(*case_demo_uint8_t);
     Tester.run(*case_demo_uint16_t);
@@ -317,11 +339,15 @@ void runtime_test() {
     Tester.run(*case_logic_or);
     Tester.run(*case_cmp_eq);
     Tester.run(*case_jump);
+    Tester.run(*case_jump_if);
+    REPRINTLN(70, '-');
+    REPRINTLN(70, '#');
     Serial.println(F("Runtime Unit Tests Completed."));
+    REPRINTLN(70, '#');
 #endif
-    REPRINTLN(50, '-');
+    REPRINTLN(70, '#');
     Serial.println(F("Report:"));
-    REPRINTLN(50, '-');
+    REPRINTLN(70, '#');
     Tester.review(*case_demo_uint8_t); delete case_demo_uint8_t;
     Tester.review(*case_demo_uint16_t); delete case_demo_uint16_t;
     Tester.review(*case_demo_uint32_t); delete case_demo_uint32_t;
@@ -335,9 +361,11 @@ void runtime_test() {
     Tester.review(*case_logic_or); delete case_logic_or;
     Tester.review(*case_cmp_eq); delete case_cmp_eq;
     Tester.review(*case_jump); delete case_jump;
-    REPRINTLN(50, '-');
+    Tester.review(*case_jump_if); delete case_jump_if;
+    REPRINTLN(70, '#');
     Serial.println(F("Runtime Unit Tests Report Completed."));
-    REPRINTLN(50, '-');
+    REPRINTLN(70, '#');
+    Serial.println();
 };
 
 #else // __RUNTIME_UNIT_TEST__
@@ -346,6 +374,7 @@ bool runtime_test_called = false;
 void runtime_test() {
     if (runtime_test_called) return;
     Serial.println(F("Unit tests are disabled."));
+    Serial.println();
     runtime_test_called = true;
 };
 class UnitTest {
@@ -353,6 +382,7 @@ public:
     static RuntimeError fullProgramDebug(VovkPLCRuntime& runtime, RuntimeProgram& program) {
         program.print();
         Serial.println(F("Runtime working in production mode. Full program debugging is disabled."));
+        Serial.println();
         runtime.clear(program);
         runtime.cleanRun(program);
         return program.status;

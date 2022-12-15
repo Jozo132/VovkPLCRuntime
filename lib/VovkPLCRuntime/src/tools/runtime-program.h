@@ -64,23 +64,27 @@ public:
         return loadUnsafe(program, program_size);
     }
 
+    // Get the size of used program memory
+    uint16_t size() { return program_size; }
+
     // Hot update the running program. This is a very dangerous operation, so use it with caution!
     RuntimeError modify(uint16_t index, uint8_t value) {
-        if (index >= program_size) return INVALID_LINE_NUMBER;
+        if (index >= program_size) return INVALID_PROGRAM_INDEX;
         program[index] = value;
         return STATUS_SUCCESS;
     }
 
     // Hot update the running program. This is a very dangerous operation, so use it with caution!
     RuntimeError modify(uint16_t index, uint8_t* data, uint16_t size) {
-        if (index + size > program_size) return INVALID_LINE_NUMBER;
+        if (index + size > program_size) return INVALID_PROGRAM_INDEX;
         for (uint16_t i = 0; i < size; i++) program[index + i] = data[i];
         return STATUS_SUCCESS;
     }
 
-    template <typename T> RuntimeError modifyValue(uint16_t index, T value) {
-        if (index + sizeof(T) > program_size) return INVALID_LINE_NUMBER;
-        memcpy(&program[index], &value, sizeof(T));
+    RuntimeError modifyValue(uint16_t index, uint16_t value) {
+        if (index + sizeof(uint16_t) > program_size) return INVALID_PROGRAM_INDEX;
+        program[index] = value >> 8;
+        program[index + 1] = value & 0xFF;
         return STATUS_SUCCESS;
     }
 
@@ -93,7 +97,7 @@ public:
 
     // Set the active PLC Program line number
     RuntimeError setLine(uint16_t line_number) {
-        if (line_number < 0 || line_number >= MAX_PROGRAM_SIZE) return INVALID_LINE_NUMBER;
+        if (line_number < 0 || line_number >= MAX_PROGRAM_SIZE) return INVALID_PROGRAM_INDEX;
         program_line = line_number;
         return STATUS_SUCCESS;
     }
@@ -108,23 +112,71 @@ public:
 
     uint16_t getProgramSize() { return program_size; }
 
-    void print() {
-        Serial.print(F("Program[")); Serial.print(program_size);
+    int print() {
+        int length = Serial.print(F("Program["));
+        length += Serial.print(program_size);
         if (program_size == 0) {
-            Serial.print(F("] <Empty>"));
-            return;
+            length += Serial.print(F("] []"));
+            return length;
         }
-        Serial.print(F("] <Buffer "));
+        length += Serial.print(F("] ["));
         for (uint16_t i = 0; i < program_size; i++) {
             uint8_t value = program[i];
-            if (value < 0x10) Serial.print('0');
-            Serial.print(value, HEX);
-            if (i < program_size - 1) Serial.print(' ');
+            if (value < 0x10) length += Serial.print('0');
+            length += Serial.print(value, HEX);
+            if (i < program_size - 1) length += Serial.print(' ');
         }
-        Serial.print('>');
+        length += Serial.print(']');
+        return length;
     }
 
-    void println() { print(); Serial.println(); }
+    int println() { int length = print(); length += Serial.println(); return length; }
+
+    void explain() {
+        Serial.println(F("#### Program Explanation:"));
+        if (program_size == 0) {
+            Serial.println(F("Program is empty."));
+            return;
+        }
+        uint16_t index = 0;
+        bool done = false;
+        while (!done) {
+            // Get current opcode
+            PLCRuntimeInstructionSet opcode = (PLCRuntimeInstructionSet) program[index];
+            Serial.printf("    %4d [%02X %02X] - %02X: ", index, index >> 8, index & 0xFF, opcode);
+            bool exists = OPCODE_EXISTS(opcode);
+            if (!exists) {
+                Serial.println(F("INVALID OPCODE\n"));
+                return;
+            }
+
+            // Get current instruction size
+            uint8_t instruction_size = OPCODE_SIZE(opcode);
+            // Get current instruction name
+            auto instruction_name = OPCODE_NAME(opcode);
+            int length = Serial.print(instruction_name);
+            length += Serial.print(' ');
+            while (length < 13) length += Serial.print('-');
+            Serial.print(' ');
+            Serial.print(F("[size "));
+            if (instruction_size < 10) Serial.print(' ');
+            Serial.print(instruction_size);
+            Serial.print(F("] "));
+            // Print instruction arguments
+            for (uint8_t i = 0; i < instruction_size; i++) {
+                if ((i + index) >= program_size) {
+                    Serial.println(F(" - OUT OF PROGRAM BOUNDS\n"));
+                    return;
+                }
+                uint8_t value = program[i + index];
+                Serial.printf(" %02X", value);
+            }
+            Serial.println();
+            index += instruction_size;
+            if (index >= program_size) done = true;
+        }
+        Serial.println(F("#### End of program explanation."));
+    }
 
     PLCRuntimeInstructionSet getCurrentBytecode() {
         if (program_line >= program_size) return EXIT;
@@ -133,38 +185,42 @@ public:
 
     uint8_t sizeOfCurrentBytecode() { return OPCODE_SIZE(getCurrentBytecode()); }
 
-    RuntimeError printOpcodeAt(uint16_t index) {
-        if (index >= program_size) return INVALID_LINE_NUMBER;
+    int printOpcodeAt(uint16_t index) {
+        int length = 0;
+        if (index >= program_size) return length;
         PLCRuntimeInstructionSet opcode = (PLCRuntimeInstructionSet) program[index];
         bool valid_opcode = OPCODE_EXISTS(opcode);
         if (!valid_opcode) {
-            Serial.print(F("Opcode[0x"));
-            if (opcode < 0x10) Serial.print('0');
-            Serial.print(opcode, HEX);
-            Serial.print(F("] <Invalid>"));
-            return INVALID_INSTRUCTION;
+            length += Serial.print(F("Opcode: [0x"));
+            if (opcode < 0x10) length += Serial.print('0');
+            length += Serial.print(opcode, HEX);
+            length += Serial.print(F("] <Invalid>"));
+            return length;
         }
         uint8_t opcode_size = OPCODE_SIZE(opcode);
-        Serial.print(F("Opcode["));
-        Serial.print(OPCODE_NAME(opcode));
-        if (opcode_size > 0) Serial.print(F("] <Buffer "));
-        else Serial.print(F("] <Empty"));
+        length += Serial.print(F("Opcode["));
+        if (opcode < 0x10) length += Serial.print('0');
+        length += Serial.print(opcode, HEX);
+        length += Serial.print(F("]: "));
+        length += Serial.print(OPCODE_NAME(opcode));
+        length += Serial.print(' ');
+        length += Serial.print(' ');
+        while (length < 25) length += Serial.print('-');
+        while (length < 27) length += Serial.print(' ');
+        Serial.print('[');
         for (uint8_t i = 0; i < opcode_size; i++) {
             uint8_t value = program[index + i];
-            if (value < 0x10) Serial.print('0');
-            Serial.print(value, HEX);
-            if (i < opcode_size - 1) Serial.print(' ');
+            if (value < 0x10) length += Serial.print('0');
+            length += Serial.print(value, HEX);
+            if (i < opcode_size - 1) length += Serial.print(' ');
         }
-        Serial.print('>');
-        return STATUS_SUCCESS;
+        length += Serial.print(']');
+        return length;
     }
-    RuntimeError printlnOpcodeAt(uint16_t index) {
-        RuntimeError error = printOpcodeAt(index);
+    void printlnOpcodeAt(uint16_t index) {
+        printOpcodeAt(index);
         Serial.println();
-        return error;
     }
-
-
 
     // Push a new sequence of bytes to the PLC Program
     RuntimeError push(uint8_t* code, uint16_t code_size) {
@@ -406,6 +462,35 @@ public:
         program[program_size + 1] = program_address >> 8;
         program[program_size + 2] = program_address & 0xFF;
         program_size += 3;
+        status = STATUS_SUCCESS;
+        return status;
+    }
+
+    // Pushes the byte at the given address of the memory into the stack
+    RuntimeError pushGET(uint16_t program_address, PLCRuntimeInstructionSet type = type_uint8_t) {
+        if (program_size + 4 > MAX_PROGRAM_SIZE) {
+            status = PROGRAM_SIZE_EXCEEDED;
+            return status;
+        }
+        program[program_size] = GET;
+        program[program_size + 1] = (uint8_t) type;
+        program[program_size + 2] = program_address >> 8;
+        program[program_size + 3] = program_address & 0xFF;
+        program_size += 4;
+        status = STATUS_SUCCESS;
+        return status;
+    }
+    // Stores the byte at the top of the stack into the given address in memory and pops the stack
+    RuntimeError pushPUT(uint16_t program_address, PLCRuntimeInstructionSet type = type_uint8_t) {
+        if (program_size + 4 > MAX_PROGRAM_SIZE) {
+            status = PROGRAM_SIZE_EXCEEDED;
+            return status;
+        }
+        program[program_size] = PUT;
+        program[program_size + 1] = (uint8_t) type;
+        program[program_size + 2] = program_address >> 8;
+        program[program_size + 3] = program_address & 0xFF;
+        program_size += 4;
         status = STATUS_SUCCESS;
         return status;
     }
