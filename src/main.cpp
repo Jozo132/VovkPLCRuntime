@@ -13,8 +13,12 @@
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   Serial.begin(115200);
-  while (!Serial) delay(10); // wait for serial port to connect. Needed for native USB port only
-
+  while (!Serial && (millis() < 10000)) { // wait for serial port to connect. Needed for native USB port only
+    digitalWrite(LED_BUILTIN, LOW);
+    delay(1);
+    digitalWrite(LED_BUILTIN, HIGH);
+    delay(100);
+  }
   // Start the runtime unit test
   runtime_unit_test();
 }
