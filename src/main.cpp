@@ -4,7 +4,7 @@
 
 
 
-#define __RUNTIME_DEBUG__
+// #define __RUNTIME_DEBUG__
 #define __RUNTIME_FULL_UNIT_TEST___ // Avoid using this with microcontrollers with limited RAM!
 
 #include <VovkPLCRuntime.h>
@@ -23,7 +23,7 @@ void setup() {
   runtime_unit_test();
 }
 
-#ifdef __RUNTIME_FULL_UNIT_TEST___
+#ifndef __RUNTIME_FULL_UNIT_TEST___
 RuntimeProgram program(86); // Program size
 VovkPLCRuntime runtime(64, program); // Stack size
 #endif
@@ -37,7 +37,7 @@ void loop() {
   digitalWrite(LED_BUILTIN, HIGH);
   delay(500);
 
-#ifdef __RUNTIME_FULL_UNIT_TEST___
+#ifndef __RUNTIME_FULL_UNIT_TEST___
   // Custom program test
   if (startup) {
     runtime.startup();
