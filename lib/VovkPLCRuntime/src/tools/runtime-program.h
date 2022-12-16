@@ -143,7 +143,19 @@ public:
         while (!done) {
             // Get current opcode
             PLCRuntimeInstructionSet opcode = (PLCRuntimeInstructionSet) program[index];
-            Serial.printf("    %4d [%02X %02X] - %02X: ", index, index >> 8, index & 0xFF, opcode);
+            // Serial.printf("    %4d [%02X %02X] - %02X: ", index, index >> 8, index & 0xFF, opcode);
+            Serial.print(F("    "));
+            print_number_padStart(index, 4);
+            Serial.print(F(" ["));
+            uint8_t hi = index >> 8;
+            uint8_t lo = index & 0xFF;
+            print_number_padStart(hi, 2, '0', HEX);
+            Serial.print(' ');
+            print_number_padStart(lo, 2, '0', HEX);
+            Serial.print(F("] - "));
+            print_number_padStart(opcode, 2, '0', HEX);
+            Serial.print(F(": "));
+
             bool exists = OPCODE_EXISTS(opcode);
             if (!exists) {
                 Serial.println(F("INVALID OPCODE\n"));
@@ -169,7 +181,8 @@ public:
                     return;
                 }
                 uint8_t value = program[i + index];
-                Serial.printf(" %02X", value);
+                // Serial.printf(" %02X", value);
+                print_number_padStart(value, 2, '0', HEX);
             }
             Serial.println();
             index += instruction_size;

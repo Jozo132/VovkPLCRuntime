@@ -131,7 +131,16 @@ struct UnitTest {
             float ms = (float) t * 0.001;
             if (status == PROGRAM_EXITED) finished = true;
             bool problem = status != STATUS_SUCCESS && status != PROGRAM_EXITED;
-            Serial.printf("    Step %4d [%02X %02X]: ", index, index >> 8, index & 0xFF);
+            // Serial.printf("    Step %4d [%02X %02X]: ", index, index >> 8, index & 0xFF);
+            Serial.print(F("    Step ")); 
+            print_number_padStart(index, 4);
+            Serial.print(F(" ["));
+            uint8_t hi = index >> 8;
+            uint8_t lo = index & 0xFF;
+            print_number_padStart(hi, 2, '0', HEX);
+            Serial.print(' ');
+            print_number_padStart(lo, 2, '0', HEX);
+            Serial.print(F("]: "));
             if (problem) {
                 const char* error = RUNTIME_ERROR_NAME(status);
                 Serial.print(F("Error at program pointer "));

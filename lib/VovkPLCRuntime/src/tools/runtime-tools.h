@@ -68,6 +68,44 @@ void fstrcpy(char* buff, const char* fstr) {
     }
 }
 
+int print_number_padStart(int value, int pad, char padChar = ' ', int base = 10) {
+    int strlen = 0;
+    int temp = value;
+    int num_of_digits = temp == 0 ? 1 : 0;
+    if (temp < 0) {
+        num_of_digits++;
+        temp = -temp;
+    }
+    while (temp > 0) {
+        num_of_digits++;
+        temp /= base;
+    }
+    if (num_of_digits < pad)
+        for (int i = 0; i < pad - num_of_digits; i++)
+            strlen += Serial.print(padChar);
+    strlen += Serial.print(value, base);
+    return strlen;
+}
+
+int pring_number_padEnd(int value, int pad, char padChar = ' ', int base = 10) {
+    int strlen = 0;
+    int temp = value;
+    int num_of_digits = temp == 0 ? 1 : 0;
+    if (temp < 0) {
+        num_of_digits++;
+        temp = -temp;
+    }
+    while (temp > 0) {
+        num_of_digits++;
+        temp /= base;
+    }
+    strlen += Serial.print(value, base);
+    if (num_of_digits < pad)
+        for (int i = 0; i < pad - num_of_digits; i++)
+            strlen += Serial.print(padChar);
+    return strlen;
+}
+
 #define REPRINT(count, str) for (uint8_t i = 0; i < count; i++) { Serial.print(str); }
 #define REPRINTLN(count, str) REPRINT(count, str); Serial.println();
 
