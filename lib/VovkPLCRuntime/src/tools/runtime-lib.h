@@ -37,7 +37,7 @@ public:
         started_up = true;
     }
     void startup() {
-        if (Serial && !started_up) {
+        if (!started_up) {
             started_up = true;
             REPRINTLN(70, ':');
             Serial.println(F(":: Using VovkPLCRuntime Library - Author J.Vovk <jozo132@gmail.com> ::"));
@@ -102,26 +102,26 @@ public:
     }
     // Execute the whole PLC program, returns an error code (0 on success)
     RuntimeError run() {
-        startup();
+        if (!started_up) startup();
         if (program == NULL) return NO_PROGRAM;
         return run(program->program, program->program_size);
     }
     // Run the whole PLC program from the beginning, returns an error code (0 on success)
     RuntimeError cleanRun(RuntimeProgram& program) {
-        startup();
+        if (!started_up) startup();
         clear(program);
         return run(program);
     }
     // Run the whole PLC program from the beginning, returns an error code (0 on success)
     RuntimeError cleanRun() {
-        startup();
+        if (!started_up)startup();
         if (program == NULL) return NO_PROGRAM;
         clear();
         return run(program->program, program->program_size);
     }
     // Read a custom type T value from the stack. This will pop the stack by sizeof(T) bytes and return the value.
     template <typename T> T read() {
-        startup();
+        if (!started_up) startup();
         if (stack->size() < (uint16_t) sizeof(T)) return 0;
         uint8_t temp[sizeof(T)];
         for (uint16_t i = 0; i < (uint16_t) sizeof(T); i++)
@@ -154,7 +154,7 @@ RuntimeError VovkPLCRuntime::run(RuntimeProgram& program) { return run(program.p
 
 // Execute the whole PLC program, returns an erro code (0 on success)
 RuntimeError VovkPLCRuntime::run(uint8_t* program, uint16_t program_size) {
-    startup();
+    if (!started_up) startup();
     uint16_t index = 0;
     while (index < program_size) {
         RuntimeError status = step(program, program_size, index);
