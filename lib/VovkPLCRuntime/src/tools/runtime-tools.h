@@ -23,6 +23,11 @@
 
 #include <Arduino.h>
 
+// Define an empty F() macro if it isn't defined, so that the code can be compiled on non-Arduino platforms
+#ifndef F 
+#define F(x) x
+#endif
+
 #ifdef __arm__
 // should use uinstd.h to define sbrk but Due causes a conflict
 extern "C" char* sbrk(int incr);
