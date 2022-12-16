@@ -118,7 +118,6 @@ struct UnitTest {
         runtime.clear(program);
         program.println();
 #ifdef __RUNTIME_DEBUG__
-        uint16_t program_size = program.getProgramSize();
         program.explain();
         Serial.println(F("Starting detailed program debug..."));
         uint16_t index = 0;
@@ -288,7 +287,6 @@ const TestCase<uint8_t>* case_jump_if = new TestCase<uint8_t>({ "jump_if => for 
     static const uint8_t i_ptr = 1;
     uint16_t loop_jump = 0;
     uint16_t loop_destination = 0;
-    uint16_t end_jump = 0;
     uint16_t end_destination = 0;
     program.push_uint8_t(0);            // Add 0 to the stack           [0]  
     program.pushPUT(sum_ptr);           // Store 0 in sum_ptr           []
@@ -316,7 +314,7 @@ const TestCase<uint8_t>* case_jump_if = new TestCase<uint8_t>({ "jump_if => for 
 } });
 
 
-void runtime_test() {
+void runtime_unit_test() {
     Tester.runtime.startup();
     REPRINTLN(70, '-');
     Serial.println(F("Runtime Unit Test"));
@@ -367,7 +365,6 @@ void runtime_test() {
     REPRINTLN(70, '#');
     Serial.println(F("Runtime Unit Tests Report Completed."));
     REPRINTLN(70, '#');
-    Serial.println();
 };
 
 #else // __RUNTIME_UNIT_TEST__

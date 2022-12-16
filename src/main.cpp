@@ -14,9 +14,9 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   Serial.begin(115200);
   while (!Serial) delay(10); // wait for serial port to connect. Needed for native USB port only
-  
-  // Start the runtime tests
-  runtime_test();
+
+  // Start the runtime unit test
+  runtime_unit_test();
 }
 
 #ifdef __RUNTIME_FULL_UNIT_TEST___
@@ -29,7 +29,7 @@ bool startup = true;
 void loop() {
   // Blink the LED to indicate that the tests are done
   digitalWrite(LED_BUILTIN, LOW);
-  delay(20);
+  delay(2);
   digitalWrite(LED_BUILTIN, HIGH);
   delay(500);
 
@@ -91,6 +91,10 @@ void loop() {
     RuntimeError status = runtime.cleanRun();
 #endif
     float output = runtime.read<float>();
+
+    const char* status_name = RUNTIME_ERROR_NAME(status);
+
+    Serial.print(F("Runtime status: ")); Serial.println(status_name);
 
     Serial.print(F("Result: ")); Serial.println(output);
     Serial.print(F("Expected result: ")); Serial.println(expected);

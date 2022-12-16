@@ -39,6 +39,7 @@ public:
     void startup() {
         if (!started_up) {
             started_up = true;
+            Serial.println();
             REPRINTLN(70, ':');
             Serial.println(F(":: Using VovkPLCRuntime Library - Author J.Vovk <jozo132@gmail.com> ::"));
             REPRINTLN(70, ':');

@@ -55,22 +55,26 @@ RuntimeError printlnOpcodeAt(const uint8_t* program, uint16_t size, uint16_t ind
 }
 
 #ifdef __RUNTIME_DEBUG__
-#define CHECK_PROGRAM_POINTER_BOUNDS_HEAD {                             \
+#define CHECK_PROGRAM_POINTER_BOUNDS_HEAD                               \
+{                                                                       \
     Serial.print(F("Program pointer points out of bounds: "));          \
     Serial.print(index);                                                \
     Serial.print(F(" > "));                                             \
     Serial.println(program_size);                                       \
-    printOpcodeAt(program, program_size, index_start);  \
+    printOpcodeAt(program, program_size, index_start);                  \
     return PROGRAM_POINTER_OUT_OF_BOUNDS;                               \
 }
 #else
-#define CHECK_PROGRAM_POINTER_BOUNDS_HEAD return PROGRAM_POINTER_OUT_OF_BOUNDS; 
+#define CHECK_PROGRAM_POINTER_BOUNDS_HEAD                               \
+    return PROGRAM_POINTER_OUT_OF_BOUNDS; 
 #endif
 
 namespace PLCMethods {
 
     RuntimeError handle_JMP(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
-        uint16_t index_start = index;
+        //! @cond Doxygen_Suppress
+        __attribute__((unused)) uint16_t index_start = index;
+        //! @endcond
         uint16_t size = 2;
         if (index + size > program_size) CHECK_PROGRAM_POINTER_BOUNDS_HEAD;
         u8A_to_u16 cvt;
@@ -81,7 +85,9 @@ namespace PLCMethods {
         return STATUS_SUCCESS;
     }
     RuntimeError handle_JMP_IF(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
-        uint16_t index_start = index;
+        //! @cond Doxygen_Suppress
+        __attribute__((unused)) uint16_t index_start = index;
+        //! @endcond
         uint16_t size = 2;
         if (index + size > program_size) CHECK_PROGRAM_POINTER_BOUNDS_HEAD;
         if (stack->pop_bool()) {
@@ -94,7 +100,9 @@ namespace PLCMethods {
         return STATUS_SUCCESS;
     }
     RuntimeError handle_JMP_IF_NOT(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
-        uint16_t index_start = index;
+        //! @cond Doxygen_Suppress
+        __attribute__((unused)) uint16_t index_start = index;
+        //! @endcond
         uint16_t size = 2;
         if (index + size > program_size) CHECK_PROGRAM_POINTER_BOUNDS_HEAD;
         if (!stack->pop_bool()) {
@@ -108,7 +116,9 @@ namespace PLCMethods {
     }
 
     RuntimeError handle_CALL(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
-        uint16_t index_start = index;
+        //! @cond Doxygen_Suppress
+        __attribute__((unused)) uint16_t index_start = index;
+        //! @endcond
         uint16_t size = 2;
         if (index + size > program_size) CHECK_PROGRAM_POINTER_BOUNDS_HEAD;
         u8A_to_u16 cvt;
@@ -122,7 +132,9 @@ namespace PLCMethods {
         return STATUS_SUCCESS;
     }
     RuntimeError handle_CALL_IF(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
-        uint16_t index_start = index;
+        //! @cond Doxygen_Suppress
+        __attribute__((unused)) uint16_t index_start = index;
+        //! @endcond
         uint16_t size = 2;
         if (index + size > program_size) CHECK_PROGRAM_POINTER_BOUNDS_HEAD;
         if (stack->pop_bool()) {
@@ -138,7 +150,9 @@ namespace PLCMethods {
         return STATUS_SUCCESS;
     }
     RuntimeError handle_CALL_IF_NOT(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
-        uint16_t index_start = index;
+        //! @cond Doxygen_Suppress
+        __attribute__((unused)) uint16_t index_start = index;
+        //! @endcond
         uint16_t size = 2;
         if (index + size > program_size) CHECK_PROGRAM_POINTER_BOUNDS_HEAD;
         if (!stack->pop_bool()) {
@@ -154,7 +168,9 @@ namespace PLCMethods {
         return STATUS_SUCCESS;
     }
     RuntimeError handle_RET(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
-        uint16_t index_start = index;
+        //! @cond Doxygen_Suppress
+        __attribute__((unused)) uint16_t index_start = index;
+        //! @endcond
         if (stack->call_stack->size() == 0) return CALL_STACK_UNDERFLOW;
         uint16_t ret_index = stack->popCall();
         index = ret_index;
@@ -165,7 +181,9 @@ namespace PLCMethods {
 
 
     RuntimeError handle_EXIT(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
-        uint16_t index_start = index;
+        //! @cond Doxygen_Suppress
+        __attribute__((unused)) uint16_t index_start = index;
+        //! @endcond
         if (index >= program_size) return STATUS_SUCCESS;
         uint8_t exit_code = program[index++];
         return (RuntimeError) exit_code;

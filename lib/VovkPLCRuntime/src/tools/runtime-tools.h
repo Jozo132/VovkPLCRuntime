@@ -26,11 +26,16 @@
 #ifdef __arm__
 // should use uinstd.h to define sbrk but Due causes a conflict
 extern "C" char* sbrk(int incr);
+#elif defined(ESP8266) 
+// ESP8266 has no sbrk
 #else  // __ARM__
 extern char* __brkval;
 #endif  // __arm__
 
 int freeMemory() {
+#if defined(ESP8266)
+    return ESP.getFreeHeap();
+#else
     char top;
 #ifdef __arm__
     return &top - reinterpret_cast<char*>(sbrk(0));
@@ -39,10 +44,12 @@ int freeMemory() {
 #else  // __arm__
     return __brkval ? &top - __brkval : &top - __malloc_heap_start;
 #endif  // __arm__
+#endif  // ESP8266
 }
 
 void fstrcpy(char* buff, const char* fstr) {
-    uint8_t i, c = 0;
+    uint8_t i = 0;
+    uint8_t c = 0;
     for (;;) {
         c = pgm_read_byte(fstr + i);
         buff[i++] = c;
