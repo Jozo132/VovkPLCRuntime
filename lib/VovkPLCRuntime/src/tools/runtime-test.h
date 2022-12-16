@@ -91,7 +91,7 @@ struct UnitTest {
 #endif
 
     template <typename T> void review(const TestCase<T>& test) {
-        size_t offset = Serial.print("Test \"");
+        size_t offset = Serial.print(F("Test \""));
         offset += Serial.print(test.name);
         offset += Serial.print('"');
         program.erase();
@@ -328,11 +328,11 @@ void runtime_unit_test() {
     REPRINTLN(70, '-');
     Serial.println(F("Runtime Unit Test"));
     REPRINTLN(70, '-');
+#ifdef __RUNTIME_DEBUG__
     logRuntimeErrorList();
     REPRINTLN(70, '-');
     logRuntimeInstructionSet();
     REPRINTLN(70, '-');
-#ifdef __RUNTIME_DEBUG__
     REPRINTLN(70, '#');
     Serial.println(F("Executing Runtime Unit Tests..."));
     Tester.run(*case_demo_uint8_t);
@@ -379,7 +379,7 @@ void runtime_unit_test() {
 #else // __RUNTIME_UNIT_TEST__
 
 bool runtime_test_called = false;
-void runtime_test() {
+void runtime_unit_test() {
     if (runtime_test_called) return;
     Serial.println(F("Unit tests are disabled."));
     Serial.println();
