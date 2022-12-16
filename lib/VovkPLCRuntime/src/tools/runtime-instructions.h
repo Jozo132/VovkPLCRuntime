@@ -81,6 +81,19 @@ const char* RUNTIME_ERROR_NAME(RuntimeError error) {
     return output;
 }
 
+void logRuntimeErrorList() {
+    Serial.println(F("RuntimeError Status List:\n")); // "    %2d: %s"
+    size_t position = 0;
+    for (size_t i = 0; i < SIZE_OF_ARRAY(RuntimeErrorNames); i++) {
+        Serial.print(F("    "));
+        if (i < 10) Serial.print(' ');
+        Serial.print(i);
+        Serial.print(F(": "));
+        Serial.println(RuntimeErrorNames[i]);
+    }
+    Serial.println();
+}
+
 // Reverse Polish Notation (RPN) to custom bytecode
 
 

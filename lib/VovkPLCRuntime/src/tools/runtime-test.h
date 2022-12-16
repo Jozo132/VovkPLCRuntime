@@ -321,6 +321,8 @@ void runtime_test() {
     REPRINTLN(70, '-');
     Serial.println(F("Runtime Unit Test"));
     REPRINTLN(70, '-');
+    logRuntimeErrorList();
+    REPRINTLN(70, '-');
     logRuntimeInstructionSet();
     REPRINTLN(70, '-');
 #ifdef __RUNTIME_DEBUG__

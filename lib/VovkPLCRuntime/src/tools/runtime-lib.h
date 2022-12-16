@@ -159,9 +159,8 @@ RuntimeError VovkPLCRuntime::run(uint8_t* program, uint16_t program_size) {
     while (index < program_size) {
         RuntimeError status = step(program, program_size, index);
         if (status != STATUS_SUCCESS) {
-            if (status == PROGRAM_EXITED) {
+            if (status == PROGRAM_EXITED)
                 return STATUS_SUCCESS;
-            }
             return status;
         }
     }
