@@ -28,6 +28,8 @@
 #define F(x) x
 #endif
 
+#define IGNORE_UNUSED __attribute__((unused))
+
 #ifdef __arm__
 // should use uinstd.h to define sbrk but Due causes a conflict
 extern "C" char* sbrk(int incr);
