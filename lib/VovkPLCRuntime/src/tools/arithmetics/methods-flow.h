@@ -167,7 +167,6 @@ namespace PLCMethods {
 
 
     RuntimeError handle_EXIT(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
-        IGNORE_UNUSED uint16_t index_start = index;
         if (index >= program_size) return STATUS_SUCCESS;
         uint8_t exit_code = program[index++];
         return (RuntimeError) exit_code;
