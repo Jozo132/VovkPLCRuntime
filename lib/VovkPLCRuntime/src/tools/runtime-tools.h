@@ -21,12 +21,15 @@
 
 #pragma once
 
-#ifdef __WASM__
+#ifdef __SIMULATOR__
 
+// #ifdef __WASM__
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+// #else // __WASM__
+// #endif
 
 #define PROGMEM
 #define pgm_read_byte(x) (*(x))
@@ -85,7 +88,7 @@ double ln(double x) {
     return 2.0 * sum;
 }
 
-double log10( double x ) { return ln(x) / LN10; }
+double log10(double x) { return ln(x) / LN10; }
 
 #else
 #include <Arduino.h>
@@ -95,7 +98,7 @@ double log10( double x ) { return ln(x) / LN10; }
 #ifdef __arm__
 // should use uinstd.h to define sbrk but Due causes a conflict
 extern "C" char* sbrk(int incr);
-#elif defined(ESP8266) || defined(__WASM__)
+#elif defined(ESP8266) || defined(__SIMULATOR__)
 // ESP8266 has no sbrk
 #else  // __ARM__
 extern char* __brkval;
@@ -104,7 +107,7 @@ extern char* __brkval;
 int freeMemory() {
 #if defined(ESP8266)
     return ESP.getFreeHeap();
-#elif defined(__WASM__)
+#elif defined(__SIMULATOR__)
     return 9000;
 #else
     char top;
@@ -157,7 +160,7 @@ union u8A_to_u16 { uint8_t u8A[2]; uint16_t u16; };
 
 
 
-#ifdef __WASM__
+#ifdef __SIMULATOR__
 void pinMode(int pin, int mode) {}
 void digitalWrite(int pin, int value) {}
 int digitalRead(int pin) { return 0; }
@@ -358,7 +361,7 @@ public:
 
 Serial_t Serial;
 
-#endif // __WASM__
+#endif // __SIMULATOR__
 
 
 

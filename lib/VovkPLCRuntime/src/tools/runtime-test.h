@@ -21,6 +21,7 @@
 
 #pragma once
 
+#ifndef __SIMULATOR__
 #if defined(__RUNTIME_FULL_UNIT_TEST___)
 #warning RUNTIME FULL UNIT TEST ENABLED
 #endif // __RUNTIME_FULL_UNIT_TEST___
@@ -28,6 +29,7 @@
 #if defined(__RUNTIME_DEBUG__)
 #warning RUNTIME DEBUG MODE ENABLED - Pleas do not use this in production code.This is only for testing purposesand might cause unexpected behaviour.
 #endif // __RUNTIME_DEBUG__
+#endif
 
 template <typename T> struct TestCase {
     const char* name;

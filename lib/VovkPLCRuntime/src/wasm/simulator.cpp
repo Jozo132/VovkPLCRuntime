@@ -19,7 +19,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#define __WASM__
+#define __SIMULATOR__
 #define __RUNTIME_DEBUG__
 #define __RUNTIME_FULL_UNIT_TEST___
 
