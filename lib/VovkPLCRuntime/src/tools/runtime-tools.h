@@ -21,19 +21,81 @@
 
 #pragma once
 
-#include <Arduino.h>
+#ifdef __WASM__
 
-// Define an empty F() macro if it isn't defined, so that the code can be compiled on non-Arduino platforms
-#ifndef F 
-#define F(x) x
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define PROGMEM
+#define pgm_read_byte(x) (*(x))
+#define pgm_read_word(x) (*(x))
+#define pgm_read_dword(x) (*(x))
+#define pgm_read_float(x) (*(x))
+#define pgm_read_double(x) (*(x))
+#define pgm_read_ptr(x) (*(x))
+#define __FlashStringHelper char
+
+#define size_t int
+
+#ifndef NULL
+#define NULL nullptr
+#endif 
+
+#define LOW 0
+#define HIGH 1
+
+#define OUTPUT 0
+#define INPUT 1
+#define INPUT_PULLUP 2
+
+#define LSBFIRST 0
+#define MSBFIRST 1
+
+#define CHANGE 1
+#define FALLING 2
+#define RISING 3
+
+#define LED_BUILTIN 13
+
+
+#define HEX 16
+#define DEC 10
+#define OCT 8
+#define BIN 2
+
+#define LN10 2.3025850929940456840179914546844
+
+double ln(double x) {
+    double old_sum = 0.0;
+    double xmlxpl = (x - 1) / (x + 1);
+    double xmlxpl_2 = xmlxpl * xmlxpl;
+    double denom = 1.0;
+    double frac = xmlxpl;
+    double term = frac;                 // denom start from 1.0
+    double sum = term;
+
+    while (sum != old_sum) {
+        old_sum = sum;
+        denom += 2.0;
+        frac *= xmlxpl_2;
+        sum += frac / denom;
+    }
+    return 2.0 * sum;
+}
+
+double log10( double x ) { return ln(x) / LN10; }
+
+#else
+#include <Arduino.h>
 #endif
 
-#define IGNORE_UNUSED __attribute__((unused))
 
 #ifdef __arm__
 // should use uinstd.h to define sbrk but Due causes a conflict
 extern "C" char* sbrk(int incr);
-#elif defined(ESP8266) 
+#elif defined(ESP8266) || defined(__WASM__)
 // ESP8266 has no sbrk
 #else  // __ARM__
 extern char* __brkval;
@@ -42,6 +104,8 @@ extern char* __brkval;
 int freeMemory() {
 #if defined(ESP8266)
     return ESP.getFreeHeap();
+#elif defined(__WASM__)
+    return 9000;
 #else
     char top;
 #ifdef __arm__
@@ -67,6 +131,242 @@ void fstrcpy(char* buff, const char* fstr) {
         }
     }
 }
+
+
+// Define an empty F() macro if it isn't defined, so that the code can be compiled on non-Arduino platforms
+#ifndef F 
+#define F(x) x
+#endif
+
+#define IGNORE_UNUSED __attribute__((unused))
+
+#define SIZE_OF_ARRAY(a) (sizeof(a) / sizeof(a[0]))
+
+#define STRINGIFY(X) #X
+
+#define CVT_8(type) union uint8_t_to_##type { uint8_t type_uint8_t; type type_##type; }
+#define CVT_16(type) union uint16_t_to_##type { uint16_t type_uint16_t; type type_##type; }
+#define CVT_32(type) union uint32_t_to_##type { uint32_t type_uint32_t; type type_##type; }
+#define CVT_64(type) union uint64_t_to_##type { uint64_t type_uint64_t; type type_##type; }
+
+
+CVT_32(float);
+CVT_64(double);
+
+union u8A_to_u16 { uint8_t u8A[2]; uint16_t u16; };
+
+
+
+#ifdef __WASM__
+void pinMode(int pin, int mode) {}
+void digitalWrite(int pin, int value) {}
+int digitalRead(int pin) { return 0; }
+void delay(int ms) {}
+void delayMicroseconds(int us) {}
+unsigned long millis() { return 0; }
+unsigned long micros() { return 0; }
+void attachInterrupt(int pin, void (*callback)(), int mode) {}
+void detachInterrupt(int pin) {}
+void yield() {}
+
+
+void __print(char c) {
+    printf("%c", c);
+}
+
+class Serial_t {
+    char input[256];
+    int input_len = 0;
+public:
+    operator bool() { return true; }
+    void begin(int baudrate) {}
+    void end() {}
+    int print(const char* str) {
+        int size = 0;
+        char c = 0;
+        while (*str) {
+            c = *str++;
+            size++;
+            __print(c);
+        }
+        return size;
+    }
+    int print(const char* str, int len) {
+        int size = 0;
+        char c = 0;
+        while (len--) {
+            c = *str++;
+            size++;
+            __print(c);
+        }
+        return size;
+    }
+    int print(char c) {
+        __print(c);
+        return 1;
+    }
+    int print(int i, int base = DEC) {
+        char buff[64];
+        int size = 0;
+        if (base == DEC) sprintf(buff, "%d", i);
+        else if (base == HEX) sprintf(buff, "%x", i);
+        else if (base == OCT) sprintf(buff, "%o", i);
+        else if (base == BIN) {
+            int j = 0;
+            for (j = 0; j < 32; j++) {
+                buff[j] = (i & 0x80000000) ? '1' : '0';
+                i <<= 1;
+            }
+            buff[j] = 0;
+        }
+        size = print(buff);
+        return size;
+    }
+    int print(unsigned int i, int base = DEC) {
+        char buff[64];
+        int size = 0;
+        if (base == DEC) sprintf(buff, "%u", i);
+        else if (base == HEX) sprintf(buff, "%x", i);
+        else if (base == OCT) sprintf(buff, "%o", i);
+        else if (base == BIN) {
+            int j = 0;
+            for (j = 0; j < 32; j++) {
+                buff[j] = (i & 0x80000000) ? '1' : '0';
+                i <<= 1;
+            }
+            buff[j] = 0;
+        }
+        size = print(buff);
+        return size;
+    }
+    int print(long i, int base = DEC) {
+        char buff[64];
+        int size = 0;
+        if (base == DEC) sprintf(buff, "%ld", i);
+        else if (base == HEX) sprintf(buff, "%lx", i);
+        else if (base == OCT) sprintf(buff, "%lo", i);
+        else if (base == BIN) {
+            int j = 0;
+            for (j = 0; j < 32; j++) {
+                buff[j] = (i & 0x80000000) ? '1' : '0';
+                i <<= 1;
+            }
+            buff[j] = 0;
+        }
+        size = print(buff);
+        return size;
+    }
+    int print(unsigned long i, int base = DEC) {
+        char buff[64];
+        int size = 0;
+        if (base == DEC) sprintf(buff, "%lu", i);
+        else if (base == HEX) sprintf(buff, "%lx", i);
+        else if (base == OCT) sprintf(buff, "%lo", i);
+        else if (base == BIN) {
+            int j = 0;
+            for (j = 0; j < 32; j++) {
+                buff[j] = (i & 0x80000000) ? '1' : '0';
+                i <<= 1;
+            }
+            buff[j] = 0;
+        }
+        size = print(buff);
+        return size;
+    }
+    int print(float i, int base = DEC) {
+        char buff[64];
+        int size = 0;
+        uint32_t_to_float cvt;
+        cvt.type_float = i;
+        uint32_t i32 = cvt.type_uint32_t;
+
+        if (base == DEC) sprintf(buff, "%f", i);
+        else if (base == HEX) sprintf(buff, "%f", i);
+        else if (base == OCT) sprintf(buff, "%f", i);
+        else if (base == BIN) {
+            int j = 0;
+            for (j = 0; j < 32; j++) {
+                buff[j] = (i32 & 0x80000000) ? '1' : '0';
+                i32 <<= 1;
+            }
+            buff[j] = 0;
+        }
+        size = print(buff);
+        return size;
+    }
+    int print(double i, int base = DEC) {
+        char buff[64];
+        int size = 0;
+        uint64_t_to_double cvt;
+        cvt.type_double = i;
+        uint64_t i64 = cvt.type_uint64_t;
+
+        if (base == DEC) sprintf(buff, "%f", i);
+        else if (base == HEX) sprintf(buff, "%f", i);
+        else if (base == OCT) sprintf(buff, "%f", i);
+        else if (base == BIN) {
+            int j = 0;
+            for (j = 0; j < 32; j++) {
+                buff[j] = (i64 & 0x80000000) ? '1' : '0';
+                i64 <<= 1;
+            }
+            buff[j] = 0;
+        }
+        size = print(buff);
+        return size;
+    }
+    int println(const char* str) { int size = print(str); size += print("\n"); return size; }
+    int println(const char* str, int len) { int size = print(str, len); size += print("\n"); return size; }
+    int println(char c) { int size = print(c); size += print("\n"); return size; }
+    int println(int i, int base = DEC) { int size = print(i, base); size += print("\n"); return size; }
+    int println(unsigned int i, int base = DEC) { int size = print(i, base); size += print("\n"); return size; }
+    int println(long i, int base = DEC) { int size = print(i, base); size += print("\n"); return size; }
+    int println(unsigned long i, int base = DEC) { int size = print(i, base); size += print("\n"); return size; }
+    int println(double i, int base = DEC) { int size = print(i, base); size += print("\n"); return size; }
+    int println() { int size = print("\n"); return size; }
+    int available() {
+        return input_len;
+    }
+    int read() {
+        if (input_len == 0) return -1;
+        int c = input[0];
+        for (int i = 0; i < input_len - 1; i++) {
+            input[i] = input[i + 1];
+        }
+        input_len--;
+        return c;
+    }
+    void write(char c) { __print(c); }
+    void write(const char* str) { print(str); }
+    void write(const char* str, int len) { print(str, len); }
+    void write(int i, int base = DEC) { print(i, base); }
+    void write(unsigned int i, int base = DEC) { print(i, base); }
+    void write(long i, int base = DEC) { print(i, base); }
+    void write(unsigned long i, int base = DEC) { print(i, base); }
+    void write(double i, int base = DEC) { print(i, base); }
+    void flush() {}
+    void clear() {
+        input_len = 0;
+        input[0] = 0;
+    }
+
+
+
+
+
+};
+
+Serial_t Serial;
+
+#endif // __WASM__
+
+
+
+
+
+
+
+
 
 int print_number_padStart(int value, int pad, char padChar = ' ', int base = 10) {
     int strlen = 0;
@@ -108,19 +408,3 @@ int pring_number_padEnd(int value, int pad, char padChar = ' ', int base = 10) {
 
 #define REPRINT(count, str) for (uint8_t i = 0; i < count; i++) { Serial.print(str); }
 #define REPRINTLN(count, str) REPRINT(count, str); Serial.println();
-
-#define SIZE_OF_ARRAY(a) (sizeof(a) / sizeof(a[0]))
-
-#define STRINGIFY(X) #X
-
-#define CVT_8(type) union uint8_t_to_##type { uint8_t type_uint8_t; type type_##type; }
-#define CVT_16(type) union uint16_t_to_##type { uint16_t type_uint16_t; type type_##type; }
-#define CVT_32(type) union uint32_t_to_##type { uint32_t type_uint32_t; type type_##type; }
-#define CVT_64(type) union uint64_t_to_##type { uint64_t type_uint64_t; type type_##type; }
-
-
-CVT_32(float);
-CVT_64(double);
-
-union u8A_to_u16 { uint8_t u8A[2]; uint16_t u16; };
-

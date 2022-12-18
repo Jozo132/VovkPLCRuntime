@@ -50,6 +50,7 @@ public:
     uint16_t max_stack_size = 0; // Maximum stack size
     Stack<uint8_t> memory; // PLC memory to manipulate
     RuntimeProgram* program = nullptr; // Active PLC program
+    RuntimeCommandParser cmd_parser; // Command parser for PLC commands
     void formatMemory(uint16_t size, uint8_t* data = nullptr) {
         if (size == 0) return;
         memory.format(size);

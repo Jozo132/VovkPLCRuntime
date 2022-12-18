@@ -530,7 +530,7 @@ void logRuntimeInstructionSet() {
     Serial.println(F("Bytecode Instruction Set:"));
     size_t position = 0;
     bool was_valid = true;
-    for (uint8_t opcode = 0x00; opcode < 256; opcode++) {
+    for (int opcode = 0x00; opcode < 256; opcode++) {
         bool is_valid = OPCODE_EXISTS((PLCRuntimeInstructionSet) opcode);
         if ((is_valid && !was_valid) || opcode < 0x02) Serial.println();
         was_valid = is_valid;

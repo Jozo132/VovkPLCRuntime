@@ -4,7 +4,7 @@
 
 
 
-// #define __RUNTIME_DEBUG__
+#define __RUNTIME_DEBUG__
 #define __RUNTIME_FULL_UNIT_TEST___ // Avoid using this with microcontrollers with limited RAM!
 
 #include <VovkPLCRuntime.h>

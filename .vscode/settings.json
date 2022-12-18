@@ -12,6 +12,8 @@
         "string_view": "cpp",
         "initializer_list": "cpp",
         "random": "cpp",
-        "atomic": "cpp"
+        "atomic": "cpp",
+        "cmath": "cpp",
+        "*.tcc": "cpp"
     }
 }

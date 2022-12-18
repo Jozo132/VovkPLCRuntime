@@ -61,8 +61,10 @@ public:
     }
     // Pop an uint8_t value from the stack
     uint8_t pop() { return stack->pop(); }
+    // Pop an uint8_t value from the stack
+    void pop(int size) { stack->pop(size); }
     // Peek the top uint8_t value from the stack
-    uint8_t peek() { return stack->peek(); }
+    uint8_t peek(int depth) { return stack->peek(depth); }
 
     // Push a boolean value to the stack
     RuntimeError push_bool(bool value) {
