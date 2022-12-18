@@ -28,6 +28,7 @@
 #include "stack/runtime-stack.h"
 #include "arithmetics/runtime-arithmetics.h"
 #include "runtime-program.h"
+#include "runtime-cmd-parser.h"
 
 class VovkPLCRuntime {
 private:
