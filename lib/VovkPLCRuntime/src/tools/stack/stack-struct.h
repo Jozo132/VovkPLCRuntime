@@ -22,25 +22,25 @@
 #pragma once
 
 template <typename T> struct Stack {
-    T* stack = nullptr;
-    uint16_t MAX_STACK_SIZE = 0;
-    uint16_t _size = 0;
+    T* _data = nullptr;
+    int MAX_STACK_SIZE = 0;
+    int _size = 0;
 
     Stack(uint16_t max_size = 0) {
         format(max_size);
     }
 
     void format(uint16_t size) {
-        if (stack != nullptr) delete [] stack;
+        if (_data != nullptr) delete [] _data;
         MAX_STACK_SIZE = size;
-        stack = new T[MAX_STACK_SIZE];
+        _data = new T[MAX_STACK_SIZE];
         _size = MAX_STACK_SIZE;
     }
 
     // Pushes a value to the top of the stack
     void push(T value) {
         if (_size >= MAX_STACK_SIZE) return;
-        stack[_size] = value;
+        _data[_size] = value;
         _size++;
     }
 
@@ -48,32 +48,36 @@ template <typename T> struct Stack {
     T pop() {
         if (_size == 0) return T();
         _size--;
-        return stack[_size];
+        return _data[_size];
+    }
+    void pop(int size) {
+        if (size > _size) size = _size;
+        _size -= size;
     }
 
     // Returns the top value from the stack
     T peek(uint16_t depth = 0) {
         if (_size == 0) return T();
         if (depth >= _size) return T();
-        return stack[_size - depth - 1];
+        return _data[_size - depth - 1];
     }
 
     // Returns the value at the specified index like an array
     // T value = stack[0];
     T operator [](uint16_t index) {
         if (index >= _size) return T();
-        return stack[index];
+        return _data[index];
     }
 
     bool set(uint16_t index, T value) {
         if (index >= _size) return true;
-        stack[index] = value;
+        _data[index] = value;
         return false;
     }
 
     bool get(uint16_t index, T& value) {
         if (index >= _size) return true;
-        value = stack[index];
+        value = _data[index];
         return false;
     }
 
@@ -100,7 +104,7 @@ template <typename T> struct Stack {
             length += Serial.print(hidden);
             length += Serial.print(F(" more bytes... "));
             for (uint16_t i = 0; i < 16; i++) {
-                T value = stack[hidden + i];
+                T value = _data[hidden + i];
                 if (value < 0x10) length += Serial.print('0');
                 length += Serial.print(value, HEX);
                 length += Serial.print(' ');
@@ -109,7 +113,7 @@ template <typename T> struct Stack {
             return length;
         }
         for (uint16_t i = 0; i < _size; i++) {
-            T value = stack[i];
+            T value = _data[i];
             if (value < 0x10) length += Serial.print('0');
             length += Serial.print(value, HEX);
             if (i < _size - 1) length += Serial.print(' ');
