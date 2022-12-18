@@ -22,9 +22,11 @@ rem SPDX-License-Identifier: GPL-3.0-or-later
 
 set NAME=simulator
 set BUILD_DIR=build
+set C_INCLUDE_PATH="C:\MinGW\include"
+@REM set CPLUS_INCLUDE_PATH="C:\MinGW\include"
 
 IF not exist %BUILD_DIR% (mkdir %BUILD_DIR%)
 
 @REM clang++ -Wall -std=c++11 %NAME%.cpp -o %NAME%.exe
-clang++ --target=wasm32 -nostdlib -Wall -D __WASM__ -O3 -c %NAME%.cpp -o %BUILD_DIR%/%NAME%.o
+clang++ --target=wasm32 -nostdlib -Wall -D __WASM__ -O3 -I %C_INCLUDE_PATH% -c %NAME%.cpp -o %BUILD_DIR%/%NAME%.o
 wasm-ld --no-entry --export-all --lto-O3 --allow-undefined --import-memory %BUILD_DIR%/%NAME%.o -o %NAME%.wasm
