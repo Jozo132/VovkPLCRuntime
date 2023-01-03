@@ -14,6 +14,13 @@
         "random": "cpp",
         "atomic": "cpp",
         "cmath": "cpp",
-        "*.tcc": "cpp"
+        "*.tcc": "cpp",
+        "chrono": "cpp",
+        "compare": "cpp",
+        "ranges": "cpp",
+        "ratio": "cpp",
+        "variant": "cpp",
+        "regex": "cpp",
+        "bitset": "cpp"
     }
 }

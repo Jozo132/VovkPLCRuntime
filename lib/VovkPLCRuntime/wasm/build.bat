@@ -28,5 +28,5 @@ set C_INCLUDE_PATH="C:\MinGW\include"
 IF not exist %BUILD_DIR% (mkdir %BUILD_DIR%)
 
 @REM clang++ -Wall -std=c++11 %NAME%.cpp -o %NAME%.exe
-clang++ --target=wasm32 -nostdlib -Wall -D __WASM__ -O3 -I %C_INCLUDE_PATH% -c %NAME%.cpp -o %BUILD_DIR%/%NAME%.o
-wasm-ld --no-entry --export-all --lto-O3 --allow-undefined --import-memory %BUILD_DIR%/%NAME%.o -o %NAME%.wasm
+clang++ --target=wasm32 -Wall -std=c++11 -D __WASM__ -O1 -I %C_INCLUDE_PATH% -c %NAME%.cpp -o %BUILD_DIR%/%NAME%.o
+wasm-ld --no-entry --export-dynamic --allow-undefined --lto-O1 --import-memory --demangle %BUILD_DIR%/%NAME%.o -o %NAME%.wasm

@@ -23,22 +23,27 @@
 #define __RUNTIME_DEBUG__
 #define __RUNTIME_FULL_UNIT_TEST___
 
-#include "../VovkPLCRuntime.h"
+
+#include "include/wasm.h"
+#include <stdint.h>
+// #ifndef __WASM__
+// #include <stdio.h>
+// // #else // __WASM__
+// #endif // __WASM__
+#include <stdlib.h>
+#include <string.h>
+
+// #define PRINTF_DISABLE_SUPPORT_FLOAT
+#include "./lib/printf/printf.h"
+#include "./lib/printf/printf.c"
+
+#include "../src/VovkPLCRuntime.h"
 
 // TODO: Remove this and implement a working WASM interface for the simulator
 
-void setup(void);
-void loop(void);
+WASM_EXPORT void _start() {}
 
-int main() {
-    setup();
-    while (true) {
-        loop();
-    }
-}
-
-
-void setup() {
+WASM_EXPORT void setup() {
     pinMode(LED_BUILTIN, OUTPUT);
     Serial.begin(115200);
     while (!Serial && (millis() < 10000)) { // wait for serial port to connect. Needed for native USB port only
@@ -56,7 +61,7 @@ VovkPLCRuntime runtime(64, program); // Stack size
 
 bool startup = true;
 
-void loop() {
+WASM_EXPORT void loop() {
     // Blink the LED to indicate that the tests are done
     digitalWrite(LED_BUILTIN, LOW);
     delay(2);
@@ -139,4 +144,12 @@ void loop() {
     float ms = t / 1000.0;
     int mem = freeMemory();
     Serial.print(F("Program executed for ")); Serial.print(cycles); Serial.print(F(" cycles in ")); Serial.print(ms, 3); Serial.print(F(" ms. Result: ")); Serial.print(result); Serial.print(F("  Free memory: ")); Serial.print(mem); Serial.println(F(" bytes."));
+}
+
+
+WASM_EXPORT int main() {
+    setup();
+    while (true) {
+        loop();
+    }
 }
