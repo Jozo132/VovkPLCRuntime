@@ -39,7 +39,12 @@ template <typename T> struct Stack {
 
     // Pushes a value to the top of the stack
     void push(T value) {
-        if (_size >= MAX_STACK_SIZE) return;
+        if (_size >= MAX_STACK_SIZE) {
+            Serial.println(F("Stack overflow!"));
+            Serial.print(F("Trying to push ")); Serial.print(value, HEX); Serial.print(F(" to stack at index ")); Serial.println(_size);
+            Serial.print(F("MAX_STACK_SIZE = ")); Serial.println(MAX_STACK_SIZE);
+            return;
+        }
         _data[_size] = value;
         _size++;
     }

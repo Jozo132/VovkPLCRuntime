@@ -157,7 +157,7 @@ namespace PLCMethods {
     }
     RuntimeError handle_RET(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         IGNORE_UNUSED uint16_t index_start = index;
-        if (stack->call_stack->size() == 0) return CALL_STACK_UNDERFLOW;
+        if (stack->call_stack.size() == 0) return CALL_STACK_UNDERFLOW;
         uint16_t ret_index = stack->popCall();
         index = ret_index;
 

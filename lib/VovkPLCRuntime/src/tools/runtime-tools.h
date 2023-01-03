@@ -23,14 +23,6 @@
 
 #ifdef __SIMULATOR__
 
-// #ifdef __WASM__
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-// #else // __WASM__
-// #endif
-
 #define PROGMEM
 #define pgm_read_byte(x) (*(x))
 #define pgm_read_word(x) (*(x))
@@ -173,9 +165,14 @@ void detachInterrupt(int pin) {}
 void yield() {}
 
 
-void __print(char c) {
-    printf("%c", c);
-}
+#ifdef __WASM__
+WASM_IMPORT void __print(char c);
+void  _putchar(char c) { __print(c); }
+#else // __WASM__
+void __print(char c) { printf("%c", c); }
+#endif // __WASM__
+
+char buff[64];
 
 class Serial_t {
     char input[256];
@@ -209,10 +206,8 @@ public:
         return 1;
     }
     int print(int i, int base = DEC) {
-        char buff[64];
         int size = 0;
-        if (base == DEC) sprintf(buff, "%d", i);
-        else if (base == HEX) sprintf(buff, "%x", i);
+        if (base == HEX) sprintf(buff, "%x", i);
         else if (base == OCT) sprintf(buff, "%o", i);
         else if (base == BIN) {
             int j = 0;
@@ -221,15 +216,13 @@ public:
                 i <<= 1;
             }
             buff[j] = 0;
-        }
+        } else sprintf(buff, "%d", i);
         size = print(buff);
         return size;
     }
     int print(unsigned int i, int base = DEC) {
-        char buff[64];
         int size = 0;
-        if (base == DEC) sprintf(buff, "%u", i);
-        else if (base == HEX) sprintf(buff, "%x", i);
+        if (base == HEX) sprintf(buff, "%x", i);
         else if (base == OCT) sprintf(buff, "%o", i);
         else if (base == BIN) {
             int j = 0;
@@ -238,15 +231,13 @@ public:
                 i <<= 1;
             }
             buff[j] = 0;
-        }
+        } else sprintf(buff, "%u", i);
         size = print(buff);
         return size;
     }
     int print(long i, int base = DEC) {
-        char buff[64];
         int size = 0;
-        if (base == DEC) sprintf(buff, "%ld", i);
-        else if (base == HEX) sprintf(buff, "%lx", i);
+        if (base == HEX) sprintf(buff, "%lx", i);
         else if (base == OCT) sprintf(buff, "%lo", i);
         else if (base == BIN) {
             int j = 0;
@@ -255,15 +246,13 @@ public:
                 i <<= 1;
             }
             buff[j] = 0;
-        }
+        } else sprintf(buff, "%ld", i);
         size = print(buff);
         return size;
     }
     int print(unsigned long i, int base = DEC) {
-        char buff[64];
         int size = 0;
-        if (base == DEC) sprintf(buff, "%lu", i);
-        else if (base == HEX) sprintf(buff, "%lx", i);
+        if (base == HEX) sprintf(buff, "%lx", i);
         else if (base == OCT) sprintf(buff, "%lo", i);
         else if (base == BIN) {
             int j = 0;
@@ -272,49 +261,21 @@ public:
                 i <<= 1;
             }
             buff[j] = 0;
-        }
+        } else sprintf(buff, "%lu", i);
         size = print(buff);
         return size;
     }
-    int print(float i, int base = DEC) {
-        char buff[64];
+    int print(float i, int decimals = -1) {
         int size = 0;
-        uint32_t_to_float cvt;
-        cvt.type_float = i;
-        uint32_t i32 = cvt.type_uint32_t;
-
-        if (base == DEC) sprintf(buff, "%f", i);
-        else if (base == HEX) sprintf(buff, "%f", i);
-        else if (base == OCT) sprintf(buff, "%f", i);
-        else if (base == BIN) {
-            int j = 0;
-            for (j = 0; j < 32; j++) {
-                buff[j] = (i32 & 0x80000000) ? '1' : '0';
-                i32 <<= 1;
-            }
-            buff[j] = 0;
-        }
+        if (decimals < 0) sprintf(buff, "%f", i);
+        else sprintf(buff, "%.*f", decimals, i);
         size = print(buff);
         return size;
     }
-    int print(double i, int base = DEC) {
-        char buff[64];
+    int print(double i, int decimals = -1) {
         int size = 0;
-        uint64_t_to_double cvt;
-        cvt.type_double = i;
-        uint64_t i64 = cvt.type_uint64_t;
-
-        if (base == DEC) sprintf(buff, "%f", i);
-        else if (base == HEX) sprintf(buff, "%f", i);
-        else if (base == OCT) sprintf(buff, "%f", i);
-        else if (base == BIN) {
-            int j = 0;
-            for (j = 0; j < 32; j++) {
-                buff[j] = (i64 & 0x80000000) ? '1' : '0';
-                i64 <<= 1;
-            }
-            buff[j] = 0;
-        }
+        if (decimals < 0) sprintf(buff, "%f", i);
+        else sprintf(buff, "%.*f", decimals, i);
         size = print(buff);
         return size;
     }

@@ -26,28 +26,28 @@ namespace PLCMethods {
     RuntimeError ADD_uint8_t(RuntimeStack* stack) {
         uint8_t b = stack->pop_uint8_t();
         uint8_t a = stack->pop_uint8_t();
-        stack->push(a + b);
+        stack->push_uint8_t(a + b);
         return STATUS_SUCCESS;
     }
 
     RuntimeError SUB_uint8_t(RuntimeStack* stack) {
         uint8_t b = stack->pop_uint8_t();
         uint8_t a = stack->pop_uint8_t();
-        stack->push(a - b);
+        stack->push_uint8_t(a - b);
         return STATUS_SUCCESS;
     }
     
     RuntimeError MUL_uint8_t(RuntimeStack* stack) {
         uint8_t b = stack->pop_uint8_t();
         uint8_t a = stack->pop_uint8_t();
-        stack->push(a * b);
+        stack->push_uint8_t(a * b);
         return STATUS_SUCCESS;
     }
 
     RuntimeError DIV_uint8_t(RuntimeStack* stack) {
         uint8_t b = stack->pop_uint8_t();
         uint8_t a = stack->pop_uint8_t();
-        stack->push(a / b);
+        stack->push_uint8_t(a / b);
         return STATUS_SUCCESS;
     }
     

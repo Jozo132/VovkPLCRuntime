@@ -30,12 +30,18 @@ public:
     RuntimeError status = UNDEFINED_STATE;
 
     RuntimeProgram(const uint8_t* program = nullptr, uint16_t program_size = 0) {
+        format(program_size + 1);
         load(program, program_size);
     }
     RuntimeProgram(uint16_t program_size) {
+        format(program_size);
+    }
+
+    void format(uint16_t program_size) {
         this->MAX_PROGRAM_SIZE = program_size;
         this->program = new uint8_t[program_size];
         this->program_size = 0;
+        erase();
     }
 
     static uint32_t calculateChecksum(const uint8_t* data, uint16_t size) {
@@ -239,8 +245,10 @@ public:
     RuntimeError push(uint8_t* code, uint16_t code_size) {
         if (program_size + code_size > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
+            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
+        Serial.print(F("Pushing ")); Serial.print(code_size); Serial.println(F(" bytes to the program."));
         memcpy(program + program_size, code, code_size);
         program_size += code_size;
         status = STATUS_SUCCESS;
@@ -251,6 +259,7 @@ public:
     RuntimeError push(uint8_t instruction) {
         if (program_size + 1 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
+            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
         program[program_size] = instruction;
@@ -263,10 +272,12 @@ public:
     RuntimeError push(uint8_t instruction, uint8_t data_type) {
         if (program_size + 2 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
+            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
         program[program_size] = instruction;
         program[program_size + 1] = data_type;
+        Serial.print(F("Pushed instruction: ")); Serial.print(instruction); Serial.print(F(" - type: ")); Serial.println(data_type);
         program_size += 2;
         status = STATUS_SUCCESS;
         return status;
@@ -281,10 +292,12 @@ public:
     RuntimeError push_uint8_t(uint8_t value) {
         if (program_size + 2 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
+            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
         program[program_size] = type_uint8_t;
         program[program_size + 1] = value;
+        Serial.print(F("Pushed uint8_t: ")); Serial.println(value);
         program_size += 2;
         status = STATUS_SUCCESS;
         return status;
@@ -294,10 +307,12 @@ public:
     RuntimeError push_int8_t(int8_t value) {
         if (program_size + 2 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
+            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
         program[program_size] = type_int8_t;
         program[program_size + 1] = value;
+        Serial.print(F("Pushed int8_t: ")); Serial.println(value);
         program_size += 2;
         status = STATUS_SUCCESS;
         return status;
@@ -307,11 +322,13 @@ public:
     RuntimeError push_uint16_t(uint16_t value) {
         if (program_size + 3 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
+            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
         program[program_size] = type_uint16_t;
         program[program_size + 1] = value >> 8;
         program[program_size + 2] = value & 0xFF;
+        Serial.print(F("Pushed uint16_t: ")); Serial.println(value);
         program_size += 3;
         status = STATUS_SUCCESS;
         return status;
@@ -321,11 +338,13 @@ public:
     RuntimeError push_int16_t(int16_t value) {
         if (program_size + 3 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
+            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
         program[program_size] = type_int16_t;
         program[program_size + 1] = value >> 8;
         program[program_size + 2] = value & 0xFF;
+        Serial.print(F("Pushed int16_t: ")); Serial.println(value);
         program_size += 3;
         status = STATUS_SUCCESS;
         return status;
@@ -335,6 +354,7 @@ public:
     RuntimeError push_uint32_t(uint32_t value) {
         if (program_size + 5 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
+            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
         program[program_size] = type_uint32_t;
@@ -342,6 +362,7 @@ public:
         program[program_size + 2] = (value >> 16) & 0xFF;
         program[program_size + 3] = (value >> 8) & 0xFF;
         program[program_size + 4] = value & 0xFF;
+        Serial.print(F("Pushed uint32_t: ")); Serial.println(value);
         program_size += 5;
         status = STATUS_SUCCESS;
         return status;
@@ -351,6 +372,7 @@ public:
     RuntimeError push_int32_t(int32_t value) {
         if (program_size + 5 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
+            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
         program[program_size] = type_int32_t;
@@ -358,6 +380,7 @@ public:
         program[program_size + 2] = (value >> 16) & 0xFF;
         program[program_size + 3] = (value >> 8) & 0xFF;
         program[program_size + 4] = value & 0xFF;
+        Serial.print(F("Pushed int32_t: ")); Serial.println(value);
         program_size += 5;
         status = STATUS_SUCCESS;
         return status;
@@ -367,16 +390,17 @@ public:
     RuntimeError push_uint64_t(uint64_t value) {
         if (program_size + 9 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
+            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
         program[program_size] = type_uint64_t;
-        program[program_size + 1] = value >> 56;
-        program[program_size + 2] = (value >> 48) & 0xFF;
-        program[program_size + 3] = (value >> 40) & 0xFF;
-        program[program_size + 4] = (value >> 32) & 0xFF;
-        program[program_size + 5] = (value >> 24) & 0xFF;
-        program[program_size + 6] = (value >> 16) & 0xFF;
-        program[program_size + 7] = (value >> 8) & 0xFF;
+        program[program_size + 1] = value >> (uint64_t) 56;
+        program[program_size + 2] = (value >> (uint64_t) 48) & 0xFF;
+        program[program_size + 3] = (value >> (uint64_t) 40) & 0xFF;
+        program[program_size + 4] = (value >> (uint64_t) 32) & 0xFF;
+        program[program_size + 5] = (value >> (uint64_t) 24) & 0xFF;
+        program[program_size + 6] = (value >> (uint64_t) 16) & 0xFF;
+        program[program_size + 7] = (value >> (uint64_t) 8) & 0xFF;
         program[program_size + 8] = value & 0xFF;
         program_size += 9;
         status = STATUS_SUCCESS;
@@ -387,16 +411,17 @@ public:
     RuntimeError push_int64_t(int64_t value) {
         if (program_size + 9 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
+            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
         program[program_size] = type_int64_t;
-        program[program_size + 1] = value >> 56;
-        program[program_size + 2] = (value >> 48) & 0xFF;
-        program[program_size + 3] = (value >> 40) & 0xFF;
-        program[program_size + 4] = (value >> 32) & 0xFF;
-        program[program_size + 5] = (value >> 24) & 0xFF;
-        program[program_size + 6] = (value >> 16) & 0xFF;
-        program[program_size + 7] = (value >> 8) & 0xFF;
+        program[program_size + 1] = value >> (int64_t) 56;
+        program[program_size + 2] = (value >> (int64_t) 48) & 0xFF;
+        program[program_size + 3] = (value >> (int64_t) 40) & 0xFF;
+        program[program_size + 4] = (value >> (int64_t) 32) & 0xFF;
+        program[program_size + 5] = (value >> (int64_t) 24) & 0xFF;
+        program[program_size + 6] = (value >> (int64_t) 16) & 0xFF;
+        program[program_size + 7] = (value >> (int64_t) 8) & 0xFF;
         program[program_size + 8] = value & 0xFF;
         program_size += 9;
         status = STATUS_SUCCESS;
@@ -407,6 +432,7 @@ public:
     RuntimeError push_float(float value) {
         if (program_size + 5 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
+            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
         program[program_size] = type_float;
@@ -424,6 +450,7 @@ public:
     RuntimeError push_double(double value) {
         if (program_size + 9 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
+            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
         program[program_size] = type_double;
@@ -445,6 +472,7 @@ public:
     RuntimeError pushJMP(uint16_t program_address) {
         if (program_size + 3 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
+            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
         program[program_size] = JMP;
@@ -457,6 +485,7 @@ public:
     RuntimeError pushJMP_IF(uint16_t program_address) {
         if (program_size + 3 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
+            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
         program[program_size] = JMP_IF;
@@ -469,6 +498,7 @@ public:
     RuntimeError pushJMP_IF_NOT(uint16_t program_address) {
         if (program_size + 3 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
+            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
         program[program_size] = JMP_IF_NOT;
@@ -483,6 +513,7 @@ public:
     RuntimeError pushGET(uint16_t program_address, PLCRuntimeInstructionSet type = type_uint8_t) {
         if (program_size + 4 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
+            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
         program[program_size] = GET;
@@ -497,6 +528,7 @@ public:
     RuntimeError pushPUT(uint16_t program_address, PLCRuntimeInstructionSet type = type_uint8_t) {
         if (program_size + 4 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
+            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
         program[program_size] = PUT;

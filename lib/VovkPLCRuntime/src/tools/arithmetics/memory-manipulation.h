@@ -25,67 +25,67 @@ namespace PLCMethods {
 
     RuntimeError PUSH_bool(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         bool value = 0;
-        extract_status = ProgramExtract.type_bool(program, program_size, index, value);
+        extract_status = ProgramExtract.type_bool(program, program_size, index, &value);
         if (extract_status != STATUS_SUCCESS) return extract_status;
         return stack->push_bool(value);
     }
     RuntimeError PUSH_uint8_t(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         uint8_t value = 0;
-        extract_status = ProgramExtract.type_uint8_t(program, program_size, index, value);
+        extract_status = ProgramExtract.type_uint8_t(program, program_size, index, &value);
         if (extract_status != STATUS_SUCCESS) return extract_status;
         return stack->push_uint8_t(value);
     }
     RuntimeError PUSH_uint16_t(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         uint16_t value = 0;
-        extract_status = ProgramExtract.type_uint16_t(program, program_size, index, value);
+        extract_status = ProgramExtract.type_uint16_t(program, program_size, index, &value);
         if (extract_status != STATUS_SUCCESS) return extract_status;
         return stack->push_uint16_t(value);
     }
     RuntimeError PUSH_uint32_t(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         uint32_t value = 0;
-        extract_status = ProgramExtract.type_uint32_t(program, program_size, index, value);
+        extract_status = ProgramExtract.type_uint32_t(program, program_size, index, &value);
         if (extract_status != STATUS_SUCCESS) return extract_status;
         return stack->push_uint32_t(value);
     }
     RuntimeError PUSH_uint64_t(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         uint64_t value = 0;
-        extract_status = ProgramExtract.type_uint64_t(program, program_size, index, value);
+        extract_status = ProgramExtract.type_uint64_t(program, program_size, index, &value);
         if (extract_status != STATUS_SUCCESS) return extract_status;
         return stack->push_uint64_t(value);
     }
     RuntimeError PUSH_int8_t(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         int8_t value = 0;
-        extract_status = ProgramExtract.type_int8_t(program, program_size, index, value);
+        extract_status = ProgramExtract.type_int8_t(program, program_size, index, &value);
         if (extract_status != STATUS_SUCCESS) return extract_status;
         return stack->push_int8_t(value);
     }
     RuntimeError PUSH_int16_t(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         int16_t value = 0;
-        extract_status = ProgramExtract.type_int16_t(program, program_size, index, value);
+        extract_status = ProgramExtract.type_int16_t(program, program_size, index, &value);
         if (extract_status != STATUS_SUCCESS) return extract_status;
         return stack->push_int16_t(value);
     }
     RuntimeError PUSH_int32_t(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         int32_t value = 0;
-        extract_status = ProgramExtract.type_int32_t(program, program_size, index, value);
+        extract_status = ProgramExtract.type_int32_t(program, program_size, index, &value);
         if (extract_status != STATUS_SUCCESS) return extract_status;
         return stack->push_int32_t(value);
     }
     RuntimeError PUSH_int64_t(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         int64_t value = 0;
-        extract_status = ProgramExtract.type_int64_t(program, program_size, index, value);
+        extract_status = ProgramExtract.type_int64_t(program, program_size, index, &value);
         if (extract_status != STATUS_SUCCESS) return extract_status;
         return stack->push_int64_t(value);
     }
     RuntimeError PUSH_float(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         float value = 0;
-        extract_status = ProgramExtract.type_float(program, program_size, index, value);
+        extract_status = ProgramExtract.type_float(program, program_size, index, &value);
         if (extract_status != STATUS_SUCCESS) return extract_status;
         return stack->push_float(value);
     }
     RuntimeError PUSH_double(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
         double value = 0;
-        extract_status = ProgramExtract.type_double(program, program_size, index, value);
+        extract_status = ProgramExtract.type_double(program, program_size, index, &value);
         if (extract_status != STATUS_SUCCESS) return extract_status;
         return stack->push_double(value);
     }
@@ -114,9 +114,9 @@ namespace PLCMethods {
         if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         uint8_t data_type = 0;
         uint16_t address = 0;
-        extract_status = ProgramExtract.type_uint8_t(program, program_size, index, data_type);
+        extract_status = ProgramExtract.type_uint8_t(program, program_size, index, &data_type);
         if (extract_status != STATUS_SUCCESS) return extract_status;
-        extract_status = ProgramExtract.type_uint16_t(program, program_size, index, address);
+        extract_status = ProgramExtract.type_uint16_t(program, program_size, index, &address);
         if (extract_status != STATUS_SUCCESS) return extract_status;
         uint8_t value = stack->pop_uint8_t();
         bool error = stack->memory.set(address, value);
@@ -138,9 +138,9 @@ namespace PLCMethods {
         if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         uint8_t data_type = 0;
         uint16_t address = 0;
-        extract_status = ProgramExtract.type_uint8_t(program, program_size, index, data_type);
+        extract_status = ProgramExtract.type_uint8_t(program, program_size, index, &data_type);
         if (extract_status != STATUS_SUCCESS) return extract_status;
-        extract_status = ProgramExtract.type_uint16_t(program, program_size, index, address);
+        extract_status = ProgramExtract.type_uint16_t(program, program_size, index, &address);
         if (extract_status != STATUS_SUCCESS) return extract_status;
         uint8_t value = 0;
         bool error = stack->memory.get(address, value);
