@@ -4,8 +4,8 @@
 
 
 
-#define __RUNTIME_DEBUG__
-#define __RUNTIME_FULL_UNIT_TEST___ // Avoid using this with microcontrollers with limited RAM!
+// #define __RUNTIME_DEBUG__  // Avoid using this with microcontrollers with limited RAM!
+#define __RUNTIME_FULL_UNIT_TEST___ // Only use this for testing the library
 
 #include <VovkPLCRuntime.h>
 
@@ -23,10 +23,8 @@ void setup() {
   runtime_unit_test();
 }
 
-#ifndef __RUNTIME_FULL_UNIT_TEST___
 RuntimeProgram program(86); // Program size
 VovkPLCRuntime runtime(64, program); // Stack size
-#endif
 
 bool startup = true;
 
@@ -37,7 +35,6 @@ void loop() {
   digitalWrite(LED_BUILTIN, HIGH);
   delay(500);
 
-#ifndef __RUNTIME_FULL_UNIT_TEST___
   // Custom program test
   if (startup) {
     runtime.startup();
@@ -90,15 +87,14 @@ void loop() {
 
 #ifdef __RUNTIME_DEBUG__
     RuntimeError status = UnitTest::fullProgramDebug(runtime);
+    const char* status_name = RUNTIME_ERROR_NAME(status);
+    Serial.print(F("Runtime status: ")); Serial.println(status_name);
 #else
     Serial.print(F("Loaded bytecode: ")); program.println();
     RuntimeError status = runtime.cleanRun();
 #endif
     float output = runtime.read<float>();
 
-    const char* status_name = RUNTIME_ERROR_NAME(status);
-
-    Serial.print(F("Runtime status: ")); Serial.println(status_name);
 
     Serial.print(F("Result: ")); Serial.println(output);
     Serial.print(F("Expected result: ")); Serial.println(expected);
@@ -118,5 +114,4 @@ void loop() {
   float ms = t / 1000.0;
   int mem = freeMemory();
   Serial.print(F("Program executed for ")); Serial.print(cycles); Serial.print(F(" cycles in ")); Serial.print(ms, 3); Serial.print(F(" ms. Result: ")); Serial.print(result); Serial.print(F("  Free memory: ")); Serial.print(mem); Serial.println(F(" bytes."));
-#endif
 }
