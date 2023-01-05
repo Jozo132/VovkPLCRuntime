@@ -35,6 +35,7 @@ template <typename T> struct TestCase {
     const char* name;
     RuntimeError expected_error;
     T expected_result;
+    void (*build)(RuntimeProgram& program);
 };
 
 void print__uint64_t(uint64_t big_number) {
@@ -78,6 +79,8 @@ struct UnitTest {
     template <typename T> void run(const TestCase<T>& test) {
         Serial.println();
         REPRINTLN(70, '#');
+        program.erase();
+        if (test.build) test.build(program);
         Serial.print(F("Running test: ")); Serial.println(test.name);
         RuntimeError status = fullProgramDebug(runtime, program);
         T output = runtime.read<T>();
@@ -90,6 +93,8 @@ struct UnitTest {
 #endif
 
     template <typename T> void review(const TestCase<T>& test) {
+        program.erase();
+        if (test.build) test.build(program);
         size_t offset = Serial.print(F("Test \""));
         offset += Serial.print(test.name);
         offset += Serial.print('"');
@@ -181,139 +186,110 @@ struct UnitTest {
 
 UnitTest Tester;
 
-const TestCase<uint8_t> case_demo_uint8_t({ "demo_uint8_t => (1 + 2) * 3", STATUS_SUCCESS, 9 });
-void case_demo_uint8_t_build() {
-    Tester.program.erase();
-    Tester.program.push_uint8_t(1);
-    Tester.program.push_uint8_t(2);
-    Tester.program.push(ADD, type_uint8_t);
-    Tester.program.push_uint8_t(3);
-    Tester.program.push(MUL, type_uint8_t);
-}
-const TestCase<uint16_t> case_demo_uint16_t({ "demo_uint16_t => (1 + 2) * 3", STATUS_SUCCESS, 9 });
-void case_demo_uint16_t_build() {
-    Tester.program.erase();
-    Tester.program.push_uint16_t(1);
-    Tester.program.push_uint16_t(2);
-    Tester.program.push(ADD, type_uint16_t);
-    Tester.program.push_uint16_t(3);
-    Tester.program.push(MUL, type_uint16_t);
-}
+const TestCase<uint8_t>* case_demo_uint8_t = new const TestCase<uint8_t>({ "demo_uint8_t => (1 + 2) * 3", STATUS_SUCCESS, 9, [](RuntimeProgram& program) {
+    program.push_uint8_t(1);
+    program.push_uint8_t(2);
+    program.push(ADD, type_uint8_t);
+    program.push_uint8_t(3);
+    program.push(MUL, type_uint8_t);
+} });
 
-const TestCase<uint32_t> case_demo_uint32_t({ "demo_uint32_t => (1 + 2) * 3", STATUS_SUCCESS, 9 });
-void case_demo_uint32_t_build() {
-    Tester.program.erase();
-    Tester.program.push_uint32_t(1);
-    Tester.program.push_uint32_t(2);
-    Tester.program.push(ADD, type_uint32_t);
-    Tester.program.push_uint32_t(3);
-    Tester.program.push(MUL, type_uint32_t);
-}
-const TestCase<uint64_t> case_demo_uint64_t({ "demo_uint64_t => (1 + 2) * 3", STATUS_SUCCESS, 9 });
-void case_demo_uint64_t_build() {
-    Tester.program.erase();
-    Tester.program.push_uint64_t(1);
-    Tester.program.push_uint64_t(2);
-    Tester.program.push(ADD, type_uint64_t);
-    Tester.program.push_uint64_t(3);
-    Tester.program.push(MUL, type_uint64_t);
-}
+const TestCase<uint16_t>* case_demo_uint16_t = new const TestCase<uint16_t>({ "demo_uint16_t => (1 + 2) * 3", STATUS_SUCCESS, 9, [](RuntimeProgram& program) {
+    program.push_uint16_t(1);
+    program.push_uint16_t(2);
+    program.push(ADD, type_uint16_t);
+    program.push_uint16_t(3);
+    program.push(MUL, type_uint16_t);
+} });
 
-const TestCase<int8_t> case_demo_int8_t({ "demo_int8_t => (1 - 2) * 3", STATUS_SUCCESS, -3 });
-void case_demo_int8_t_build() {
-    Tester.program.erase();
-    Tester.program.push_int8_t(1);
-    Tester.program.push_int8_t(2);
-    Tester.program.push(SUB, type_int8_t);
-    Tester.program.push_int8_t(3);
-    Tester.program.push(MUL, type_int8_t);
-}
+const TestCase<uint32_t>* case_demo_uint32_t = new const TestCase<uint32_t>({ "demo_uint32_t => (1 + 2) * 3", STATUS_SUCCESS, 9, [](RuntimeProgram& program) {
+    program.push_uint32_t(1);
+    program.push_uint32_t(2);
+    program.push(ADD, type_uint32_t);
+    program.push_uint32_t(3);
+    program.push(MUL, type_uint32_t);
+} });
+const TestCase<uint64_t>* case_demo_uint64_t = new const TestCase<uint64_t>({ "demo_uint64_t => (1 + 2) * 3", STATUS_SUCCESS, 9, [](RuntimeProgram& program) {
+    program.push_uint64_t(1);
+    program.push_uint64_t(2);
+    program.push(ADD, type_uint64_t);
+    program.push_uint64_t(3);
+    program.push(MUL, type_uint64_t);
+} });
 
-const TestCase<float> case_demo_float({ "demo_float => (0.1 + 0.2) * -1", STATUS_SUCCESS, -0.3 });
-void case_demo_float_build() {
-    Tester.program.erase();
-    Tester.program.push_float(0.1);
-    Tester.program.push_float(0.2);
-    Tester.program.push(ADD, type_float);
-    Tester.program.push_float(-1);
-    Tester.program.push(MUL, type_float);
-}
-const TestCase<double> case_demo_double({ "demo_double => (0.1 + 0.2) * -1", STATUS_SUCCESS, -0.30000000000000004 });
-void case_demo_double_build() {
-    Tester.program.erase();
-    Tester.program.push_double(0.1);
-    Tester.program.push_double(0.2);
-    Tester.program.push(ADD, type_double);
-    Tester.program.push_double(-1);
-    Tester.program.push(MUL, type_double);
-}
+const TestCase<int8_t>* case_demo_int8_t = new const TestCase<int8_t>({ "demo_int8_t => (1 - 2) * 3", STATUS_SUCCESS, -3, [](RuntimeProgram& program) {
+    program.push_int8_t(1);
+    program.push_int8_t(2);
+    program.push(SUB, type_int8_t);
+    program.push_int8_t(3);
+    program.push(MUL, type_int8_t);
+} });
+
+const TestCase<float>* case_demo_float = new const TestCase<float>({ "demo_float => (0.1 + 0.2) * -1", STATUS_SUCCESS, -0.3, [](RuntimeProgram& program) {
+    program.push_float(0.1);
+    program.push_float(0.2);
+    program.push(ADD, type_float);
+    program.push_float(-1);
+    program.push(MUL, type_float);
+} });
+const TestCase<double>* case_demo_double = new const TestCase<double>({ "demo_double => (0.1 + 0.2) * -1", STATUS_SUCCESS, -0.30000000000000004, [](RuntimeProgram& program) {
+    program.push_double(0.1);
+    program.push_double(0.2);
+    program.push(ADD, type_double);
+    program.push_double(-1);
+    program.push(MUL, type_double);
+} });
 
 // Bitwise operations
-const TestCase<uint8_t> case_bitwise_and_X8({ "bitwise_and_X8", STATUS_SUCCESS, 0b00000101 });
-void case_bitwise_and_X8_build() {
-    Tester.program.erase();
-    Tester.program.push_uint8_t(0b00001111);
-    Tester.program.push_uint8_t(0b01010101);
-    Tester.program.push(BW_AND_X8);
-}
-const TestCase<uint16_t> case_bitwise_and_X16({ "bitwise_and_X16", STATUS_SUCCESS, 0x000F });
-void case_bitwise_and_X16_build() {
-    Tester.program.erase();
-    Tester.program.push_uint16_t(0x00FF);
-    Tester.program.push_uint16_t(0xF00F);
-    Tester.program.push(BW_AND_X16);
-}
+const TestCase<uint8_t>* case_bitwise_and_X8 = new const TestCase<uint8_t>({ "bitwise_and_X8", STATUS_SUCCESS, 0b00000101, [](RuntimeProgram& program) {
+    program.push_uint8_t(0b00001111);
+    program.push_uint8_t(0b01010101);
+    program.push(BW_AND_X8);
+} });
+const TestCase<uint16_t>* case_bitwise_and_X16 = new const TestCase<uint16_t>({ "bitwise_and_X16", STATUS_SUCCESS, 0x000F, [](RuntimeProgram& program) {
+    program.push_uint16_t(0x00FF);
+    program.push_uint16_t(0xF00F);
+    program.push(BW_AND_X16);
+} });
 
 // Logic (boolean) operations
-const TestCase<bool> case_logic_and({ "logic_and => true && true", STATUS_SUCCESS, true });
-void case_logic_and_build() {
-    Tester.program.erase();
-    Tester.program.push_bool(true);
-    Tester.program.push_bool(true);
-    Tester.program.push(LOGIC_AND);
-}
-const TestCase<bool> case_logic_or({ "logic_or => true || false", STATUS_SUCCESS, true });
-void case_logic_or_build() {
-    Tester.program.erase();
-    Tester.program.push_bool(true);
-    Tester.program.push_bool(false);
-    Tester.program.push(LOGIC_OR);
-}
+const TestCase<bool>* case_logic_and = new const TestCase<bool>({ "logic_and => true && true", STATUS_SUCCESS, true, [](RuntimeProgram& program) {
+    program.push_bool(true);
+    program.push_bool(true);
+    program.push(LOGIC_AND);
+} });
+const TestCase<bool>* case_logic_or = new const TestCase<bool>({ "logic_or => true || false", STATUS_SUCCESS, true, [](RuntimeProgram& program) {
+    program.push_bool(true);
+    program.push_bool(false);
+    program.push(LOGIC_OR);
+} });
 
 // Comparison operations
-const TestCase<bool> case_cmp_eq({ "cmp_eq => 1 == 1", STATUS_SUCCESS, true });
-void case_cmp_eq_build() {
-    Tester.program.erase();
-    Tester.program.push_bool(1);
-    Tester.program.push_bool(1);
-    Tester.program.push(CMP_EQ, type_bool);
-}
-const TestCase<bool> case_cmp_eq_1({ "cmp_eq => 0.29 == 0.31", STATUS_SUCCESS, false });
-void case_cmp_eq_1_build() {
-    Tester.program.erase();
-    Tester.program.push_float(0.29);
-    Tester.program.push_float(0.31);
-    Tester.program.push(CMP_EQ, type_float);
-}
+const TestCase<bool>* case_cmp_eq = new const TestCase<bool>({ "cmp_eq => 1 == 1", STATUS_SUCCESS, true, [](RuntimeProgram& program) {
+    program.push_bool(1);
+    program.push_bool(1);
+    program.push(CMP_EQ, type_bool);
+} });
+const TestCase<bool>* case_cmp_eq_1 = new const TestCase<bool>({ "cmp_eq => 0.29 == 0.31", STATUS_SUCCESS, false, [](RuntimeProgram& program) {
+    program.push_float(0.29);
+    program.push_float(0.31);
+    program.push(CMP_EQ, type_float);
+} });
 
 // Jump operations
-const TestCase<uint8_t> case_jump({ "jump => push 1 and jump to exit", PROGRAM_EXITED, 1 });
-void case_jump_build() {
-    Tester.program.erase();
-    Tester.program.push_uint8_t(1); // 0 [+2]
-    uint16_t jump_index = Tester.program.size();
-    Tester.program.pushJMP(0); // 2 [+3]
-    Tester.program.push_uint8_t(1); // 5 [+2]
-    Tester.program.push(ADD, type_uint8_t); // 7 [+2]
-    Tester.program.push_uint8_t(3); // 9 [+2]
-    Tester.program.push(MUL, type_uint8_t); // 11 [+2]
-    uint16_t exit_index = Tester.program.size();
-    Tester.program.push(EXIT); // 13 [+1]
-    Tester.program.modifyValue(jump_index + 1, exit_index); // Change the jump address to the exit address
-}
-const TestCase<uint8_t> case_jump_if({ "jump_if => for loop sum", PROGRAM_EXITED, 100 });
-void case_jump_if_build() {
-    Tester.program.erase();
+const TestCase<uint8_t>* case_jump = new const TestCase<uint8_t>({ "jump => push 1 and jump to exit", PROGRAM_EXITED, 1, [](RuntimeProgram& program) {
+    program.push_uint8_t(1); // 0 [+2]
+    uint16_t jump_index = program.size();
+    program.pushJMP(0); // 2 [+3]
+    program.push_uint8_t(1); // 5 [+2]
+    program.push(ADD, type_uint8_t); // 7 [+2]
+    program.push_uint8_t(3); // 9 [+2]
+    program.push(MUL, type_uint8_t); // 11 [+2]
+    uint16_t exit_index = program.size();
+    program.push(EXIT); // 13 [+1]
+    program.modifyValue(jump_index + 1, exit_index); // Change the jump address to the exit address
+} });
+const TestCase<uint8_t>* case_jump_if = new const TestCase<uint8_t>({ "jump_if => for loop sum", PROGRAM_EXITED, 100, [](RuntimeProgram& program) {
     // uint8_t sum = 0; 
     // for (uint8_t i = 0; i < 10; i++) {
     //   sum += (uint8_t) 10;
@@ -324,30 +300,30 @@ void case_jump_if_build() {
     uint16_t loop_jump = 0;
     uint16_t loop_destination = 0;
     uint16_t end_destination = 0;
-    Tester.program.push_uint8_t(0);            // Add 0 to the stack           [0]  
-    Tester.program.pushPUT(sum_ptr);           // Store 0 in sum_ptr           []
-    Tester.program.push_uint8_t(0);            // Add 0 to the stack           [0]
-    Tester.program.pushPUT(i_ptr);             // Store 0 in i_ptr             []
-    loop_destination = Tester.program.size();  // :loop
-    Tester.program.pushGET(i_ptr);             // Load i_ptr to the stack      [0]
-    Tester.program.push_uint8_t(10);           // Add 10 to the stack          [0, 10]
-    Tester.program.push(CMP_LT, type_uint8_t); // Compare 0 < 10               [1]
-    loop_jump = Tester.program.size();
-    Tester.program.pushJMP_IF_NOT(0);          // Jump to :end if 1 == 0       []
-    Tester.program.pushGET(i_ptr);             // Load i_ptr to the stack      [0]
-    Tester.program.push_uint8_t(1);            // Add 1 to the stack           [0, 1]
-    Tester.program.push(ADD, type_uint8_t);    // Add 0 + 1                    [1]
-    Tester.program.pushPUT(i_ptr);             // Store 1 in i_ptr             []
-    Tester.program.pushGET(sum_ptr);           // Load sum_ptr to the stack    [0]
-    Tester.program.push_uint8_t(10);           // Add 10 to the stack          [0, 10]
-    Tester.program.push(ADD, type_uint8_t);    // Add 0 + 10                   [10]
-    Tester.program.pushPUT(sum_ptr);           // Store 10 in sum_ptr          []
-    Tester.program.pushJMP(loop_destination);  // Jump to :loop                []
-    end_destination = Tester.program.size();   // :end
-    Tester.program.pushGET(sum_ptr);           // Load sum_ptr to the stack    [0]
-    Tester.program.push(EXIT);                 // Exit the program
-    Tester.program.modifyValue(loop_jump + 1, end_destination); // Change the jump address to the exit address
-}
+    program.push_uint8_t(0);            // Add 0 to the stack           [0]  
+    program.pushPUT(sum_ptr);           // Store 0 in sum_ptr           []
+    program.push_uint8_t(0);            // Add 0 to the stack           [0]
+    program.pushPUT(i_ptr);             // Store 0 in i_ptr             []
+    loop_destination = program.size();  // :loop
+    program.pushGET(i_ptr);             // Load i_ptr to the stack      [0]
+    program.push_uint8_t(10);           // Add 10 to the stack          [0, 10]
+    program.push(CMP_LT, type_uint8_t); // Compare 0 < 10               [1]
+    loop_jump = program.size();
+    program.pushJMP_IF_NOT(0);          // Jump to :end if 1 == 0       []
+    program.pushGET(i_ptr);             // Load i_ptr to the stack      [0]
+    program.push_uint8_t(1);            // Add 1 to the stack           [0, 1]
+    program.push(ADD, type_uint8_t);    // Add 0 + 1                    [1]
+    program.pushPUT(i_ptr);             // Store 1 in i_ptr             []
+    program.pushGET(sum_ptr);           // Load sum_ptr to the stack    [0]
+    program.push_uint8_t(10);           // Add 10 to the stack          [0, 10]
+    program.push(ADD, type_uint8_t);    // Add 0 + 10                   [10]
+    program.pushPUT(sum_ptr);           // Store 10 in sum_ptr          []
+    program.pushJMP(loop_destination);  // Jump to :loop                []
+    end_destination = program.size();   // :end
+    program.pushGET(sum_ptr);           // Load sum_ptr to the stack    [0]
+    program.push(EXIT);                 // Exit the program
+    program.modifyValue(loop_jump + 1, end_destination); // Change the jump address to the exit address
+} });
 
 
 void runtime_unit_test() {
@@ -362,20 +338,20 @@ void runtime_unit_test() {
     REPRINTLN(70, '-');
     REPRINTLN(70, '#');
     Serial.println(F("Executing Runtime Unit Tests..."));
-    case_demo_uint8_t_build(); Tester.run(case_demo_uint8_t);
-    case_demo_uint16_t_build(); Tester.run(case_demo_uint16_t);
-    case_demo_uint32_t_build(); Tester.run(case_demo_uint32_t);
-    case_demo_uint64_t_build(); Tester.run(case_demo_uint64_t);
-    case_demo_int8_t_build(); Tester.run(case_demo_int8_t);
-    case_demo_float_build(); Tester.run(case_demo_float);
-    case_demo_double_build(); Tester.run(case_demo_double);
-    case_bitwise_and_X8_build(); Tester.run(case_bitwise_and_X8);
-    case_bitwise_and_X16_build(); Tester.run(case_bitwise_and_X16);
-    case_logic_and_build(); Tester.run(case_logic_and);
-    case_logic_or_build(); Tester.run(case_logic_or);
-    case_cmp_eq_build(); Tester.run(case_cmp_eq);
-    case_jump_build(); Tester.run(case_jump);
-    case_jump_if_build(); Tester.run(case_jump_if);
+    Tester.run(*case_demo_uint8_t);
+    Tester.run(*case_demo_uint16_t);
+    Tester.run(*case_demo_uint32_t);
+    Tester.run(*case_demo_uint64_t);
+    Tester.run(*case_demo_int8_t);
+    Tester.run(*case_demo_float);
+    Tester.run(*case_demo_double);
+    Tester.run(*case_bitwise_and_X8);
+    Tester.run(*case_bitwise_and_X16);
+    Tester.run(*case_logic_and);
+    Tester.run(*case_logic_or);
+    Tester.run(*case_cmp_eq);
+    Tester.run(*case_jump);
+    Tester.run(*case_jump_if);
     REPRINTLN(70, '-');
     REPRINTLN(70, '#');
     Serial.println(F("Runtime Unit Tests Completed."));
@@ -384,20 +360,20 @@ void runtime_unit_test() {
     REPRINTLN(70, '#');
     Serial.println(F("Report:"));
     REPRINTLN(70, '#');
-    case_demo_uint8_t_build(); Tester.review(case_demo_uint8_t);
-    case_demo_uint16_t_build(); Tester.review(case_demo_uint16_t);
-    case_demo_uint32_t_build(); Tester.review(case_demo_uint32_t);
-    case_demo_uint64_t_build(); Tester.review(case_demo_uint64_t);
-    case_demo_int8_t_build(); Tester.review(case_demo_int8_t);
-    case_demo_float_build(); Tester.review(case_demo_float);
-    case_demo_double_build(); Tester.review(case_demo_double);
-    case_bitwise_and_X8_build(); Tester.review(case_bitwise_and_X8);
-    case_bitwise_and_X16_build(); Tester.review(case_bitwise_and_X16);
-    case_logic_and_build(); Tester.review(case_logic_and);
-    case_logic_or_build(); Tester.review(case_logic_or);
-    case_cmp_eq_build(); Tester.review(case_cmp_eq);
-    case_jump_build(); Tester.review(case_jump);
-    case_jump_if_build(); Tester.review(case_jump_if);
+    Tester.review(*case_demo_uint8_t); delete case_demo_uint8_t;
+    Tester.review(*case_demo_uint16_t); delete case_demo_uint16_t;
+    Tester.review(*case_demo_uint32_t); delete case_demo_uint32_t;
+    Tester.review(*case_demo_uint64_t); delete case_demo_uint64_t;
+    Tester.review(*case_demo_int8_t); delete case_demo_int8_t;
+    Tester.review(*case_demo_float); delete case_demo_float;
+    Tester.review(*case_demo_double); delete case_demo_double;
+    Tester.review(*case_bitwise_and_X8); delete case_bitwise_and_X8;
+    Tester.review(*case_bitwise_and_X16); delete case_bitwise_and_X16;
+    Tester.review(*case_logic_and); delete case_logic_and;
+    Tester.review(*case_logic_or); delete case_logic_or;
+    Tester.review(*case_cmp_eq); delete case_cmp_eq;
+    Tester.review(*case_jump); delete case_jump;
+    Tester.review(*case_jump_if); delete case_jump_if;
     REPRINTLN(70, '#');
     Serial.println(F("Runtime Unit Tests Report Completed."));
     REPRINTLN(70, '#');

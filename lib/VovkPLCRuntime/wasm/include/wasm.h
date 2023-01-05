@@ -12,21 +12,8 @@ typedef __SIZE_TYPE__ size_t;
   __attribute__((export_name(#name))) \
   name
 
-// Declare these as coming from walloc.c.
-void *malloc(size_t size);
-void free(void *p);
-                          
-void* WASM_EXPORT_FN(walloc)(size_t size) {
-  return malloc(size);
-}
-
-void WASM_EXPORT_FN(wfree)(void* ptr) {
-  free(ptr);
-}
-
 #include <stdint.h>
-// #include <stdlib.h>
-#include <string.h>
+#include "jvmalloc.h"
 
 #else // __WASM__
 #define WASM_EXPORT

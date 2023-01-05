@@ -97,7 +97,9 @@ extern char* __brkval;
 #endif  // __arm__
 
 int freeMemory() {
-#if defined(ESP8266)
+#ifdef __SIMULATOR__
+    return heap_size - heap_used;
+#elif defined(ESP8266)
     return ESP.getFreeHeap();
 #elif defined(__SIMULATOR__)
     return 9000;
@@ -174,6 +176,15 @@ void __print(char c) { printf("%c", c); }
 
 char buff[64];
 
+// To upper case
+void toUpper(char* buff) {
+    for (int i = 0; buff[i]; i++) {
+        if (buff[i] >= 'a' && buff[i] <= 'z') {
+            buff[i] -= 'a' - 'A';
+        }
+    }
+}
+
 class Serial_t {
     char input[256];
     int input_len = 0;
@@ -207,8 +218,10 @@ public:
     }
     int print(int i, int base = DEC) {
         int size = 0;
-        if (base == HEX) sprintf(buff, "%x", i);
-        else if (base == OCT) sprintf(buff, "%o", i);
+        if (base == HEX) {
+            sprintf(buff, "%x", i);
+            toUpper(buff);
+        } else if (base == OCT) sprintf(buff, "%o", i);
         else if (base == BIN) {
             int j = 0;
             for (j = 0; j < 32; j++) {
@@ -222,8 +235,10 @@ public:
     }
     int print(unsigned int i, int base = DEC) {
         int size = 0;
-        if (base == HEX) sprintf(buff, "%x", i);
-        else if (base == OCT) sprintf(buff, "%o", i);
+        if (base == HEX) {
+            sprintf(buff, "%x", i);
+            toUpper(buff);
+        } else if (base == OCT) sprintf(buff, "%o", i);
         else if (base == BIN) {
             int j = 0;
             for (j = 0; j < 32; j++) {
@@ -237,8 +252,10 @@ public:
     }
     int print(long i, int base = DEC) {
         int size = 0;
-        if (base == HEX) sprintf(buff, "%lx", i);
-        else if (base == OCT) sprintf(buff, "%lo", i);
+        if (base == HEX) {
+            sprintf(buff, "%lx", i);
+            toUpper(buff);
+        } else if (base == OCT) sprintf(buff, "%lo", i);
         else if (base == BIN) {
             int j = 0;
             for (j = 0; j < 32; j++) {
@@ -252,8 +269,10 @@ public:
     }
     int print(unsigned long i, int base = DEC) {
         int size = 0;
-        if (base == HEX) sprintf(buff, "%lx", i);
-        else if (base == OCT) sprintf(buff, "%lo", i);
+        if (base == HEX) {
+            sprintf(buff, "%lx", i);
+            toUpper(buff);
+        } else if (base == OCT) sprintf(buff, "%lo", i);
         else if (base == BIN) {
             int j = 0;
             for (j = 0; j < 32; j++) {

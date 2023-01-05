@@ -23,6 +23,7 @@
         "regex": "cpp",
         "bitset": "cpp",
         "printf.c": "cpp",
-        "memory_resource": "c"
+        "memory_resource": "c",
+        "cstring": "cpp"
     }
 }

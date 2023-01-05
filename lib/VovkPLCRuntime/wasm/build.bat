@@ -20,34 +20,21 @@ rem along with VovkPLCRuntime.  If not, see <https://www.gnu.org/licenses/>.
 rem
 rem SPDX-License-Identifier: GPL-3.0-or-later
 
-
-set C_INCLUDE_PATH="C:\MinGW\include"
-@REM set CPLUS_INCLUDE_PATH="C:\MinGW\include"
-
-IF not exist build (mkdir build)
-
-
-
+@REM Compile Windows EXE (TEST)
 @REM clang++ -Wall -std=c++11 simulator.cpp -o simulator.exe
 
 @echo on
-@echo Compiling dependencies:
-@echo     - "walloc.o"
+@echo Compiling...
 @echo off
 
-clang -DNDEBUG -Oz --target=wasm32 -nostdlib -c include/walloc.c -o build/walloc.o      || goto :error
+IF not exist build (mkdir build)
+clang++ --target=wasm32 -Wall -std=c++11 -nostdlib -D __WASM__ -O0 -c simulator.cpp -o build/simulator.o        || goto :error
 
 @echo on
-@echo     - "simulator.o"
+@echo Building...
 @echo off
 
-clang++ --target=wasm32 -Wall -std=c++11 -nostdlib -D __WASM__ -O0 -I %C_INCLUDE_PATH% -c simulator.cpp -o build/simulator.o        || goto :error
-
-@echo on
-@echo Building "simulator.wasm" ...
-@echo off
-
-wasm-ld --no-entry --export-dynamic --allow-undefined --lto-O0 --import-memory --demangle build/simulator.o build/walloc.o -o simulator.wasm      || goto :error
+wasm-ld --no-entry --export-dynamic --allow-undefined --lto-O0 --demangle build/simulator.o -o simulator.wasm      || goto :error
 
 @echo on
 @echo Done.

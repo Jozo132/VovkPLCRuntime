@@ -277,7 +277,6 @@ public:
         }
         program[program_size] = instruction;
         program[program_size + 1] = data_type;
-        Serial.print(F("Pushed instruction: ")); Serial.print(instruction); Serial.print(F(" - type: ")); Serial.println(data_type);
         program_size += 2;
         status = STATUS_SUCCESS;
         return status;
@@ -297,7 +296,6 @@ public:
         }
         program[program_size] = type_uint8_t;
         program[program_size + 1] = value;
-        Serial.print(F("Pushed uint8_t: ")); Serial.println(value);
         program_size += 2;
         status = STATUS_SUCCESS;
         return status;
@@ -312,7 +310,6 @@ public:
         }
         program[program_size] = type_int8_t;
         program[program_size + 1] = value;
-        Serial.print(F("Pushed int8_t: ")); Serial.println(value);
         program_size += 2;
         status = STATUS_SUCCESS;
         return status;
@@ -328,7 +325,6 @@ public:
         program[program_size] = type_uint16_t;
         program[program_size + 1] = value >> 8;
         program[program_size + 2] = value & 0xFF;
-        Serial.print(F("Pushed uint16_t: ")); Serial.println(value);
         program_size += 3;
         status = STATUS_SUCCESS;
         return status;
@@ -344,7 +340,6 @@ public:
         program[program_size] = type_int16_t;
         program[program_size + 1] = value >> 8;
         program[program_size + 2] = value & 0xFF;
-        Serial.print(F("Pushed int16_t: ")); Serial.println(value);
         program_size += 3;
         status = STATUS_SUCCESS;
         return status;
@@ -362,7 +357,6 @@ public:
         program[program_size + 2] = (value >> 16) & 0xFF;
         program[program_size + 3] = (value >> 8) & 0xFF;
         program[program_size + 4] = value & 0xFF;
-        Serial.print(F("Pushed uint32_t: ")); Serial.println(value);
         program_size += 5;
         status = STATUS_SUCCESS;
         return status;
@@ -380,7 +374,6 @@ public:
         program[program_size + 2] = (value >> 16) & 0xFF;
         program[program_size + 3] = (value >> 8) & 0xFF;
         program[program_size + 4] = value & 0xFF;
-        Serial.print(F("Pushed int32_t: ")); Serial.println(value);
         program_size += 5;
         status = STATUS_SUCCESS;
         return status;
