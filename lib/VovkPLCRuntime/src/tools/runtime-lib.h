@@ -60,29 +60,37 @@ public:
     }
 
     VovkPLCRuntime(uint16_t max_stack_size, uint16_t memory_size = 0) {
+        if (stack != NULL) delete stack;
         stack = new RuntimeStack(max_stack_size);
         this->max_stack_size = max_stack_size;
         formatMemory(memory_size);
     }
     VovkPLCRuntime(uint16_t max_stack_size, uint16_t memory_size, uint8_t* program, uint16_t program_size) {
+        if (stack != NULL) delete stack;
         stack = new RuntimeStack(max_stack_size);
         this->max_stack_size = max_stack_size;
+        if (program != NULL) delete program;
         this->program = new RuntimeProgram(program, program_size);
         formatMemory(memory_size);
     }
     VovkPLCRuntime(uint16_t max_stack_size, RuntimeProgram& program) {
+        if (stack != NULL) delete stack;
         stack = new RuntimeStack(max_stack_size);
         this->max_stack_size = max_stack_size;
+        if (this->program != NULL) delete this->program;
         this->program = &program;
     }
     VovkPLCRuntime(uint16_t max_stack_size, uint16_t memory_size, RuntimeProgram& program) {
+        if (stack != NULL) delete stack;
         stack = new RuntimeStack(max_stack_size);
         this->max_stack_size = max_stack_size;
+        if (this->program != NULL) delete this->program;
         this->program = &program;
         formatMemory(memory_size);
     }
 
     void attachProgram(RuntimeProgram& program) {
+        if (this->program != NULL) delete this->program;
         this->program = &program;
     }
 

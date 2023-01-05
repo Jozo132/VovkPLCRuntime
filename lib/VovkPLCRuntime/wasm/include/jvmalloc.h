@@ -6,7 +6,7 @@
 
 // Heap size is in bytes and can be changed by defining HEAP_SIZE before including this file.
 #ifndef HEAP_SIZE
-#define HEAP_SIZE 1 * 1024 * 1024 // Default to 1MB
+#define HEAP_SIZE 1 * 1024 // Default to 1MB
 #endif // HEAP_SIZE
 
 // The maximum number of unique allocations that can be made at once. Can be changed by defining MAX_ALLOCATIONS before including this file. Defaults to 4096.
@@ -15,22 +15,26 @@
 #endif // MAX_ALLOCATIONS
 
 #ifndef NULL
-#define NULL ((void*)0)
+#define NULL 0
 #endif // NULL
 
-#ifndef nullprt
-#define nullprt NULL
-#endif // nullprt
+#ifndef nullptr
+#define nullptr NULL
+#endif // nullptr
 
-char heap[HEAP_SIZE];
-int heap_size = HEAP_SIZE;
-int heap_used = 0;
+// #ifndef WASM_IMPORT
+// #define WASM_IMPORT
+// #endif // WASM_IMPORT
+
+#define heap_size HEAP_SIZE
+char heap[heap_size];
+volatile int heap_used = 0;
 
 struct Allocation {
-    void* ptr;
-    int size;
-    int used;
-    int isFree;
+    void* ptr = NULL;
+    int size = 0;
+    int used = 0;
+    int isFree = 1;
 };
 
 struct Allocation allocations[MAX_ALLOCATIONS] = { };
@@ -43,7 +47,7 @@ extern "C" {
 
     // malloc implementation
     void* malloc(int size) {
-        if (heap_used + size > heap_size) return NULL;
+        // if (heap_used + size > heap_size) return NULL;
         for (int i = 0; i < allocation_count; i++) {
             if (allocations[i].isFree && allocations[i].size >= size) {
                 allocations[i].used = size;
@@ -52,13 +56,15 @@ extern "C" {
             }
         }
         if (allocation_count >= MAX_ALLOCATIONS) return NULL;
-        allocations[allocation_count].ptr = &heap[heap_used];
-        allocations[allocation_count].size = size;
-        allocations[allocation_count].used = size;
-        allocations[allocation_count].isFree = 0;
+        Allocation* alloc = &allocations[allocation_count];
+        if (alloc == NULL) return NULL;
+        alloc->ptr = &heap[heap_used];
+        alloc->size = size;
+        alloc->used = size;
+        alloc->isFree = 0;
         heap_used += size;
         allocation_count++;
-        return allocations[allocation_count - 1].ptr;
+        return alloc->ptr;
     }
 
     // free implementation
@@ -70,6 +76,24 @@ extern "C" {
             }
         }
     }
+
+    // WASM_IMPORT void* malloc(int size);
+    // WASM_IMPORT void free(void* ptr);
+
+    // rpmalloc implementation
+    void* rpmalloc(int size) { return malloc(size); }
+
+    // _Znam implementation
+    void* _Znam(int size) { return malloc(size); }
+
+    // _Znwm implementation
+    void* _Znwm(int size) { return malloc(size); }
+
+    // _ZdaPv implementation
+    void _ZdaPv(void* ptr) { free(ptr); }
+
+    // _ZdlPv implementation
+    void _ZdlPv(void* ptr) { free(ptr); }
 
     // memset implementation
     void* memset(void* ptr, int value, int num) {
@@ -109,9 +133,8 @@ extern "C" {
     // strcpy implementation
     char* strcpy(char* dest, const char* src) {
         int len = strlen(src);
-        for (int i = 0; i < len; i++) {
+        for (int i = 0; i < len; i++)
             dest[i] = src[i];
-        }
         dest[len] = '\0';
         return dest;
     }
@@ -127,22 +150,6 @@ extern "C" {
         }
         return len1 - len2;
     }
-
-
-    // rpmalloc implementation
-    void* rpmalloc(int size) { return malloc(size); }
-
-    // _Znam implementation
-    void* _Znam(int size) { return malloc(size); }
-
-    // _Znwm implementation
-    void* _Znwm(int size) { return malloc(size); }
-
-    // _ZdaPv implementation
-    void _ZdaPv(void* ptr) { free(ptr); }
-
-    // _ZdlPv implementation
-    void _ZdlPv(void* ptr) { free(ptr); }
 
 #ifdef __cplusplus
 }

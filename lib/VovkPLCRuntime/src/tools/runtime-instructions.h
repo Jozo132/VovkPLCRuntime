@@ -74,8 +74,9 @@ const char* const RuntimeErrorNames [] PROGMEM = {
 };
 
 const char* const unknows_error_code_str PROGMEM = "UNKNOWN_ERROR_CODE";
+char runtime_error_msg[40];
 const char* RUNTIME_ERROR_NAME(RuntimeError error) {
-    char* output = new char[40];
+    char* output = runtime_error_msg;
     if (error < 0 || error > SIZE_OF_ARRAY(RuntimeErrorNames)) fstrcpy(output, unknows_error_code_str);
     else fstrcpy(output, RuntimeErrorNames[error]);
     return output;

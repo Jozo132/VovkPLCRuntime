@@ -28,13 +28,13 @@ rem SPDX-License-Identifier: GPL-3.0-or-later
 @echo off
 
 IF not exist build (mkdir build)
-clang++ --target=wasm32 -Wall -std=c++11 -nostdlib -D __WASM__ -O0 -c simulator.cpp -o build/simulator.o        || goto :error
+clang++ --target=wasm32-undefined-undefined-wasm -Wall -std=c++11 -nostdlib -D __WASM__ -O3 -c simulator.cpp -o build/simulator.o        || goto :error
 
 @echo on
 @echo Building...
 @echo off
 
-wasm-ld --no-entry --export-dynamic --allow-undefined --lto-O0 --demangle build/simulator.o -o simulator.wasm      || goto :error
+wasm-ld --no-entry --export-dynamic --allow-undefined --lto-O3 build/simulator.o -o simulator.wasm      || goto :error
 
 @echo on
 @echo Done.

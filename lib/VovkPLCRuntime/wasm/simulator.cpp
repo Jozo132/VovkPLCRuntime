@@ -23,14 +23,11 @@
 #define __RUNTIME_DEBUG__
 #define __RUNTIME_FULL_UNIT_TEST___
 
+#ifndef __WASM__
+#define __WASM__
+#endif // __WASM__
 
 #include "include/wasm.h"
-// #ifndef __WASM__
-// #include <stdio.h>
-// // #else // __WASM__
-// #endif // __WASM__
-
-// #define PRINTF_DISABLE_SUPPORT_FLOAT
 #include "./lib/printf/printf.h"
 #include "./lib/printf/printf.c"
 
@@ -107,7 +104,6 @@ void custom_test() {
         float output = runtime.read<float>();
 
         const char* status_name = RUNTIME_ERROR_NAME(status);
-
         Serial.print(F("Runtime status: ")); Serial.println(status_name);
 
         Serial.print(F("Result: ")); Serial.println(output);
@@ -132,17 +128,25 @@ void custom_test() {
 
 
 WASM_EXPORT void run_unit_test() {
-    // int* p = (int*) malloc(4);
-    // free(p);
-    pinMode(LED_BUILTIN, OUTPUT);
-    Serial.begin(115200);
-    while (!Serial && (millis() < 10000)) { // wait for serial port to connect. Needed for native USB port only
-        digitalWrite(LED_BUILTIN, LOW);
-        delay(1);
-        digitalWrite(LED_BUILTIN, HIGH);
-        delay(100);
-    }
-    // Start the runtime unit test
     runtime_unit_test();
+}
+
+WASM_EXPORT void run_custom_test() {
     custom_test();
+}
+
+WASM_EXPORT int get_free_memory() {
+    return freeMemory(); // heap_size - heap_used
+}
+
+WASM_EXPORT int get_used_memory() {
+    return heap_used;
+}
+
+WASM_EXPORT int get_total_memory() {
+    return heap_size;
+}
+
+WASM_EXPORT void doNothing() {
+    // Do nothing
 }

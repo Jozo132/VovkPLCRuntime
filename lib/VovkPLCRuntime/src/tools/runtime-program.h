@@ -39,6 +39,7 @@ public:
 
     void format(uint16_t program_size) {
         this->MAX_PROGRAM_SIZE = program_size;
+        if (this->program != NULL) delete [] this->program;
         this->program = new uint8_t[program_size];
         this->program_size = 0;
         erase();

@@ -32,8 +32,8 @@ template <typename T> struct Stack {
 
     void format(uint16_t size) {
         if (_data != nullptr) delete [] _data;
+        _data = new T[size];
         MAX_STACK_SIZE = size;
-        _data = new T[MAX_STACK_SIZE];
         _size = MAX_STACK_SIZE;
     }
 
