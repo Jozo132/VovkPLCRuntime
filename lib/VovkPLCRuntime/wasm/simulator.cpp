@@ -39,29 +39,13 @@
 
 // TODO: Remove this and implement a working WASM interface for the simulator
 
-WASM_EXPORT void _start() {}
-
-WASM_EXPORT void setup() {
-    // int* p = (int*) malloc(4);
-    // free(p);
-    pinMode(LED_BUILTIN, OUTPUT);
-    Serial.begin(115200);
-    while (!Serial && (millis() < 10000)) { // wait for serial port to connect. Needed for native USB port only
-        digitalWrite(LED_BUILTIN, LOW);
-        delay(1);
-        digitalWrite(LED_BUILTIN, HIGH);
-        delay(100);
-    }
-    // Start the runtime unit test
-    runtime_unit_test();
-}
 
 RuntimeProgram program(86); // Program size
 VovkPLCRuntime runtime(64, program); // Stack size
 
 bool startup = true;
 
-WASM_EXPORT void loop() {
+void custom_test() {
     // Blink the LED to indicate that the tests are done
     digitalWrite(LED_BUILTIN, LOW);
     delay(2);
@@ -147,9 +131,18 @@ WASM_EXPORT void loop() {
 }
 
 
-WASM_EXPORT int main() {
-    setup();
-    while (true) {
-        loop();
+WASM_EXPORT void run_unit_test() {
+    // int* p = (int*) malloc(4);
+    // free(p);
+    pinMode(LED_BUILTIN, OUTPUT);
+    Serial.begin(115200);
+    while (!Serial && (millis() < 10000)) { // wait for serial port to connect. Needed for native USB port only
+        digitalWrite(LED_BUILTIN, LOW);
+        delay(1);
+        digitalWrite(LED_BUILTIN, HIGH);
+        delay(100);
     }
+    // Start the runtime unit test
+    runtime_unit_test();
+    custom_test();
 }
