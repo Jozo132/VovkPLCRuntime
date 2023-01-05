@@ -20,13 +20,40 @@ rem along with VovkPLCRuntime.  If not, see <https://www.gnu.org/licenses/>.
 rem
 rem SPDX-License-Identifier: GPL-3.0-or-later
 
-set NAME=simulator
-set BUILD_DIR=build
+
 set C_INCLUDE_PATH="C:\MinGW\include"
 @REM set CPLUS_INCLUDE_PATH="C:\MinGW\include"
 
-IF not exist %BUILD_DIR% (mkdir %BUILD_DIR%)
+IF not exist build (mkdir build)
 
-@REM clang++ -Wall -std=c++11 %NAME%.cpp -o %NAME%.exe
-clang++ --target=wasm32 -Wall -std=c++11 -D __WASM__ -O1 -I %C_INCLUDE_PATH% -c %NAME%.cpp -o %BUILD_DIR%/%NAME%.o
-wasm-ld --no-entry --export-dynamic --allow-undefined --lto-O1 --import-memory --demangle %BUILD_DIR%/%NAME%.o -o %NAME%.wasm
+
+
+@REM clang++ -Wall -std=c++11 simulator.cpp -o simulator.exe
+
+@echo on
+@echo Compiling dependencies:
+@echo     - "walloc.o"
+@echo off
+
+clang -DNDEBUG -Oz --target=wasm32 -nostdlib -c include/walloc.c -o build/walloc.o      || goto :error
+
+@echo on
+@echo     - "simulator.o"
+@echo off
+
+clang++ --target=wasm32 -Wall -std=c++11 -nostdlib -D __WASM__ -O0 -I %C_INCLUDE_PATH% -c simulator.cpp -o build/simulator.o        || goto :error
+
+@echo on
+@echo Building "simulator.wasm" ...
+@echo off
+
+wasm-ld --no-entry --export-dynamic --allow-undefined --lto-O0 --import-memory --demangle build/simulator.o build/walloc.o -o simulator.wasm      || goto :error
+
+@echo on
+@echo Done.
+@echo off
+
+goto :EOF
+
+:error
+echo Failed with error %errorlevel%

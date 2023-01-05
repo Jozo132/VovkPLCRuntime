@@ -25,17 +25,15 @@
 
 
 #include "include/wasm.h"
-#include <stdint.h>
 // #ifndef __WASM__
 // #include <stdio.h>
 // // #else // __WASM__
 // #endif // __WASM__
-#include <stdlib.h>
-#include <string.h>
 
 // #define PRINTF_DISABLE_SUPPORT_FLOAT
 #include "./lib/printf/printf.h"
 #include "./lib/printf/printf.c"
+
 
 #include "../src/VovkPLCRuntime.h"
 
@@ -44,6 +42,8 @@
 WASM_EXPORT void _start() {}
 
 WASM_EXPORT void setup() {
+    // int* p = (int*) malloc(4);
+    // free(p);
     pinMode(LED_BUILTIN, OUTPUT);
     Serial.begin(115200);
     while (!Serial && (millis() < 10000)) { // wait for serial port to connect. Needed for native USB port only

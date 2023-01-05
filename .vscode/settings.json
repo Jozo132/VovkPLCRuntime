@@ -21,6 +21,8 @@
         "ratio": "cpp",
         "variant": "cpp",
         "regex": "cpp",
-        "bitset": "cpp"
+        "bitset": "cpp",
+        "printf.c": "cpp",
+        "memory_resource": "c"
     }
 }

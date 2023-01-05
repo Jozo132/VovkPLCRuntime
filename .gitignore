@@ -2,7 +2,9 @@
 *.browse.c_cpp.db*
 *c_cpp_properties.json
 *launch.json
+*settings.json
 *ipch
 *simulator_*
 *node_modules
 *package-lock.json
+*.o
