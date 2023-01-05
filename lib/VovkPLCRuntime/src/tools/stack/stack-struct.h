@@ -23,8 +23,8 @@
 
 template <typename T> struct Stack {
     T* _data = nullptr;
-    int MAX_STACK_SIZE = 0;
-    int _size = 0;
+    uint16_t MAX_STACK_SIZE = 0;
+    uint16_t _size = 0;
 
     Stack(uint16_t max_size = 0) {
         format(max_size);
@@ -55,7 +55,7 @@ template <typename T> struct Stack {
         _size--;
         return _data[_size];
     }
-    void pop(int size) {
+    void pop(uint16_t size) {
         if (size > _size) size = _size;
         _size -= size;
     }
