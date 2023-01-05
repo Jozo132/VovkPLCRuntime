@@ -91,7 +91,7 @@ void loop() {
     Serial.print(F("Runtime status: ")); Serial.println(status_name);
 #else
     Serial.print(F("Loaded bytecode: ")); program.println();
-    RuntimeError status = runtime.cleanRun();
+    runtime.cleanRun();
 #endif
     float output = runtime.read<float>();
 
