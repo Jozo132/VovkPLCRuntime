@@ -23,15 +23,7 @@
 #define __RUNTIME_DEBUG__
 #define __RUNTIME_FULL_UNIT_TEST___
 
-#ifndef __WASM__
-#define __WASM__
-#endif // __WASM__
-
 #include "include/wasm.h"
-#include "./lib/printf/printf.h"
-#include "./lib/printf/printf.c"
-
-
 #include "../src/VovkPLCRuntime.h"
 
 // TODO: Remove this and implement a working WASM interface for the simulator
@@ -149,4 +141,8 @@ WASM_EXPORT int get_total_memory() {
 
 WASM_EXPORT void doNothing() {
     // Do nothing
+}
+
+WASM_EXPORT void doSomething() {
+    runtime_unit_test();
 }
