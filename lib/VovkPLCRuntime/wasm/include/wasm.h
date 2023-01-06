@@ -12,8 +12,14 @@ typedef __SIZE_TYPE__ size_t;
   __attribute__((export_name(#name))) \
   name
 
+
+WASM_IMPORT void stdout(char c);
+void __print(char c) { stdout(c); }
+void _putchar(char c) { stdout(c); }
+
 #include <stdint.h>
 #include "jvmalloc.h"
+
 
 #else // __WASM__
 #define WASM_EXPORT

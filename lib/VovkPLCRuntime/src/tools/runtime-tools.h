@@ -167,11 +167,7 @@ void detachInterrupt(int pin) {}
 void yield() {}
 
 
-#ifdef __WASM__
-WASM_IMPORT void stdout(char c);
-void __print(char c) { stdout(c); }
-void  _putchar(char c) { stdout(c); }
-#else // __WASM__
+#ifndef __WASM__
 void __print(char c) { printf("%c", c); }
 #endif // __WASM__
 

@@ -27,7 +27,8 @@
 // #endif // WASM_IMPORT
 
 #define heap_size HEAP_SIZE
-char heap[heap_size];
+#define heap_offset 8
+char heap[heap_size + heap_offset];
 volatile int heap_used = 0;
 
 struct Allocation {
@@ -47,7 +48,7 @@ extern "C" {
 
     // malloc implementation
     void* malloc(int size) {
-        // if (heap_used + size > heap_size) return NULL;
+        if (size <= 0) return NULL;
         for (int i = 0; i < allocation_count; i++) {
             if (allocations[i].isFree && allocations[i].size >= size) {
                 allocations[i].used = size;
@@ -55,10 +56,11 @@ extern "C" {
                 return allocations[i].ptr;
             }
         }
+        if ((heap_used + heap_offset + size) > heap_size) return NULL;
         if (allocation_count >= MAX_ALLOCATIONS) return NULL;
         Allocation* alloc = &allocations[allocation_count];
         if (alloc == NULL) return NULL;
-        alloc->ptr = &heap[heap_used];
+        alloc->ptr = &heap[heap_used + heap_offset];
         alloc->size = size;
         alloc->used = size;
         alloc->isFree = 0;
