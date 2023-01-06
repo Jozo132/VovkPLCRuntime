@@ -4,9 +4,12 @@
 // It is designed to be used on the web or in node.js.
 // It exports 'malloc' and 'free' symbols along with some string functions.
 
+#pragma once
+#include "jvint.h"
+
 // Heap size is in bytes and can be changed by defining HEAP_SIZE before including this file.
 #ifndef HEAP_SIZE
-#define HEAP_SIZE 1 * 1024 // Default to 1MB
+#define HEAP_SIZE 1 * 1024 * 1024 // Default to 1MB
 #endif // HEAP_SIZE
 
 // The maximum number of unique allocations that can be made at once. Can be changed by defining MAX_ALLOCATIONS before including this file. Defaults to 4096.
@@ -28,14 +31,16 @@
 
 #define heap_size HEAP_SIZE
 #define heap_offset 8
+#define heap_padding 8
 char heap[heap_size + heap_offset];
-volatile int heap_used = 0;
+int heap_used = 0;
+int heap_effective_used = 0;
 
 struct Allocation {
     void* ptr = NULL;
     int size = 0;
     int used = 0;
-    int isFree = 1;
+    uint8_t isFree = 1;
 };
 
 struct Allocation allocations[MAX_ALLOCATIONS] = { };
@@ -53,18 +58,21 @@ extern "C" {
             if (allocations[i].isFree && allocations[i].size >= size) {
                 allocations[i].used = size;
                 allocations[i].isFree = 0;
+                heap_effective_used += size;
                 return allocations[i].ptr;
             }
         }
+        bool can_have_padding = (size > 16) && ((size + heap_padding) < heap_size); // Add padding to allocations larger than 16 bytes to allow new allocations to be made without reallocating the heap 
         if ((heap_used + heap_offset + size) > heap_size) return NULL;
         if (allocation_count >= MAX_ALLOCATIONS) return NULL;
         Allocation* alloc = &allocations[allocation_count];
         if (alloc == NULL) return NULL;
         alloc->ptr = &heap[heap_used + heap_offset];
-        alloc->size = size;
+        alloc->size = size + (can_have_padding ? heap_padding : 0);
         alloc->used = size;
         alloc->isFree = 0;
-        heap_used += size;
+        heap_used += size + (can_have_padding ? heap_padding : 0);
+        heap_effective_used += size + (can_have_padding ? heap_padding : 0);
         allocation_count++;
         return alloc->ptr;
     }
@@ -74,6 +82,7 @@ extern "C" {
         for (int i = 0; i < allocation_count; i++) {
             if (allocations[i].ptr == ptr) {
                 allocations[i].isFree = 1;
+                heap_effective_used -= allocations[i].used;
                 return;
             }
         }
