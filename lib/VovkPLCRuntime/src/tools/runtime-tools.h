@@ -32,7 +32,9 @@
 #define pgm_read_ptr(x) (*(x))
 #define __FlashStringHelper char
 
+#ifndef size_t
 #define size_t int
+#endif
 
 #ifndef NULL
 #define NULL nullptr
