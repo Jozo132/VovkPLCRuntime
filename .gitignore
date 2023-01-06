@@ -4,7 +4,6 @@
 *launch.json
 *settings.json
 *ipch
-*simulator_*
 *node_modules
 *package-lock.json
 *.o
