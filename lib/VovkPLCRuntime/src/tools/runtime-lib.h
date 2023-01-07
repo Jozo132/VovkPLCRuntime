@@ -34,61 +34,58 @@ class VovkPLCRuntime {
 private:
     bool started_up = false;
 public:
-    void disableStartupMessage() {
-        started_up = true;
-    }
-    void startup() {
-        if (!started_up) {
-            started_up = true;
-            Serial.println();
-            REPRINTLN(70, ':');
-            Serial.println(F(":: Using VovkPLCRuntime Library - Author J.Vovk <jozo132@gmail.com> ::"));
-            REPRINTLN(70, ':');
-        }
-    }
-    RuntimeStack* stack; // Active memory stack for PLC execution
+    RuntimeStack* stack = nullptr; // Active memory stack for PLC execution
     uint16_t max_stack_size = 0; // Maximum stack size
-    Stack<uint8_t> memory; // PLC memory to manipulate
+    Stack<uint8_t>* memory = nullptr; // PLC memory to manipulate
+    uint16_t memory_size = 0; // PLC memory size
     RuntimeProgram* program = nullptr; // Active PLC program
     RuntimeCommandParser cmd_parser; // Command parser for PLC commands
+
+    void startup() {
+        if (started_up) return;
+        started_up = true;
+        Serial.println();
+        REPRINTLN(70, ':');
+        Serial.println(F(":: Using VovkPLCRuntime Library - Author J.Vovk <jozo132@gmail.com> ::"));
+        REPRINTLN(70, ':');
+
+        stack = new RuntimeStack(max_stack_size);
+        if (program == NULL) program = new RuntimeProgram();
+        program->begin();
+        formatMemory(memory_size);
+    }
+
     void formatMemory(uint16_t size, uint8_t* data = nullptr) {
         if (size == 0) return;
-        memory.format(size);
+        memory->format(size);
         if (data == nullptr) return;
         for (uint16_t i = 0; i < size; i++)
-            memory.push(data[i]);
+            memory->push(data[i]);
     }
 
     VovkPLCRuntime(uint16_t max_stack_size, uint16_t memory_size = 0) {
-        if (stack != NULL) delete stack;
-        stack = new RuntimeStack(max_stack_size);
         this->max_stack_size = max_stack_size;
-        formatMemory(memory_size);
+        this->memory_size = memory_size;
     }
     VovkPLCRuntime(uint16_t max_stack_size, uint16_t memory_size, uint8_t* program, uint16_t program_size) {
-        if (stack != NULL) delete stack;
-        stack = new RuntimeStack(max_stack_size);
         this->max_stack_size = max_stack_size;
-        if (program != NULL) delete program;
+        this->memory_size = memory_size;
         this->program = new RuntimeProgram(program, program_size);
-        formatMemory(memory_size);
+
     }
     VovkPLCRuntime(uint16_t max_stack_size, RuntimeProgram& program) {
-        if (stack != NULL) delete stack;
-        stack = new RuntimeStack(max_stack_size);
         this->max_stack_size = max_stack_size;
-        if (this->program != NULL) delete this->program;
         this->program = &program;
     }
     VovkPLCRuntime(uint16_t max_stack_size, uint16_t memory_size, RuntimeProgram& program) {
-        if (stack != NULL) delete stack;
-        stack = new RuntimeStack(max_stack_size);
         this->max_stack_size = max_stack_size;
-        if (this->program != NULL) delete this->program;
         this->program = &program;
-        formatMemory(memory_size);
+        this->memory_size = memory_size;
     }
-
+    ~VovkPLCRuntime() {
+        if (stack != NULL) delete stack;
+        if (program != NULL) delete program;
+    }
     void attachProgram(RuntimeProgram& program) {
         if (this->program != NULL) delete this->program;
         this->program = &program;

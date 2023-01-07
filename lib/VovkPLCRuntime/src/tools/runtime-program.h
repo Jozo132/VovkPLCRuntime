@@ -29,12 +29,27 @@ public:
     uint16_t program_line = 0; // Active program line
     RuntimeError status = UNDEFINED_STATE;
 
-    RuntimeProgram(const uint8_t* program = nullptr, uint16_t program_size = 0) {
+    RuntimeProgram(const uint8_t* program, uint16_t program_size) {
+        this->MAX_PROGRAM_SIZE = program_size;
+        this->program_size = program_size;
+        this->program = (uint8_t*) program;
+    }
+    RuntimeProgram(uint16_t program_size) {
+        this->MAX_PROGRAM_SIZE = program_size;
+    }
+    RuntimeProgram() { }
+    ~RuntimeProgram() {
+        if (program != NULL) delete [] program;
+    }
+
+    void begin(const uint8_t* program, uint16_t program_size) {
         format(program_size + 1);
         load(program, program_size);
     }
-    RuntimeProgram(uint16_t program_size) {
-        format(program_size);
+    void begin(uint16_t program_size = 0) {
+        if (program_size == 0) return;
+        MAX_PROGRAM_SIZE = program_size;
+        if (MAX_PROGRAM_SIZE > 0 && program == nullptr) format(MAX_PROGRAM_SIZE);
     }
 
     void format(uint16_t program_size) {

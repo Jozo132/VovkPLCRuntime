@@ -119,11 +119,11 @@ namespace PLCMethods {
         extract_status = ProgramExtract.type_uint16_t(program, program_size, index, &address);
         if (extract_status != STATUS_SUCCESS) return extract_status;
         uint8_t value = stack->pop_uint8_t();
-        bool error = stack->memory.set(address, value);
+        bool error = stack->memory->set(address, value);
         if (error) {
 #ifdef __RUNTIME_DEBUG__
             Serial.print(F("PUT: Memory access error. Max memory size is "));
-            Serial.print(stack->memory.size());
+            Serial.print(stack->memory->size());
             Serial.print(F(" but target address is "));
             Serial.println(address);
 #endif
@@ -143,11 +143,11 @@ namespace PLCMethods {
         extract_status = ProgramExtract.type_uint16_t(program, program_size, index, &address);
         if (extract_status != STATUS_SUCCESS) return extract_status;
         uint8_t value = 0;
-        bool error = stack->memory.get(address, value);
+        bool error = stack->memory->get(address, value);
         if (error) {
 #ifdef __RUNTIME_DEBUG__
             Serial.print(F("GET: Memory access error. Max memory size is "));
-            Serial.print(stack->memory.size());
+            Serial.print(stack->memory->size());
             Serial.print(F(" but target address is "));
             Serial.println(address);
 #endif

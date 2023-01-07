@@ -68,22 +68,28 @@ struct UnitTest {
     static const uint16_t memory_size = 16;
     static const uint16_t stack_size = 32;
     static const uint16_t program_size = 64;
-    RuntimeProgram program = RuntimeProgram(program_size);
-    VovkPLCRuntime runtime = VovkPLCRuntime(stack_size, memory_size, program);
+    RuntimeProgram* program = nullptr;
+    VovkPLCRuntime* runtime = nullptr;
     UnitTest() {
-        program.format(program_size);
-        program.erase();
-        runtime.formatMemory(memory_size);
+        program = new RuntimeProgram(program_size);
+        runtime = new VovkPLCRuntime(stack_size, memory_size, *program);
+        program->format(program_size);
+        program->erase();
+        runtime->formatMemory(memory_size);
+    }
+    ~UnitTest() {
+        delete program;
+        delete runtime;
     }
 #ifdef __RUNTIME_DEBUG__
     template <typename T> void run(const TestCase<T>& test) {
         Serial.println();
         REPRINTLN(70, '#');
-        program.erase();
-        if (test.build) test.build(program);
+        program->erase();
+        if (test.build) test.build(*program);
         Serial.print(F("Running test: ")); Serial.println(test.name);
-        RuntimeError status = fullProgramDebug(runtime, program);
-        T output = runtime.read<T>();
+        RuntimeError status = fullProgramDebug(*runtime, *program);
+        T output = runtime->read<T>();
         bool passed = status == test.expected_error && test.expected_result == output;
         Serial.print(F("Program result: ")); println(output);
         Serial.print(F("Expected result: ")); println(test.expected_result);
@@ -93,14 +99,14 @@ struct UnitTest {
 #endif
 
     template <typename T> void review(const TestCase<T>& test) {
-        program.erase();
-        if (test.build) test.build(program);
+        program->erase();
+        if (test.build) test.build(*program);
         size_t offset = Serial.print(F("Test \""));
         offset += Serial.print(test.name);
         offset += Serial.print('"');
         long t = micros();
-        runtime.cleanRun();
-        T output = runtime.read<T>();
+        runtime->cleanRun();
+        T output = runtime->read<T>();
         t = micros() - t;
         float ms = (float) t * 0.001;
         bool passed = test.expected_result == output;
@@ -184,7 +190,7 @@ struct UnitTest {
     void println(int64_t result) { println__int64_t(result); }
 };
 
-UnitTest Tester;
+UnitTest* Tester = nullptr;
 
 const TestCase<uint8_t> case_demo_uint8_t({ "demo_uint8_t => (1 + 2) * 3", STATUS_SUCCESS, 9, [](RuntimeProgram& program) {
     program.push_uint8_t(1);
@@ -327,7 +333,8 @@ const TestCase<uint8_t> case_jump_if({ "jump_if => for loop sum", PROGRAM_EXITED
 
 
 void runtime_unit_test() {
-    Tester.runtime.startup();
+    Tester = new UnitTest();
+    Tester->runtime->startup();
     REPRINTLN(70, '-');
     Serial.println(F("Runtime Unit Test"));
     REPRINTLN(70, '-');
@@ -338,20 +345,20 @@ void runtime_unit_test() {
     REPRINTLN(70, '-');
     REPRINTLN(70, '#');
     Serial.println(F("Executing Runtime Unit Tests..."));
-    Tester.run(case_demo_uint8_t);
-    Tester.run(case_demo_uint16_t);
-    Tester.run(case_demo_uint32_t);
-    Tester.run(case_demo_uint64_t);
-    Tester.run(case_demo_int8_t);
-    Tester.run(case_demo_float);
-    Tester.run(case_demo_double);
-    Tester.run(case_bitwise_and_X8);
-    Tester.run(case_bitwise_and_X16);
-    Tester.run(case_logic_and);
-    Tester.run(case_logic_or);
-    Tester.run(case_cmp_eq);
-    Tester.run(case_jump);
-    Tester.run(case_jump_if);
+    Tester->run(case_demo_uint8_t);
+    Tester->run(case_demo_uint16_t);
+    Tester->run(case_demo_uint32_t);
+    Tester->run(case_demo_uint64_t);
+    Tester->run(case_demo_int8_t);
+    Tester->run(case_demo_float);
+    Tester->run(case_demo_double);
+    Tester->run(case_bitwise_and_X8);
+    Tester->run(case_bitwise_and_X16);
+    Tester->run(case_logic_and);
+    Tester->run(case_logic_or);
+    Tester->run(case_cmp_eq);
+    Tester->run(case_jump);
+    Tester->run(case_jump_if);
     REPRINTLN(70, '-');
     REPRINTLN(70, '#');
     Serial.println(F("Runtime Unit Tests Completed."));
@@ -360,23 +367,24 @@ void runtime_unit_test() {
     REPRINTLN(70, '#');
     Serial.println(F("Report:"));
     REPRINTLN(70, '#');
-    Tester.review(case_demo_uint8_t);
-    Tester.review(case_demo_uint16_t);
-    Tester.review(case_demo_uint32_t);
-    Tester.review(case_demo_uint64_t);
-    Tester.review(case_demo_int8_t);
-    Tester.review(case_demo_float);
-    Tester.review(case_demo_double);
-    Tester.review(case_bitwise_and_X8);
-    Tester.review(case_bitwise_and_X16);
-    Tester.review(case_logic_and);
-    Tester.review(case_logic_or);
-    Tester.review(case_cmp_eq);
-    Tester.review(case_jump);
-    Tester.review(case_jump_if);
+    Tester->review(case_demo_uint8_t);
+    Tester->review(case_demo_uint16_t);
+    Tester->review(case_demo_uint32_t);
+    Tester->review(case_demo_uint64_t);
+    Tester->review(case_demo_int8_t);
+    Tester->review(case_demo_float);
+    Tester->review(case_demo_double);
+    Tester->review(case_bitwise_and_X8);
+    Tester->review(case_bitwise_and_X16);
+    Tester->review(case_logic_and);
+    Tester->review(case_logic_or);
+    Tester->review(case_cmp_eq);
+    Tester->review(case_jump);
+    Tester->review(case_jump_if);
     REPRINTLN(70, '#');
     Serial.println(F("Runtime Unit Tests Report Completed."));
     REPRINTLN(70, '#');
+    delete Tester;
 };
 
 #else // __RUNTIME_UNIT_TEST__

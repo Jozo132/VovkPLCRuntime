@@ -29,6 +29,9 @@ template <typename T> struct Stack {
     Stack(uint16_t max_size = 0) {
         format(max_size);
     }
+    ~Stack() {
+        if (_data != nullptr) delete [] _data;
+    }
 
     void format(uint16_t size) {
         if (_data != nullptr) delete [] _data;
