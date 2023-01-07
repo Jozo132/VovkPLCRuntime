@@ -13,6 +13,8 @@ typedef int int32_t;
 typedef long long int64_t;
 typedef unsigned long uintptr_t;
 
+typedef bool boolean;
+
 typedef long intptr_t;
 typedef unsigned int size_t;
 
@@ -34,8 +36,6 @@ typedef unsigned int size_t;
 
 #define ptrdiff_t intptr_t
 
-#define bool char
-#define boolean char
 #define true 1
 #define false 0
 
