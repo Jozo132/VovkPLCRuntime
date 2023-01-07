@@ -32,14 +32,14 @@
 #define heap_size HEAP_SIZE
 #define heap_offset 8
 #define heap_padding 8
-char heap[heap_size + heap_offset];
+char heap[heap_size + heap_offset] = { 0 };
 int heap_used = 0;
 int heap_effective_used = 0;
 
 struct Allocation {
     void* ptr = NULL;
-    int size = 0;
-    int used = 0;
+    short size = 0;
+    // int used = 0;
     uint8_t isFree = 1;
 };
 
@@ -50,61 +50,6 @@ int allocation_count = 0;
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
-
-    // malloc implementation
-    void* malloc(int size) {
-        if (size <= 0) return NULL;
-        for (int i = 0; i < allocation_count; i++) {
-            if (allocations[i].isFree && allocations[i].size >= size) {
-                allocations[i].used = size;
-                allocations[i].isFree = 0;
-                heap_effective_used += size;
-                return allocations[i].ptr;
-            }
-        }
-        bool can_have_padding = (size > 16) && ((size + heap_padding) < heap_size); // Add padding to allocations larger than 16 bytes to allow new allocations to be made without reallocating the heap 
-        if ((heap_used + heap_offset + size) > heap_size) return NULL;
-        if (allocation_count >= MAX_ALLOCATIONS) return NULL;
-        Allocation* alloc = &allocations[allocation_count];
-        if (alloc == NULL) return NULL;
-        alloc->ptr = &heap[heap_used + heap_offset];
-        alloc->size = size + (can_have_padding ? heap_padding : 0);
-        alloc->used = size;
-        alloc->isFree = 0;
-        heap_used += size + (can_have_padding ? heap_padding : 0);
-        heap_effective_used += size + (can_have_padding ? heap_padding : 0);
-        allocation_count++;
-        return alloc->ptr;
-    }
-
-    // free implementation
-    void free(void* ptr) {
-        for (int i = 0; i < allocation_count; i++) {
-            if (allocations[i].ptr == ptr) {
-                allocations[i].isFree = 1;
-                heap_effective_used -= allocations[i].used;
-                return;
-            }
-        }
-    }
-
-    // WASM_IMPORT void* malloc(int size);
-    // WASM_IMPORT void free(void* ptr);
-
-    // rpmalloc implementation
-    void* rpmalloc(int size) { return malloc(size); }
-
-    // _Znam implementation
-    void* _Znam(int size) { return malloc(size); }
-
-    // _Znwm implementation
-    void* _Znwm(int size) { return malloc(size); }
-
-    // _ZdaPv implementation
-    void _ZdaPv(void* ptr) { free(ptr); }
-
-    // _ZdlPv implementation
-    void _ZdlPv(void* ptr) { free(ptr); }
 
     // memset implementation
     void* memset(void* ptr, int value, int num) {
@@ -131,6 +76,91 @@ extern "C" {
             if (char_ptr1[i] != char_ptr2[i])
                 return char_ptr1[i] - char_ptr2[i];
         }
+        return 0;
+    }
+
+    // malloc implementation
+    void* malloc(short size) {
+        if (size <= 0) return NULL;
+        // Find a free allocation that matches the size, or the smallest free allocation that is larger than the size
+        // This is to avoid small allocations to take up larger chunks of memory
+        short next_free_size = 0;
+        int next_free_index = -1;
+        for (int i = 0; i < allocation_count; i++) {
+            if (allocations[i].isFree && allocations[i].ptr != NULL) {
+                if (allocations[i].size == size) {
+                    // allocations[i].used = size;
+                    allocations[i].isFree = 0;
+                    heap_effective_used += size;
+                    return allocations[i].ptr;
+                }
+                if (allocations[i].size > size) {
+                    if (next_free_index == -1 || allocations[i].size < next_free_size) {
+                        next_free_size = allocations[i].size;
+                        next_free_index = i;
+                    }
+                }
+            }
+        }
+        if (next_free_index != -1) {
+            // allocations[next_free_index].used = size;
+            allocations[next_free_index].isFree = 0;
+            heap_effective_used += size;
+            return allocations[next_free_index].ptr;
+        }
+        // bool can_have_padding = (size >= 16) && ((size + heap_padding) < heap_size); // Add padding to allocations larger than 16 bytes to allow new allocations to be made without reallocating the heap 
+        // int allocated = size + (can_have_padding ? heap_padding : 0);
+        // int allocated = size;
+        if ((heap_used + heap_offset + size) > heap_size) return NULL;
+        if (allocation_count >= MAX_ALLOCATIONS) return NULL;
+        Allocation* alloc = &allocations[allocation_count];
+        if (alloc == NULL) return NULL;
+        alloc->ptr = &heap[heap_used + heap_offset];
+        // alloc->size = allocated;
+        alloc->size = size;
+        // alloc->used = size;
+        alloc->isFree = 0;
+        // heap_used += allocated;
+        heap_used += size;
+        heap_effective_used += size;
+        allocation_count++;
+        return alloc->ptr;
+    }
+
+    // free implementation
+    void free(void* ptr) {
+        if (ptr == NULL) return;
+        for (int i = 0; i < allocation_count; i++) {
+            if (allocations[i].ptr == ptr) {
+                allocations[i].isFree = 1;
+                memset(allocations[i].ptr, 0, allocations[i].size);
+                heap_effective_used -= allocations[i].size;
+                return;
+            }
+        }
+    }
+
+    // WASM_IMPORT void* malloc(int size);
+    // WASM_IMPORT void free(void* ptr);
+
+    // rpmalloc implementation
+    void* rpmalloc(int size) { return malloc(size); }
+
+    // _Znam implementation
+    void* _Znam(int size) { return malloc(size); }
+
+    // _Znwm implementation
+    void* _Znwm(int size) { return malloc(size); }
+
+    // _ZdaPv implementation
+    void _ZdaPv(void* ptr) { free(ptr); ptr = NULL; }
+
+    // _ZdlPv implementation
+    void _ZdlPv(void* ptr) { free(ptr); ptr = NULL; }
+
+
+    // __cxa_atexit implementation
+    int __cxa_atexit(void (*func)(void*), void* arg, void* dso_handle) {
         return 0;
     }
 
