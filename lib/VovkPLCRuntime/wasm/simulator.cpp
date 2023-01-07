@@ -145,4 +145,74 @@ WASM_EXPORT void doNothing() {
 
 WASM_EXPORT void doSomething() {
     runtime_unit_test();
+    custom_test();
+}
+
+
+template <typename T> struct OutputBuffer {
+    T* data = nullptr;
+    size_t type_size = sizeof(T);
+    size_t length = 0;
+    size_t max_size = 0;
+    OutputBuffer(size_t size = 0) { init(size); }
+    void init(size_t size = 0) {
+        if (!size) return;
+        if (data == nullptr) {
+            data = new T[size];
+            length = 0;
+            max_size = size;
+        }
+    }
+    void push(T value) {
+        if (length < max_size) {
+            data[length++] = value;
+        }
+    }
+    T pop() {
+        if (length > 0) {
+            return data[--length];
+        }
+        return 0;
+    }
+    T shift() {
+        if (length > 0) {
+            T value = data[0];
+            for (size_t i = 1; i < length; i++) {
+                data[i - 1] = data[i];
+            }
+            length--;
+            return value;
+        }
+        return 0;
+    }
+    // Array operator getter
+    T& operator[](size_t index) {
+        if (index < length)
+            return data[index];
+        return data[0];
+    }
+    // Array operator setter (avoid overloaded 'operator[]' cannot have more than one parameter before C++2b)
+    void set(size_t index, T value) {
+        if (index < length)
+            data[index] = value;
+    }
+
+};
+
+OutputBuffer<unsigned char> myBuffer(10);
+
+int export_request_count = 0;
+WASM_EXPORT void* export_output() {
+    export_request_count++;
+    if (myBuffer.length > 9)
+        myBuffer.shift();
+    myBuffer.push(export_request_count);
+    //Print buffer contents
+    Serial.print(F("Buffer <"));
+    for (size_t i = 0; i < myBuffer.length; i++) {
+        Serial.print(myBuffer[i], HEX);
+        if (i < myBuffer.length - 1) Serial.print(F(", "));
+    }
+    Serial.println(F(">"));
+    return (void*) (&myBuffer);
 }
