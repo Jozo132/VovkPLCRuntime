@@ -40,7 +40,8 @@ class RuntimeCommandParser {
         if (commandLength > __RUNTIME_COMMAND_PARSER_MAX_COMMAND_LENGTH)
             return true;
 
-        parsedData.command = (char*) malloc(commandLength + 1);
+        // parsedData.command = (char*) malloc(commandLength + 1);
+        parsedData.command = new char[commandLength + 1];
         i = 0;
         while (input[index] != ',' && input[index] != '\0') {
             parsedData.command[i] = input[index];
@@ -126,7 +127,8 @@ class RuntimeCommandParser {
         if (dataLength > __RUNTIME_COMMAND_PARSER_MAX_DATA_LENGTH)
             return true;
 
-        parsedData.data = (uint8_t*) malloc(dataLength);
+        // parsedData.data = (uint8_t*) malloc(dataLength);
+        parsedData.data = new uint8_t[dataLength];
 
         int j = 0;
         while (input[index] != '\0') {

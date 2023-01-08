@@ -23,6 +23,16 @@
 
 #ifdef __SIMULATOR__
 
+#ifndef __WASM__
+#include "stdint.h"
+#include "stdio.h"
+#include "string.h"
+
+int get_used_memory() {
+    return 0;
+}
+#endif // __WASM__
+
 #define PROGMEM
 #define pgm_read_byte(x) (*(x))
 #define pgm_read_word(x) (*(x))
@@ -99,7 +109,7 @@ extern char* __brkval;
 #endif  // __arm__
 
 int freeMemory() {
-#ifdef __SIMULATOR__
+#ifdef __WASM__
     return heap_size - heap_used;
 #elif defined(ESP8266)
     return ESP.getFreeHeap();
@@ -169,7 +179,7 @@ void detachInterrupt(int pin) {}
 void yield() {}
 
 
-#ifndef __WASM__
+#if !defined(__WASM__)
 void __print(char c) { printf("%c", c); }
 #endif // __WASM__
 
