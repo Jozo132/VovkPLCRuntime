@@ -340,6 +340,12 @@ public:
 
 Serial_t Serial;
 
+#else // __SIMULATOR__
+
+int get_used_memory() {
+    return 0;
+}
+
 #endif // __SIMULATOR__
 
 
