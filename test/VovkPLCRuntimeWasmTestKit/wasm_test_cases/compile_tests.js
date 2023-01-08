@@ -17,6 +17,14 @@ const readFile = file_name => new Promise((resolve, reject) => {
     })
 })
 
+/** @param { string } file_name */
+const getFileSize = file_name => new Promise((resolve, reject) => {
+    fs.stat(file_name, (error, stats) => {
+        if (error) reject(error)
+        else resolve(stats.size)
+    })
+})
+
 /** @param { string } command * @param { any } [options] */
 const exec_async = (command, options) => new Promise((resolve, reject) => {
     exec(command, options, (error, stdout, stderr) => {
@@ -59,7 +67,8 @@ const compile_and_build_wasm = async (file_name, padding = 15) => new Promise(as
             return
         }
         const success_msg = `Compiled ${file_name}.wasm`
-        console.log(`${success_msg.padEnd(padding + 20, ' ')} - CC took ${`${cc_t} ms`.padEnd(10, ' ')}   LD took ${`${ld_t} ms`.padEnd(10, ' ')}`)
+        const fileSize = await getFileSize(wasm) * 0.001
+        console.log(`${success_msg.padEnd(padding + 20, ' ')} - CC took ${`${cc_t} ms`.padEnd(10, ' ')}   LD took ${`${ld_t} ms`.padEnd(10, ' ')}  File size: ${fileSize.toFixed(1).padStart(6, ' ')} KB`)
         resolve(true)
     } catch (error) {
         reject(error)
