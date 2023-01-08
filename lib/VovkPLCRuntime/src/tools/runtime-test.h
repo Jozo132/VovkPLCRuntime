@@ -333,26 +333,18 @@ const TestCase<uint8_t> case_jump_if({ "jump_if => for loop sum", PROGRAM_EXITED
 
 
 void runtime_unit_test() {
-    int mem = 0;
-    mem = get_used_memory(); Serial.print(F("  Used memory [ 1]: ")); Serial.print(mem); Serial.println(F(" bytes."));
     Tester = new UnitTest();
-    mem = get_used_memory(); Serial.print(F("  Used memory [ 2]: ")); Serial.print(mem); Serial.println(F(" bytes."));
     Tester->runtime->startup();
-    mem = get_used_memory(); Serial.print(F("  Used memory [ 3]: ")); Serial.print(mem); Serial.println(F(" bytes."));
     REPRINTLN(70, '-');
     Serial.println(F("Runtime Unit Test"));
     REPRINTLN(70, '-');
-    mem = get_used_memory(); Serial.print(F("  Used memory [ 4]: ")); Serial.print(mem); Serial.println(F(" bytes."));
 #ifdef __RUNTIME_DEBUG__
     logRuntimeErrorList();
-    mem = get_used_memory(); Serial.print(F("  Used memory [ 6]: ")); Serial.print(mem); Serial.println(F(" bytes."));
     REPRINTLN(70, '-');
     logRuntimeInstructionSet();
-    mem = get_used_memory(); Serial.print(F("  Used memory [ 7]: ")); Serial.print(mem); Serial.println(F(" bytes."));
     REPRINTLN(70, '-');
     REPRINTLN(70, '#');
     Serial.println(F("Executing Runtime Unit Tests..."));
-    mem = get_used_memory(); Serial.print(F("  Used memory [ 8]: ")); Serial.print(mem); Serial.println(F(" bytes."));
     Tester->run(case_demo_uint8_t);
     Tester->run(case_demo_uint16_t);
     Tester->run(case_demo_uint32_t);
@@ -368,7 +360,6 @@ void runtime_unit_test() {
     Tester->run(case_cmp_eq_2);
     Tester->run(case_jump);
     Tester->run(case_jump_if);
-    mem = get_used_memory(); Serial.print(F("  Used memory [ 9]: ")); Serial.print(mem); Serial.println(F(" bytes."));
     REPRINTLN(70, '-');
     REPRINTLN(70, '#');
     Serial.println(F("Runtime Unit Tests Completed."));
@@ -392,13 +383,11 @@ void runtime_unit_test() {
     Tester->review(case_cmp_eq_2);
     Tester->review(case_jump);
     Tester->review(case_jump_if);
-    mem = get_used_memory(); Serial.print(F("  Used memory [10]: ")); Serial.print(mem); Serial.println(F(" bytes."));
     REPRINTLN(70, '#');
     Serial.println(F("Runtime Unit Tests Report Completed."));
     REPRINTLN(70, '#');
     delete Tester;
     Tester = nullptr;
-    mem = get_used_memory(); Serial.print(F("  Used memory [11]: ")); Serial.print(mem); Serial.println(F(" bytes."));
 };
 
 #else // __RUNTIME_UNIT_TEST__
