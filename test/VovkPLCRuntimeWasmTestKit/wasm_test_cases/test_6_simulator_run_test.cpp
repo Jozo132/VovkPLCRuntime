@@ -1,38 +1,24 @@
-// simulator.cpp - 1.0.0 - 2022-12-11
-//
-// Copyright (c) 2022 J.Vovk
-//
-// This file is part of VovkPLCRuntime.
-//
-// VovkPLCRuntime is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// VovkPLCRuntime is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with VovkPLCRuntime.  If not, see <https://www.gnu.org/licenses/>.
-//
-// SPDX-License-Identifier: GPL-3.0-or-later
-
 #define __SIMULATOR__
 #define __RUNTIME_DEBUG__
 #define __RUNTIME_FULL_UNIT_TEST___
 
-#include "include/wasm.h"
-#include "../VovkPLCRuntime/src/VovkPLCRuntime.h"
+#include "common.h"
 
-// TODO: Remove this and implement a working WASM interface for the simulator
+#include "../../../lib/VovkPLCRuntime/src/VovkPLCRuntime.h"
+
+void custom_test();
+
+bool startup = true;
+
+WASM_EXPORT void doSomething() {
+    custom_test();
+}
+
 
 
 RuntimeProgram program(86); // Program size
 VovkPLCRuntime runtime(64, program); // Stack size
 
-bool startup = true;
 
 void custom_test() {
     // Blink the LED to indicate that the tests are done
@@ -115,91 +101,4 @@ void custom_test() {
     float ms = t / 1000.0;
     int mem = freeMemory();
     Serial.print(F("Program executed for ")); Serial.print(cycles); Serial.print(F(" cycles in ")); Serial.print(ms, 3); Serial.print(F(" ms. Result: ")); Serial.print(result); Serial.print(F("  Free memory: ")); Serial.print(mem); Serial.println(F(" bytes."));
-}
-
-
-WASM_EXPORT void run_unit_test() {
-    runtime_unit_test();
-}
-
-WASM_EXPORT void run_custom_test() {
-    custom_test();
-}
-
-WASM_EXPORT void doNothing() {
-    // Do nothing
-}
-
-WASM_EXPORT void doSomething() {
-    runtime_unit_test();
-    custom_test();
-}
-
-
-template <typename T> struct OutputBuffer {
-    T* data = nullptr;
-    size_t type_size = sizeof(T);
-    size_t length = 0;
-    size_t max_size = 0;
-    OutputBuffer(size_t size = 0) { init(size); }
-    void init(size_t size = 0) {
-        if (!size) return;
-        if (data == nullptr) {
-            data = new T[size];
-            length = 0;
-            max_size = size;
-        }
-    }
-    void push(T value) {
-        if (length < max_size) {
-            data[length++] = value;
-        }
-    }
-    T pop() {
-        if (length > 0) {
-            return data[--length];
-        }
-        return 0;
-    }
-    T shift() {
-        if (length > 0) {
-            T value = data[0];
-            for (size_t i = 1; i < length; i++) {
-                data[i - 1] = data[i];
-            }
-            length--;
-            return value;
-        }
-        return 0;
-    }
-    // Array operator getter
-    T& operator[](size_t index) {
-        if (index < length)
-            return data[index];
-        return data[0];
-    }
-    // Array operator setter (avoid overloaded 'operator[]' cannot have more than one parameter before C++2b)
-    void set(size_t index, T value) {
-        if (index < length)
-            data[index] = value;
-    }
-
-};
-
-OutputBuffer<unsigned char> myBuffer(10);
-
-int export_request_count = 0;
-WASM_EXPORT void* export_output() {
-    export_request_count++;
-    if (myBuffer.length > 9)
-        myBuffer.shift();
-    myBuffer.push(export_request_count);
-    //Print buffer contents
-    Serial.print(F("Buffer <"));
-    for (size_t i = 0; i < myBuffer.length; i++) {
-        Serial.print(myBuffer[i], HEX);
-        if (i < myBuffer.length - 1) Serial.print(F(", "));
-    }
-    Serial.println(F(">"));
-    return (void*) (&myBuffer);
 }

@@ -20,9 +20,6 @@ rem along with VovkPLCRuntime.  If not, see <https://www.gnu.org/licenses/>.
 rem
 rem SPDX-License-Identifier: GPL-3.0-or-later
 
-@REM Compile Windows EXE (TEST)
-@REM clang++ -Wall -std=c++11 simulator.cpp -o simulator.exe
-
 @echo on
 @echo Compiling...
 @echo off
@@ -41,6 +38,9 @@ wasm-ld --no-entry --export-dynamic --allow-undefined --lto-O3 build/simulator.o
 @echo off
 
 goto :EOF
+
+@REM Compile Windows EXE (TEST)
+@REM clang++ -Wall -std=c++11 simulator.cpp -o simulator.exe
 
 :error
 echo Failed with error %errorlevel%

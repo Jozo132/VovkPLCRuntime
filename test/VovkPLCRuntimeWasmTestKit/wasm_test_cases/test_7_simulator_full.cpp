@@ -4,13 +4,14 @@
 
 #include "common.h"
 
-#include "../../VovkPLCRuntime/src/VovkPLCRuntime.h"
+#include "../../../lib/VovkPLCRuntime/src/VovkPLCRuntime.h"
 
 void custom_test();
 
 bool startup = true;
 
 WASM_EXPORT void doSomething() {
+    if (startup) runtime_unit_test();
     custom_test();
 }
 
