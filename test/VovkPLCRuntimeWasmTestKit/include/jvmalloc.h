@@ -38,9 +38,8 @@ int heap_effective_used = 0;
 
 struct Allocation {
     void* ptr = NULL;
-    short size = 0;
-    // int used = 0;
-    uint8_t isFree = 1;
+    uint32_t size = 0;
+    bool isAllocated = false;
 };
 
 struct Allocation allocations[MAX_ALLOCATIONS] = { };
@@ -87,11 +86,11 @@ extern "C" {
         short next_free_size = 0;
         int next_free_index = -1;
         for (int i = 0; i < allocation_count; i++) {
-            if (allocations[i].isFree && allocations[i].ptr != NULL) {
+            if (!allocations[i].isAllocated && allocations[i].ptr != NULL) {
                 if (allocations[i].size == size) {
-                    // allocations[i].used = size;
-                    allocations[i].isFree = 0;
+                    allocations[i].isAllocated = true;
                     heap_effective_used += size;
+                    memset(allocations[i].ptr, 0, allocations[i].size);
                     return allocations[i].ptr;
                 }
                 if (allocations[i].size > size) {
@@ -103,24 +102,18 @@ extern "C" {
             }
         }
         if (next_free_index != -1) {
-            // allocations[next_free_index].used = size;
-            allocations[next_free_index].isFree = 0;
+            allocations[next_free_index].isAllocated = true;
             heap_effective_used += size;
+            memset(allocations[next_free_index].ptr, 0, allocations[next_free_index].size);
             return allocations[next_free_index].ptr;
         }
-        // bool can_have_padding = (size >= 16) && ((size + heap_padding) < heap_size); // Add padding to allocations larger than 16 bytes to allow new allocations to be made without reallocating the heap 
-        // int allocated = size + (can_have_padding ? heap_padding : 0);
-        // int allocated = size;
         if ((heap_used + heap_offset + size) > heap_size) return NULL;
         if (allocation_count >= MAX_ALLOCATIONS) return NULL;
         Allocation* alloc = &allocations[allocation_count];
         if (alloc == NULL) return NULL;
         alloc->ptr = &heap[heap_used + heap_offset];
-        // alloc->size = allocated;
         alloc->size = size;
-        // alloc->used = size;
-        alloc->isFree = 0;
-        // heap_used += allocated;
+        alloc->isAllocated = true;
         heap_used += size;
         heap_effective_used += size;
         allocation_count++;
@@ -130,11 +123,14 @@ extern "C" {
     // free implementation
     void free(void* ptr) {
         if (ptr == NULL) return;
+        // Find the allocation and free it
         for (int i = 0; i < allocation_count; i++) {
-            if (allocations[i].ptr == ptr && allocations[i].isFree == 0) {
-                allocations[i].isFree = 1;
-                memset(allocations[i].ptr, 0, allocations[i].size);
+            if (allocations[i].ptr == ptr && allocations[i].isAllocated) {
+                allocations[i].isAllocated = false;
                 heap_effective_used -= allocations[i].size;
+                // NOTE: This is not to standard, but it would be nice to be able to set a pointer to NULL after freeing it
+                // void** ref = reinterpret_cast<void**>(&ptr);
+                // *ref = NULL;
                 return;
             }
         }
