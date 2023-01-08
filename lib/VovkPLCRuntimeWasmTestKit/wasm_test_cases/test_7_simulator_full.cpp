@@ -4,7 +4,7 @@
 
 #include "common.h"
 
-#include "../../src/VovkPLCRuntime.h"
+#include "../../VovkPLCRuntime/src/VovkPLCRuntime.h"
 
 void custom_test();
 

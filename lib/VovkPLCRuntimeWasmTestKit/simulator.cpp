@@ -24,7 +24,7 @@
 #define __RUNTIME_FULL_UNIT_TEST___
 
 #include "include/wasm.h"
-#include "../src/VovkPLCRuntime.h"
+#include "../VovkPLCRuntime/src/VovkPLCRuntime.h"
 
 // TODO: Remove this and implement a working WASM interface for the simulator
 

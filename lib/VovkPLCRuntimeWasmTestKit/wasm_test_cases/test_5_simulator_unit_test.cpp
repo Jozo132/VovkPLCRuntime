@@ -4,7 +4,7 @@
 
 #include "common.h"
 
-#include "../../src/VovkPLCRuntime.h"
+#include "../../VovkPLCRuntime/src/VovkPLCRuntime.h"
 
 WASM_EXPORT void doSomething() {
     runtime_unit_test();
