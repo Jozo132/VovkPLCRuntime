@@ -73,8 +73,8 @@ struct UnitTest {
     UnitTest() {
         program = new RuntimeProgram(program_size);
         runtime = new VovkPLCRuntime(stack_size, memory_size, *program);
+        program->begin();
         program->format(program_size);
-        program->erase();
         runtime->formatMemory(memory_size);
     }
     ~UnitTest() {
@@ -85,7 +85,7 @@ struct UnitTest {
     template <typename T> void run(const TestCase<T>& test) {
         Serial.println();
         REPRINTLN(70, '#');
-        program->erase();
+        program->format();
         if (test.build) test.build(*program);
         Serial.print(F("Running test: ")); Serial.println(test.name);
         RuntimeError status = fullProgramDebug(*runtime, *program);
@@ -99,7 +99,7 @@ struct UnitTest {
 #endif
 
     template <typename T> void review(const TestCase<T>& test) {
-        program->erase();
+        program->format();
         if (test.build) test.build(*program);
         size_t offset = Serial.print(F("Test \""));
         offset += Serial.print(test.name);
@@ -271,12 +271,12 @@ const TestCase<bool> case_logic_or({ "logic_or => true || false", STATUS_SUCCESS
 } });
 
 // Comparison operations
-const TestCase<bool> case_cmp_eq({ "cmp_eq => 1 == 1", STATUS_SUCCESS, true, [](RuntimeProgram& program) {
+const TestCase<bool> case_cmp_eq_1({ "cmp_eq_1 => 1 == 1", STATUS_SUCCESS, true, [](RuntimeProgram& program) {
     program.push_bool(1);
     program.push_bool(1);
     program.push(CMP_EQ, type_bool);
 } });
-const TestCase<bool> case_cmp_eq_1({ "cmp_eq => 0.29 == 0.31", STATUS_SUCCESS, false, [](RuntimeProgram& program) {
+const TestCase<bool> case_cmp_eq_2({ "cmp_eq_2 => 0.29 == 0.31", STATUS_SUCCESS, false, [](RuntimeProgram& program) {
     program.push_float(0.29);
     program.push_float(0.31);
     program.push(CMP_EQ, type_float);
@@ -333,18 +333,26 @@ const TestCase<uint8_t> case_jump_if({ "jump_if => for loop sum", PROGRAM_EXITED
 
 
 void runtime_unit_test() {
+    int mem = 0;
+    mem = get_used_memory(); Serial.print(F("  Used memory [ 1]: ")); Serial.print(mem); Serial.println(F(" bytes."));
     Tester = new UnitTest();
+    mem = get_used_memory(); Serial.print(F("  Used memory [ 2]: ")); Serial.print(mem); Serial.println(F(" bytes."));
     Tester->runtime->startup();
+    mem = get_used_memory(); Serial.print(F("  Used memory [ 3]: ")); Serial.print(mem); Serial.println(F(" bytes."));
     REPRINTLN(70, '-');
     Serial.println(F("Runtime Unit Test"));
     REPRINTLN(70, '-');
+    mem = get_used_memory(); Serial.print(F("  Used memory [ 4]: ")); Serial.print(mem); Serial.println(F(" bytes."));
 #ifdef __RUNTIME_DEBUG__
     logRuntimeErrorList();
+    mem = get_used_memory(); Serial.print(F("  Used memory [ 6]: ")); Serial.print(mem); Serial.println(F(" bytes."));
     REPRINTLN(70, '-');
     logRuntimeInstructionSet();
+    mem = get_used_memory(); Serial.print(F("  Used memory [ 7]: ")); Serial.print(mem); Serial.println(F(" bytes."));
     REPRINTLN(70, '-');
     REPRINTLN(70, '#');
     Serial.println(F("Executing Runtime Unit Tests..."));
+    mem = get_used_memory(); Serial.print(F("  Used memory [ 8]: ")); Serial.print(mem); Serial.println(F(" bytes."));
     Tester->run(case_demo_uint8_t);
     Tester->run(case_demo_uint16_t);
     Tester->run(case_demo_uint32_t);
@@ -356,9 +364,11 @@ void runtime_unit_test() {
     Tester->run(case_bitwise_and_X16);
     Tester->run(case_logic_and);
     Tester->run(case_logic_or);
-    Tester->run(case_cmp_eq);
+    Tester->run(case_cmp_eq_1);
+    Tester->run(case_cmp_eq_2);
     Tester->run(case_jump);
     Tester->run(case_jump_if);
+    mem = get_used_memory(); Serial.print(F("  Used memory [ 9]: ")); Serial.print(mem); Serial.println(F(" bytes."));
     REPRINTLN(70, '-');
     REPRINTLN(70, '#');
     Serial.println(F("Runtime Unit Tests Completed."));
@@ -378,13 +388,17 @@ void runtime_unit_test() {
     Tester->review(case_bitwise_and_X16);
     Tester->review(case_logic_and);
     Tester->review(case_logic_or);
-    Tester->review(case_cmp_eq);
+    Tester->review(case_cmp_eq_1);
+    Tester->review(case_cmp_eq_2);
     Tester->review(case_jump);
     Tester->review(case_jump_if);
+    mem = get_used_memory(); Serial.print(F("  Used memory [10]: ")); Serial.print(mem); Serial.println(F(" bytes."));
     REPRINTLN(70, '#');
     Serial.println(F("Runtime Unit Tests Report Completed."));
     REPRINTLN(70, '#');
     delete Tester;
+    Tester = nullptr;
+    mem = get_used_memory(); Serial.print(F("  Used memory [11]: ")); Serial.print(mem); Serial.println(F(" bytes."));
 };
 
 #else // __RUNTIME_UNIT_TEST__

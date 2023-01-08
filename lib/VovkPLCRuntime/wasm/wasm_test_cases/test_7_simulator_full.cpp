@@ -30,7 +30,6 @@ void custom_test() {
 
     // Custom program test
     if (startup) {
-        program.begin();
         runtime.startup();
         Serial.println(F("Custom program test"));
         Serial.println(F("Variables  = { a: 1, b: 2, c: 3, d: 4, e: 5, f: 6 }"));
@@ -44,7 +43,6 @@ void custom_test() {
 
 
         // Hand-coded RPN instructions:
-        runtime.program->erase();
         runtime.program->push_float(10);
         runtime.program->push_float(1);
         runtime.program->push_float(a);

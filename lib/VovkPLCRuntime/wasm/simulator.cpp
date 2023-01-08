@@ -56,7 +56,6 @@ void custom_test() {
 
 
         // Hand-coded RPN instructions:
-        runtime.program->erase();
         runtime.program->push_float(10);
         runtime.program->push_float(1);
         runtime.program->push_float(a);

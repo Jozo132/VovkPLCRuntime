@@ -52,12 +52,14 @@ public:
         if (MAX_PROGRAM_SIZE > 0 && program == nullptr) format(MAX_PROGRAM_SIZE);
     }
 
-    void format(uint16_t program_size) {
+    void format(uint16_t program_size = 0) {
+        if (program_size == 0) program_size = MAX_PROGRAM_SIZE;
         this->MAX_PROGRAM_SIZE = program_size;
         if (this->program != NULL) delete [] this->program;
         this->program = new uint8_t[program_size];
         this->program_size = 0;
-        erase();
+        this->program_line = 0;
+        this->status = UNDEFINED_STATE;
     }
 
     static uint32_t calculateChecksum(const uint8_t* data, uint16_t size) {
@@ -108,13 +110,6 @@ public:
         program[index] = value >> 8;
         program[index + 1] = value & 0xFF;
         return STATUS_SUCCESS;
-    }
-
-
-    void erase() {
-        program_size = 0;
-        program_line = 0;
-        status = UNDEFINED_STATE;
     }
 
     // Set the active PLC Program line number
