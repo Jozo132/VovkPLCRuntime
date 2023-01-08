@@ -78,8 +78,10 @@ struct UnitTest {
         runtime->formatMemory(memory_size);
     }
     ~UnitTest() {
-        delete program;
-        delete runtime;
+        if (program != NULL) delete program;
+        if (runtime != NULL) delete runtime;
+        program = nullptr;
+        runtime = nullptr;
     }
 #ifdef __RUNTIME_DEBUG__
     template <typename T> void run(const TestCase<T>& test) {
@@ -387,7 +389,7 @@ void runtime_unit_test() {
     Serial.println(F("Runtime Unit Tests Report Completed."));
     REPRINTLN(70, '#');
     delete Tester;
-    Tester = nullptr;
+    Tester = NULL;
 };
 
 #else // __RUNTIME_UNIT_TEST__

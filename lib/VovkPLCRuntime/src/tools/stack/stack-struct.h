@@ -31,6 +31,7 @@ template <typename T> struct Stack {
     }
     ~Stack() {
         if (_data != nullptr) delete [] _data;
+        _data = nullptr;
     }
 
     void format(uint16_t size) {
@@ -167,6 +168,7 @@ template <typename T> struct LinkedList {
         head = head->next;
         T value = node->value;
         delete node;
+        node = nullptr;
         _size--;
         return value;
     }

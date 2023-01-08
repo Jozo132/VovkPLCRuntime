@@ -40,6 +40,7 @@ public:
     RuntimeProgram() { }
     ~RuntimeProgram() {
         if (program != NULL) delete [] program;
+        program = NULL;
     }
 
     void begin(const uint8_t* program, uint16_t program_size) {

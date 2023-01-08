@@ -85,6 +85,8 @@ public:
     ~VovkPLCRuntime() {
         if (stack != NULL) delete stack;
         if (program != NULL) delete program;
+        stack = NULL;
+        program = NULL;
     }
     void attachProgram(RuntimeProgram& program) {
         if (this->program != NULL) delete this->program;

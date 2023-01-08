@@ -42,9 +42,12 @@ public:
         memory->format(memory_size);
     }
     ~RuntimeStack() {
-        if (stack != nullptr)delete stack;
-        if (call_stack != nullptr)delete call_stack;
-        if (memory != nullptr)delete memory;
+        if (stack != nullptr) delete stack;
+        if (call_stack != nullptr) delete call_stack;
+        if (memory != nullptr) delete memory;
+        stack = nullptr;
+        call_stack = nullptr;
+        memory = nullptr;
     }
 
     int print() { return stack->print(); }
