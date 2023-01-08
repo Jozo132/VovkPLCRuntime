@@ -8,3 +8,4 @@
 *package-lock.json
 *.o
 *settings.json
+.vscode
