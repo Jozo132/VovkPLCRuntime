@@ -131,7 +131,7 @@ extern "C" {
     void free(void* ptr) {
         if (ptr == NULL) return;
         for (int i = 0; i < allocation_count; i++) {
-            if (allocations[i].ptr == ptr) {
+            if (allocations[i].ptr == ptr && allocations[i].isFree == 0) {
                 allocations[i].isFree = 1;
                 memset(allocations[i].ptr, 0, allocations[i].size);
                 heap_effective_used -= allocations[i].size;
