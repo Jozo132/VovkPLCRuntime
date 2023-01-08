@@ -127,18 +127,6 @@ WASM_EXPORT void run_custom_test() {
     custom_test();
 }
 
-WASM_EXPORT int get_free_memory() {
-    return freeMemory(); // heap_size - heap_used
-}
-
-WASM_EXPORT int get_used_memory() {
-    return heap_used;
-}
-
-WASM_EXPORT int get_total_memory() {
-    return heap_size;
-}
-
 WASM_EXPORT void doNothing() {
     // Do nothing
 }

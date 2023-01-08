@@ -22,6 +22,22 @@ void _putchar(char c) { stdout(c); }
 #include "../lib/printf/printf.h"
 #include "../lib/printf/printf.c"
 
+
+WASM_EXPORT int get_free_memory() {
+    // return heap_size - heap_used;
+    return heap_size - heap_effective_used;
+}
+
+WASM_EXPORT int get_used_memory() {
+    // return heap_used;
+    return heap_effective_used;
+}
+
+WASM_EXPORT int get_total_memory() {
+    // return heap_size;
+    return heap_used;
+}
+
 #else // __WASM__
 #define WASM_EXPORT
 #define WASM_IMPORT
