@@ -144,7 +144,7 @@ const main = async () => {
     console.log()
 
     const table_offset = longset_file_name_length + 2
-    const col_width = 21
+    const col_width = 18
     const col_pad_number = x => {
         let isNumber = false
         if (Array.isArray(x)) {
