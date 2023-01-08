@@ -34,9 +34,9 @@ public:
     RuntimeStack(uint16_t max_size, uint16_t call_stack_size = 10, uint16_t memory_size = 4) {
         this->max_size = max_size;
         this->max_call_stack_size = call_stack_size;
-        if (!stack) stack = new Stack<uint8_t>;
-        if (!call_stack) call_stack = new Stack<uint16_t>;
-        if (!memory) memory = new Stack<uint8_t>;
+        if (stack == nullptr) stack = new Stack<uint8_t>;
+        if (call_stack == nullptr) call_stack = new Stack<uint16_t>;
+        if (memory == nullptr) memory = new Stack<uint8_t>;
         stack->format(max_size);
         call_stack->format(call_stack_size);
         memory->format(memory_size);
