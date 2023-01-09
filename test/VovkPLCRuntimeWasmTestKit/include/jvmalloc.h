@@ -22,7 +22,7 @@
 #endif // NULL
 
 #ifndef nullptr
-#define nullptr NULL
+#define nullptr 0
 #endif // nullptr
 
 // #ifndef WASM_IMPORT
@@ -37,7 +37,7 @@ int heap_used = 0;
 int heap_effective_used = 0;
 
 struct Allocation {
-    void* ptr = NULL;
+    void* ptr = nullptr;
     uint32_t size = 0;
     bool isAllocated = false;
 };
@@ -80,13 +80,13 @@ extern "C" {
 
     // malloc implementation
     void* malloc(short size) {
-        if (size <= 0) return NULL;
+        if (size <= 0) return nullptr;
         // Find a free allocation that matches the size, or the smallest free allocation that is larger than the size
         // This is to avoid small allocations to take up larger chunks of memory
         short next_free_size = 0;
         int next_free_index = -1;
         for (int i = 0; i < allocation_count; i++) {
-            if (!allocations[i].isAllocated && allocations[i].ptr != NULL) {
+            if (!allocations[i].isAllocated && allocations[i].ptr != nullptr) {
                 if (allocations[i].size == size) {
                     allocations[i].isAllocated = true;
                     heap_effective_used += size;
@@ -107,10 +107,10 @@ extern "C" {
             memset(allocations[next_free_index].ptr, 0, allocations[next_free_index].size);
             return allocations[next_free_index].ptr;
         }
-        if ((heap_used + heap_offset + size) > heap_size) return NULL;
-        if (allocation_count >= MAX_ALLOCATIONS) return NULL;
+        if ((heap_used + heap_offset + size) > heap_size) return nullptr;
+        if (allocation_count >= MAX_ALLOCATIONS) return nullptr;
         Allocation* alloc = &allocations[allocation_count];
-        if (alloc == NULL) return NULL;
+        if (alloc == nullptr) return nullptr;
         alloc->ptr = &heap[heap_used + heap_offset];
         alloc->size = size;
         alloc->isAllocated = true;
@@ -122,15 +122,15 @@ extern "C" {
 
     // free implementation
     void free(void* ptr) {
-        if (ptr == NULL) return;
+        if (ptr == nullptr) return;
         // Find the allocation and free it
         for (int i = 0; i < allocation_count; i++) {
             if (allocations[i].ptr == ptr && allocations[i].isAllocated) {
                 allocations[i].isAllocated = false;
                 heap_effective_used -= allocations[i].size;
-                // NOTE: This is not to standard, but it would be nice to be able to set a pointer to NULL after freeing it
+                // NOTE: This is not to standard, but it would be nice to be able to set a pointer to nullptr after freeing it
                 // void** ref = reinterpret_cast<void**>(&ptr);
-                // *ref = NULL;
+                // *ref = nullptr;
                 return;
             }
         }
@@ -149,10 +149,10 @@ extern "C" {
     void* _Znwm(int size) { return malloc(size); }
 
     // _ZdaPv implementation
-    void _ZdaPv(void* ptr) { free(ptr); ptr = NULL; }
+    void _ZdaPv(void* ptr) { free(ptr); }
 
     // _ZdlPv implementation
-    void _ZdlPv(void* ptr) { free(ptr); ptr = NULL; }
+    void _ZdlPv(void* ptr) { free(ptr); }
 
 
     // __cxa_atexit implementation
