@@ -84,7 +84,7 @@ const char* RUNTIME_ERROR_NAME(RuntimeError error) {
 
 void logRuntimeErrorList() {
     Serial.println(F("RuntimeError Status List:\n")); // "    %2d: %s"
-    for (size_t i = 0; i < SIZE_OF_ARRAY(RuntimeErrorNames); i++) {
+    for (uint32_t i = 0; i < SIZE_OF_ARRAY(RuntimeErrorNames); i++) {
         Serial.print(F("    "));
         if (i < 10) Serial.print(' ');
         Serial.print(i);
@@ -529,7 +529,7 @@ uint8_t OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
 
 void logRuntimeInstructionSet() {
     Serial.println(F("Bytecode Instruction Set:"));
-    size_t position = 0;
+    uint32_t position = 0;
     bool was_valid = true;
     for (int opcode = 0x00; opcode < 256; opcode++) {
         bool is_valid = OPCODE_EXISTS((PLCRuntimeInstructionSet) opcode);

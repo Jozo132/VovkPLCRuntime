@@ -39,8 +39,8 @@
 
 namespace PLCMethods {
 
-    RuntimeError handle_ADD(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
-        uint16_t size = 1;
+    RuntimeError handle_ADD(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) {
+        uint32_t size = 1;
         if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         uint8_t data_type = program[index++];
         switch (data_type) {
@@ -59,8 +59,8 @@ namespace PLCMethods {
         }
     }
 
-    RuntimeError handle_SUB(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
-        uint16_t size = 1;
+    RuntimeError handle_SUB(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) {
+        uint32_t size = 1;
         if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         uint8_t data_type = program[index++];
         switch (data_type) {
@@ -79,8 +79,8 @@ namespace PLCMethods {
         }
     }
 
-    RuntimeError handle_MUL(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
-        uint16_t size = 1;
+    RuntimeError handle_MUL(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) {
+        uint32_t size = 1;
         if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         uint8_t data_type = program[index++];
         switch (data_type) {
@@ -99,8 +99,8 @@ namespace PLCMethods {
         }
     }
 
-    RuntimeError handle_DIV(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
-        uint16_t size = 1;
+    RuntimeError handle_DIV(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) {
+        uint32_t size = 1;
         if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         uint8_t data_type = program[index++];
         switch (data_type) {
@@ -122,8 +122,8 @@ namespace PLCMethods {
 
 
     // Comparison operators
-    RuntimeError handle_CMP_EQ(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
-        uint16_t size = 1;
+    RuntimeError handle_CMP_EQ(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) {
+        uint32_t size = 1;
         if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         uint8_t data_type = program[index++];
         switch (data_type) {
@@ -141,8 +141,8 @@ namespace PLCMethods {
             default: return INVALID_DATA_TYPE;
         }
     }
-    RuntimeError handle_CMP_NEQ(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
-        uint16_t size = 1;
+    RuntimeError handle_CMP_NEQ(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) {
+        uint32_t size = 1;
         if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         uint8_t data_type = program[index++];
         switch (data_type) {
@@ -160,8 +160,8 @@ namespace PLCMethods {
             default: return INVALID_DATA_TYPE;
         }
     }
-    RuntimeError handle_CMP_GT(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
-        uint16_t size = 1;
+    RuntimeError handle_CMP_GT(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) {
+        uint32_t size = 1;
         if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         uint8_t data_type = program[index++];
         switch (data_type) {
@@ -179,8 +179,8 @@ namespace PLCMethods {
             default: return INVALID_DATA_TYPE;
         }
     }
-    RuntimeError handle_CMP_GTE(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
-        uint16_t size = 1;
+    RuntimeError handle_CMP_GTE(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) {
+        uint32_t size = 1;
         if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         uint8_t data_type = program[index++];
         switch (data_type) {
@@ -198,8 +198,8 @@ namespace PLCMethods {
             default: return INVALID_DATA_TYPE;
         }
     }
-    RuntimeError handle_CMP_LT(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
-        uint16_t size = 1;
+    RuntimeError handle_CMP_LT(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) {
+        uint32_t size = 1;
         if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         uint8_t data_type = program[index++];
         switch (data_type) {
@@ -217,8 +217,8 @@ namespace PLCMethods {
             default: return INVALID_DATA_TYPE;
         }
     }
-    RuntimeError handle_CMP_LTE(RuntimeStack* stack, uint8_t* program, uint16_t program_size, uint16_t& index) {
-        uint16_t size = 1;
+    RuntimeError handle_CMP_LTE(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) {
+        uint32_t size = 1;
         if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         uint8_t data_type = program[index++];
         switch (data_type) {

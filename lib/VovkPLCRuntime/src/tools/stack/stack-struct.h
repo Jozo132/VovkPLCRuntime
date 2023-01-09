@@ -23,10 +23,10 @@
 
 template <typename T> struct Stack {
     T* _data = nullptr;
-    uint16_t MAX_STACK_SIZE = 0;
-    uint16_t _size = 0;
+    uint32_t MAX_STACK_SIZE = 0;
+    uint32_t _size = 0;
 
-    Stack(uint16_t max_size = 0) {
+    Stack(uint32_t max_size = 0) {
         format(max_size);
     }
     ~Stack() {
@@ -34,7 +34,7 @@ template <typename T> struct Stack {
         _data = nullptr;
     }
 
-    void format(uint16_t size) {
+    void format(uint32_t size) {
         if (_data != nullptr) delete [] _data;
         _data = new T[size];
         MAX_STACK_SIZE = size;
@@ -59,13 +59,13 @@ template <typename T> struct Stack {
         _size--;
         return _data[_size];
     }
-    void pop(uint16_t size) {
+    void pop(uint32_t size) {
         if (size > _size) size = _size;
         _size -= size;
     }
 
     // Returns the top value from the stack
-    T peek(uint16_t depth = 0) {
+    T peek(uint32_t depth = 0) {
         if (_size == 0) return T();
         if (depth >= _size) return T();
         return _data[_size - depth - 1];
@@ -73,18 +73,18 @@ template <typename T> struct Stack {
 
     // Returns the value at the specified index like an array
     // T value = stack[0];
-    T operator [](uint16_t index) {
+    T operator [](uint32_t index) {
         if (index >= _size) return T();
         return _data[index];
     }
 
-    bool set(uint16_t index, T value) {
+    bool set(uint32_t index, T value) {
         if (index >= _size) return true;
         _data[index] = value;
         return false;
     }
 
-    bool get(uint16_t index, T& value) {
+    bool get(uint32_t index, T& value) {
         if (index >= _size) return true;
         value = _data[index];
         return false;
@@ -92,7 +92,7 @@ template <typename T> struct Stack {
 
 
     // Returns the number of elements in the stack
-    uint16_t size() { return _size; }
+    uint32_t size() { return _size; }
 
     // Returns true if the stack is empty
     bool empty() { return _size == 0; }
@@ -107,12 +107,12 @@ template <typename T> struct Stack {
         length += Serial.print(_size);
         length += Serial.print(F(") ["));
         if (_size > 16) {
-            uint16_t hidden = _size - 16;
+            uint32_t hidden = _size - 16;
             length += Serial.print(' ');
             if (hidden < 10) length += Serial.print(' ');
             length += Serial.print(hidden);
             length += Serial.print(F(" more bytes... "));
-            for (uint16_t i = 0; i < 16; i++) {
+            for (uint32_t i = 0; i < 16; i++) {
                 T value = _data[hidden + i];
                 if (value < 0x10) length += Serial.print('0');
                 length += Serial.print(value, HEX);
@@ -121,7 +121,7 @@ template <typename T> struct Stack {
             length += Serial.print(']');
             return length;
         }
-        for (uint16_t i = 0; i < _size; i++) {
+        for (uint32_t i = 0; i < _size; i++) {
             T value = _data[i];
             if (value < 0x10) length += Serial.print('0');
             length += Serial.print(value, HEX);
@@ -145,7 +145,7 @@ template <typename T> struct LinkedList {
 
     Node* head = nullptr;
     Node* tail = nullptr;
-    uint16_t _size = 0;
+    uint32_t _size = 0;
 
     // Pushes a value to the end of the list
     void push(T value) {
@@ -174,10 +174,10 @@ template <typename T> struct LinkedList {
     }
 
     // Returns the first value from the list
-    T peek(uint16_t depth = 0) {
+    T peek(uint32_t depth = 0) {
         if (head == nullptr) return T();
         Node* node = head;
-        for (uint16_t i = 0; i < depth; i++) {
+        for (uint32_t i = 0; i < depth; i++) {
             if (node->next == nullptr) return T();
             node = node->next;
         }
@@ -185,7 +185,7 @@ template <typename T> struct LinkedList {
     }
 
     // Returns the number of elements in the list
-    uint16_t size() { return _size; }
+    uint32_t size() { return _size; }
 
     // Returns true if the list is empty
     bool empty() { return _size == 0; }
@@ -209,16 +209,16 @@ template <typename T> struct LinkedList {
         length += Serial.print(_size);
         length += Serial.print(F(") ["));
         if (_size > 16) {
-            uint16_t hidden = _size - 16;
+            uint32_t hidden = _size - 16;
             length += Serial.print(' ');
             if (hidden < 10) length += Serial.print(' ');
             length += Serial.print(hidden);
             length += Serial.print(F(" more bytes... "));
             Node* node = head;
-            for (uint16_t i = 0; i < hidden; i++) {
+            for (uint32_t i = 0; i < hidden; i++) {
                 node = node->next;
             }
-            for (uint16_t i = 0; i < 16; i++) {
+            for (uint32_t i = 0; i < 16; i++) {
                 T value = node->value;
                 if (value < 0x10) length += Serial.print('0');
                 length += Serial.print(value, HEX);
@@ -229,7 +229,7 @@ template <typename T> struct LinkedList {
             return length;
         }
         Node* node = head;
-        for (uint16_t i = 0; i < _size; i++) {
+        for (uint32_t i = 0; i < _size; i++) {
             T value = node->value;
             if (value < 0x10) length += Serial.print('0');
             length += Serial.print(value, HEX);

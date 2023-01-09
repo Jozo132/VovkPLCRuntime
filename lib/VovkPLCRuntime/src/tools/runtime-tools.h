@@ -47,7 +47,7 @@ int get_used_memory() {
 #endif
 
 #ifndef NULL
-#define NULL nullptr
+#define NULL 0
 #endif 
 
 #define LOW 0
@@ -126,6 +126,9 @@ int freeMemory() {
 #endif  // __arm__
 #endif  // ESP8266
 }
+
+
+#define LOG_FREE_MEMORY() Serial.print(F("Free memory: ")); Serial.print(freeMemory()); Serial.println(F(" bytes")) 
 
 void fstrcpy(char* buff, const char* fstr) {
     uint8_t i = 0;

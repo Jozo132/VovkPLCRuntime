@@ -21,55 +21,60 @@
 
 #pragma once
 
+char foo;
+
 class RuntimeProgram {
 public:
-    uint8_t* program = NULL; // PLC program to execute
-    uint16_t MAX_PROGRAM_SIZE = 0; // Max program size in bytes
-    uint16_t program_size = 0; // Current program size in bytes
-    uint16_t program_line = 0; // Active program line
+#ifdef __WASM__
+    uint8_t* program = nullptr; // PLC program to execute
+#else 
+    uint8_t* program = new uint8_t[1]; // PLC program to execute
+#endif
+    uint32_t MAX_PROGRAM_SIZE = 0; // Max program size in bytes
+    uint32_t program_size = 0; // Current program size in bytes
+    uint32_t program_line = 0; // Active program line
     RuntimeError status = UNDEFINED_STATE;
 
-    RuntimeProgram(const uint8_t* program, uint16_t program_size) {
+    RuntimeProgram(const uint8_t* program, uint32_t program_size) {
         this->MAX_PROGRAM_SIZE = program_size;
         this->program_size = program_size;
         this->program = (uint8_t*) program;
     }
-    RuntimeProgram(uint16_t program_size) {
+    RuntimeProgram(uint32_t program_size) {
         this->MAX_PROGRAM_SIZE = program_size;
     }
     RuntimeProgram() { }
     ~RuntimeProgram() {
-        if (program != NULL) delete [] program;
-        program = NULL;
+        if (program != nullptr) delete [] program;
     }
 
-    void begin(const uint8_t* program, uint16_t program_size) {
+    void begin(const uint8_t* program, uint32_t program_size) {
         format(program_size + 1);
         load(program, program_size);
     }
-    void begin(uint16_t program_size = 0) {
+    void begin(uint32_t program_size = 0) {
         if (program_size == 0) return;
         MAX_PROGRAM_SIZE = program_size;
         if (MAX_PROGRAM_SIZE > 0 && program == nullptr) format(MAX_PROGRAM_SIZE);
     }
 
-    void format(uint16_t program_size = 0) {
+    void format(uint32_t program_size = 0) {
         if (program_size == 0) program_size = MAX_PROGRAM_SIZE;
         this->MAX_PROGRAM_SIZE = program_size;
-        if (this->program != NULL) delete [] this->program;
+        if (this->program != nullptr) delete [] this->program;
         this->program = new uint8_t[program_size];
         this->program_size = 0;
         this->program_line = 0;
         this->status = UNDEFINED_STATE;
     }
 
-    static uint32_t calculateChecksum(const uint8_t* data, uint16_t size) {
+    static uint32_t calculateChecksum(const uint8_t* data, uint32_t size) {
         uint32_t checksum = 0;
         for (uint32_t i = 0; i < size; i++) checksum += (uint32_t) data[i];
         return checksum;
     }
 
-    RuntimeError loadUnsafe(const uint8_t* program, uint16_t program_size) {
+    RuntimeError loadUnsafe(const uint8_t* program, uint32_t program_size) {
         this->program = (uint8_t*) program;
         if (program_size > MAX_PROGRAM_SIZE) status = PROGRAM_SIZE_EXCEEDED;
         else if (program_size == 0) status = UNDEFINED_STATE;
@@ -79,7 +84,7 @@ public:
         return status;
     }
 
-    RuntimeError load(const uint8_t* program, uint16_t program_size, uint32_t checksum = 0) {
+    RuntimeError load(const uint8_t* program, uint32_t program_size, uint32_t checksum = 0) {
         uint32_t calculated_checksum = calculateChecksum(program, program_size);
         if (calculated_checksum != checksum) {
             status = INVALID_CHECKSUM;
@@ -90,45 +95,45 @@ public:
     }
 
     // Get the size of used program memory
-    uint16_t size() { return program_size; }
+    uint32_t size() { return program_size; }
 
     // Hot update the running program. This is a very dangerous operation, so use it with caution!
-    RuntimeError modify(uint16_t index, uint8_t value) {
+    RuntimeError modify(uint32_t index, uint8_t value) {
         if (index >= program_size) return INVALID_PROGRAM_INDEX;
         program[index] = value;
         return STATUS_SUCCESS;
     }
 
     // Hot update the running program. This is a very dangerous operation, so use it with caution!
-    RuntimeError modify(uint16_t index, uint8_t* data, uint16_t size) {
+    RuntimeError modify(uint32_t index, uint8_t* data, uint32_t size) {
         if (index + size > program_size) return INVALID_PROGRAM_INDEX;
-        for (uint16_t i = 0; i < size; i++) program[index + i] = data[i];
+        for (uint32_t i = 0; i < size; i++) program[index + i] = data[i];
         return STATUS_SUCCESS;
     }
 
-    RuntimeError modifyValue(uint16_t index, uint16_t value) {
-        if (index + sizeof(uint16_t) > program_size) return INVALID_PROGRAM_INDEX;
+    RuntimeError modifyValue(uint32_t index, uint32_t value) {
+        if (index + sizeof(uint32_t) > program_size) return INVALID_PROGRAM_INDEX;
         program[index] = value >> 8;
         program[index + 1] = value & 0xFF;
         return STATUS_SUCCESS;
     }
 
     // Set the active PLC Program line number
-    RuntimeError setLine(uint16_t line_number) {
+    RuntimeError setLine(uint32_t line_number) {
         if (line_number < 0 || line_number >= MAX_PROGRAM_SIZE) return INVALID_PROGRAM_INDEX;
         program_line = line_number;
         return STATUS_SUCCESS;
     }
 
     // Get the active PLC Program line number
-    uint16_t getLine() { return program_line; }
+    uint32_t getLine() { return program_line; }
 
     // Reset the active PLC Program line number to the beginning
     void resetLine() { program_line = 0; }
 
     bool finished() { return program_line >= program_size; }
 
-    uint16_t getProgramSize() { return program_size; }
+    uint32_t getProgramSize() { return program_size; }
 
     int print() {
         int length = Serial.print(F("Program["));
@@ -138,7 +143,7 @@ public:
             return length;
         }
         length += Serial.print(F("] ["));
-        for (uint16_t i = 0; i < program_size; i++) {
+        for (uint32_t i = 0; i < program_size; i++) {
             uint8_t value = program[i];
             if (value < 0x10) length += Serial.print('0');
             length += Serial.print(value, HEX);
@@ -156,7 +161,7 @@ public:
             Serial.println(F("Program is empty."));
             return;
         }
-        uint16_t index = 0;
+        uint32_t index = 0;
         bool done = false;
         while (!done) {
             // Get current opcode
@@ -216,7 +221,7 @@ public:
 
     uint8_t sizeOfCurrentBytecode() { return OPCODE_SIZE(getCurrentBytecode()); }
 
-    int printOpcodeAt(uint16_t index) {
+    int printOpcodeAt(uint32_t index) {
         int length = 0;
         if (index >= program_size) return length;
         PLCRuntimeInstructionSet opcode = (PLCRuntimeInstructionSet) program[index];
@@ -248,13 +253,13 @@ public:
         length += Serial.print(']');
         return length;
     }
-    void printlnOpcodeAt(uint16_t index) {
+    void printlnOpcodeAt(uint32_t index) {
         printOpcodeAt(index);
         Serial.println();
     }
 
     // Push a new sequence of bytes to the PLC Program
-    RuntimeError push(uint8_t* code, uint16_t code_size) {
+    RuntimeError push(uint8_t* code, uint32_t code_size) {
         if (program_size + code_size > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
@@ -328,7 +333,7 @@ public:
     }
 
     // Push an uint16_t value to the PLC Program
-    RuntimeError push_uint16_t(uint16_t value) {
+    RuntimeError push_uint16_t(uint32_t value) {
         if (program_size + 3 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
@@ -474,7 +479,7 @@ public:
     }
 
     // Push flow control instructions to the PLC Program
-    RuntimeError pushJMP(uint16_t program_address) {
+    RuntimeError pushJMP(uint32_t program_address) {
         if (program_size + 3 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
@@ -487,7 +492,7 @@ public:
         status = STATUS_SUCCESS;
         return status;
     }
-    RuntimeError pushJMP_IF(uint16_t program_address) {
+    RuntimeError pushJMP_IF(uint32_t program_address) {
         if (program_size + 3 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
@@ -500,7 +505,7 @@ public:
         status = STATUS_SUCCESS;
         return status;
     }
-    RuntimeError pushJMP_IF_NOT(uint16_t program_address) {
+    RuntimeError pushJMP_IF_NOT(uint32_t program_address) {
         if (program_size + 3 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
@@ -515,7 +520,7 @@ public:
     }
 
     // Pushes the byte at the given address of the memory into the stack
-    RuntimeError pushGET(uint16_t program_address, PLCRuntimeInstructionSet type = type_uint8_t) {
+    RuntimeError pushGET(uint32_t program_address, PLCRuntimeInstructionSet type = type_uint8_t) {
         if (program_size + 4 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
@@ -530,7 +535,7 @@ public:
         return status;
     }
     // Stores the byte at the top of the stack into the given address in memory and pops the stack
-    RuntimeError pushPUT(uint16_t program_address, PLCRuntimeInstructionSet type = type_uint8_t) {
+    RuntimeError pushPUT(uint32_t program_address, PLCRuntimeInstructionSet type = type_uint8_t) {
         if (program_size + 4 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             Serial.print(F("Program size exceeded: ")); Serial.println(program_size);

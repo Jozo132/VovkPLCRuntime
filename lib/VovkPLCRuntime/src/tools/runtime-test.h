@@ -65,23 +65,27 @@ void println__int64_t(int64_t big_number) {
 
 #ifdef __RUNTIME_FULL_UNIT_TEST___
 struct UnitTest {
-    static const uint16_t memory_size = 16;
-    static const uint16_t stack_size = 32;
-    static const uint16_t program_size = 64;
+    static const uint32_t memory_size = 16;
+    static const uint32_t stack_size = 32;
+    static const uint32_t program_size = 64;
+#ifdef __WASM__
     RuntimeProgram* program = nullptr;
     VovkPLCRuntime* runtime = nullptr;
-    UnitTest() {
-        program = new RuntimeProgram(program_size);
-        runtime = new VovkPLCRuntime(stack_size, memory_size, *program);
+#else 
+    RuntimeProgram* program = new RuntimeProgram(program_size);
+    VovkPLCRuntime* runtime = new VovkPLCRuntime(stack_size, memory_size, *program);
+#endif
+    UnitTest() { }
+    ~UnitTest() {
+        if (program != nullptr) delete program;
+        if (runtime != nullptr) delete runtime;
+    }
+    void begin() {
+        if (program == nullptr) program = new RuntimeProgram(program_size);
+        if (runtime == nullptr) runtime = new VovkPLCRuntime(stack_size, memory_size, *program);
         program->begin();
         program->format(program_size);
         runtime->formatMemory(memory_size);
-    }
-    ~UnitTest() {
-        if (program != NULL) delete program;
-        if (runtime != NULL) delete runtime;
-        program = nullptr;
-        runtime = nullptr;
     }
 #ifdef __RUNTIME_DEBUG__
     template <typename T> void run(const TestCase<T>& test) {
@@ -103,7 +107,7 @@ struct UnitTest {
     template <typename T> void review(const TestCase<T>& test) {
         program->format();
         if (test.build) test.build(*program);
-        size_t offset = Serial.print(F("Test \""));
+        uint32_t offset = Serial.print(F("Test \""));
         offset += Serial.print(test.name);
         offset += Serial.print('"');
         long t = micros();
@@ -130,7 +134,7 @@ struct UnitTest {
 #ifdef __RUNTIME_DEBUG__
         program.explain();
         Serial.println(F("Starting detailed program debug..."));
-        uint16_t index = 0;
+        uint32_t index = 0;
         bool finished = false;
         RuntimeError status = STATUS_SUCCESS;
         while (!finished) {
@@ -190,9 +194,23 @@ struct UnitTest {
     template <typename T> void println(T result) { Serial.println(result); }
     void println(uint64_t result) { println__uint64_t(result); }
     void println(int64_t result) { println__int64_t(result); }
+#ifdef __WASM__ 
+    void println(int8_t result) {
+        char buffer[4];
+        sprintf(buffer, "%d", result);
+        Serial.println(buffer);
+    }
+#endif
 };
 
+
+#ifdef __WASM__
 UnitTest* Tester = nullptr;
+#define TesterMethod Tester->
+#else
+UnitTest Tester;
+#define TesterMethod Tester.
+#endif
 
 const TestCase<uint8_t> case_demo_uint8_t({ "demo_uint8_t => (1 + 2) * 3", STATUS_SUCCESS, 9, [](RuntimeProgram& program) {
     program.push_uint8_t(1);
@@ -287,13 +305,13 @@ const TestCase<bool> case_cmp_eq_2({ "cmp_eq_2 => 0.29 == 0.31", STATUS_SUCCESS,
 // Jump operations
 const TestCase<uint8_t> case_jump({ "jump => push 1 and jump to exit", PROGRAM_EXITED, 1, [](RuntimeProgram& program) {
     program.push_uint8_t(1); // 0 [+2]
-    uint16_t jump_index = program.size();
+    uint32_t jump_index = program.size();
     program.pushJMP(0); // 2 [+3]
     program.push_uint8_t(1); // 5 [+2]
     program.push(ADD, type_uint8_t); // 7 [+2]
     program.push_uint8_t(3); // 9 [+2]
     program.push(MUL, type_uint8_t); // 11 [+2]
-    uint16_t exit_index = program.size();
+    uint32_t exit_index = program.size();
     program.push(EXIT); // 13 [+1]
     program.modifyValue(jump_index + 1, exit_index); // Change the jump address to the exit address
 } });
@@ -305,9 +323,9 @@ const TestCase<uint8_t> case_jump_if({ "jump_if => for loop sum", PROGRAM_EXITED
     // return sum;
     static const uint8_t sum_ptr = 0;
     static const uint8_t i_ptr = 1;
-    uint16_t loop_jump = 0;
-    uint16_t loop_destination = 0;
-    uint16_t end_destination = 0;
+    uint32_t loop_jump = 0;
+    uint32_t loop_destination = 0;
+    uint32_t end_destination = 0;
     program.push_uint8_t(0);            // Add 0 to the stack           [0]  
     program.pushPUT(sum_ptr);           // Store 0 in sum_ptr           []
     program.push_uint8_t(0);            // Add 0 to the stack           [0]
@@ -335,8 +353,11 @@ const TestCase<uint8_t> case_jump_if({ "jump_if => for loop sum", PROGRAM_EXITED
 
 
 void runtime_unit_test() {
+#ifdef __WASM__
     Tester = new UnitTest();
-    Tester->runtime->startup();
+#endif
+    TesterMethod begin();
+    TesterMethod runtime->startup();
     REPRINTLN(70, '-');
     Serial.println(F("Runtime Unit Test"));
     REPRINTLN(70, '-');
@@ -347,21 +368,22 @@ void runtime_unit_test() {
     REPRINTLN(70, '-');
     REPRINTLN(70, '#');
     Serial.println(F("Executing Runtime Unit Tests..."));
-    Tester->run(case_demo_uint8_t);
-    Tester->run(case_demo_uint16_t);
-    Tester->run(case_demo_uint32_t);
-    Tester->run(case_demo_uint64_t);
-    Tester->run(case_demo_int8_t);
-    Tester->run(case_demo_float);
-    Tester->run(case_demo_double);
-    Tester->run(case_bitwise_and_X8);
-    Tester->run(case_bitwise_and_X16);
-    Tester->run(case_logic_and);
-    Tester->run(case_logic_or);
-    Tester->run(case_cmp_eq_1);
-    Tester->run(case_cmp_eq_2);
-    Tester->run(case_jump);
-    Tester->run(case_jump_if);
+    // Tester->run(case_demo_uint8_t);
+    TesterMethod run(case_demo_uint8_t);
+    TesterMethod run(case_demo_uint16_t);
+    TesterMethod run(case_demo_uint32_t);
+    TesterMethod run(case_demo_uint64_t);
+    TesterMethod run(case_demo_int8_t);
+    TesterMethod run(case_demo_float);
+    TesterMethod run(case_demo_double);
+    TesterMethod run(case_bitwise_and_X8);
+    TesterMethod run(case_bitwise_and_X16);
+    TesterMethod run(case_logic_and);
+    TesterMethod run(case_logic_or);
+    TesterMethod run(case_cmp_eq_1);
+    TesterMethod run(case_cmp_eq_2);
+    TesterMethod run(case_jump);
+    TesterMethod run(case_jump_if);
     REPRINTLN(70, '-');
     REPRINTLN(70, '#');
     Serial.println(F("Runtime Unit Tests Completed."));
@@ -370,26 +392,28 @@ void runtime_unit_test() {
     REPRINTLN(70, '#');
     Serial.println(F("Report:"));
     REPRINTLN(70, '#');
-    Tester->review(case_demo_uint8_t);
-    Tester->review(case_demo_uint16_t);
-    Tester->review(case_demo_uint32_t);
-    Tester->review(case_demo_uint64_t);
-    Tester->review(case_demo_int8_t);
-    Tester->review(case_demo_float);
-    Tester->review(case_demo_double);
-    Tester->review(case_bitwise_and_X8);
-    Tester->review(case_bitwise_and_X16);
-    Tester->review(case_logic_and);
-    Tester->review(case_logic_or);
-    Tester->review(case_cmp_eq_1);
-    Tester->review(case_cmp_eq_2);
-    Tester->review(case_jump);
-    Tester->review(case_jump_if);
+    TesterMethod review(case_demo_uint8_t);
+    TesterMethod review(case_demo_uint16_t);
+    TesterMethod review(case_demo_uint32_t);
+    TesterMethod review(case_demo_uint64_t);
+    TesterMethod review(case_demo_int8_t);
+    TesterMethod review(case_demo_float);
+    TesterMethod review(case_demo_double);
+    TesterMethod review(case_bitwise_and_X8);
+    TesterMethod review(case_bitwise_and_X16);
+    TesterMethod review(case_logic_and);
+    TesterMethod review(case_logic_or);
+    TesterMethod review(case_cmp_eq_1);
+    TesterMethod review(case_cmp_eq_2);
+    TesterMethod review(case_jump);
+    TesterMethod review(case_jump_if);
     REPRINTLN(70, '#');
     Serial.println(F("Runtime Unit Tests Report Completed."));
     REPRINTLN(70, '#');
+#ifdef __WASM__
     delete Tester;
-    Tester = NULL;
+    Tester = nullptr;
+#endif
 };
 
 #else // __RUNTIME_UNIT_TEST__

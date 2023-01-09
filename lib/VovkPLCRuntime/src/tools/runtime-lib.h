@@ -34,11 +34,17 @@ class VovkPLCRuntime {
 private:
     bool started_up = false;
 public:
+    uint32_t max_stack_size = 0; // Maximum stack size
+    uint32_t memory_size = 0; // PLC memory size
+    #ifdef __WASM__
     RuntimeStack* stack = nullptr; // Active memory stack for PLC execution
-    uint16_t max_stack_size = 0; // Maximum stack size
     Stack<uint8_t>* memory = nullptr; // PLC memory to manipulate
-    uint16_t memory_size = 0; // PLC memory size
     RuntimeProgram* program = nullptr; // Active PLC program
+    #else
+    RuntimeStack* stack = new RuntimeStack(0); // Active memory stack for PLC execution
+    Stack<uint8_t>* memory = new Stack<uint8_t>(); // PLC memory to manipulate
+    RuntimeProgram* program = new RuntimeProgram(); // Active PLC program
+    #endif
     RuntimeCommandParser cmd_parser; // Command parser for PLC commands
 
     void startup() {
@@ -50,46 +56,44 @@ public:
         REPRINTLN(70, ':');
 
         stack = new RuntimeStack(max_stack_size);
-        if (program == NULL) program = new RuntimeProgram();
+        if (program == nullptr) program = new RuntimeProgram();
         program->begin();
         formatMemory(memory_size);
     }
 
-    void formatMemory(uint16_t size, uint8_t* data = nullptr) {
+    void formatMemory(uint32_t size, uint8_t* data = nullptr) {
         if (size == 0) return;
         memory->format(size);
         if (data == nullptr) return;
-        for (uint16_t i = 0; i < size; i++)
+        for (uint32_t i = 0; i < size; i++)
             memory->push(data[i]);
     }
 
-    VovkPLCRuntime(uint16_t max_stack_size, uint16_t memory_size = 0) {
+    VovkPLCRuntime(uint32_t max_stack_size, uint32_t memory_size = 0) {
         this->max_stack_size = max_stack_size;
         this->memory_size = memory_size;
     }
-    VovkPLCRuntime(uint16_t max_stack_size, uint16_t memory_size, uint8_t* program, uint16_t program_size) {
+    VovkPLCRuntime(uint32_t max_stack_size, uint32_t memory_size, uint8_t* program, uint32_t program_size) {
         this->max_stack_size = max_stack_size;
         this->memory_size = memory_size;
         this->program = new RuntimeProgram(program, program_size);
 
     }
-    VovkPLCRuntime(uint16_t max_stack_size, RuntimeProgram& program) {
+    VovkPLCRuntime(uint32_t max_stack_size, RuntimeProgram& program) {
         this->max_stack_size = max_stack_size;
         this->program = &program;
     }
-    VovkPLCRuntime(uint16_t max_stack_size, uint16_t memory_size, RuntimeProgram& program) {
+    VovkPLCRuntime(uint32_t max_stack_size, uint32_t memory_size, RuntimeProgram& program) {
         this->max_stack_size = max_stack_size;
         this->program = &program;
         this->memory_size = memory_size;
     }
     ~VovkPLCRuntime() {
-        if (stack != NULL) delete stack;
-        if (program != NULL) delete program;
-        stack = NULL;
-        program = NULL;
+        if (stack != nullptr) delete stack;
+        if (program != nullptr) delete program;
     }
     void attachProgram(RuntimeProgram& program) {
-        if (this->program != NULL) delete this->program;
+        if (this->program != nullptr) delete this->program;
         this->program = &program;
     }
 
@@ -98,22 +102,22 @@ public:
     // Clear the stack and reset the program line
     void clear(RuntimeProgram& program);
     // Execute one PLC instruction at index, returns an error code (0 on success)
-    RuntimeError step(uint8_t* program, uint16_t program_size, uint16_t& index);
+    RuntimeError step(uint8_t* program, uint32_t program_size, uint32_t& index);
     // Execute the whole PLC program, returns an error code (0 on success)
-    RuntimeError run(uint8_t* program, uint16_t program_size);
+    RuntimeError run(uint8_t* program, uint32_t program_size);
     // Execute one PLC instruction, returns an error code (0 on success)
     RuntimeError step(RuntimeProgram& program);
     // Run/Continue the whole PLC program from where it left off, returns an error code (0 on success)
     RuntimeError run(RuntimeProgram& program);
     // Execute one PLC instruction at index, returns an error code (0 on success)
-    RuntimeError step(uint16_t& index) {
-        if (program == NULL) return NO_PROGRAM;
+    RuntimeError step(uint32_t& index) {
+        if (program == nullptr) return NO_PROGRAM;
         return step(program->program, program->program_size, index);
     }
     // Execute the whole PLC program, returns an error code (0 on success)
     RuntimeError run() {
         if (!started_up) startup();
-        if (program == NULL) return NO_PROGRAM;
+        if (program == nullptr) return NO_PROGRAM;
         return run(program->program, program->program_size);
     }
     // Run the whole PLC program from the beginning, returns an error code (0 on success)
@@ -125,16 +129,16 @@ public:
     // Run the whole PLC program from the beginning, returns an error code (0 on success)
     RuntimeError cleanRun() {
         if (!started_up)startup();
-        if (program == NULL) return NO_PROGRAM;
+        if (program == nullptr) return NO_PROGRAM;
         clear();
         return run(program->program, program->program_size);
     }
     // Read a custom type T value from the stack. This will pop the stack by sizeof(T) bytes and return the value.
     template <typename T> T read() {
         if (!started_up) startup();
-        if (stack->size() < (uint16_t) sizeof(T)) return 0;
+        if (stack->size() < (uint32_t) sizeof(T)) return 0;
         uint8_t temp[sizeof(T)];
-        for (uint16_t i = 0; i < (uint16_t) sizeof(T); i++)
+        for (uint32_t i = 0; i < (uint32_t) sizeof(T); i++)
             temp[i] = stack->pop();
         T value = *(T*) temp;
         return value;
@@ -163,9 +167,9 @@ int VovkPLCRuntime::printStack() { return stack->print(); }
 RuntimeError VovkPLCRuntime::run(RuntimeProgram& program) { return run(program.program, program.program_size); }
 
 // Execute the whole PLC program, returns an erro code (0 on success)
-RuntimeError VovkPLCRuntime::run(uint8_t* program, uint16_t program_size) {
+RuntimeError VovkPLCRuntime::run(uint8_t* program, uint32_t program_size) {
     if (!started_up) startup();
-    uint16_t index = 0;
+    uint32_t index = 0;
     while (index < program_size) {
         RuntimeError status = step(program, program_size, index);
         if (status != STATUS_SUCCESS) {
@@ -184,7 +188,7 @@ RuntimeError VovkPLCRuntime::run(uint8_t* program, uint16_t program_size) {
 RuntimeError VovkPLCRuntime::step(RuntimeProgram& program) { return step(program.program, program.program_size, program.program_line); }
 
 // Execute one PLC instruction at index, returns an error code (0 on success)
-RuntimeError VovkPLCRuntime::step(uint8_t* program, uint16_t program_size, uint16_t& index) {
+RuntimeError VovkPLCRuntime::step(uint8_t* program, uint32_t program_size, uint32_t& index) {
     if (program_size == 0) return EMPTY_PROGRAM;
     if (index >= program_size) return PROGRAM_SIZE_EXCEEDED;
     uint8_t opcode = program[index];

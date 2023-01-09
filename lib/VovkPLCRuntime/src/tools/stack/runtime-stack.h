@@ -25,13 +25,13 @@ class RuntimeStack {
 public:
     Stack<uint8_t>* stack = nullptr;
     Stack<uint16_t>* call_stack = nullptr;
-    uint16_t max_size = 0;
-    uint16_t max_call_stack_size = 0;
+    uint32_t max_size = 0;
+    uint32_t max_call_stack_size = 0;
 
     Stack<uint8_t>* memory = nullptr; // PLC memory to manipulate
 
     // Create a stack with a maximum size
-    RuntimeStack(uint16_t max_size, uint16_t call_stack_size = 10, uint16_t memory_size = 4) {
+    RuntimeStack(uint32_t max_size, uint32_t call_stack_size = 10, uint32_t memory_size = 4) {
         this->max_size = max_size;
         this->max_call_stack_size = call_stack_size;
         if (stack == nullptr) stack = new Stack<uint8_t>;
@@ -53,7 +53,7 @@ public:
     int print() { return stack->print(); }
     void println() { stack->println(); }
 
-    RuntimeError pushCall(uint16_t return_address) {
+    RuntimeError pushCall(uint32_t return_address) {
         if (call_stack->size() >= max_call_stack_size) return STACK_OVERFLOW;
         call_stack->push(return_address);
         return STATUS_SUCCESS;
@@ -209,13 +209,13 @@ public:
     float peek_float() { uint32_t_to_float cvt; cvt.type_uint32_t = peek_uint32_t(); return cvt.type_float; }
     double peek_double() { uint64_t_to_double cvt; cvt.type_uint64_t = peek_uint64_t(); return cvt.type_double; }
 
-    uint16_t size() { return stack->size(); }
+    uint32_t size() { return stack->size(); }
 };
 
 
 #define EXTRACT_TYPE_8(type)                                                                                    \
-    static RuntimeError type_##type(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, type* value) {  \
-        uint16_t size = sizeof(type);                                                                           \
+    static RuntimeError type_##type(uint8_t* bytecode, uint32_t bytecode_size, uint32_t& index, type* value) {  \
+        uint32_t size = sizeof(type);                                                                           \
         if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;                                         \
         *value = bytecode[index];                                                                               \
         index += size;                                                                                          \
@@ -223,8 +223,8 @@ public:
     }
 
 #define EXTRACT_TYPE_16(type)                                                                                   \
-    static RuntimeError type_##type(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, type* value) {  \
-        uint16_t size = sizeof(type);                                                                           \
+    static RuntimeError type_##type(uint8_t* bytecode, uint32_t bytecode_size, uint32_t& index, type* value) {  \
+        uint32_t size = sizeof(type);                                                                           \
         if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;                                         \
         *value = ((uint16_t) bytecode[index] << 8) | bytecode[index + 1];                                        \
         index += size;                                                                                          \
@@ -232,8 +232,8 @@ public:
     }
 
 #define EXTRACT_TYPE_32(type)                                                                                                                               \
-    static RuntimeError type_##type(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, type* value) {                                              \
-        uint16_t size = sizeof(type);                                                                                                                       \
+    static RuntimeError type_##type(uint8_t* bytecode, uint32_t bytecode_size, uint32_t& index, type* value) {                                              \
+        uint32_t size = sizeof(type);                                                                                                                       \
         if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;                                                                                     \
         *value = ((type) bytecode[index] << 24) | ((type) bytecode[index + 1] << 16) | ((type) bytecode[index + 2] << 8) | ((type) bytecode[index + 3]);     \
         index += size;                                                                                                                                      \
@@ -241,8 +241,8 @@ public:
     }
 
 #define EXTRACT_TYPE_32_CVT(type)                                                                                                                                                     \
-    static RuntimeError type_##type(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, type* value) {                                                                        \
-        uint16_t size = sizeof(type);                                                                                                                                                 \
+    static RuntimeError type_##type(uint8_t* bytecode, uint32_t bytecode_size, uint32_t& index, type* value) {                                                                        \
+        uint32_t size = sizeof(type);                                                                                                                                                 \
         if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;                                                                                                               \
         CVT_32(type) cvt;                                                                                                                                                             \
         cvt.type_uint32_t = ((uint32_t) bytecode[index] << 24) | ((uint32_t) bytecode[index + 1] << 16) | ((uint32_t) bytecode[index + 2] << 8) | ((uint32_t) bytecode[index + 3]);   \
@@ -252,8 +252,8 @@ public:
     }
 
 #define EXTRACT_TYPE_64(type)                                                                                                                                       \
-    static RuntimeError type_##type(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, type* value) {                                                      \
-        uint16_t size = sizeof(type);                                                                                                                               \
+    static RuntimeError type_##type(uint8_t* bytecode, uint32_t bytecode_size, uint32_t& index, type* value) {                                                      \
+        uint32_t size = sizeof(type);                                                                                                                               \
         if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;                                                                                             \
         *value = ((type) bytecode[index] << 56) | ((type) bytecode[index + 1] << 48) | ((type) bytecode[index + 2] << 40) | ((type) bytecode[index + 3] << 32) |     \
                 ((type) bytecode[index + 4] << 24) | ((type) bytecode[index + 5] << 16) | ((type) bytecode[index + 6] << 8) | ((type) bytecode[index + 7]);         \
@@ -262,8 +262,8 @@ public:
     }
 
 #define EXTRACT_TYPE_64_CVT(type)                                                                                                                                                           \
-    static RuntimeError type_##type(uint8_t* bytecode, uint16_t bytecode_size, uint16_t& index, type* value) {                                                                              \
-        uint16_t size = sizeof(type);                                                                                                                                                       \
+    static RuntimeError type_##type(uint8_t* bytecode, uint32_t bytecode_size, uint32_t& index, type* value) {                                                                              \
+        uint32_t size = sizeof(type);                                                                                                                                                       \
         if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;                                                                                                                     \
         CVT_64(type) cvt;                                                                                                                                                                   \
         cvt.type_uint64_t = ((uint64_t) bytecode[index] << 56) | ((uint64_t) bytecode[index + 1] << 48) | ((uint64_t) bytecode[index + 2] << 40) | ((uint64_t) bytecode[index + 3] << 32) | \
