@@ -102,7 +102,7 @@ void loop() {
     startup = false;
   }
 
-  const int cycles = 10000;
+  const int cycles = 1000;
   float result = -1;
   long t = micros();
   for (int i = 0; i < cycles; i++) {

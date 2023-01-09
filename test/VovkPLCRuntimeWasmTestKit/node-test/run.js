@@ -30,12 +30,16 @@ const main = async () => {
     const wasmInstance = await WebAssembly.instantiate(wasmModule, wasmImports)
 
     // Get the main functions
-    const { run_unit_test } = wasmInstance.exports
+    const { run_unit_test, run_custom_test } = wasmInstance.exports
     if (!run_unit_test) throw new Error("'run_unit_test' function not found")
+    if (!run_custom_test) throw new Error("'run_custom_test' function not found")
 
     try {
-        console.log("Running VovkPLCRuntime WebAssembly simulation unit test...") // @ts-ignore
+        console.log("Running VovkPLCRuntime WebAssembly simulation unit test...")
+        // @ts-ignore
         run_unit_test()
+        // @ts-ignore
+        for (let i = 0; i < 10; i++) run_custom_test()
         console.log("Done.")
     } catch (error) {
         if (message) console.log(message)
