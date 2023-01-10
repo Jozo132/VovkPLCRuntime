@@ -36,15 +36,15 @@ private:
 public:
     uint32_t max_stack_size = 0; // Maximum stack size
     uint32_t memory_size = 0; // PLC memory size
-    #ifdef __WASM__
+#ifdef __WASM__
     RuntimeStack* stack = nullptr; // Active memory stack for PLC execution
     Stack<uint8_t>* memory = nullptr; // PLC memory to manipulate
     RuntimeProgram* program = nullptr; // Active PLC program
-    #else
-    RuntimeStack* stack = new RuntimeStack(0); // Active memory stack for PLC execution
+#else
+    RuntimeStack* stack = new RuntimeStack(); // Active memory stack for PLC execution
     Stack<uint8_t>* memory = new Stack<uint8_t>(); // PLC memory to manipulate
     RuntimeProgram* program = new RuntimeProgram(); // Active PLC program
-    #endif
+#endif
     RuntimeCommandParser cmd_parser; // Command parser for PLC commands
 
     void startup() {

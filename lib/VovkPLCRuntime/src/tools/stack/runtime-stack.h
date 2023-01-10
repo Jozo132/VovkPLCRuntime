@@ -31,7 +31,7 @@ public:
     Stack<uint8_t>* memory = nullptr; // PLC memory to manipulate
 
     // Create a stack with a maximum size
-    RuntimeStack(uint32_t max_size, uint32_t call_stack_size = 10, uint32_t memory_size = 4) {
+    RuntimeStack(uint32_t max_size = 0, uint32_t call_stack_size = 10, uint32_t memory_size = 4) {
         this->max_size = max_size;
         this->max_call_stack_size = call_stack_size;
         if (stack == nullptr) stack = new Stack<uint8_t>;
