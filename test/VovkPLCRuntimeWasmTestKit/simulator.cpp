@@ -203,3 +203,57 @@ WASM_EXPORT void* export_output() {
     Serial.println(F(">"));
     return (void*) (&myBuffer);
 }
+
+
+
+// Export program definition API
+WASM_EXPORT int API_resizeProgram(int new_size) {
+    runtime.program->format(new_size);
+    return 0;
+}
+WASM_EXPORT int API_getProgramSize() {
+    return runtime.program->size();
+}
+WASM_EXPORT int API_getProgramSizeMax() {
+    return runtime.program->MAX_PROGRAM_SIZE;
+}
+WASM_EXPORT void API_printProgram() {
+    runtime.program->println();
+}
+
+// Export program instruction API
+WASM_EXPORT RuntimeError API_push_INSTRUCTION(uint8_t instruction) {
+    return runtime.program->push(instruction);
+}
+WASM_EXPORT RuntimeError API_push_U8(uint8_t value) {
+    return runtime.program->push_uint8_t(value);
+}
+WASM_EXPORT RuntimeError API_push_U16(uint16_t value) {
+    return runtime.program->push_uint16_t(value);
+}
+WASM_EXPORT RuntimeError API_push_U32(uint32_t value) {
+    return runtime.program->push_uint32_t(value);
+}
+WASM_EXPORT RuntimeError API_push_U64(uint64_t value) {
+    return runtime.program->push_uint64_t(value);
+}
+WASM_EXPORT RuntimeError API_push_S8(int8_t value) {
+    return runtime.program->push_int8_t(value);
+}
+WASM_EXPORT RuntimeError API_push_S16(int16_t value) {
+    return runtime.program->push_int16_t(value);
+}
+WASM_EXPORT RuntimeError API_push_S32(int32_t value) {
+    return runtime.program->push_int32_t(value);
+}
+WASM_EXPORT RuntimeError API_push_S64(int64_t value) {
+    return runtime.program->push_int64_t(value);
+}
+WASM_EXPORT RuntimeError API_push_F32(float value) {
+    return runtime.program->push_float(value);
+}
+WASM_EXPORT RuntimeError API_push_F64(double value) {
+    return runtime.program->push_double(value);
+}
+
+
