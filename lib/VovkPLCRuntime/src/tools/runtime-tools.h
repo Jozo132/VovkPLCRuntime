@@ -183,6 +183,10 @@ void yield() {}
 
 
 #if !defined(__WASM__)
+#define STREAM_TO_STDOUT 0
+#define STREAM_TO_STDERR 1
+#define STREAM_TO_STREAMOUT 2
+int print_direction = STREAM_TO_STDOUT;
 void __print(char c) { printf("%c", c); }
 #endif // __WASM__
 
@@ -200,8 +204,12 @@ void toUpper(char* buff) {
 class Serial_t {
     char input[256];
     int input_len = 0;
+    int stream_direction = STREAM_TO_STDOUT;
 public:
     operator bool() { return true; }
+    Serial_t(int STREAM_DIRECTION = STREAM_TO_STDOUT) {
+        stream_direction = STREAM_DIRECTION;
+    }
     void begin(int baudrate) {}
     void end() {}
     int print(const char* str) {
@@ -210,6 +218,7 @@ public:
         while (*str) {
             c = *str++;
             size++;
+            if (stream_direction != )
             __print(c);
         }
         return size;
