@@ -201,14 +201,26 @@ void toUpper(char* buff) {
     }
 }
 
+
+
 class Serial_t {
     char input[256];
     int input_len = 0;
     int stream_direction = STREAM_TO_STDOUT;
+    void (*print_func)(char) = nullptr;
 public:
     operator bool() { return true; }
     Serial_t(int STREAM_DIRECTION = STREAM_TO_STDOUT) {
         stream_direction = STREAM_DIRECTION;
+        // Define a function pointer to redirect standard output
+        print_func =
+#ifdef __WASM__
+            stream_direction == STREAM_TO_STREAMOUT ? (void(*)(char)) streamOut :
+            stream_direction == STREAM_TO_STDERR ? (void(*)(char)) stderr :
+            (void(*)(char)) stdout;
+#else // __WASM__
+            (void(*)(char)) __print;
+#endif // __WASM__
     }
     void begin(int baudrate) {}
     void end() {}
@@ -218,8 +230,7 @@ public:
         while (*str) {
             c = *str++;
             size++;
-            if (stream_direction != )
-            __print(c);
+            print_func(c);
         }
         return size;
     }
@@ -229,12 +240,12 @@ public:
         while (len--) {
             c = *str++;
             size++;
-            __print(c);
+            print_func(c);
         }
         return size;
     }
     int print(char c) {
-        __print(c);
+        print_func(c);
         return 1;
     }
     int print(int i, int base = DEC) {
@@ -340,7 +351,7 @@ public:
         input_len--;
         return c;
     }
-    void write(char c) { __print(c); }
+    void write(char c) { print_func(c); }
     void write(const char* str) { print(str); }
     void write(const char* str, int len) { print(str, len); }
     void write(int i, int base = DEC) { print(i, base); }
@@ -360,7 +371,9 @@ public:
 
 };
 
-Serial_t Serial;
+Serial_t Serial(STREAM_TO_STDOUT);
+Serial_t Error(STREAM_TO_STDERR);
+Serial_t Stream(STREAM_TO_STREAMOUT);
 
 #else // __SIMULATOR__
 

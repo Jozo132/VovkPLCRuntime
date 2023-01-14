@@ -257,3 +257,9 @@ WASM_EXPORT RuntimeError API_push_F64(double value) {
 }
 
 
+WASM_EXPORT void printErrorMessage() {
+    Error.println("Error: This is a test error message.");
+}
+WASM_EXPORT void printStreamTest() {
+    Stream.print("{ \"test\": \"This is a test stream message.\" }");
+}
