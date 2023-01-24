@@ -7,6 +7,7 @@
 const fs = require('fs')
 const path = require('path')
 const { exec } = require('child_process')
+const { performance } = require('perf_hooks');
 
 
 /** @param { string } file_name */
@@ -34,7 +35,7 @@ const exec_async = (command, options) => new Promise((resolve, reject) => {
 })
 
 /** @param { string } input * @param { string } output */
-const CC = (input, output) => `clang++ --target=wasm32 -Wall -std=c++11 -nostdlib -D __WASM__ -O3 -c "${input}" -o "${output}"`
+const CC = (input, output) => `clang++ --target=wasm32 -Wall -std=c++11 -nostdlib -D __WASM__ -D __WASM_TIME__ -O3 -c "${input}" -o "${output}"`
 
 /** @param { string } input * @param { string } output */
 const LD = (input, output) => `wasm-ld --no-entry --export-dynamic --allow-undefined --lto-O3 "${input}" -o "${output}"`
@@ -137,6 +138,8 @@ const instantiate_wasm = async file_name => {
             stdout: (charcode) => { /* console_print(charcode) */ }, // Skip logging to console
             stderr: (charcode) => { console_error(charcode) },
             streamOut: (charcode) => { console_stream(charcode) },
+            millis: () => +performance.now().toFixed(0),
+            micros: () => +(performance.now() * 1000).toFixed(0),
         }
     }
     const wasmBuffer = await readFile(file_name)

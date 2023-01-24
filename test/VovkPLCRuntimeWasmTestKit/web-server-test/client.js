@@ -62,6 +62,8 @@ const initWasm = async () => {
             stdout: console_print,
             stderr: console_error,
             streamOut: console_stream,
+            millis: () => +performance.now().toFixed(0),
+            micros: () => +(performance.now() * 1000).toFixed(0),
         }
     }
     const wasmModule = await WebAssembly.compile(wasmBuffer)

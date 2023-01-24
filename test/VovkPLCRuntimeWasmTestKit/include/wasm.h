@@ -10,6 +10,31 @@
   __attribute__((export_name(#name))) \
   name
 
+#ifdef __WASM_TIME__
+WASM_IMPORT unsigned long millis(); // const millis = () => +performance.now().toFixed(0);
+WASM_IMPORT unsigned long micros(); // const micros = () => +(performance.now() * 1000).toFixed(0);
+
+// WARNING: these delay functions are blocking and stop the main thread for their duration, use with caution and only when necessary.
+void delay(int ms) {
+    unsigned long t = millis();
+    const unsigned long end = t + ms;
+    while (t < end) {
+        t = millis();
+    }
+}
+void delayMicroseconds(int us) {
+    unsigned long t = micros();
+    const unsigned long end = t + us;
+    while (t < end) {
+        t = micros();
+    }
+}
+#else // __WASM_TIME__
+unsigned long millis() { return 0; }
+unsigned long micros() { return 0; }
+void delay(int ms) {}
+void delayMicroseconds(int us) {}
+#endif // __WASM_TIME__
 
 WASM_IMPORT void stdout(char c);
 WASM_IMPORT void stderr(char c);

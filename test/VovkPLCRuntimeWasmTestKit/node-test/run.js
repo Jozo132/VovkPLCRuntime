@@ -6,13 +6,26 @@
 
 const fs = require("fs")
 const path = require("path")
+const { performance } = require('perf_hooks');
+
+const timestamp = () => { // "YYYY-MM-DD HH:mm:ss.SSS"
+    const date = new Date()
+    const year = date.getFullYear().toString().padStart(4, '0')
+    const month = (date.getMonth() + 1).toString().padStart(2, '0')
+    const day = date.getDate().toString().padStart(2, '0')
+    const hour = date.getHours().toString().padStart(2, '0')
+    const minute = date.getMinutes().toString().padStart(2, '0')
+    const second = date.getSeconds().toString().padStart(2, '0')
+    const millisecond = date.getMilliseconds().toString().padStart(3, '0')
+    return `${year}-${month}-${day} ${hour}:${minute}:${second}.${millisecond}`
+}
 
 
 let message = ''
 const console_print = charcode => {
     const char = String.fromCharCode(charcode)
     if (char === '\0' || char === '\n') {
-        console.log(message)
+        console.log(`[${timestamp()}]:`, message)
         message = ''
     } else {
         message += char
@@ -31,7 +44,7 @@ const console_error = charcode => {
     if (Array.isArray(charcode)) return charcode.forEach(console_error)
     const char = String.fromCharCode(charcode)
     if (char === '\0' || char === '\n') {
-        console.error(error_message)
+        console.error(`[${timestamp()}]:`, error_message)
         error_message = ''
     } else error_message += char
 }
@@ -61,6 +74,8 @@ const main = async () => {
             stdout: console_print,
             stderr: console_error,
             streamOut: console_stream,
+            millis: () => +performance.now().toFixed(0),
+            micros: () => +(performance.now() * 1000).toFixed(0),
         }
     }
     const wasmBuffer = fs.readFileSync(path.join(__dirname, "../simulator.wasm"))

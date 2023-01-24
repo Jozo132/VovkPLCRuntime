@@ -173,10 +173,12 @@ union u8A_to_u16 { uint8_t u8A[2]; uint16_t u16; };
 void pinMode(int pin, int mode) {}
 void digitalWrite(int pin, int value) {}
 int digitalRead(int pin) { return 0; }
+#ifndef __WASM__
 void delay(int ms) {}
 void delayMicroseconds(int us) {}
 unsigned long millis() { return 0; }
 unsigned long micros() { return 0; }
+#endif // __WASM__
 void attachInterrupt(int pin, void (*callback)(), int mode) {}
 void detachInterrupt(int pin) {}
 void yield() {}
