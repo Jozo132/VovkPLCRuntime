@@ -10,3 +10,4 @@
 *.tmp
 *settings.json
 .vscode
+*.wasm
