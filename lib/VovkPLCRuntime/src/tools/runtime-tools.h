@@ -102,7 +102,7 @@ double log10(double x) { return ln(x) / LN10; }
 #ifdef __arm__
 // should use uinstd.h to define sbrk but Due causes a conflict
 extern "C" char* sbrk(int incr);
-#elif defined(ESP8266) || defined(__SIMULATOR__)
+#elif defined(ESP8266) || defined(ESP32) || defined(__SIMULATOR__)
 // ESP8266 has no sbrk
 #else  // __ARM__
 extern char* __brkval;
@@ -111,7 +111,7 @@ extern char* __brkval;
 int freeMemory() {
 #ifdef __WASM__
     return heap_size - heap_used;
-#elif defined(ESP8266)
+#elif defined(ESP8266) || defined(ESP32)
     return ESP.getFreeHeap();
 #elif defined(__SIMULATOR__)
     return 9000;
