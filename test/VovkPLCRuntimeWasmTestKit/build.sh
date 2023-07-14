@@ -21,9 +21,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 set -e
 
-NAME=simulator
-BUILD_DIR=build
-INCLUDE="C:\MinGW\include"
+# Set variable 'target' relative path to './test/VovkPLCRuntimeWasmTestKit'
 
-clang++ --target=wasm32	-nostdlib -O3 -o $BUILD_DIR/$NAME.o -c -I $INCLUDE $NAME.cpp
-wasm-ld --no-entry --export-all --lto-O3 --allow-undefined --import-memory $BUILD_DIR/$NAME.o -o $NAME.wasm
+echo "Compiling..."
+cd test/VovkPLCRuntimeWasmTestKit
+mkdir -p build
+clang++ --target=wasm32-undefined-undefined-wasm -Wall -std=c++11 -nostdlib -D __WASM__ -D __WASM_TIME__ -O3 -c simulator.cpp -o build/simulator.o
+echo "Building..."
+wasm-ld --no-entry --export-dynamic --allow-undefined --lto-O3 build/simulator.o -o simulator.wasm
+echo "Done."

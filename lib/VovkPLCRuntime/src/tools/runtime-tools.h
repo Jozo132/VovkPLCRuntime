@@ -28,6 +28,7 @@
 #include "stdio.h"
 #include "string.h"
 
+int get_used_memory();
 int get_used_memory() {
     return 0;
 }
@@ -74,6 +75,7 @@ int get_used_memory() {
 
 #define LN10 2.3025850929940456840179914546844
 
+double ln(double x);
 double ln(double x) {
     double old_sum = 0.0;
     double xmlxpl = (x - 1) / (x + 1);
@@ -92,6 +94,7 @@ double ln(double x) {
     return 2.0 * sum;
 }
 
+double log10(double x);
 double log10(double x) { return ln(x) / LN10; }
 
 #else
@@ -108,6 +111,7 @@ extern "C" char* sbrk(int incr);
 extern char* __brkval;
 #endif  // __arm__
 
+int freeMemory();
 int freeMemory() {
 #ifdef __WASM__
     return heap_size - heap_used;
@@ -127,9 +131,9 @@ int freeMemory() {
 #endif  // ESP8266
 }
 
+#define LOG_FREE_MEMORY() Serial.print(F("Free memory: ")); Serial.print(freeMemory()); Serial.println(F(" bytes"));
 
-#define LOG_FREE_MEMORY() Serial.print(F("Free memory: ")); Serial.print(freeMemory()); Serial.println(F(" bytes")) 
-
+void fstrcpy(char* buff, const char* fstr);
 void fstrcpy(char* buff, const char* fstr) {
     uint8_t i = 0;
     uint8_t c = 0;
@@ -148,6 +152,13 @@ void fstrcpy(char* buff, const char* fstr) {
 // Define an empty F() macro if it isn't defined, so that the code can be compiled on non-Arduino platforms
 #ifndef F 
 #define F(x) x
+#endif
+
+// If Raspeberry Pi Pico is used
+#if defined(ARDUINO_ARCH_RP2040)
+#define FSH char
+#else 
+#define FSH __FlashStringHelper
 #endif
 
 #define IGNORE_UNUSED __attribute__((unused))
@@ -366,11 +377,6 @@ public:
         input_len = 0;
         input[0] = 0;
     }
-
-
-
-
-
 };
 
 Serial_t Serial(STREAM_TO_STDOUT);
@@ -379,6 +385,7 @@ Serial_t Stream(STREAM_TO_STREAMOUT);
 
 #else // __SIMULATOR__
 
+int get_used_memory();
 int get_used_memory() {
     return 0;
 }
@@ -393,7 +400,8 @@ int get_used_memory() {
 
 
 
-int print_number_padStart(int value, int pad, char padChar = ' ', int base = 10) {
+int print_number_padStart(int value, int pad, char padChar = ' ', int base = 10);
+int print_number_padStart(int value, int pad, char padChar, int base) {
     int strlen = 0;
     int temp = value;
     int num_of_digits = temp == 0 ? 1 : 0;
@@ -411,8 +419,8 @@ int print_number_padStart(int value, int pad, char padChar = ' ', int base = 10)
     strlen += Serial.print(value, base);
     return strlen;
 }
-
-int pring_number_padEnd(int value, int pad, char padChar = ' ', int base = 10) {
+int pring_number_padEnd(int value, int pad, char padChar = ' ', int base = 10);
+int pring_number_padEnd(int value, int pad, char padChar, int base) {
     int strlen = 0;
     int temp = value;
     int num_of_digits = temp == 0 ? 1 : 0;

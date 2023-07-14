@@ -12,6 +12,10 @@ def skip_from_build(node):
         # Return None for exclude
         return None
 
+    if "test_" in node.name:
+        # Return None for exclude
+        return None
+    
     return node
 
 # Register callback

@@ -120,7 +120,7 @@ public:
 
     // Set the active PLC Program line number
     RuntimeError setLine(uint32_t line_number) {
-        if (line_number < 0 || line_number >= MAX_PROGRAM_SIZE) return INVALID_PROGRAM_INDEX;
+        if (line_number >= MAX_PROGRAM_SIZE) return INVALID_PROGRAM_INDEX;
         program_line = line_number;
         return STATUS_SUCCESS;
     }

@@ -77,7 +77,7 @@ const char* const unknows_error_code_str PROGMEM = "UNKNOWN_ERROR_CODE";
 char runtime_error_msg[40];
 const char* RUNTIME_ERROR_NAME(RuntimeError error) {
     char* output = runtime_error_msg;
-    if (error < 0 || error > SIZE_OF_ARRAY(RuntimeErrorNames)) fstrcpy(output, unknows_error_code_str);
+    if (error > SIZE_OF_ARRAY(RuntimeErrorNames)) fstrcpy(output, unknows_error_code_str);
     else fstrcpy(output, RuntimeErrorNames[error]);
     return output;
 }
@@ -331,7 +331,7 @@ bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
     return false;
 }
 
-const __FlashStringHelper* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
+const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
     switch (opcode) {
         case NOP: return F("NOP");
         case type_bool: return F("PUSH boolean");
