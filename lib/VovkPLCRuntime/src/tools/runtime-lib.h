@@ -21,6 +21,10 @@
 
 #pragma once
 
+#ifdef __WASM__
+#include "assembly/wasm/wasm.h"
+#endif
+
 #include "runtime-tools.h"
 #include "stack/stack-struct.h"
 #include "runtime-memory.h"

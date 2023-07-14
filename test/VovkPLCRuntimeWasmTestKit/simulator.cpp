@@ -19,11 +19,12 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#define __WASM__
+#define __WASM_TIME__
 #define __SIMULATOR__
 #define __RUNTIME_DEBUG__
 #define __RUNTIME_FULL_UNIT_TEST___
 
-#include "include/wasm.h"
 #include "../../lib/VovkPLCRuntime/src/VovkPLCRuntime.h"
 
 // TODO: Remove this and implement a working WASM interface for the simulator

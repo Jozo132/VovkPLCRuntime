@@ -40,6 +40,46 @@ WASM_IMPORT void stdout(char c);
 WASM_IMPORT void stderr(char c);
 WASM_IMPORT void streamOut(char c);
 
+#ifndef __WASM_STREAM_SIZE_IN__
+#define __WASM_STREAM_SIZE_IN__ 1024
+#endif // __WASM_STREAM_SIZE_IN__
+
+// Circular buffer
+char __wasm_stream_in__[__WASM_STREAM_SIZE_IN__];
+int __wasm_stream_in_cursor__ = 0;
+int __wasm_stream_in_index__ = 0;
+
+WASM_EXPORT bool streamIn(char c) { // Retrun true if the char was written to the buffer
+    int next = (__wasm_stream_in_index__ + 1) % __WASM_STREAM_SIZE_IN__;
+    if (next == __wasm_stream_in_cursor__) return false;
+    __wasm_stream_in__[__wasm_stream_in_index__] = c;
+    __wasm_stream_in_index__ = next;
+    return true;
+}
+char __streamInRead() {
+    if (__wasm_stream_in_cursor__ == __wasm_stream_in_index__) return '\0';
+    char c = __wasm_stream_in__[__wasm_stream_in_cursor__];
+    __wasm_stream_in_cursor__ = (__wasm_stream_in_cursor__ + 1) % __WASM_STREAM_SIZE_IN__;
+    return c;
+}
+
+
+int streamAvailable() { // Return the size of the buffer
+    if (__wasm_stream_in_index__ >= __wasm_stream_in_cursor__) return __wasm_stream_in_index__ - __wasm_stream_in_cursor__;
+    return __WASM_STREAM_SIZE_IN__ - __wasm_stream_in_cursor__ + __wasm_stream_in_index__;
+}
+// Inject the wasm stream into the char array reference and update its length, also check for the max length and return false if there is no problem 
+bool streamRead(char* arr, int* len, int max) {
+    int i = 0;
+    while (i < max) {
+        if (streamAvailable() == 0) break;
+        arr[i] = __streamInRead();
+        i++;
+    }
+    *len = i;
+    return i == max;
+}
+
 
 #define STREAM_TO_STDOUT 0
 #define STREAM_TO_STDERR 1
@@ -63,8 +103,8 @@ void _putchar(char c) {
 #include "jvint.h"
 #include "jvmalloc.h"
 
-#include "../lib/printf/printf.h"
-#include "../lib/printf/printf.c"
+#include "printf/printf.h"
+#include "printf/printf.c"
 
 
 WASM_EXPORT int get_free_memory() {

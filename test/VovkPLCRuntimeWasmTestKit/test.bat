@@ -21,21 +21,15 @@ rem
 rem SPDX-License-Identifier: GPL-3.0-or-later
 
 @echo on
-@echo Compiling...
+@echo Starting WASM tests...
 @echo off
 
 
-rem try to execute 'cd test/VovkPLCRuntimeWasmTestKit', if failed do nothing
-cd test\VovkPLCRuntimeWasmTestKit 2>nul
+rem try to execute 'cd test/VovkPLCRuntimeWasmTestKit/wasm_test_cases', if failed do nothing
+cd test\VovkPLCRuntimeWasmTestKit\wasm_test_cases 2>nul
+cd wasm_test_cases 2>nul
 
-IF not exist build (mkdir build)
-clang++ --target=wasm32-undefined-undefined-wasm -Wall -std=c++11 -nostdlib -O3 -c simulator.cpp -o build/simulator.o        || goto :error
-
-@echo on
-@echo Building...
-@echo off
-
-wasm-ld --no-entry --export-dynamic --allow-undefined --lto-O3 build/simulator.o -o simulator.wasm      || goto :error
+node compile_tests.js      || goto :error
 
 @echo on
 @echo Done.

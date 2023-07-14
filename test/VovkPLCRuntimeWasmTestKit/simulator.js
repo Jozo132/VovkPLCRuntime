@@ -76,6 +76,9 @@ class Simulator {
         this.wasmInstance = null
         this.initialized = false
         this.initializing = false
+        this.exports = {
+            
+        }
     }
 
     async init() {
@@ -110,6 +113,7 @@ class Simulator {
         const wasmBuffer = fs.readFileSync(path.join(__dirname, "./simulator.wasm"))
         const wasmModule = await WebAssembly.compile(wasmBuffer)
         this.wasmInstance = await WebAssembly.instantiate(wasmModule, wasmImports)
+        Object.assign(this.exports, this.wasmInstance.exports)
         console.log("Simulator initialized.")
         this.initialized = true
         this.initializing = false
@@ -117,12 +121,12 @@ class Simulator {
 
     getExports() {
         if (!this.wasmInstance) throw new Error("Simulator not initialized")
-        return this.wasmInstance.exports
+        return this.exports
     }
 
     execute(function_name, ...args) {
         if (!this.wasmInstance) throw new Error("Simulator not initialized")
-        const { exports } = this.wasmInstance
+        const exports = this.exports
         const func = exports[function_name]
         if (!func) throw new Error(`Function '${function_name}' not found in WASM module exports`)
         if (typeof func !== 'function') throw new Error(`'${function_name}' is not a valid function ... it is a ${typeof func}`)
