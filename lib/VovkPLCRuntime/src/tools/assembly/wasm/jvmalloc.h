@@ -5,6 +5,8 @@
 // It exports 'malloc' and 'free' symbols along with some string functions.
 
 #pragma once
+
+#ifdef __WASM__
 #include "jvint.h"
 
 // Heap size is in bytes and can be changed by defining HEAP_SIZE before including this file.
@@ -191,3 +193,6 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif // __cplusplus
+
+
+#endif // __WASM__

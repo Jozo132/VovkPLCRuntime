@@ -2,6 +2,8 @@
 
 #pragma once
 
+#ifdef __WASM__
+
 typedef unsigned char byte;
 typedef unsigned char uint8_t;
 typedef unsigned short uint16_t;
@@ -41,3 +43,5 @@ typedef unsigned int size_t;
 
 #define NULL 0
 #define nullptr 0
+
+#endif // __WASM__

@@ -32,6 +32,8 @@
 #ifndef _PRINTF_H_
 #define _PRINTF_H_
 
+#ifdef __WASM__
+
 #include <stdarg.h>
 // #include <stddef.h>
 
@@ -113,5 +115,6 @@ int fctprintf(void (*out)(char character, void* arg), void* arg, const char* for
 }
 #endif
 
+#endif  // __WASM__
 
 #endif  // _PRINTF_H_

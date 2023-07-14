@@ -30,6 +30,8 @@
 //
 ///////////////////////////////////////////////////////////////////////////////
 
+#ifdef __WASM__
+
 #include "../jvint.h"
 
 #include "printf.h"
@@ -911,3 +913,6 @@ int fctprintf(void (*out)(char character, void* arg), void* arg, const char* for
   va_end(va);
   return ret;
 }
+
+
+#endif // __WASM__
