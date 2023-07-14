@@ -24,7 +24,8 @@ set -e
 # Set variable 'target' relative path to './test/VovkPLCRuntimeWasmTestKit'
 
 echo "Compiling..."
-cd test/VovkPLCRuntimeWasmTestKit
+# try to cd, if failed do nothing
+cd test/VovkPLCRuntimeWasmTestKit 2>/dev/null || true 
 mkdir -p build
 clang++ --target=wasm32-undefined-undefined-wasm -Wall -std=c++11 -nostdlib -D __WASM__ -D __WASM_TIME__ -O3 -c simulator.cpp -o build/simulator.o
 echo "Building..."

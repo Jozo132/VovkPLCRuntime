@@ -1,9 +1,4 @@
 #pragma once
-#include "../runtime-lib.h"
-
-#ifndef WASM_EXPORT
-#define WASM_EXPORT
-#endif // WASM_EXPORT
 
 // ################################################################################################
 // ### Example (0.1 + 0.2) * -1 = -0.3

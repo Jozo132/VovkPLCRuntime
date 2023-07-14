@@ -25,7 +25,9 @@ rem SPDX-License-Identifier: GPL-3.0-or-later
 @echo off
 
 
-cd test/VovkPLCRuntimeWasmTestKit
+rem try to execute 'cd test/VovkPLCRuntimeWasmTestKit', if failed do nothing
+cd test\VovkPLCRuntimeWasmTestKit 2>nul
+
 IF not exist build (mkdir build)
 clang++ --target=wasm32-undefined-undefined-wasm -Wall -std=c++11 -nostdlib -D __WASM__ -D __WASM_TIME__ -O3 -c simulator.cpp -o build/simulator.o        || goto :error
 
