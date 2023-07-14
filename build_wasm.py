@@ -11,8 +11,10 @@ is_windows = platform.system() == "Windows"
 BUILD_PATH = "test/VovkPLCRuntimeWasmTestKit/"
 BUILD_FILE = "build.bat" if is_windows else "build.sh"
 
-print("Building the WASM executable using: " + BUILD_PATH + BUILD_FILE)
+print("----------------------------------------------------------------------")
 print("Note: to compile the WASM executable, you need to have LLVM installed.")
+print("----------------------------------------------------------------------")
+print("Building the WASM executable using: " + BUILD_PATH + BUILD_FILE + " ...")
 # Run the target build script
 bashCommand = BUILD_PATH + BUILD_FILE
 process = subprocess.Popen(bashCommand.split(), stdout=subprocess.PIPE)
