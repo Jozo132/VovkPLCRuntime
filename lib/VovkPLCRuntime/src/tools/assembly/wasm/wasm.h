@@ -72,14 +72,15 @@ int streamAvailable() { // Return the size of the buffer
     return __WASM_STREAM_SIZE_IN__ - __wasm_stream_in_cursor__ + __wasm_stream_in_index__;
 }
 // Inject the wasm stream into the char array reference and update its length, also check for the max length and return false if there is no problem 
-bool streamRead(char* arr, int* len, int max) {
+bool streamRead(char* arr, int& len, int max) {
     int i = 0;
-    while (i < max) {
+    while (i < max - 1) {
         if (streamAvailable() == 0) break;
         arr[i] = __streamInRead();
         i++;
     }
-    *len = i;
+    arr[i] = '\0';
+    len = i;
     return i == max;
 }
 

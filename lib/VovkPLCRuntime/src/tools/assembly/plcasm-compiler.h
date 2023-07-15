@@ -424,6 +424,10 @@ void fill(char c, int count) {
     for (int i = 0; i < count; i++) Serial.print(c);
 }
 
+WASM_EXPORT void loadAssembly() {
+    int size = 0;
+    streamRead(assembly_string, size, max_assembly_string_size);
+}
 
 WASM_EXPORT void compileTest() {
     Serial.println(F("Compiling test..."));
@@ -436,9 +440,9 @@ WASM_EXPORT void compileTest() {
         Serial.print(F(" "));
         fill(' ', 4 - Serial.print(i));
         int s = Serial.print(F(" (")) + Serial.print(token.line) + Serial.print(F(":")) + Serial.print(token.column) + Serial.print(F(") "));
-        fill(' ', 8 - s);
+        fill(' ', 10 - s);
         Serial.print(F(" "));
-        fill(' ', 10 - printTokenType(token.type));
+        fill(' ', 12 - printTokenType(token.type));
         if (token.type == TOKEN_KEYWORD) Serial.print(F("\""));
         token.print();
         if (token.type == TOKEN_KEYWORD) Serial.print(F("\""));

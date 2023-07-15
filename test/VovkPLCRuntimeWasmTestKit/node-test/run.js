@@ -7,7 +7,7 @@
 const simulator = require("../simulator")
 
 const main = async () => {
-    await simulator.init()
+    await simulator.initialize()
     // Get the main functions
     const { run_unit_test, run_custom_test } = simulator.getExports()
     

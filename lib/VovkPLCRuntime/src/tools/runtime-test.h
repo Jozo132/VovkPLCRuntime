@@ -351,6 +351,48 @@ const TestCase<uint8_t> case_jump_if({ "jump_if => for loop sum", PROGRAM_EXITED
     program.modifyValue(loop_jump + 1, end_destination); // Change the jump address to the exit address
 } });
 
+/* BROWSER TEST:
+PLCRuntimeWasm.uploadAssembly(`
+    # This is a comment
+    // This is also a comment
+
+    tag "sum" 0    // set "sum" to memory index 0
+    tag "i"   1    // set "i"   to memory index 1
+
+    u8.const 0
+    u8.put "sum"   // set u8 at address 0 to value 0
+    u8.const 0
+    u8.put "i"     // set u8 at address 1 to value 0
+
+    loop:          // start label
+
+    u8.get "i"
+    u8.const 10
+    u8.cmp_lt
+    jmp_if_not end // jump to end if "i" == 0
+
+    u8.get "i"
+    u8.const 1
+    u8.add
+    u8.put "i"     // i++
+
+    u8.get "sum"
+    u8.const 10
+    u8.add
+    u8.put "sum"   // sum += 10
+
+    jmp loop       // jump to loop
+
+    end:           // end label
+
+    u8.get "sum"
+
+    exit          // exit the program and return the remaining stack
+
+`); do_compile_test()
+
+ * 
+ */
 
 void runtime_unit_test() {
 #ifdef __WASM__

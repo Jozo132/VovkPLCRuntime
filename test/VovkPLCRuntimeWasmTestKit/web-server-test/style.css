@@ -3,3 +3,17 @@ body {
     color: #fff;
     font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
+
+div.row {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+}
+
+div.col {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+}

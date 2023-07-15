@@ -16,23 +16,56 @@ class PLCRuntimeWasm_class {
         if (this.running && this.wasm) return this.wasm
         this.running = true
         if (debug) console.log("Starting up...")
-        const wasmFile = await fetch(wasm_path)
-        const wasmBuffer = await wasmFile.arrayBuffer()
+        /** @type { ArrayBuffer | Buffer } */
+        let wasmBuffer
+        /** @type { Performance } */
+        let perf
+        if (typeof module !== 'undefined') { // @ts-ignore
+            perf = require('perf_hooks').performance
+            const fs = require("fs")
+            const path = require("path")
+            wasmBuffer = fs.readFileSync(path.join(__dirname, wasm_path))
+        } else if (typeof window !== 'undefined') {
+            perf = window.performance
+            const wasmFile = await fetch(wasm_path)
+            wasmBuffer = await wasmFile.arrayBuffer()
+        } else throw new Error("Unknown environment")
         const wasmImports = {
             env: {
                 stdout: this.console_print,
                 stderr: this.console_error,
                 streamOut: this.console_stream,
-                millis: () => +performance.now().toFixed(0),
-                micros: () => +(performance.now() * 1000).toFixed(0),
+                millis: () => +perf.now().toFixed(0),
+                micros: () => +(perf.now() * 1000).toFixed(0),
             }
         }
         const wasmModule = await WebAssembly.compile(wasmBuffer)
         const wasmInstance = await WebAssembly.instantiate(wasmModule, wasmImports)
-        Object.assign(window, wasmInstance.exports) // Assign all exports to the global scope
+        if (typeof window !== 'undefined') Object.assign(window, wasmInstance.exports) // Assign all exports to the global scope
         if (!wasmInstance) throw new Error("Failed to instantiate WebAssembly module")
         this.wasm = wasmInstance
         return wasmInstance
+    }
+
+    /** @param { string } assembly */
+    uploadAssembly = (assembly) => {
+        // Use 'bool streamIn(char)' to upload the assembly character by character
+        // Use 'void loadAssembly()' to load the assembly into the PLC from the stream buffer
+        if (!this.wasm) throw new Error("WebAssembly module not initialized")
+        const { streamIn, loadAssembly } = this.wasm.exports
+        let ok = true
+        for (let i = 0; i < assembly.length && ok; i++) {
+            const char = assembly[i]
+            const c = char.charCodeAt(0) // @ts-ignore
+            ok = streamIn(c)
+        }
+        if (!ok) throw new Error("Failed to upload assembly") // @ts-ignore
+        loadAssembly()
+    }
+
+    getExports = () => {
+        if (!this.wasm) throw new Error("WebAssembly module not initialized")
+        return Object.assign({}, this.wasm.exports, { uploadAssembly: this.uploadAssembly })
     }
 
     console_print = c => {
@@ -80,4 +113,12 @@ class PLCRuntimeWasm_class {
     }
 }
 
-const PLCRuntimeWasm = new PLCRuntimeWasm_class()
+const ________PLCRuntimeWasm_______ = new PLCRuntimeWasm_class()
+
+/** @typedef { PLCRuntimeWasm_class } PLCRuntimeWasm */
+
+// Export the module if we are in Node.js
+if (typeof module !== 'undefined') module.exports = ________PLCRuntimeWasm_______
+
+// Export the module if we are in a browser
+if (typeof window !== 'undefined') Object.assign(window, { PLCRuntimeWasm: ________PLCRuntimeWasm_______ })
