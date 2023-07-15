@@ -1,117 +1,34 @@
 // @ts-check
 "use strict"
 
-let message = ''
-const console_print = c => {
-    const char = String.fromCharCode(c)
-    if (char === '\n') {
-        console.log(message)
-        message = ''
-    } else {
-        message += char
-    }
-}
+const getWasm = () => PLCRuntimeWasm.initialize("/simulator.wasm")
 
-let error_message = ''
-/** @param { number | number[] | string } charcode */
-const console_error = charcode => {
-    if (typeof charcode === 'string') {
-        if (charcode.length === 0) return
-        if (charcode.length === 1) return console_error(charcode.charCodeAt(0))
-        return charcode.split('').forEach(console_error)
-    }
-    if (Array.isArray(charcode)) return charcode.forEach(console_error)
-    const char = String.fromCharCode(charcode)
-    if (char === '\0' || char === '\n') {
-        console.error(error_message)
-        error_message = ''
-    } else error_message += char
-}
-
-let stream_message = ''
-/** @param { number | number[] | string } charcode */
-const console_stream = charcode => {
-    if (typeof charcode === 'string') {
-        if (charcode.length === 0) return
-        if (charcode.length === 1) return console_stream(charcode.charCodeAt(0))
-        return charcode.split('').forEach(console_stream)
-    }
-    if (Array.isArray(charcode)) return charcode.forEach(console_stream)
-    const char = String.fromCharCode(charcode)
-    stream_message += char
-    if (stream_message.length > 100000) stream_message = stream_message.substring(stream_message.length - 100000 + 1)
-}
-
-const readStream = () => {
-    const output = stream_message
-    stream_message = ''
-    return output
-}
-
-let wasm = null
-let running = false
-const initWasm = async () => {
-    if (running) return wasm
-    running = true
-    console.log("Starting up...")
-    // const wasmFile = await fetch("/wasm_test_cases/string_alloc.wasm")
-    const wasmFile = await fetch("/simulator.wasm")
-    const wasmBuffer = await wasmFile.arrayBuffer()
-    const wasmImports = {
-        env: {
-            stdout: console_print,
-            stderr: console_error,
-            streamOut: console_stream,
-            millis: () => +performance.now().toFixed(0),
-            micros: () => +(performance.now() * 1000).toFixed(0),
-        }
-    }
-    const wasmModule = await WebAssembly.compile(wasmBuffer)
-    const wasmInstance = await WebAssembly.instantiate(wasmModule, wasmImports)
-    Object.assign(window, wasmInstance.exports)
-    wasm = wasmInstance
-    return wasmInstance
-}
 
 const run = async () => {
-
-    const wasmInstance = await initWasm()
+    const wasm = await getWasm()
 
     // Get the main functions
-    const { run_unit_test, run_custom_test } = wasmInstance.exports
+    const { run_unit_test, run_custom_test } = wasm.exports
     if (!run_unit_test) throw new Error("'run_unit_test' function not found")
     if (!run_custom_test) throw new Error("'run_custom_test' function not found")
 
     try {
         console.log("Running VovkPLCRuntime WebAssembly simulation unit test...") // @ts-ignore
         run_unit_test()
-        console.log("Done. Now running custom code...")
+        console.log("Done. Now running custom code...") // @ts-ignore
         run_custom_test()
         console.log("Done.")
     } catch (error) {
-        if (message) console.log(message)
         console.error(error)
     }
 }
 
-
-const init_element = document.getElementById("init")
-const run_element = document.getElementById("run")
-const do_nothing_element = document.getElementById("do-nothing")
-const leak_check_element = document.getElementById("leak-check")
-const output_element = document.getElementById("output")
-
-if (!init_element) throw new Error("init_element not found")
-if (!run_element) throw new Error("run_element not found")
-if (!do_nothing_element) throw new Error("do_nothing_element not found")
-if (!leak_check_element) throw new Error("leak_check_element not found")
-if (!output_element) throw new Error("output_element not found")
-
-
 let old_memory = 0
-const checkForMemoryLeak = () => {
+const checkForMemoryLeak = async () => {
+    const wasm = await getWasm()
+
     const { get_free_memory } = wasm.exports
-    if (!get_free_memory) throw new Error("'get_free_memory' function not found")
+    if (!get_free_memory) throw new Error("'get_free_memory' function not found") // @ts-ignore
 
     const now = get_free_memory()
     const diff_in_bytes = old_memory - now
@@ -123,15 +40,43 @@ const checkForMemoryLeak = () => {
     old_memory = now
 }
 
-const do_nothing_job = () => {
+const do_nothing_job = async () => {
+    const wasm = await getWasm()
+
     const { doNothing } = wasm.exports
     if (!doNothing) throw new Error("'doNothing' function not found")
-    console.log("Running doNothing()...")
+    console.log("Running doNothing()...") // @ts-ignore
     doNothing()
 }
 
-init_element.addEventListener("click", initWasm)
+const do_compile_test = async () => {
+    const wasm = await getWasm()
+
+    const { compileTest } = wasm.exports
+    if (!compileTest) throw new Error("'compileTest' function not found")
+    console.log("Running compileTest()...") // @ts-ignore
+    compileTest()
+}
+
+
+const init_element = document.getElementById("init")
+const run_element = document.getElementById("run")
+const compile_test_element = document.getElementById("compile-test")
+const do_nothing_element = document.getElementById("do-nothing")
+const leak_check_element = document.getElementById("leak-check")
+const output_element = document.getElementById("output")
+
+if (!init_element) throw new Error("init_element not found")
+if (!run_element) throw new Error("run_element not found")
+if (!compile_test_element) throw new Error("compile_test_element not found")
+if (!do_nothing_element) throw new Error("do_nothing_element not found")
+if (!leak_check_element) throw new Error("leak_check_element not found")
+if (!output_element) throw new Error("output_element not found")
+
+
+init_element.addEventListener("click", getWasm)
 run_element.addEventListener("click", run)
+compile_test_element.addEventListener("click", do_compile_test)
 do_nothing_element.addEventListener("click", do_nothing_job)
 leak_check_element.addEventListener("click", checkForMemoryLeak)
 
