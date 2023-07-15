@@ -20,6 +20,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #pragma once
+#ifndef __RUNTIME_TOOLS_H__
+#define __RUNTIME_TOOLS_H__
 
 #ifdef __SIMULATOR__
 
@@ -45,11 +47,11 @@ int get_used_memory() {
 
 #ifndef size_t
 #define size_t int
-#endif
+#endif // size_t
 
 #ifndef NULL
 #define NULL 0
-#endif 
+#endif // NULL
 
 #define LOW 0
 #define HIGH 1
@@ -97,9 +99,9 @@ double ln(double x) {
 double log10(double x);
 double log10(double x) { return ln(x) / LN10; }
 
-#else
+#else // __SIMULATOR__
 #include <Arduino.h>
-#endif
+#endif // __SIMULATOR__
 
 
 #ifdef __arm__
@@ -111,7 +113,6 @@ extern "C" char* sbrk(int incr);
 extern char* __brkval;
 #endif  // __arm__
 
-int freeMemory();
 int freeMemory() {
 #ifdef __WASM__
     return heap_size - heap_used;
@@ -441,3 +442,5 @@ int pring_number_padEnd(int value, int pad, char padChar, int base) {
 
 #define REPRINT(count, str) for (uint8_t i = 0; i < count; i++) { Serial.print(str); }
 #define REPRINTLN(count, str) REPRINT(count, str); Serial.println();
+
+#endif // __RUNTIME_TOOLS_H__

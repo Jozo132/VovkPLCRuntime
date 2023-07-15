@@ -1,5 +1,8 @@
 #pragma once
 
+#include "jvint.h"
+#include "jvmalloc.h"
+
 #ifdef __WASM__
 #define WASM_EXPORT __attribute__((visibility("default"))) \
     extern "C"
