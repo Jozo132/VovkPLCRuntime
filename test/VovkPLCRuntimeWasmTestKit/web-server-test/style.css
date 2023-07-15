@@ -7,7 +7,6 @@ body {
 div.row {
     display: flex;
     flex-direction: row;
-    justify-content: space-between;
     align-items: center;
 }
 
@@ -16,4 +15,6 @@ div.col {
     flex-direction: column;
     justify-content: space-between;
     align-items: center;
+    margin-left: 5px;
+    margin-right: 5px;
 }
