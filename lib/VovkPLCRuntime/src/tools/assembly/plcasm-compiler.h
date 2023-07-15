@@ -147,6 +147,15 @@ int printTokenType(TokenType type) {
 }
 
 #define MAX_NUM_OF_TOKENS 1000
+
+struct LUT_label {
+    StringView string;
+    int address;
+};
+
+struct LUT_label LUT_labels[MAX_NUM_OF_TOKENS] = { };
+int LUT_label_count = 0;
+
 struct Token {
     StringView string;
     int length;
@@ -350,6 +359,33 @@ void add_token(char* string, int length) {
             if (token.type == TOKEN_REAL) {
                 p1_token.value_float = -token.value_float;
                 p1_token.type = TOKEN_REAL;
+                return;
+            }
+        }
+    }
+    if (token_count_temp >= 1) {
+        Token& p1_token = tokens[token_count_temp - 1];
+        TokenType p1_type = p1_token.type;
+        // If [keyword , :] then change to [label]
+        if (p1_type == TOKEN_KEYWORD) {
+            if (token.type == TOKEN_OPERATOR && str_cmp(token, ":")) {
+                p1_token.type = TOKEN_LABEL;
+                bool new_label = true;
+                for (int i = 0; i < LUT_label_count; i++) {
+                    if (str_cmp(LUT_labels[i].string, p1_token.string)) {
+                        new_label = false;
+                        break;
+                    }
+                }
+                if (new_label) {
+                    if (LUT_label_count >= MAX_NUM_OF_TOKENS) {
+                        Serial.print(F("Error: too many labels. Max number of labels is")); Serial.println(MAX_NUM_OF_TOKENS);
+                        return;
+                    }
+                    LUT_labels[LUT_label_count].string = p1_token.string;
+                    LUT_labels[LUT_label_count].address = token_count_temp;
+                    LUT_label_count++;
+                }
                 return;
             }
         }
