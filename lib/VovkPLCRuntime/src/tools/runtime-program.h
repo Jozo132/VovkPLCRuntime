@@ -23,6 +23,175 @@
 
 char foo;
 
+class InstructionCompiler {
+    public:
+    // Push a new sequence of bytes to the PLC Program
+    static uint32_t push(uint8_t* location, uint8_t* code, uint32_t code_size) {
+        memcpy(location, code, code_size);
+        return code_size;
+    }
+
+    // Push a new instruction to the PLC Program
+    static uint8_t push(uint8_t* location, uint8_t instruction) {
+        location[0] = instruction;
+        return 1;
+    }
+
+    // Push a new instruction to the PLC Program
+    static uint8_t push(uint8_t* location, uint8_t instruction, uint8_t data_type) {
+        location[0] = instruction;
+        location[1] = data_type;
+        return 2;
+    }
+
+    // Push a boolean value to the PLC Program
+    static uint8_t push_bool(uint8_t* location, bool value) {
+        return push_uint8_t(location, value ? 1 : 0);
+    }
+
+    // Push an uint8_t value to the PLC Program
+    static uint8_t push_uint8_t(uint8_t* location, uint8_t value) {
+        location[0] = type_uint8_t;
+        location[1] = value;
+        return 2;
+    }
+
+    // Push an int8_t value to the PLC Program
+    static uint8_t push_int8_t(uint8_t* location, int8_t value) {
+        location[0] = type_int8_t;
+        location[1] = value;
+        return 2;
+    }
+
+    // Push an uint16_t value to the PLC Program
+    static uint8_t push_uint16_t(uint8_t* location, uint32_t value) {
+        location[0] = type_uint16_t;
+        location[1] = value >> 8;
+        location[2] = value & 0xFF;
+        return 3;
+    }
+
+    // Push an int16_t value to the PLC Program
+    static uint8_t push_int16_t(uint8_t* location, int16_t value) {
+        location[0] = type_int16_t;
+        location[1] = value >> 8;
+        location[2] = value & 0xFF;
+        return 3;
+    }
+
+    // Push an uint32_t value to the PLC Program
+    static uint8_t push_uint32_t(uint8_t* location, uint32_t value) {
+        location[0] = type_uint32_t;
+        location[1] = value >> 24;
+        location[2] = (value >> 16) & 0xFF;
+        location[3] = (value >> 8) & 0xFF;
+        location[4] = value & 0xFF;
+        return 5;
+    }
+
+    // Push an int32_t value to the PLC Program
+    static uint8_t push_int32_t(uint8_t* location, int32_t value) {
+        location[0] = type_int32_t;
+        location[1] = value >> 24;
+        location[2] = (value >> 16) & 0xFF;
+        location[3] = (value >> 8) & 0xFF;
+        location[4] = value & 0xFF;
+        return 5;
+    }
+
+    // Push an uint64_t value to the PLC Program
+    static uint8_t push_uint64_t(uint8_t* location, uint64_t value) {
+        location[0] = type_uint64_t;
+        location[1] = value >> (uint64_t) 56;
+        location[2] = (value >> (uint64_t) 48) & 0xFF;
+        location[3] = (value >> (uint64_t) 40) & 0xFF;
+        location[4] = (value >> (uint64_t) 32) & 0xFF;
+        location[5] = (value >> (uint64_t) 24) & 0xFF;
+        location[6] = (value >> (uint64_t) 16) & 0xFF;
+        location[7] = (value >> (uint64_t) 8) & 0xFF;
+        location[8] = value & 0xFF;
+        return 9;
+    }
+
+    // Push an int64_t value to the PLC Program
+    static uint8_t push_int64_t(uint8_t* location, int64_t value) {
+        location[0] = type_int64_t;
+        location[1] = value >> (int64_t) 56;
+        location[2] = (value >> (int64_t) 48) & 0xFF;
+        location[3] = (value >> (int64_t) 40) & 0xFF;
+        location[4] = (value >> (int64_t) 32) & 0xFF;
+        location[5] = (value >> (int64_t) 24) & 0xFF;
+        location[6] = (value >> (int64_t) 16) & 0xFF;
+        location[7] = (value >> (int64_t) 8) & 0xFF;
+        location[8] = value & 0xFF;
+        return 9;
+    }
+
+    // Push a float value to the PLC Program
+    static uint8_t push_float(uint8_t* location, float value) {
+        location[0] = type_float;
+        uint32_t* value_ptr = (uint32_t*) &value;
+        location[1] = *value_ptr >> 24;
+        location[2] = (*value_ptr >> 16) & 0xFF;
+        location[3] = (*value_ptr >> 8) & 0xFF;
+        location[4] = *value_ptr & 0xFF;
+        return 5;
+    }
+
+    // Push a double value to the PLC Program
+    static uint8_t push_double(uint8_t* location, double value) {
+        location[0] = type_double;
+        uint64_t* value_ptr = (uint64_t*) &value;
+        location[1] = *value_ptr >> 56;
+        location[2] = (*value_ptr >> 48) & 0xFF;
+        location[3] = (*value_ptr >> 40) & 0xFF;
+        location[4] = (*value_ptr >> 32) & 0xFF;
+        location[5] = (*value_ptr >> 24) & 0xFF;
+        location[6] = (*value_ptr >> 16) & 0xFF;
+        location[7] = (*value_ptr >> 8) & 0xFF;
+        location[8] = *value_ptr & 0xFF;
+        return 9;
+    }
+
+    // Push flow control instructions to the PLC Program
+    static uint8_t pushJMP(uint8_t* location, uint32_t location_address) {
+        location[0] = JMP;
+        location[1] = location_address >> 8;
+        location[2] = location_address & 0xFF;
+        return 3;
+    }
+    static uint8_t pushJMP_IF(uint8_t* location, uint32_t location_address) {
+
+        location[0] = JMP_IF;
+        location[1] = location_address >> 8;
+        location[2] = location_address & 0xFF;
+        return 3;
+    }
+    static uint8_t pushJMP_IF_NOT(uint8_t* location, uint32_t location_address) {
+        location[0] = JMP_IF_NOT;
+        location[1] = location_address >> 8;
+        location[2] = location_address & 0xFF;
+        return 3;
+    }
+
+    // Pushes the byte at the given address of the memory into the stack
+    static uint8_t pushGET(uint8_t* location, uint32_t location_address, PLCRuntimeInstructionSet type = type_uint8_t) {
+        location[0] = GET;
+        location[1] = (uint8_t) type;
+        location[2] = location_address >> 8;
+        location[3] = location_address & 0xFF;
+        return 4;
+    }
+    // Stores the byte at the top of the stack into the given address in memory and pops the stack
+    static uint8_t pushPUT(uint8_t* location, uint32_t location_address, PLCRuntimeInstructionSet type = type_uint8_t) {
+        location[0] = PUT;
+        location[1] = (uint8_t) type;
+        location[2] = location_address >> 8;
+        location[3] = location_address & 0xFF;
+        return 4;
+    }
+};
+
 class RuntimeProgram {
 public:
 #ifdef __WASM__
@@ -265,9 +434,7 @@ public:
             Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
-        Serial.print(F("Pushing ")); Serial.print(code_size); Serial.println(F(" bytes to the program."));
-        memcpy(program + program_size, code, code_size);
-        program_size += code_size;
+        program_size += InstructionCompiler::push(program + program_size, code, code_size);
         status = STATUS_SUCCESS;
         return status;
     }
@@ -279,8 +446,7 @@ public:
             Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
-        program[program_size] = instruction;
-        program_size++;
+        program_size += InstructionCompiler::push(program + program_size, instruction);
         status = STATUS_SUCCESS;
         return status;
     }
@@ -292,9 +458,7 @@ public:
             Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
-        program[program_size] = instruction;
-        program[program_size + 1] = data_type;
-        program_size += 2;
+        program_size += InstructionCompiler::push(program + program_size, instruction, data_type);
         status = STATUS_SUCCESS;
         return status;
     }
@@ -311,9 +475,7 @@ public:
             Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
-        program[program_size] = type_uint8_t;
-        program[program_size + 1] = value;
-        program_size += 2;
+        program_size += InstructionCompiler::push_uint8_t(program + program_size, value);
         status = STATUS_SUCCESS;
         return status;
     }
@@ -325,9 +487,7 @@ public:
             Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
-        program[program_size] = type_int8_t;
-        program[program_size + 1] = value;
-        program_size += 2;
+        program_size += InstructionCompiler::push_int8_t(program + program_size, value);
         status = STATUS_SUCCESS;
         return status;
     }
@@ -339,10 +499,7 @@ public:
             Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
-        program[program_size] = type_uint16_t;
-        program[program_size + 1] = value >> 8;
-        program[program_size + 2] = value & 0xFF;
-        program_size += 3;
+        program_size += InstructionCompiler::push_uint16_t(program + program_size, value);
         status = STATUS_SUCCESS;
         return status;
     }
@@ -354,10 +511,7 @@ public:
             Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
-        program[program_size] = type_int16_t;
-        program[program_size + 1] = value >> 8;
-        program[program_size + 2] = value & 0xFF;
-        program_size += 3;
+        program_size += InstructionCompiler::push_int16_t(program + program_size, value);
         status = STATUS_SUCCESS;
         return status;
     }
@@ -369,12 +523,7 @@ public:
             Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
-        program[program_size] = type_uint32_t;
-        program[program_size + 1] = value >> 24;
-        program[program_size + 2] = (value >> 16) & 0xFF;
-        program[program_size + 3] = (value >> 8) & 0xFF;
-        program[program_size + 4] = value & 0xFF;
-        program_size += 5;
+        program_size += InstructionCompiler::push_uint32_t(program + program_size, value);
         status = STATUS_SUCCESS;
         return status;
     }
@@ -386,12 +535,7 @@ public:
             Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
-        program[program_size] = type_int32_t;
-        program[program_size + 1] = value >> 24;
-        program[program_size + 2] = (value >> 16) & 0xFF;
-        program[program_size + 3] = (value >> 8) & 0xFF;
-        program[program_size + 4] = value & 0xFF;
-        program_size += 5;
+        program_size += InstructionCompiler::push_int32_t(program + program_size, value);
         status = STATUS_SUCCESS;
         return status;
     }
@@ -403,16 +547,7 @@ public:
             Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
-        program[program_size] = type_uint64_t;
-        program[program_size + 1] = value >> (uint64_t) 56;
-        program[program_size + 2] = (value >> (uint64_t) 48) & 0xFF;
-        program[program_size + 3] = (value >> (uint64_t) 40) & 0xFF;
-        program[program_size + 4] = (value >> (uint64_t) 32) & 0xFF;
-        program[program_size + 5] = (value >> (uint64_t) 24) & 0xFF;
-        program[program_size + 6] = (value >> (uint64_t) 16) & 0xFF;
-        program[program_size + 7] = (value >> (uint64_t) 8) & 0xFF;
-        program[program_size + 8] = value & 0xFF;
-        program_size += 9;
+        program_size += InstructionCompiler::push_uint64_t(program + program_size, value);
         status = STATUS_SUCCESS;
         return status;
     }
@@ -424,16 +559,7 @@ public:
             Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
-        program[program_size] = type_int64_t;
-        program[program_size + 1] = value >> (int64_t) 56;
-        program[program_size + 2] = (value >> (int64_t) 48) & 0xFF;
-        program[program_size + 3] = (value >> (int64_t) 40) & 0xFF;
-        program[program_size + 4] = (value >> (int64_t) 32) & 0xFF;
-        program[program_size + 5] = (value >> (int64_t) 24) & 0xFF;
-        program[program_size + 6] = (value >> (int64_t) 16) & 0xFF;
-        program[program_size + 7] = (value >> (int64_t) 8) & 0xFF;
-        program[program_size + 8] = value & 0xFF;
-        program_size += 9;
+        program_size += InstructionCompiler::push_int64_t(program + program_size, value);
         status = STATUS_SUCCESS;
         return status;
     }
@@ -445,13 +571,7 @@ public:
             Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
-        program[program_size] = type_float;
-        uint32_t* value_ptr = (uint32_t*) &value;
-        program[program_size + 1] = *value_ptr >> 24;
-        program[program_size + 2] = (*value_ptr >> 16) & 0xFF;
-        program[program_size + 3] = (*value_ptr >> 8) & 0xFF;
-        program[program_size + 4] = *value_ptr & 0xFF;
-        program_size += 5;
+        program_size += InstructionCompiler::push_float(program + program_size, value);
         status = STATUS_SUCCESS;
         return status;
     }
@@ -463,17 +583,7 @@ public:
             Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
-        program[program_size] = type_double;
-        uint64_t* value_ptr = (uint64_t*) &value;
-        program[program_size + 1] = *value_ptr >> 56;
-        program[program_size + 2] = (*value_ptr >> 48) & 0xFF;
-        program[program_size + 3] = (*value_ptr >> 40) & 0xFF;
-        program[program_size + 4] = (*value_ptr >> 32) & 0xFF;
-        program[program_size + 5] = (*value_ptr >> 24) & 0xFF;
-        program[program_size + 6] = (*value_ptr >> 16) & 0xFF;
-        program[program_size + 7] = (*value_ptr >> 8) & 0xFF;
-        program[program_size + 8] = *value_ptr & 0xFF;
-        program_size += 9;
+        program_size += InstructionCompiler::push_double(program + program_size, value);
         status = STATUS_SUCCESS;
         return status;
     }
@@ -485,10 +595,7 @@ public:
             Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
-        program[program_size] = JMP;
-        program[program_size + 1] = program_address >> 8;
-        program[program_size + 2] = program_address & 0xFF;
-        program_size += 3;
+        program_size += InstructionCompiler::pushJMP(program + program_size, program_address);
         status = STATUS_SUCCESS;
         return status;
     }
@@ -498,10 +605,7 @@ public:
             Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
-        program[program_size] = JMP_IF;
-        program[program_size + 1] = program_address >> 8;
-        program[program_size + 2] = program_address & 0xFF;
-        program_size += 3;
+        program_size += InstructionCompiler::pushJMP_IF(program + program_size, program_address);
         status = STATUS_SUCCESS;
         return status;
     }
@@ -511,10 +615,7 @@ public:
             Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
-        program[program_size] = JMP_IF_NOT;
-        program[program_size + 1] = program_address >> 8;
-        program[program_size + 2] = program_address & 0xFF;
-        program_size += 3;
+        program_size += InstructionCompiler::pushJMP_IF_NOT(program + program_size, program_address);
         status = STATUS_SUCCESS;
         return status;
     }
@@ -526,11 +627,7 @@ public:
             Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
-        program[program_size] = GET;
-        program[program_size + 1] = (uint8_t) type;
-        program[program_size + 2] = program_address >> 8;
-        program[program_size + 3] = program_address & 0xFF;
-        program_size += 4;
+        program_size += InstructionCompiler::pushGET(program + program_size, program_address, type);
         status = STATUS_SUCCESS;
         return status;
     }
@@ -541,11 +638,7 @@ public:
             Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
             return status;
         }
-        program[program_size] = PUT;
-        program[program_size + 1] = (uint8_t) type;
-        program[program_size + 2] = program_address >> 8;
-        program[program_size + 3] = program_address & 0xFF;
-        program_size += 4;
+        program_size += InstructionCompiler::pushPUT(program + program_size, program_address, type);
         status = STATUS_SUCCESS;
         return status;
     }

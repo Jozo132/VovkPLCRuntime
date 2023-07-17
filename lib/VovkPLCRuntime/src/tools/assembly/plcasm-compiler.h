@@ -169,8 +169,8 @@ struct Token {
         if (type == TOKEN_BOOLEAN) return printf("%s", value_bool ? "true" : "false");
         if (type == TOKEN_INTEGER) return printf("%d", value_int);
         if (type == TOKEN_REAL) return printf("%f", value_float);
-        if (type == TOKEN_STRING) return printf("\"%s\"", string.data);
-        return string.print();
+        if (type == TOKEN_STRING) return printf("'") + string.print() + printf("'");
+        return printf("\"") + string.print() + printf("\"");
     }
     void parse();
 };
@@ -363,6 +363,17 @@ void add_token(char* string, int length) {
             }
         }
     }
+    if (token_count_temp >= 2) {
+        Token& p1_token = tokens[token_count_temp - 1];
+        Token& p2_token = tokens[token_count_temp - 2];
+        // If [' , * , '] then change to [string]
+        if (str_cmp(token, "'") && str_cmp(p2_token, "'")) {
+            p2_token.type = TOKEN_STRING;
+            p2_token.string = p1_token.string;
+            token_count_temp--;
+            return;
+        }
+    }
     if (token_count_temp >= 1) {
         Token& p1_token = tokens[token_count_temp - 1];
         TokenType p1_type = p1_token.type;
@@ -408,8 +419,16 @@ void tokenize() {
     char* token_start = assembly_string;
     int token_length = 0;
     int assembly_string_length = string_len(assembly_string);
+    bool in_string = false;
     for (int i = 0; i < assembly_string_length; i++) {
         char c = assembly_string[i];
+
+        if (in_string && !(c == '\'' || c == '\n')) {
+            if (token_length == 0) token_start = assembly_string + i;
+            token_length++;
+            continue;
+        }
+
         // c == # || c == /
         if (c == '#' || c == '/') {
             add_token_optional(token_start, token_length);
@@ -440,7 +459,8 @@ void tokenize() {
         if (string_chr(lex_dividers, c) != NULL) {
             add_token_optional(token_start, token_length);
             column += token_length;
-            add_token(assembly_string + i, 1);
+            if (c == '\'') in_string = !in_string;
+            if (c != '"')  add_token(assembly_string + i, 1);
             token_length = 0;
             column++;
             continue;
@@ -473,15 +493,14 @@ WASM_EXPORT void compileTest() {
     Serial.println(F("Tokens:"));
     for (int i = 0; i < token_count; i++) {
         Token& token = tokens[i];
+        TokenType type = token.type;
         Serial.print(F(" "));
         fill(' ', 4 - Serial.print(i));
         int s = Serial.print(F(" (")) + Serial.print(token.line) + Serial.print(F(":")) + Serial.print(token.column) + Serial.print(F(") "));
         fill(' ', 10 - s);
         Serial.print(F(" "));
-        fill(' ', 12 - printTokenType(token.type));
-        if (token.type == TOKEN_KEYWORD) Serial.print(F("\""));
+        fill(' ', 12 - printTokenType(type));
         token.print();
-        if (token.type == TOKEN_KEYWORD) Serial.print(F("\""));
         Serial.println();
     }
 }
