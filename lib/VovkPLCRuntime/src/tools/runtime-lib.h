@@ -34,10 +34,6 @@
 #include "runtime-program.h"
 #include "runtime-cmd-parser.h"
 
-#ifdef __WASM__
-#include "assembly/plcasm-compiler.h"
-#endif
-
 class VovkPLCRuntime {
 private:
     bool started_up = false;

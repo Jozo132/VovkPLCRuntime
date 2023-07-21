@@ -23,3 +23,7 @@
 
 #include "tools/runtime-lib.h"
 #include "tools/runtime-test.h"
+
+#ifdef __WASM__
+#include "tools/assembly/plcasm-compiler.h"
+#endif
