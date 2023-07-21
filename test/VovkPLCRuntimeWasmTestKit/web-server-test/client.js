@@ -1,6 +1,7 @@
 // @ts-check
 "use strict"
 
+// @ts-ignore
 const getWasm = () => PLCRuntimeWasm.initialize("/simulator.wasm")
 
 
@@ -8,7 +9,7 @@ const run = async () => {
     const wasm = await getWasm()
 
     // Get the main functions
-    const { run_unit_test, run_custom_test } = wasm.exports
+    const { run_unit_test, run_custom_test } = wasm.getExports()
     if (!run_unit_test) throw new Error("'run_unit_test' function not found")
     if (!run_custom_test) throw new Error("'run_custom_test' function not found")
 
@@ -27,7 +28,7 @@ let old_memory = 0
 const checkForMemoryLeak = async () => {
     const wasm = await getWasm()
 
-    const { get_free_memory } = wasm.exports
+    const { get_free_memory } = wasm.getExports()
     if (!get_free_memory) throw new Error("'get_free_memory' function not found") // @ts-ignore
 
     const now = get_free_memory()
@@ -43,7 +44,7 @@ const checkForMemoryLeak = async () => {
 const do_nothing_job = async () => {
     const wasm = await getWasm()
 
-    const { doNothing } = wasm.exports
+    const { doNothing } = wasm.getExports()
     if (!doNothing) throw new Error("'doNothing' function not found")
     console.log("Running doNothing()...") // @ts-ignore
     doNothing()
@@ -51,11 +52,17 @@ const do_nothing_job = async () => {
 
 const do_compile_test = async () => {
     const wasm = await getWasm()
-
-    const { compileTest } = wasm.exports
+    const d = document.getElementById('assembly')
+    if (!d) throw new Error("Assembly element not found") // @ts-ignore
+    const assembly = d.value
+    const { uploadAssembly, compileTest, verifyCode } = wasm.getExports()
+    if (!uploadAssembly) throw new Error("'uploadAssembly' function not found")
     if (!compileTest) throw new Error("'compileTest' function not found")
+    if (!verifyCode) throw new Error("'verifyCode' function not found")
     console.log("Running compileTest()...") // @ts-ignore
+    uploadAssembly(assembly)
     compileTest()
+    verifyCode()
 }
 
 

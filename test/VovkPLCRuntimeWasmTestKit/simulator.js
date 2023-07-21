@@ -13,7 +13,7 @@ class PLCRuntimeWasm_class {
 
     initialize = async (wasm_path = '', debug = false) => {
         wasm_path = wasm_path || "/simulator.wasm" // "/wasm_test_cases/string_alloc.wasm"
-        if (this.running && this.wasm) return this.wasm
+        if (this.running && this.wasm) return this
         this.running = true
         if (debug) console.log("Starting up...")
         /** @type { ArrayBuffer | Buffer } */
@@ -44,7 +44,7 @@ class PLCRuntimeWasm_class {
         if (typeof window !== 'undefined') Object.assign(window, wasmInstance.exports) // Assign all exports to the global scope
         if (!wasmInstance) throw new Error("Failed to instantiate WebAssembly module")
         this.wasm = wasmInstance
-        return wasmInstance
+        return this
     }
 
     /** @param { string } assembly */

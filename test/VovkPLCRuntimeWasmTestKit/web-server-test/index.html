@@ -14,7 +14,7 @@
     <body>
         <div class="row">
             <div class="col">
-                <h1>WebAssembly Test</h1>
+                <h1>VovkPLCRuntime WebAssembly Test</h1>
             </div>
         </div>
         <div class="row">
@@ -39,7 +39,57 @@
                 <button id="leak-check">Leak-check</button>
             </div>
         </div>
+        <textarea id="assembly" spellcheck="false" rows="52" cols="80" style="background-color: #222; color: #fff; font-family: monospace; margin: 5px">
+# This is a comment
+// This is also a comment
 
+/* 
+    This is the same program written in JavaScript:
+    let sum = 0;
+    for (let i = 0; i < 10; i++) {
+        sum += 10;
+    }
+    return sum;
+*/
+
+################# Define constant values
+const   sum = 0     // set "sum" to memory index 0
+const   index = 1   // set "i"   to memory index 1
+const   incr = 10
+
+################# Set initial values
+u8.const  0
+u8.put    sum   // set u8 at address 0 to value 0
+u8.const  0
+u8.put    index // set u8 at address 1 to value 0
+
+################# Run test for loop
+loop:
+    ################# jump to end if "i" >= 10
+    u8.get     index
+    u8.const   10
+    u8.cmp_lt
+    jmp_if_not end 
+
+    ################# sum += 10
+    u8.get     sum
+    u8.const   incr 
+    u8.add
+    u8.put     sum 
+
+    ################# i++
+    u8.get     index
+    u8.const   1
+    u8.add
+    u8.put     index
+
+    jmp loop 
+
+################# exit the program and return the remaining stack
+end:  
+    u8.get sum
+    exit
+        </textarea>
         <div id="output"></div>
     </body>
 
