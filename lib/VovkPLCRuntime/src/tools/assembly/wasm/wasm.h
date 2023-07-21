@@ -44,7 +44,7 @@ WASM_IMPORT void stderr(char c);
 WASM_IMPORT void streamOut(char c);
 
 #ifndef __WASM_STREAM_SIZE_IN__
-#define __WASM_STREAM_SIZE_IN__ 1024
+#define __WASM_STREAM_SIZE_IN__ 64536
 #endif // __WASM_STREAM_SIZE_IN__
 
 // Circular buffer
