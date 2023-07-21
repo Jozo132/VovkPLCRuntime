@@ -5,8 +5,8 @@
 #ifdef __WASM__
 
 
-#define max_assembly_string_size 1024
-#define MAX_NUM_OF_TOKENS 1000
+#define max_assembly_string_size 64535
+#define MAX_NUM_OF_TOKENS 10000
 
 // ################################################################################################
 // ### Example (0.1 + 0.2) * -1 = -0.3
@@ -224,6 +224,16 @@ bool str_cmp(Token a, const char* b) {
     return true;
 }
 
+bool str_cmp(Token a, Token b) {
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+        if (a.string.data[i] != b.string.data[i]) return false;
+    }
+    return true;
+}
+
+
+
 bool isDigit(char c) {
     return c >= '0' && c <= '9';
 }
@@ -371,13 +381,13 @@ constexpr int illegal_keywords_count = sizeof(illegal_keywords) / sizeof(illegal
 bool add_label(Token& token, int address) {
     for (int i = 0; i < LUT_label_count; i++) {
         if (str_cmp(LUT_labels[i].string, token.string)) {
-            Serial.print(F("Error: duplicate label. Label \"")); token.print(); Serial.print(F("\" already exists at ")); Serial.print(token.line); Serial.print(F(":")); Serial.println(token.column);
+            Serial.print(F("Error: duplicate label. Label ")); token.print(); Serial.print(F(" already exists at ")); Serial.print(token.line); Serial.print(F(":")); Serial.println(token.column);
             return true;
         }
     }
     for (int i = 0; i < illegal_keywords_count; i++) {
         if (str_cmp(token.string, illegal_keywords[i])) {
-            Serial.print(F("Error: illegal label. Label \"")); token.print(); Serial.print(F("\" is illegal at ")); Serial.print(token.line); Serial.print(F(":")); Serial.println(token.column);
+            Serial.print(F("Error: illegal label. Label ")); token.print(); Serial.print(F(" is illegal at ")); Serial.print(token.line); Serial.print(F(":")); Serial.println(token.column);
             return true;
         }
     }
@@ -386,7 +396,7 @@ bool add_label(Token& token, int address) {
         return true;
     }
     LUT_labels[LUT_label_count].string = token.string;
-    LUT_labels[LUT_label_count].address = address;
+    LUT_labels[LUT_label_count].address = -1;
     LUT_label_count++;
     return false;
 }
@@ -394,13 +404,13 @@ bool add_label(Token& token, int address) {
 bool add_const(Token& keyword, Token& value, int address) {
     for (int i = 0; i < LUT_const_count; i++) {
         if (str_cmp(LUT_consts[i].string, keyword.string)) {
-            Serial.print(F("Error: duplicate const. Const \"")); keyword.print(); Serial.print(F("\" already exists at ")); Serial.print(keyword.line); Serial.print(F(":")); Serial.println(keyword.column);
+            Serial.print(F("Error: duplicate const. Const ")); keyword.print(); Serial.print(F(" already exists at ")); Serial.print(keyword.line); Serial.print(F(":")); Serial.println(keyword.column);
             return true;
         }
     }
     for (int i = 0; i < illegal_keywords_count; i++) {
         if (str_cmp(keyword.string, illegal_keywords[i])) {
-            Serial.print(F("Error: illegal const. Const \"")); keyword.print(); Serial.print(F("\" is illegal at ")); Serial.print(keyword.line); Serial.print(F(":")); Serial.println(keyword.column);
+            Serial.print(F("Error: illegal const. Const ")); keyword.print(); Serial.print(F(" is illegal at ")); Serial.print(keyword.line); Serial.print(F(":")); Serial.println(keyword.column);
             return true;
         }
     }
@@ -444,7 +454,7 @@ bool add_token(char* string, int length) {
     token.column = column;
     token.parse();
     if (token.type == TOKEN_UNKNOWN) {
-        Serial.print(F("Error: unknown token \"")); token.print(); Serial.print(F("\" at ")); Serial.print(line); Serial.print(F(":")); Serial.println(column);
+        Serial.print(F("Error: unknown token ")); token.print(); Serial.print(F(" at ")); Serial.print(line); Serial.print(F(":")); Serial.println(column);
         return true;
     }
     bool isNumber = token.type == TOKEN_INTEGER || token.type == TOKEN_REAL;
@@ -539,6 +549,38 @@ bool tokenize() {
             continue;
         }
 
+
+        // c == "/*"
+        bool hasNext = i + 1 < assembly_string_length;
+        char c1 = hasNext ? assembly_string[i + 1] : '\0';
+        bool blockComment = hasNext && c == '/' && c1 == '*';
+        if (blockComment) {
+            error = add_token_optional(token_start, token_length);
+            if (error) return error;
+            bool found = false;
+            i += 2;
+            while (i < assembly_string_length - 1 && !found) {
+                i++;
+                c = assembly_string[i];
+                if (c == '\n') {
+                    line++;
+                    column = 1;
+                }
+                if (c != '*') continue;
+                hasNext = i + 1 < assembly_string_length;
+                c1 = hasNext ? assembly_string[i + 1] : '\0';
+                found = c == '*' && c1 == '/';
+            }
+            if (!found || i >= assembly_string_length - 1) {
+                Serial.print(F("Error: unexpected end of file. Expected '*/' at ")); Serial.print(line); Serial.print(F(":")); Serial.println(column);
+                return true;
+            }
+            i++;
+            token_start = assembly_string + i + 1;
+            token_length = 0;
+            continue;
+        }
+
         // c == # || c == /
         if (c == '#' || c == '/') {
             error = add_token_optional(token_start, token_length);
@@ -574,7 +616,7 @@ bool tokenize() {
             if (error) return error;
             column += token_length;
             if (c == '\'') in_string = !in_string;
-            if (c != '"') error = add_token(assembly_string + i, 1);
+            if (c != '"' && c != '=') error = add_token(assembly_string + i, 1);
             if (error) return error;
             token_length = 0;
             column++;
@@ -593,18 +635,6 @@ bool tokenize() {
 }
 
 
-
-bool parsing_secondPass() {
-    bool error = false;
-    for (int i = 0; i < token_count; i++) {
-        Token& token = tokens[i];
-        TokenType type = token.type;
-        if (type == TOKEN_UNKNOWN) error = true;
-    }
-    return error;
-}
-
-
 // data type keywords
 const char* data_type_keywords [] = { "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "string" };
 const char* op_type_keywords [] = { "const", "put", "get", "cmp_gt", "cmp_lt", "cmp_eq", "cmp_ne", "cmp_ge", "cmp_le", "cmp_and", "cmp_or", "cmp_xor", "cmp_not", "add", "sub", "mul", "div", "mod", "and", "or", "xor", "not", "shl", "shr", "rol", "ror", "neg", "inc", "dec", "jmp", "jz", "jnz", "call", "ret", "nop", "halt" };
@@ -619,7 +649,6 @@ struct ProgramLine {
     int index;
     int size;
     Token* refToken;
-    int refTokenIndex;
 };
 
 ProgramLine programLines[__MAX_BUILT_BYTECODE_SIZE] = { };
@@ -629,10 +658,45 @@ int programLineCount = 0;
     int address_end = built_bytecode_length + line.size; \
     if (address_end >= __MAX_BUILT_BYTECODE_SIZE) error = true; \
     if (error) return error; \
-    for (int i = 0; i < line.size; i++) built_bytecode[built_bytecode_length + i] = bytecode[i]; \
+    for (int j = 0; j < line.size; j++) built_bytecode[built_bytecode_length + j] = bytecode[j]; \
     built_bytecode_length = address_end; \
     continue;
 
+bool boolFromToken(Token& token, bool& output) {
+    if (token.type == TOKEN_INTEGER) {
+        output = token.value_int != 0;
+        return false;
+    }
+    if (token.type == TOKEN_REAL) {
+        output = token.value_float != 0;
+        return false;
+    }
+    if (token.type == TOKEN_BOOLEAN) {
+        output = token.value_bool;
+        return false;
+    }
+    if (token.type == TOKEN_KEYWORD) {
+        for (int i = 0; i < LUT_const_count; i++) {
+            LUT_const& c = LUT_consts[i];
+            if (str_cmp(token, c.string)) {
+                if (c.type == VAL_BOOLEAN) {
+                    output = c.value_bool;
+                    return false;
+                }
+                if (c.type == VAL_INTEGER) {
+                    output = c.value_int != 0;
+                    return false;
+                }
+                if (c.type == VAL_REAL) {
+                    output = c.value_float != 0;
+                    return false;
+                }
+                return true;
+            }
+        }
+    }
+    return true;
+}
 
 bool intFromToken(Token& token, int& output) {
     if (token.type == TOKEN_INTEGER) {
@@ -698,7 +762,24 @@ bool realFromToken(Token& token, float& output) {
     return true;
 }
 
-bool build() {
+bool labelFromToken(Token& token, int& output) {
+    if (token.type == TOKEN_KEYWORD) {
+        for (int i = 0; i < LUT_label_count; i++) {
+            LUT_label& l = LUT_labels[i];
+            if (str_cmp(token, l.string)) {
+                output = l.address;
+                return false;
+            }
+        }
+    }
+    if (token.type == TOKEN_INTEGER) {
+        output = token.value_int;
+        return false;
+    }
+    return true;
+}
+
+bool build(bool finalPass) {
     bool error = false;
     programLineCount = 0;
     built_bytecode_length = 0;
@@ -707,161 +788,141 @@ bool build() {
         TokenType type = token.type;
         if (type == TOKEN_UNKNOWN) error = true;
         if (error) return error;
+
+        if (type == TOKEN_LABEL) {
+            if (finalPass) continue;
+            for (int i = 0; i < LUT_label_count; i++) {
+                LUT_label& label = LUT_labels[i];
+                if (str_cmp(token, label.string)) {
+                    label.address = built_bytecode_length;
+                    break;
+                }
+            }
+            continue;
+        }
+
+        // bool value_bool;
+        int label_address = -1;
         int value_int;
         float value_float;
 
         ProgramLine& line = programLines[programLineCount];
         line.index = built_bytecode_length;
+        line.refToken = &token;
         uint8_t* bytecode = line.code;
 
-        if (i + 1 < token_count) {
-            // [ u8.const , 3 ]
-            Token& token_p1 = tokens[i + 1];
-            error = intFromToken(token_p1, value_int);
-            error = realFromToken(token_p1, value_float);
+        bool hasNext = i + 1 < token_count;
+        // [ u8.const , 3 ]
+        Token& token_p1 = hasNext ? tokens[i + 1] : tokens[i];
+        bool e_label = finalPass ? labelFromToken(token_p1, label_address) : false;
+        // bool e_bool = boolFromToken(token_p1, value_bool);
+        bool e_int = intFromToken(token_p1, value_int);
+        bool e_real = realFromToken(token_p1, value_float);
 
-            if (type == TOKEN_KEYWORD) {
-                if (str_cmp(token, "u8.get")) {
-                    if (error) return error;
-                    line.size = InstructionCompiler::pushGET(bytecode, value_int, type_uint8_t);
+        if (type == TOKEN_KEYWORD) {
+            { // Handle flow
+                if (hasNext && str_cmp(token, "jmp")) {
+                    if (finalPass && e_label) return e_label; i++;
+                    line.size = InstructionCompiler::pushJMP(bytecode, label_address);
                     _line_push;
                 }
-                if (str_cmp(token, "u16.get")) {
-                    if (error) return error;
-                    line.size = InstructionCompiler::pushGET(bytecode, value_int, type_uint16_t);
+                if (hasNext && str_cmp(token, "jmp_if")) {
+                    if (finalPass && e_label) return e_label; i++;
+                    line.size = InstructionCompiler::pushJMP_IF(bytecode, label_address);
                     _line_push;
                 }
-                if (str_cmp(token, "u32.get")) {
-                    if (error) return error;
-                    line.size = InstructionCompiler::pushGET(bytecode, value_int, type_uint32_t);
+                if (hasNext && str_cmp(token, "jmp_if_not")) {
+                    if (finalPass && e_label) return e_label; i++;
+                    line.size = InstructionCompiler::pushJMP_IF_NOT(bytecode, label_address);
                     _line_push;
                 }
-                if (str_cmp(token, "u64.get")) {
-                    if (error) return error;
-                    line.size = InstructionCompiler::pushGET(bytecode, value_int, type_uint64_t);
-                    _line_push;
-                }
-                if (str_cmp(token, "i8.get")) {
-                    if (error) return error;
-                    line.size = InstructionCompiler::pushGET(bytecode, value_int, type_int8_t);
-                    _line_push;
-                }
-                if (str_cmp(token, "i16.get")) {
-                    if (error) return error;
-                    line.size = InstructionCompiler::pushGET(bytecode, value_int, type_int16_t);
-                    _line_push;
-                }
-                if (str_cmp(token, "i32.get")) {
-                    if (error) return error;
-                    line.size = InstructionCompiler::pushGET(bytecode, value_int, type_int32_t);
-                    _line_push;
-                }
-                if (str_cmp(token, "i64.get")) {
-                    if (error) return error;
-                    line.size = InstructionCompiler::pushGET(bytecode, value_int, type_int64_t);
-                    _line_push;
-                }
-                if (str_cmp(token, "f32.get")) {
-                    if (error) return error;
-                    line.size = InstructionCompiler::pushGET(bytecode, value_int, type_float);
-                    _line_push;
-                }
-                if (str_cmp(token, "f64.get")) {
-                    if (error) return error;
-                    line.size = InstructionCompiler::pushGET(bytecode, value_int, type_double);
-                    _line_push;
-                }
-                if (str_cmp(token, "u8.put")) {
-                    if (error) return error;
-                    line.size = InstructionCompiler::pushPUT(bytecode, value_int, type_uint8_t);
-                    _line_push;
-                }
-                if (str_cmp(token, "u16.put")) {
-                    if (error) return error;
-                    line.size = InstructionCompiler::pushPUT(bytecode, value_int, type_uint16_t);
-                    _line_push;
-                }
-                if (str_cmp(token, "u32.put")) {
-                    if (error) return error;
-                    line.size = InstructionCompiler::pushPUT(bytecode, value_int, type_uint32_t);
-                    _line_push;
-                }
-                if (str_cmp(token, "u64.put")) {
-                    if (error) return error;
-                    line.size = InstructionCompiler::pushPUT(bytecode, value_int, type_uint64_t);
-                    _line_push;
-                }
-                if (str_cmp(token, "i8.put")) {
-                    if (error) return error;
-                    line.size = InstructionCompiler::pushPUT(bytecode, value_int, type_int8_t);
-                    _line_push;
-                }
-                if (str_cmp(token, "i16.put")) {
-                    if (error) return error;
-                    line.size = InstructionCompiler::pushPUT(bytecode, value_int, type_int16_t);
-                    _line_push;
-                }
-                if (str_cmp(token, "i32.put")) {
-                    if (error) return error;
-                    line.size = InstructionCompiler::pushPUT(bytecode, value_int, type_int32_t);
-                    _line_push;
-                }
-                if (str_cmp(token, "i64.put")) {
-                    if (error) return error;
-                    line.size = InstructionCompiler::pushPUT(bytecode, value_int, type_int64_t);
-                    _line_push;
-                }
-                if (str_cmp(token, "f32.put")) {
-                    if (error) return error;
-                    line.size = InstructionCompiler::pushPUT(bytecode, value_int, type_float);
-                    _line_push;
-                }
-                if (str_cmp(token, "f64.put")) {
-                    if (error) return error;
-                    line.size = InstructionCompiler::pushPUT(bytecode, value_int, type_double);
-                    _line_push;
-                }
-                if (str_cmp(token, "u8.const")) {
-                    if (error) return error;
-                    line.size = InstructionCompiler::push_uint8_t(bytecode, value_int);
-                    _line_push;
-                }
-                if (str_cmp(token, "u16.const")) {
-                    if (error) return error;
-                    line.size = InstructionCompiler::push_uint16_t(bytecode, value_int);
-                    _line_push;
-                }
-                if (str_cmp(token, "u32.const")) {
-                    if (error) return error;
-                    line.size = InstructionCompiler::push_uint32_t(bytecode, value_int);
-                    _line_push;
-                }
-                if (str_cmp(token, "u64.const")) {
-                    if (error) return error;
-                    line.size = InstructionCompiler::push_uint64_t(bytecode, value_int);
-                    _line_push;
-                }
-                if (str_cmp(token, "i8.const")) {
-                    if (error) return error;
-                    line.size = InstructionCompiler::push_int8_t(bytecode, value_int);
-                    _line_push;
-                }
-                if (str_cmp(token, "i16.const")) {
-                    if (error) return error;
-                    line.size = InstructionCompiler::push_int16_t(bytecode, value_int);
-                    _line_push;
-                }
-                if (str_cmp(token, "i32.const")) {
-                    if (error) return error;
-                    line.size = InstructionCompiler::push_int32_t(bytecode, value_int);
-                    _line_push;
-                }
-                if (str_cmp(token, "i64.const")) {
-                    if (error) return error;
-                    line.size = InstructionCompiler::push_int64_t(bytecode, value_int);
+                // if (hasNext && str_cmp(token, "call")) {
+                //     if (e_int) return e_int; i++;
+                //     line.size = InstructionCompiler::pushCALL(bytecode, value_int);
+                //     _line_push;
+                // }
+                // if (str_cmp(token, "ret")) {
+                //     line.size = InstructionCompiler::pushRET(bytecode);
+                //     _line_push;
+                // }
+                if (str_cmp(token, "nop")) {
+                    line.size = InstructionCompiler::push(bytecode, NOP);
                     _line_push;
                 }
             }
+
+            { // Handle u8
+                if (hasNext && str_cmp(token, "u8.get")) {
+                    if (e_int) return e_int; i++;
+                    line.size = InstructionCompiler::pushGET(bytecode, value_int, type_uint8_t);
+                    _line_push;
+                }
+                if (hasNext && str_cmp(token, "u8.put")) {
+                    if (e_int) return e_int; i++;
+                    line.size = InstructionCompiler::pushPUT(bytecode, value_int, type_uint8_t);
+                    _line_push;
+                }
+                if (hasNext && str_cmp(token, "u8.const")) {
+                    if (e_int) return e_int; i++;
+                    line.size = InstructionCompiler::push_uint8_t(bytecode, value_int);
+                    _line_push;
+                }
+                if (str_cmp(token, "u8.cmp_lt")) {
+                    line.size = InstructionCompiler::push(bytecode, CMP_LT, type_uint8_t);
+                    _line_push;
+                }
+                if (str_cmp(token, "u8.cmp_gt")) {
+                    line.size = InstructionCompiler::push(bytecode, CMP_GT, type_uint8_t);
+                    _line_push;
+                }
+                if (str_cmp(token, "u8.cmp_eq")) {
+                    line.size = InstructionCompiler::push(bytecode, CMP_EQ, type_uint8_t);
+                    _line_push;
+                }
+                if (str_cmp(token, "u8.cmp_neq")) {
+                    line.size = InstructionCompiler::push(bytecode, CMP_NEQ, type_uint8_t);
+                    _line_push;
+                }
+                if (str_cmp(token, "u8.cmp_gte")) {
+                    line.size = InstructionCompiler::push(bytecode, CMP_GTE, type_uint8_t);
+                    _line_push;
+                }
+                if (str_cmp(token, "u8.cmp_lte")) {
+                    line.size = InstructionCompiler::push(bytecode, CMP_LTE, type_uint8_t);
+                    _line_push;
+                }
+                if (str_cmp(token, "u8.add")) {
+                    line.size = InstructionCompiler::push(bytecode, ADD, type_uint8_t);
+                    _line_push;
+                }
+                if (str_cmp(token, "u8.sub")) {
+                    line.size = InstructionCompiler::push(bytecode, SUB, type_uint8_t);
+                    _line_push;
+                }
+                if (str_cmp(token, "u8.mul")) {
+                    line.size = InstructionCompiler::push(bytecode, MUL, type_uint8_t);
+                    _line_push;
+                }
+                if (str_cmp(token, "u8.div")) {
+                    line.size = InstructionCompiler::push(bytecode, DIV, type_uint8_t);
+                    _line_push;
+                }
+            }
+        }
+
+        if (type == TOKEN_KEYWORD && str_cmp(token, "exit")) {
+            line.size = InstructionCompiler::push(bytecode, EXIT);
+            _line_push;
+        }
+
+        Serial.print(F("Error: unknown token ")); token.print(); Serial.print(F(" at ")); Serial.print(token.line); Serial.print(F(":")); Serial.println(token.column);
+        return true;
+    }
+    for (int i = 0; i < LUT_label_count; i++) {
+        LUT_label& label = LUT_labels[i];
+        if (label.address == -1) {
+            Serial.print(F("Error: label ")); label.string.print(); Serial.print(F(" is not defined"));
+            return true;
         }
     }
     return error;
@@ -874,66 +935,91 @@ WASM_EXPORT void loadAssembly() {
 }
 
 WASM_EXPORT bool compileTest() {
-    Serial.println(F("Compiling test..."));
+    long total = millis();
+    Serial.println(F("Compiling ..."));
     bool error = false;
-    Serial.print(F(" - Tokenization ... "));
+    Serial.print(F(" - Tokenization "));
     long t1 = millis();
     error = tokenize();
     t1 = millis() - t1;
     if (error) { Serial.println(F("FAILED"));  return error; }
     Serial.print(F("OK (")); Serial.print(t1); Serial.println(F(" ms)"));
 
-    Serial.print(F(" - Parsing (second pass) ... "));
+
+    // if (token_count > 0) {
+    //     Serial.print(F("Tokens ")); Serial.print(token_count); Serial.println(F(":"));
+    //     for (int i = 0; i < token_count; i++) {
+    //         Token& token = tokens[i];
+    //         TokenType type = token.type;
+    //         Serial.print(F("    "));
+    //         fill(' ', 4 - Serial.print(i));
+    //         int s = Serial.print(F(" (")) + Serial.print(token.line) + Serial.print(F(":")) + Serial.print(token.column) + Serial.print(F(") "));
+    //         fill(' ', 10 - s);
+    //         Serial.print(F(" "));
+    //         fill(' ', 12 - printTokenType(type));
+    //         token.print();
+    //         Serial.println();
+    //     }
+    // } else Serial.println(F("No tokens"));
+
+    Serial.print(F(" - Building "));
     t1 = millis();
-    error = parsing_secondPass();
+    error = build(false); // First pass
     t1 = millis() - t1;
     if (error) { Serial.println(F("FAILED"));  return error; }
     Serial.print(F("OK (")); Serial.print(t1); Serial.println(F(" ms)"));
 
-    Serial.print(F(" - Building ... "));
+
+    Serial.print(F(" - Linking "));
     t1 = millis();
-    error = build();
+    error = build(true); // Second pass to link labels
     t1 = millis() - t1;
     if (error) { Serial.println(F("FAILED"));  return error; }
     Serial.print(F("OK (")); Serial.print(t1); Serial.println(F(" ms)"));
+
+    total = millis() - total;
+    Serial.print(F("Compilation finished in ")); Serial.print(total); Serial.println(F(" ms"));
+
+    if (LUT_label_count > 0) {
+        Serial.print(F("Labels ")); Serial.print(LUT_label_count); Serial.println(F(":"));
+        for (int i = 0; i < LUT_label_count; i++) {
+            LUT_label& label = LUT_labels[i];
+            Serial.print(F("    ")); label.string.print(); Serial.print(F(" = ")); Serial.println(label.address);
+        }
+    } else Serial.println(F("No labels"));
+
+    if (LUT_const_count > 0) {
+        Serial.print(F("Consts ")); Serial.print(LUT_const_count); Serial.println(F(":"));
+        for (int i = 0; i < LUT_const_count; i++) {
+            LUT_const& c = LUT_consts[i];
+            Serial.print(F("    ")); c.string.print(); Serial.print(F(" = "));
+            if (c.type == VAL_BOOLEAN) Serial.print(c.value_bool ? "true" : "false");
+            if (c.type == VAL_INTEGER) Serial.print(c.value_int);
+            if (c.type == VAL_REAL) Serial.print(c.value_float);
+            if (c.type == VAL_STRING) c.value_string.print();
+            Serial.println();
+        }
+    } else Serial.println(F("No consts"));
+
+    // if (token_count > 0) {
+    //     Serial.print(F("Tokens ")); Serial.print(token_count); Serial.println(F(":"));
+    //     for (int i = 0; i < token_count; i++) {
+    //         Token& token = tokens[i];
+    //         TokenType type = token.type;
+    //         Serial.print(F("    "));
+    //         fill(' ', 4 - Serial.print(i));
+    //         int s = Serial.print(F(" (")) + Serial.print(token.line) + Serial.print(F(":")) + Serial.print(token.column) + Serial.print(F(") "));
+    //         fill(' ', 10 - s);
+    //         Serial.print(F(" "));
+    //         fill(' ', 12 - printTokenType(type));
+    //         token.print();
+    //         Serial.println();
+    //     }
+    // } else Serial.println(F("No tokens"));
 
     // Serial.print(F("Assembly: \"")); Serial.print(assembly_string); Serial.println(F("\""));
 
-    Serial.print(F("Label count: ")); Serial.println(LUT_label_count);
-    Serial.println(F("Labels:"));
-    for (int i = 0; i < LUT_label_count; i++) {
-        LUT_label& label = LUT_labels[i];
-        Serial.print(F(" ")); label.string.print(); Serial.print(F(" = ")); Serial.println(label.address);
-    }
-    Serial.print(F("Const count: ")); Serial.println(LUT_const_count);
-    Serial.println(F("Consts:"));
-    for (int i = 0; i < LUT_const_count; i++) {
-        LUT_const& c = LUT_consts[i];
-        Serial.print(F(" ")); c.string.print(); Serial.print(F(" = "));
-        if (c.type == VAL_BOOLEAN) Serial.print(c.value_bool ? "true" : "false");
-        if (c.type == VAL_INTEGER) Serial.print(c.value_int);
-        if (c.type == VAL_REAL) Serial.print(c.value_float);
-        if (c.type == VAL_STRING) c.value_string.print();
-        Serial.println();
-    }
-
-    Serial.print(F("Token count: ")); Serial.println(token_count);
-    Serial.println(F("Tokens:"));
-    for (int i = 0; i < token_count; i++) {
-        Token& token = tokens[i];
-        TokenType type = token.type;
-        Serial.print(F(" "));
-        fill(' ', 4 - Serial.print(i));
-        int s = Serial.print(F(" (")) + Serial.print(token.line) + Serial.print(F(":")) + Serial.print(token.column) + Serial.print(F(") "));
-        fill(' ', 10 - s);
-        Serial.print(F(" "));
-        fill(' ', 12 - printTokenType(type));
-        token.print();
-        Serial.println();
-    }
-
-    Serial.print(F("Bytecode size: ")); Serial.println(built_bytecode_length);
-    Serial.println(F("Bytecode:"));
+    Serial.print(F("Bytecode ")); Serial.print(built_bytecode_length); Serial.println(F(" bytes:"));
     for (int i = 0; i < built_bytecode_length; i++) {
         uint8_t byte = built_bytecode[i]; // Format it as hex
         char c1 = ((byte >> 4) & 0xF) + '0';
@@ -944,6 +1030,16 @@ WASM_EXPORT bool compileTest() {
     }
     Serial.println();
     return false;
+}
+
+
+
+WASM_EXPORT void verifyCode() {
+    VovkPLCRuntime runtime(128, 10000, built_bytecode, built_bytecode_length); // Stack size
+    runtime.startup();
+    RuntimeError status = UnitTest::fullProgramDebug(runtime);
+    const char* status_name = RUNTIME_ERROR_NAME(status);
+    Serial.print(F("Runtime status: ")); Serial.println(status_name);
 }
 
 #endif // __WASM__
