@@ -38,6 +38,8 @@ class VovkPLCRuntime {
 private:
     bool started_up = false;
 public:
+    uint32_t input_offset = 10; // Output offset in memory
+    uint32_t output_offset = 20; // Output offset in memory
     uint32_t max_stack_size = 0; // Maximum stack size
     uint32_t memory_size = 0; // PLC memory size
 #ifdef __WASM__
@@ -73,9 +75,10 @@ public:
             memory->push(data[i]);
     }
 
-    VovkPLCRuntime(uint32_t max_stack_size, uint32_t memory_size = 0) {
+    VovkPLCRuntime(uint32_t max_stack_size, uint32_t memory_size, uint32_t program_size) {
         this->max_stack_size = max_stack_size;
         this->memory_size = memory_size;
+        this->program = new RuntimeProgram(program_size);
     }
     VovkPLCRuntime(uint32_t max_stack_size, uint32_t memory_size, uint8_t* program, uint32_t program_size) {
         this->max_stack_size = max_stack_size;
@@ -150,6 +153,36 @@ public:
 
     // Print the stack buffer to the serial port
     int printStack();
+
+    void setInput(uint32_t index, byte value) {
+        if (memory == nullptr) return;
+        memory->set(index + input_offset, value);
+    }
+
+    void setInputBit(uint32_t index, uint8_t bit, bool value) {
+        if (memory == nullptr) return;
+        byte temp = 0;
+        bool error = memory->get(index + input_offset, temp);
+        if (error) return;
+        if (value) temp |= (1 << bit);
+        else temp &= ~(1 << bit);
+        memory->set(index + input_offset, temp);
+    }
+
+    byte getOutput(uint32_t index) {
+        if (memory == nullptr) return 0;
+        byte value;
+        memory->get(index + output_offset, value);
+        return value;
+    }
+
+    bool getOutputBit(uint32_t index, uint8_t bit) {
+        if (memory == nullptr) return false;
+        byte temp = 0;
+        bool error = memory->get(index + output_offset, temp);
+        if (error) return false;
+        return temp & (1 << bit);
+    }
 };
 
 // Clear the runtime stack

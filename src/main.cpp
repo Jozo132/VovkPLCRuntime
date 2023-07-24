@@ -5,10 +5,17 @@
 
 
 // #define __RUNTIME_DEBUG__  // Avoid using this with microcontrollers with limited RAM!
+#ifndef __RUNTIME_PRODUCTION__
 #define __RUNTIME_FULL_UNIT_TEST___ // Only use this for testing the library
+#endif // __RUNTIME_PRODUCTION__
 
 #include <VovkPLCRuntime.h>
 
+#define stack_size 64
+#define memory_size 64
+#define program_size 128
+
+VovkPLCRuntime runtime(stack_size, memory_size, program_size); // Stack size
 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
@@ -22,9 +29,6 @@ void setup() {
   // Start the runtime unit test
   runtime_unit_test();
 }
-
-RuntimeProgram program(86); // Program size
-VovkPLCRuntime runtime(64, program); // Stack size
 
 bool startup = true;
 
@@ -89,7 +93,7 @@ void loop() {
     const char* status_name = RUNTIME_ERROR_NAME(status);
     Serial.print(F("Runtime status: ")); Serial.println(status_name);
 #else
-    Serial.print(F("Loaded bytecode: ")); program.println();
+    Serial.print(F("Loaded bytecode: ")); runtime.program->println();
     runtime.cleanRun();
 #endif
     float output = runtime.read<float>();
@@ -106,7 +110,11 @@ void loop() {
   float result = -1;
   long t = micros();
   for (int i = 0; i < cycles; i++) {
+    bool input = digitalRead(10);
+    runtime.setInputBit(0, 0, input);
     runtime.cleanRun();
+    bool output = runtime.getOutputBit(0, 0);
+    digitalWrite(11, output);
     result = runtime.read<float>();
   }
   t = micros() - t;
