@@ -849,92 +849,57 @@ bool build(bool finalPass) {
 
         if (type == TOKEN_KEYWORD) {
             { // Handle flow
-                if (hasNext && str_cmp(token, "jmp")) {
-                    if (finalPass && e_label) return e_label; i++;
-                    line.size = InstructionCompiler::pushJMP(bytecode, label_address);
-                    _line_push;
-                }
-                if (hasNext && str_cmp(token, "jmp_if")) {
-                    if (finalPass && e_label) return e_label; i++;
-                    line.size = InstructionCompiler::pushJMP_IF(bytecode, label_address);
-                    _line_push;
-                }
-                if (hasNext && str_cmp(token, "jmp_if_not")) {
-                    if (finalPass && e_label) return e_label; i++;
-                    line.size = InstructionCompiler::pushJMP_IF_NOT(bytecode, label_address);
-                    _line_push;
-                }
-                // if (hasNext && str_cmp(token, "call")) {
-                //     if (e_int) return e_int; i++;
-                //     line.size = InstructionCompiler::pushCALL(bytecode, value_int);
-                //     _line_push;
-                // }
-                // if (str_cmp(token, "ret")) {
-                //     line.size = InstructionCompiler::pushRET(bytecode);
-                //     _line_push;
-                // }
-                if (str_cmp(token, "nop")) {
-                    line.size = InstructionCompiler::push(bytecode, NOP);
-                    _line_push;
-                }
+                if (hasNext && str_cmp(token, "jmp")) { if (finalPass && e_label) return e_label; i++; line.size = InstructionCompiler::pushJMP(bytecode, label_address); _line_push; }
+                if (hasNext && str_cmp(token, "jmp_if")) { if (finalPass && e_label) return e_label; i++; line.size = InstructionCompiler::pushJMP_IF(bytecode, label_address); _line_push; }
+                if (hasNext && str_cmp(token, "jmp_if_not")) { if (finalPass && e_label) return e_label; i++; line.size = InstructionCompiler::pushJMP_IF_NOT(bytecode, label_address); _line_push; }
+                // if (hasNext && str_cmp(token, "call")) { if (e_int) return e_int; i++; line.size = InstructionCompiler::pushCALL(bytecode, value_int); _line_push; }
+                // if (str_cmp(token, "ret")) { line.size = InstructionCompiler::pushRET(bytecode); _line_push; }
+                if (str_cmp(token, "nop")) { line.size = InstructionCompiler::push(bytecode, NOP); _line_push; }
+            }
+
+            { // Handle Bit operations (PLC specific)
+                if (str_cmp(token, "u8.get.0")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B0); _line_push; }
+                if (str_cmp(token, "u8.get.1")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B1); _line_push; }
+                if (str_cmp(token, "u8.get.2")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B2); _line_push; }
+                if (str_cmp(token, "u8.get.3")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B3); _line_push; }
+                if (str_cmp(token, "u8.get.4")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B4); _line_push; }
+                if (str_cmp(token, "u8.get.5")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B5); _line_push; }
+                if (str_cmp(token, "u8.get.6")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B6); _line_push; }
+                if (str_cmp(token, "u8.get.7")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B7); _line_push; }
+
+                if (str_cmp(token, "u8.set.0")) { line.size = InstructionCompiler::push(bytecode, SET_X8_B0); _line_push; }
+                if (str_cmp(token, "u8.set.1")) { line.size = InstructionCompiler::push(bytecode, SET_X8_B1); _line_push; }
+                if (str_cmp(token, "u8.set.2")) { line.size = InstructionCompiler::push(bytecode, SET_X8_B2); _line_push; }
+                if (str_cmp(token, "u8.set.3")) { line.size = InstructionCompiler::push(bytecode, SET_X8_B3); _line_push; }
+                if (str_cmp(token, "u8.set.4")) { line.size = InstructionCompiler::push(bytecode, SET_X8_B4); _line_push; }
+                if (str_cmp(token, "u8.set.5")) { line.size = InstructionCompiler::push(bytecode, SET_X8_B5); _line_push; }
+                if (str_cmp(token, "u8.set.6")) { line.size = InstructionCompiler::push(bytecode, SET_X8_B6); _line_push; }
+                if (str_cmp(token, "u8.set.7")) { line.size = InstructionCompiler::push(bytecode, SET_X8_B7); _line_push; }
+
+                if (str_cmp(token, "u8.rset.0")) { line.size = InstructionCompiler::push(bytecode, RSET_X8_B0); _line_push; }
+                if (str_cmp(token, "u8.rset.1")) { line.size = InstructionCompiler::push(bytecode, RSET_X8_B1); _line_push; }
+                if (str_cmp(token, "u8.rset.2")) { line.size = InstructionCompiler::push(bytecode, RSET_X8_B2); _line_push; }
+                if (str_cmp(token, "u8.rset.3")) { line.size = InstructionCompiler::push(bytecode, RSET_X8_B3); _line_push; }
+                if (str_cmp(token, "u8.rset.4")) { line.size = InstructionCompiler::push(bytecode, RSET_X8_B4); _line_push; }
+                if (str_cmp(token, "u8.rset.5")) { line.size = InstructionCompiler::push(bytecode, RSET_X8_B5); _line_push; }
+                if (str_cmp(token, "u8.rset.6")) { line.size = InstructionCompiler::push(bytecode, RSET_X8_B6); _line_push; }
+                if (str_cmp(token, "u8.rset.7")) { line.size = InstructionCompiler::push(bytecode, RSET_X8_B7); _line_push; }
             }
 
             { // Handle u8
-                if (hasNext && str_cmp(token, "u8.get")) {
-                    if (e_int) return e_int; i++;
-                    line.size = InstructionCompiler::pushGET(bytecode, value_int, type_uint8_t);
-                    _line_push;
-                }
-                if (hasNext && str_cmp(token, "u8.put")) {
-                    if (e_int) return e_int; i++;
-                    line.size = InstructionCompiler::pushPUT(bytecode, value_int, type_uint8_t);
-                    _line_push;
-                }
-                if (hasNext && str_cmp(token, "u8.const")) {
-                    if (e_int) return e_int; i++;
-                    line.size = InstructionCompiler::push_uint8_t(bytecode, value_int);
-                    _line_push;
-                }
-                if (str_cmp(token, "u8.cmp_lt")) {
-                    line.size = InstructionCompiler::push(bytecode, CMP_LT, type_uint8_t);
-                    _line_push;
-                }
-                if (str_cmp(token, "u8.cmp_gt")) {
-                    line.size = InstructionCompiler::push(bytecode, CMP_GT, type_uint8_t);
-                    _line_push;
-                }
-                if (str_cmp(token, "u8.cmp_eq")) {
-                    line.size = InstructionCompiler::push(bytecode, CMP_EQ, type_uint8_t);
-                    _line_push;
-                }
-                if (str_cmp(token, "u8.cmp_neq")) {
-                    line.size = InstructionCompiler::push(bytecode, CMP_NEQ, type_uint8_t);
-                    _line_push;
-                }
-                if (str_cmp(token, "u8.cmp_gte")) {
-                    line.size = InstructionCompiler::push(bytecode, CMP_GTE, type_uint8_t);
-                    _line_push;
-                }
-                if (str_cmp(token, "u8.cmp_lte")) {
-                    line.size = InstructionCompiler::push(bytecode, CMP_LTE, type_uint8_t);
-                    _line_push;
-                }
-                if (str_cmp(token, "u8.add")) {
-                    line.size = InstructionCompiler::push(bytecode, ADD, type_uint8_t);
-                    _line_push;
-                }
-                if (str_cmp(token, "u8.sub")) {
-                    line.size = InstructionCompiler::push(bytecode, SUB, type_uint8_t);
-                    _line_push;
-                }
-                if (str_cmp(token, "u8.mul")) {
-                    line.size = InstructionCompiler::push(bytecode, MUL, type_uint8_t);
-                    _line_push;
-                }
-                if (str_cmp(token, "u8.div")) {
-                    line.size = InstructionCompiler::push(bytecode, DIV, type_uint8_t);
-                    _line_push;
-                }
+                if (hasNext && str_cmp(token, "u8.get")) { if (e_int) return e_int; i++; line.size = InstructionCompiler::pushGET(bytecode, value_int, type_uint8_t); _line_push; }
+                if (hasNext && str_cmp(token, "u8.put")) { if (e_int) return e_int; i++; line.size = InstructionCompiler::pushPUT(bytecode, value_int, type_uint8_t); _line_push; }
+                if (hasNext && str_cmp(token, "u8.const")) { if (e_int) return e_int; i++; line.size = InstructionCompiler::push_uint8_t(bytecode, value_int); _line_push; }
+                if (str_cmp(token, "u8.cmp_lt")) { line.size = InstructionCompiler::push(bytecode, CMP_LT, type_uint8_t); _line_push; }
+                if (str_cmp(token, "u8.cmp_gt")) { line.size = InstructionCompiler::push(bytecode, CMP_GT, type_uint8_t); _line_push; }
+                if (str_cmp(token, "u8.cmp_eq")) { line.size = InstructionCompiler::push(bytecode, CMP_EQ, type_uint8_t); _line_push; }
+                if (str_cmp(token, "u8.cmp_neq")) { line.size = InstructionCompiler::push(bytecode, CMP_NEQ, type_uint8_t); _line_push; }
+                if (str_cmp(token, "u8.cmp_gte")) { line.size = InstructionCompiler::push(bytecode, CMP_GTE, type_uint8_t); _line_push; }
+                if (str_cmp(token, "u8.cmp_lte")) { line.size = InstructionCompiler::push(bytecode, CMP_LTE, type_uint8_t); _line_push; }
+                if (str_cmp(token, "u8.add")) { line.size = InstructionCompiler::push(bytecode, ADD, type_uint8_t); _line_push; }
+                if (str_cmp(token, "u8.sub")) { line.size = InstructionCompiler::push(bytecode, SUB, type_uint8_t); _line_push; }
+                if (str_cmp(token, "u8.mul")) { line.size = InstructionCompiler::push(bytecode, MUL, type_uint8_t); _line_push; }
+                if (str_cmp(token, "u8.div")) { line.size = InstructionCompiler::push(bytecode, DIV, type_uint8_t); _line_push; }
             }
         }
 

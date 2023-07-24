@@ -178,6 +178,36 @@ enum PLCRuntimeInstructionSet {
     // ACOSH,              // Hyperbolic arc cosine
     // ATANH,              // Hyperbolic arc tangent
 
+    // Bit operations (PLC specific for simpler bytecode generation)
+    GET_X8_B0 = 0x40,   // Get the first bit of the 1 byte size value (x)
+    GET_X8_B1,          // Get the second bit of the 1 byte size value (x)
+    GET_X8_B2,          // Get the third bit of the 1 byte size value (x)
+    GET_X8_B3,          // Get the fourth bit of the 1 byte size value (x)
+    GET_X8_B4,          // Get the fifth bit of the 1 byte size value (x)
+    GET_X8_B5,          // Get the sixth bit of the 1 byte size value (x)
+    GET_X8_B6,          // Get the seventh bit of the 1 byte size value (x)
+    GET_X8_B7,          // Get the eighth bit of the 1 byte size value (x)
+
+    SET_X8_B0,          // Set the first bit of the 1 byte size value (x)
+    SET_X8_B1,          // Set the second bit of the 1 byte size value (x)
+    SET_X8_B2,          // Set the third bit of the 1 byte size value (x)
+    SET_X8_B3,          // Set the fourth bit of the 1 byte size value (x)
+    SET_X8_B4,          // Set the fifth bit of the 1 byte size value (x)
+    SET_X8_B5,          // Set the sixth bit of the 1 byte size value (x)
+    SET_X8_B6,          // Set the seventh bit of the 1 byte size value (x)
+    SET_X8_B7,          // Set the eighth bit of the 1 byte size value (x)
+
+    RSET_X8_B0,         // Reset the first bit of the 1 byte size value (x)
+    RSET_X8_B1,         // Reset the second bit of the 1 byte size value (x)
+    RSET_X8_B2,         // Reset the third bit of the 1 byte size value (x)
+    RSET_X8_B3,         // Reset the fourth bit of the 1 byte size value (x)
+    RSET_X8_B4,         // Reset the fifth bit of the 1 byte size value (x)
+    RSET_X8_B5,         // Reset the sixth bit of the 1 byte size value (x)
+    RSET_X8_B6,         // Reset the seventh bit of the 1 byte size value (x)
+    RSET_X8_B7,         // Reset the eighth bit of the 1 byte size value (x)
+
+
+    // Bitwise operations
     BW_AND_X8 = 0x60,   // Bitwise AND for 1 byte size values (x, y)
     BW_AND_X16,         // Bitwise AND for 2 byte size values (x, y)
     BW_AND_X32,         // Bitwise AND for 4 byte size values (x, y)
@@ -286,6 +316,31 @@ bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
             // case ASINH:
             // case ACOSH:
             // case ATANH:
+        case GET_X8_B0:
+        case GET_X8_B1:
+        case GET_X8_B2:
+        case GET_X8_B3:
+        case GET_X8_B4:
+        case GET_X8_B5:
+        case GET_X8_B6:
+        case GET_X8_B7:
+        case SET_X8_B0:
+        case SET_X8_B1:
+        case SET_X8_B2:
+        case SET_X8_B3:
+        case SET_X8_B4:
+        case SET_X8_B5:
+        case SET_X8_B6:
+        case SET_X8_B7:
+        case RSET_X8_B0:
+        case RSET_X8_B1:
+        case RSET_X8_B2:
+        case RSET_X8_B3:
+        case RSET_X8_B4:
+        case RSET_X8_B5:
+        case RSET_X8_B6:
+        case RSET_X8_B7:
+
         case BW_AND_X8:
         case BW_AND_X16:
         case BW_AND_X32:
@@ -384,6 +439,31 @@ const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
             // case ASINH: return F("ASINH");
             // case ACOSH: return F("ACOSH");
             // case ATANH: return F("ATANH");>
+        case GET_X8_B0: return F("GET_X8_B0");
+        case GET_X8_B1: return F("GET_X8_B1");
+        case GET_X8_B2: return F("GET_X8_B2");
+        case GET_X8_B3: return F("GET_X8_B3");
+        case GET_X8_B4: return F("GET_X8_B4");
+        case GET_X8_B5: return F("GET_X8_B5");
+        case GET_X8_B6: return F("GET_X8_B6");
+        case GET_X8_B7: return F("GET_X8_B7");
+        case SET_X8_B0: return F("SET_X8_B0");
+        case SET_X8_B1: return F("SET_X8_B1");
+        case SET_X8_B2: return F("SET_X8_B2");
+        case SET_X8_B3: return F("SET_X8_B3");
+        case SET_X8_B4: return F("SET_X8_B4");
+        case SET_X8_B5: return F("SET_X8_B5");
+        case SET_X8_B6: return F("SET_X8_B6");
+        case SET_X8_B7: return F("SET_X8_B7");
+        case RSET_X8_B0: return F("RSET_X8_B0");
+        case RSET_X8_B1: return F("RSET_X8_B1");
+        case RSET_X8_B2: return F("RSET_X8_B2");
+        case RSET_X8_B3: return F("RSET_X8_B3");
+        case RSET_X8_B4: return F("RSET_X8_B4");
+        case RSET_X8_B5: return F("RSET_X8_B5");
+        case RSET_X8_B6: return F("RSET_X8_B6");
+        case RSET_X8_B7: return F("RSET_X8_B7");
+
         case BW_AND_X8: return F("BW_AND_X8");
         case BW_AND_X16: return F("BW_AND_X16");
         case BW_AND_X32: return F("BW_AND_X32");
@@ -481,6 +561,32 @@ uint8_t OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
             // case ASINH: return 2;
             // case ACOSH: return 2;
             // case ATANH: return 2;
+
+        case GET_X8_B0: return 1;
+        case GET_X8_B1: return 1;
+        case GET_X8_B2: return 1;
+        case GET_X8_B3: return 1;
+        case GET_X8_B4: return 1;
+        case GET_X8_B5: return 1;
+        case GET_X8_B6: return 1;
+        case GET_X8_B7: return 1;
+        case SET_X8_B0: return 1;
+        case SET_X8_B1: return 1;
+        case SET_X8_B2: return 1;
+        case SET_X8_B3: return 1;
+        case SET_X8_B4: return 1;
+        case SET_X8_B5: return 1;
+        case SET_X8_B6: return 1;
+        case SET_X8_B7: return 1;
+        case RSET_X8_B0: return 1;
+        case RSET_X8_B1: return 1;
+        case RSET_X8_B2: return 1;
+        case RSET_X8_B3: return 1;
+        case RSET_X8_B4: return 1;
+        case RSET_X8_B5: return 1;
+        case RSET_X8_B6: return 1;
+        case RSET_X8_B7: return 1;
+
         case BW_AND_X8: return 1;
         case BW_AND_X16: return 1;
         case BW_AND_X32: return 1;
