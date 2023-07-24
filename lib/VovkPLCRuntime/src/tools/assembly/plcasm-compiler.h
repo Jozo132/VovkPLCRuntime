@@ -147,9 +147,7 @@ struct StringView {
     char* data;
     int length;
     int print() {
-        for (int i = 0; i < length; i++) {
-            printf("%c", data[i]);
-        }
+        for (int i = 0; i < length; i++) printf("%c", data[i]);
         return length;
     }
 };
