@@ -858,37 +858,37 @@ bool build(bool finalPass) {
             }
 
             { // Handle Bit operations (PLC specific)
-                if (str_cmp(token, "u8.get.0")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B0); _line_push; }
-                if (str_cmp(token, "u8.get.1")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B1); _line_push; }
-                if (str_cmp(token, "u8.get.2")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B2); _line_push; }
-                if (str_cmp(token, "u8.get.3")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B3); _line_push; }
-                if (str_cmp(token, "u8.get.4")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B4); _line_push; }
-                if (str_cmp(token, "u8.get.5")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B5); _line_push; }
-                if (str_cmp(token, "u8.get.6")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B6); _line_push; }
-                if (str_cmp(token, "u8.get.7")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B7); _line_push; }
+                if (str_cmp(token, "u8.0.get")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B0); _line_push; }
+                if (str_cmp(token, "u8.1.get")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B1); _line_push; }
+                if (str_cmp(token, "u8.2.get")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B2); _line_push; }
+                if (str_cmp(token, "u8.3.get")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B3); _line_push; }
+                if (str_cmp(token, "u8.4.get")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B4); _line_push; }
+                if (str_cmp(token, "u8.5.get")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B5); _line_push; }
+                if (str_cmp(token, "u8.6.get")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B6); _line_push; }
+                if (str_cmp(token, "u8.7.get")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B7); _line_push; }
 
-                if (str_cmp(token, "u8.set.0")) { line.size = InstructionCompiler::push(bytecode, SET_X8_B0); _line_push; }
-                if (str_cmp(token, "u8.set.1")) { line.size = InstructionCompiler::push(bytecode, SET_X8_B1); _line_push; }
-                if (str_cmp(token, "u8.set.2")) { line.size = InstructionCompiler::push(bytecode, SET_X8_B2); _line_push; }
-                if (str_cmp(token, "u8.set.3")) { line.size = InstructionCompiler::push(bytecode, SET_X8_B3); _line_push; }
-                if (str_cmp(token, "u8.set.4")) { line.size = InstructionCompiler::push(bytecode, SET_X8_B4); _line_push; }
-                if (str_cmp(token, "u8.set.5")) { line.size = InstructionCompiler::push(bytecode, SET_X8_B5); _line_push; }
-                if (str_cmp(token, "u8.set.6")) { line.size = InstructionCompiler::push(bytecode, SET_X8_B6); _line_push; }
-                if (str_cmp(token, "u8.set.7")) { line.size = InstructionCompiler::push(bytecode, SET_X8_B7); _line_push; }
+                if (str_cmp(token, "u8.0.set")) { line.size = InstructionCompiler::push(bytecode, SET_X8_B0); _line_push; }
+                if (str_cmp(token, "u8.1.set")) { line.size = InstructionCompiler::push(bytecode, SET_X8_B1); _line_push; }
+                if (str_cmp(token, "u8.2.set")) { line.size = InstructionCompiler::push(bytecode, SET_X8_B2); _line_push; }
+                if (str_cmp(token, "u8.3.set")) { line.size = InstructionCompiler::push(bytecode, SET_X8_B3); _line_push; }
+                if (str_cmp(token, "u8.4.set")) { line.size = InstructionCompiler::push(bytecode, SET_X8_B4); _line_push; }
+                if (str_cmp(token, "u8.5.set")) { line.size = InstructionCompiler::push(bytecode, SET_X8_B5); _line_push; }
+                if (str_cmp(token, "u8.6.set")) { line.size = InstructionCompiler::push(bytecode, SET_X8_B6); _line_push; }
+                if (str_cmp(token, "u8.7.set")) { line.size = InstructionCompiler::push(bytecode, SET_X8_B7); _line_push; }
 
-                if (str_cmp(token, "u8.rset.0")) { line.size = InstructionCompiler::push(bytecode, RSET_X8_B0); _line_push; }
-                if (str_cmp(token, "u8.rset.1")) { line.size = InstructionCompiler::push(bytecode, RSET_X8_B1); _line_push; }
-                if (str_cmp(token, "u8.rset.2")) { line.size = InstructionCompiler::push(bytecode, RSET_X8_B2); _line_push; }
-                if (str_cmp(token, "u8.rset.3")) { line.size = InstructionCompiler::push(bytecode, RSET_X8_B3); _line_push; }
-                if (str_cmp(token, "u8.rset.4")) { line.size = InstructionCompiler::push(bytecode, RSET_X8_B4); _line_push; }
-                if (str_cmp(token, "u8.rset.5")) { line.size = InstructionCompiler::push(bytecode, RSET_X8_B5); _line_push; }
-                if (str_cmp(token, "u8.rset.6")) { line.size = InstructionCompiler::push(bytecode, RSET_X8_B6); _line_push; }
-                if (str_cmp(token, "u8.rset.7")) { line.size = InstructionCompiler::push(bytecode, RSET_X8_B7); _line_push; }
+                if (str_cmp(token, "u8.0.rset")) { line.size = InstructionCompiler::push(bytecode, RSET_X8_B0); _line_push; }
+                if (str_cmp(token, "u8.1.rset")) { line.size = InstructionCompiler::push(bytecode, RSET_X8_B1); _line_push; }
+                if (str_cmp(token, "u8.2.rset")) { line.size = InstructionCompiler::push(bytecode, RSET_X8_B2); _line_push; }
+                if (str_cmp(token, "u8.3.rset")) { line.size = InstructionCompiler::push(bytecode, RSET_X8_B3); _line_push; }
+                if (str_cmp(token, "u8.4.rset")) { line.size = InstructionCompiler::push(bytecode, RSET_X8_B4); _line_push; }
+                if (str_cmp(token, "u8.5.rset")) { line.size = InstructionCompiler::push(bytecode, RSET_X8_B5); _line_push; }
+                if (str_cmp(token, "u8.6.rset")) { line.size = InstructionCompiler::push(bytecode, RSET_X8_B6); _line_push; }
+                if (str_cmp(token, "u8.7.rset")) { line.size = InstructionCompiler::push(bytecode, RSET_X8_B7); _line_push; }
             }
 
             { // Handle u8
-                if (hasNext && str_cmp(token, "u8.get")) { if (e_int) return e_int; i++; line.size = InstructionCompiler::pushGET(bytecode, value_int, type_uint8_t); _line_push; }
-                if (hasNext && str_cmp(token, "u8.put")) { if (e_int) return e_int; i++; line.size = InstructionCompiler::pushPUT(bytecode, value_int, type_uint8_t); _line_push; }
+                if (hasNext && str_cmp(token, "u8.load")) { if (e_int) return e_int; i++; line.size = InstructionCompiler::pushGET(bytecode, value_int, type_uint8_t); _line_push; }
+                if (hasNext && str_cmp(token, "u8.store")) { if (e_int) return e_int; i++; line.size = InstructionCompiler::pushPUT(bytecode, value_int, type_uint8_t); _line_push; }
                 if (hasNext && str_cmp(token, "u8.const")) { if (e_int) return e_int; i++; line.size = InstructionCompiler::push_uint8_t(bytecode, value_int); _line_push; }
                 if (str_cmp(token, "u8.cmp_lt")) { line.size = InstructionCompiler::push(bytecode, CMP_LT, type_uint8_t); _line_push; }
                 if (str_cmp(token, "u8.cmp_gt")) { line.size = InstructionCompiler::push(bytecode, CMP_GT, type_uint8_t); _line_push; }
