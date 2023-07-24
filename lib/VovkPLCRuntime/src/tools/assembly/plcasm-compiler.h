@@ -935,7 +935,7 @@ bool build(bool finalPass) {
         // bool e_bool = boolFromToken(token_p1, value_bool);
         bool e_int = intFromToken(token_p1, value_int);
         bool e_real = realFromToken(token_p1, value_float);
-        bool e_data_type = typeFromToken(token, data_type);
+        /* bool e_data_type = */ typeFromToken(token, data_type);
 
         if (type == TOKEN_KEYWORD) {
             { // Handle flow
