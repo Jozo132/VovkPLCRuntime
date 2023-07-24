@@ -335,4 +335,143 @@ namespace PLCMethods {
         }
         return stack->push_uint8_t(value);
     }
+
+    // Duplicate the value on top of the stack
+    RuntimeError COPY(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) {
+        uint32_t size = 1;
+        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        uint8_t data_type = 0;
+        extract_status = ProgramExtract.type_uint8_t(program, program_size, index, &data_type);
+        if (extract_status != STATUS_SUCCESS) return extract_status;
+        switch (data_type) {
+            case type_bool: return stack->push_bool(stack->peek_bool());
+            case type_uint8_t: return stack->push_uint8_t(stack->peek_uint8_t());
+            case type_uint16_t: return stack->push_uint16_t(stack->peek_uint16_t());
+            case type_uint32_t: return stack->push_uint32_t(stack->peek_uint32_t());
+            case type_uint64_t: return stack->push_uint64_t(stack->peek_uint64_t());
+            case type_int8_t: return stack->push_int8_t(stack->peek_int8_t());
+            case type_int16_t: return stack->push_int16_t(stack->peek_int16_t());
+            case type_int32_t: return stack->push_int32_t(stack->peek_int32_t());
+            case type_int64_t: return stack->push_int64_t(stack->peek_int64_t());
+            case type_float: return stack->push_float(stack->peek_float());
+            case type_double: return stack->push_double(stack->peek_double());
+            default: return INVALID_DATA_TYPE;
+        }
+    }
+    // Swap the two values on top of the stack
+    RuntimeError SWAP(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) {
+        uint32_t size = 1;
+        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        uint8_t data_type = 0;
+        extract_status = ProgramExtract.type_uint8_t(program, program_size, index, &data_type);
+        if (extract_status != STATUS_SUCCESS) return extract_status;
+        switch (data_type) {
+            case type_bool: {
+                bool a = stack->pop_bool();
+                bool b = stack->pop_bool();
+                stack->push_bool(a);
+                stack->push_bool(b);
+                return STATUS_SUCCESS;
+            }
+            case type_uint8_t: {
+                uint8_t a = stack->pop_uint8_t();
+                uint8_t b = stack->pop_uint8_t();
+                stack->push_uint8_t(a);
+                stack->push_uint8_t(b);
+                return STATUS_SUCCESS;
+            }
+            case type_uint16_t: {
+                uint16_t a = stack->pop_uint16_t();
+                uint16_t b = stack->pop_uint16_t();
+                stack->push_uint16_t(a);
+                stack->push_uint16_t(b);
+                return STATUS_SUCCESS;
+            }
+            case type_uint32_t: {
+                uint32_t a = stack->pop_uint32_t();
+                uint32_t b = stack->pop_uint32_t();
+                stack->push_uint32_t(a);
+                stack->push_uint32_t(b);
+                return STATUS_SUCCESS;
+            }
+            case type_uint64_t: {
+                uint64_t a = stack->pop_uint64_t();
+                uint64_t b = stack->pop_uint64_t();
+                stack->push_uint64_t(a);
+                stack->push_uint64_t(b);
+                return STATUS_SUCCESS;
+            }
+            case type_int8_t: {
+                int8_t a = stack->pop_int8_t();
+                int8_t b = stack->pop_int8_t();
+                stack->push_int8_t(a);
+                stack->push_int8_t(b);
+                return STATUS_SUCCESS;
+            }
+            case type_int16_t: {
+                int16_t a = stack->pop_int16_t();
+                int16_t b = stack->pop_int16_t();
+                stack->push_int16_t(a);
+                stack->push_int16_t(b);
+                return STATUS_SUCCESS;
+            }
+            case type_int32_t: {
+                int32_t a = stack->pop_int32_t();
+                int32_t b = stack->pop_int32_t();
+                stack->push_int32_t(a);
+                stack->push_int32_t(b);
+                return STATUS_SUCCESS;
+            }
+            case type_int64_t: {
+                int64_t a = stack->pop_int64_t();
+                int64_t b = stack->pop_int64_t();
+                stack->push_int64_t(a);
+                stack->push_int64_t(b);
+                return STATUS_SUCCESS;
+            }
+            case type_float: {
+                float a = stack->pop_float();
+                float b = stack->pop_float();
+                stack->push_float(a);
+                stack->push_float(b);
+                return STATUS_SUCCESS;
+            }
+            case type_double: {
+                double a = stack->pop_double();
+                double b = stack->pop_double();
+                stack->push_double(a);
+                stack->push_double(b);
+                return STATUS_SUCCESS;
+            }
+            default: return INVALID_DATA_TYPE;
+        }
+    }
+    // Drop the value on top of the stack
+    RuntimeError DROP(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) {
+        uint32_t size = 1;
+        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        uint8_t data_type = 0;
+        extract_status = ProgramExtract.type_uint8_t(program, program_size, index, &data_type);
+        if (extract_status != STATUS_SUCCESS) return extract_status;
+        switch (data_type) {
+            case type_bool: stack->pop_bool(); break;
+            case type_uint8_t: stack->pop_uint8_t(); break;
+            case type_uint16_t: stack->pop_uint16_t(); break;
+            case type_uint32_t: stack->pop_uint32_t(); break;
+            case type_uint64_t: stack->pop_uint64_t(); break;
+            case type_int8_t: stack->pop_int8_t(); break;
+            case type_int16_t: stack->pop_int16_t(); break;
+            case type_int32_t: stack->pop_int32_t(); break;
+            case type_int64_t: stack->pop_int64_t(); break;
+            case type_float: stack->pop_float(); break;
+            case type_double: stack->pop_double(); break;
+            default: return INVALID_DATA_TYPE;
+        }
+        return STATUS_SUCCESS;
+    }
+    // Clear the stack
+    RuntimeError CLEAR(RuntimeStack* stack) {
+        stack->clear();
+        return STATUS_SUCCESS;
+    }
 }

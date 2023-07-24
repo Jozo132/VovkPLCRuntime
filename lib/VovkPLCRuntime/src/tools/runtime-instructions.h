@@ -142,6 +142,11 @@ enum PLCRuntimeInstructionSet {
     PUT,                // Put value from stack to memory. Example: [ uint8_t PUT, uint8_t type, uint16_t address ]
     GET,                // Get value from memory to stack. Example: [ uint8_t GET, uint8_t type, uint16_t address ]
 
+    COPY,               // Make a duplicate of the top of the stack
+    SWAP,               // Swap the top two values on the stack
+    DROP,               // Remove the top of the stack
+    CLEAR,              // Clear the stack
+
     // Arithmetic operations
     ADD = 0x20,         // Addition, requires data type as argument
     SUB,                // Subtraction, requires data type as argument
@@ -260,6 +265,8 @@ enum PLCRuntimeInstructionSet {
     CALL_IF,            // Call a function if the top of the stack is true (uint16_t)
     CALL_IF_NOT,        // Call a function if the top of the stack is false (uint16_t)
     RET,                // Return from a function call
+    RET_IF,             // Return from a function call if the top of the stack is true
+    RET_IF_NOT,         // Return from a function call if the top of the stack is false
 
     EXIT = 0xFF         // Exit the program. This will cease the execution of the program and return an optional exit error code (uint8_t)
 };
@@ -283,6 +290,10 @@ bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
         case CVT:
         case PUT:
         case GET:
+        case COPY:
+        case SWAP:
+        case DROP:
+        case CLEAR:
         case ADD:
         case SUB:
         case MUL:
@@ -382,6 +393,8 @@ bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
         case CALL_IF:
         case CALL_IF_NOT:
         case RET:
+        case RET_IF:
+        case RET_IF_NOT:
         case EXIT: return true;
         default: break;
     }
@@ -406,6 +419,10 @@ const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
         case CVT: return F("CVT");
         case PUT: return F("PUT");
         case GET: return F("GET");
+        case COPY: return F("COPY");
+        case SWAP: return F("SWAP");
+        case DROP: return F("DROP");
+        case CLEAR: return F("CLEAR");
         case ADD: return F("ADD");
         case SUB: return F("SUB");
         case MUL: return F("MUL");
@@ -505,6 +522,8 @@ const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
         case CALL_IF: return F("CALL_IF");
         case CALL_IF_NOT: return F("CALL_IF_NOT");
         case RET: return F("RET");
+        case RET_IF: return F("RET_IF");
+        case RET_IF_NOT: return F("RET_IF_NOT");
         case EXIT: return F("EXIT");
         default: break;
     }
@@ -529,6 +548,10 @@ uint8_t OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
         case CVT: return 3;
         case PUT: return 4;
         case GET: return 4;
+        case COPY: return 2;
+        case SWAP: return 2;
+        case DROP: return 2;
+        case CLEAR: return 1;
         case ADD: return 2;
         case SUB: return 2;
         case MUL: return 2;
@@ -629,6 +652,8 @@ uint8_t OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
         case CALL_IF: return 3;
         case CALL_IF_NOT: return 3;
         case RET: return 1;
+        case RET_IF: return 1;
+        case RET_IF_NOT: return 1;
         case EXIT: return 1;
         default: break;
     }

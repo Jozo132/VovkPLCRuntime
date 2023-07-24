@@ -111,6 +111,28 @@ u8.const 255
 u8.7.get
 
 // Expected leftover stack after test: [64 82 FF 01]
+
+########## Run recursive function test with a parameter (count down from 5)
+
+u8.const 5
+call FunctionTest
+u8.drop
+exit
+
+FunctionTest:
+        // At the top of the stack should be the input value
+        
+        // Make a copy to check the if statement for 0
+        u8.copy 
+        u8.const 0
+        u8.cmp_eq
+        ret_if
+        u8.const 1
+        u8.sub
+        call FunctionTest
+        ret
+
+
         </textarea>
         <div id="output"></div>
     </body>

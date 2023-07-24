@@ -116,9 +116,9 @@ namespace PLCMethods {
         u8A_to_u16 cvt;
         cvt.u8A[1] = program[index];
         cvt.u8A[0] = program[index + 1];
+        RuntimeError call_store_status = stack->pushCall(index + size);
         index = cvt.u16;
         if (index >= program_size) CHECK_PROGRAM_POINTER_BOUNDS_HEAD;
-        RuntimeError call_store_status = stack->pushCall(index);
         if (call_store_status != STATUS_SUCCESS) return call_store_status;
         if (index >= program_size) CHECK_PROGRAM_POINTER_BOUNDS_HEAD;
         return STATUS_SUCCESS;
@@ -131,9 +131,9 @@ namespace PLCMethods {
             u8A_to_u16 cvt;
             cvt.u8A[1] = program[index];
             cvt.u8A[0] = program[index + 1];
+            RuntimeError call_store_status = stack->pushCall(index + size);
             index = cvt.u16;
             if (index == 0 || index >= program_size) CHECK_PROGRAM_POINTER_BOUNDS_HEAD;
-            RuntimeError call_store_status = stack->pushCall(index);
             if (call_store_status != STATUS_SUCCESS) return call_store_status;
             if (index >= program_size) CHECK_PROGRAM_POINTER_BOUNDS_HEAD;
         } else index += size;
@@ -147,9 +147,9 @@ namespace PLCMethods {
             u8A_to_u16 cvt;
             cvt.u8A[1] = program[index];
             cvt.u8A[0] = program[index + 1];
+            RuntimeError call_store_status = stack->pushCall(index + size);
             index = cvt.u16;
             if (index == 0 || index >= program_size) CHECK_PROGRAM_POINTER_BOUNDS_HEAD;
-            RuntimeError call_store_status = stack->pushCall(index);
             if (call_store_status != STATUS_SUCCESS) return call_store_status;
             if (index >= program_size) CHECK_PROGRAM_POINTER_BOUNDS_HEAD;
         } else index += size;
@@ -160,8 +160,27 @@ namespace PLCMethods {
         if (stack->call_stack->size() == 0) return CALL_STACK_UNDERFLOW;
         uint16_t ret_index = stack->popCall();
         index = ret_index;
-
         if (index >= program_size) CHECK_PROGRAM_POINTER_BOUNDS_HEAD;
+        return STATUS_SUCCESS;
+    }
+    RuntimeError handle_RET_IF(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) {
+        IGNORE_UNUSED uint32_t index_start = index;
+        if (stack->call_stack->size() == 0) return CALL_STACK_UNDERFLOW;
+        if (stack->pop_bool()) {
+            uint16_t ret_index = stack->popCall();
+            index = ret_index;
+            if (index >= program_size) CHECK_PROGRAM_POINTER_BOUNDS_HEAD;
+        }
+        return STATUS_SUCCESS;
+    }
+    RuntimeError handle_RET_IF_NOT(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) {
+        IGNORE_UNUSED uint32_t index_start = index;
+        if (stack->call_stack->size() == 0) return CALL_STACK_UNDERFLOW;
+        if (!stack->pop_bool()) {
+            uint16_t ret_index = stack->popCall();
+            index = ret_index;
+            if (index >= program_size) CHECK_PROGRAM_POINTER_BOUNDS_HEAD;
+        }
         return STATUS_SUCCESS;
     }
 

@@ -206,6 +206,10 @@ RuntimeError VovkPLCRuntime::step(uint8_t* program, uint32_t program_size, uint3
         case CVT: return PLCMethods::CVT(this->stack, program, program_size, index);
         case PUT: return PLCMethods::PUT(this->stack, program, program_size, index);
         case GET: return PLCMethods::GET(this->stack, program, program_size, index);
+        case COPY: return PLCMethods::COPY(this->stack, program, program_size, index);
+        case SWAP: return PLCMethods::SWAP(this->stack, program, program_size, index);
+        case DROP: return PLCMethods::DROP(this->stack, program, program_size, index);
+        case CLEAR: return PLCMethods::CLEAR(this->stack);
         case JMP: return PLCMethods::handle_JMP(this->stack, program, program_size, index);
         case JMP_IF: return PLCMethods::handle_JMP_IF(this->stack, program, program_size, index);
         case JMP_IF_NOT: return PLCMethods::handle_JMP_IF_NOT(this->stack, program, program_size, index);
@@ -213,6 +217,8 @@ RuntimeError VovkPLCRuntime::step(uint8_t* program, uint32_t program_size, uint3
         case CALL_IF: return PLCMethods::handle_CALL_IF(this->stack, program, program_size, index);
         case CALL_IF_NOT: return PLCMethods::handle_CALL_IF_NOT(this->stack, program, program_size, index);
         case RET: return PLCMethods::handle_RET(this->stack, program, program_size, index);
+        case RET_IF: return PLCMethods::handle_RET_IF(this->stack, program, program_size, index);
+        case RET_IF_NOT: return PLCMethods::handle_RET_IF_NOT(this->stack, program, program_size, index);
         case type_bool: return PLCMethods::PUSH_bool(this->stack, program, program_size, index);
         case type_uint8_t: return PLCMethods::PUSH_uint8_t(this->stack, program, program_size, index);
         case type_int8_t: return PLCMethods::PUSH_int8_t(this->stack, program, program_size, index);

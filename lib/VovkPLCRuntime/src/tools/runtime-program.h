@@ -24,7 +24,7 @@
 char foo;
 
 class InstructionCompiler {
-    public:
+public:
     // Push a new sequence of bytes to the PLC Program
     static uint32_t push(uint8_t* location, uint8_t* code, uint32_t code_size) {
         memcpy(location, code, code_size);
@@ -161,7 +161,6 @@ class InstructionCompiler {
         return 3;
     }
     static uint8_t pushJMP_IF(uint8_t* location, uint32_t location_address) {
-
         location[0] = JMP_IF;
         location[1] = location_address >> 8;
         location[2] = location_address & 0xFF;
@@ -173,6 +172,26 @@ class InstructionCompiler {
         location[2] = location_address & 0xFF;
         return 3;
     }
+
+    static uint8_t pushCALL(uint8_t* location, uint32_t location_address) {
+        location[0] = CALL;
+        location[1] = location_address >> 8;
+        location[2] = location_address & 0xFF;
+        return 3;
+    }
+    static uint8_t pushCALL_IF(uint8_t* location, uint32_t location_address) {
+        location[0] = CALL_IF;
+        location[1] = location_address >> 8;
+        location[2] = location_address & 0xFF;
+        return 3;
+    }
+    static uint8_t pushCALL_IF_NOT(uint8_t* location, uint32_t location_address) {
+        location[0] = CALL_IF_NOT;
+        location[1] = location_address >> 8;
+        location[2] = location_address & 0xFF;
+        return 3;
+    }
+
 
     // Convert a data type to another data type
     static uint8_t pushCVT(uint8_t* location, PLCRuntimeInstructionSet from, PLCRuntimeInstructionSet to) {
@@ -197,6 +216,25 @@ class InstructionCompiler {
         location[2] = location_address >> 8;
         location[3] = location_address & 0xFF;
         return 4;
+    }
+
+    // Make a duplica of the top of the stack
+    static uint8_t pushCOPY(uint8_t* location, PLCRuntimeInstructionSet type = type_uint8_t) {
+        location[0] = COPY;
+        location[1] = type;
+        return 2;
+    }
+    // Swap the top two values on the stack
+    static uint8_t pushSWAP(uint8_t* location, PLCRuntimeInstructionSet type = type_uint8_t) {
+        location[0] = SWAP;
+        location[1] = type;
+        return 2;
+    }
+    // Drop the top value from the stack
+    static uint8_t pushDROP(uint8_t* location, PLCRuntimeInstructionSet type = type_uint8_t) {
+        location[0] = DROP;
+        location[1] = type;
+        return 2;
     }
 };
 
@@ -658,6 +696,37 @@ public:
             return status;
         }
         program_size += InstructionCompiler::pushPUT(program + program_size, program_address, type);
+        status = STATUS_SUCCESS;
+        return status;
+    }
+
+    // Make a duplica of the top of the stack
+    RuntimeError pushCOPY(PLCRuntimeInstructionSet type = type_uint8_t) {
+        if (program_size + 2 > MAX_PROGRAM_SIZE) {
+            status = PROGRAM_SIZE_EXCEEDED;
+            return status;
+        }
+        program_size += InstructionCompiler::pushCOPY(program + program_size, type);
+        status = STATUS_SUCCESS;
+        return status;
+    }
+    // Swap the top two values on the stack
+    RuntimeError pushSWAP(PLCRuntimeInstructionSet type = type_uint8_t) {
+        if (program_size + 2 > MAX_PROGRAM_SIZE) {
+            status = PROGRAM_SIZE_EXCEEDED;
+            return status;
+        }
+        program_size += InstructionCompiler::pushSWAP(program + program_size, type);
+        status = STATUS_SUCCESS;
+        return status;
+    }
+    // Drop the top value from the stack
+    RuntimeError pushDROP(PLCRuntimeInstructionSet type = type_uint8_t) {
+        if (program_size + 2 > MAX_PROGRAM_SIZE) {
+            status = PROGRAM_SIZE_EXCEEDED;
+            return status;
+        }
+        program_size += InstructionCompiler::pushDROP(program + program_size, type);
         status = STATUS_SUCCESS;
         return status;
     }
