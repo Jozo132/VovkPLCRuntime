@@ -19,13 +19,17 @@
 //
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#define __WASM__
 #define __WASM_TIME__
 #define __SIMULATOR__
 #define __RUNTIME_DEBUG__
 #define __RUNTIME_FULL_UNIT_TEST___
 
 #include "../../lib/VovkPLCRuntime/src/VovkPLCRuntime.h"
+
+#ifndef WASM_EXPORT
+#define WASM_EXPORT
+#endif // WASM_EXPORT
+
 
 // TODO: Remove this and implement a working WASM interface for the simulator
 
@@ -137,130 +141,94 @@ WASM_EXPORT void doSomething() {
 }
 
 
-template <typename T> struct OutputBuffer {
-    T* data = nullptr;
-    uint32_t type_size = sizeof(T);
-    uint32_t length = 0;
-    uint32_t max_size = 0;
-    OutputBuffer(uint32_t size = 0) { init(size); }
-    void init(uint32_t size = 0) {
-        if (!size) return;
-        if (data == nullptr) {
-            data = new T[size];
-            length = 0;
-            max_size = size;
-        }
-    }
-    void push(T value) {
-        if (length < max_size) {
-            data[length++] = value;
-        }
-    }
-    T pop() {
-        if (length > 0) {
-            return data[--length];
-        }
-        return 0;
-    }
-    T shift() {
-        if (length > 0) {
-            T value = data[0];
-            for (uint32_t i = 1; i < length; i++) {
-                data[i - 1] = data[i];
-            }
-            length--;
-            return value;
-        }
-        return 0;
-    }
-    // Array operator getter
-    T& operator[](uint32_t index) {
-        if (index < length)
-            return data[index];
-        return data[0];
-    }
-    // Array operator setter (avoid overloaded 'operator[]' cannot have more than one parameter before C++2b)
-    void set(uint32_t index, T value) {
-        if (index < length)
-            data[index] = value;
-    }
+// template <typename T> struct OutputBuffer {
+//     T* data = nullptr;
+//     uint32_t type_size = sizeof(T);
+//     uint32_t length = 0;
+//     uint32_t max_size = 0;
+//     OutputBuffer(uint32_t size = 0) { init(size); }
+//     void init(uint32_t size = 0) {
+//         if (!size) return;
+//         if (data == nullptr) {
+//             data = new T[size];
+//             length = 0;
+//             max_size = size;
+//         }
+//     }
+//     void push(T value) {
+//         if (length < max_size) {
+//             data[length++] = value;
+//         }
+//     }
+//     T pop() {
+//         if (length > 0) {
+//             return data[--length];
+//         }
+//         return 0;
+//     }
+//     T shift() {
+//         if (length > 0) {
+//             T value = data[0];
+//             for (uint32_t i = 1; i < length; i++) {
+//                 data[i - 1] = data[i];
+//             }
+//             length--;
+//             return value;
+//         }
+//         return 0;
+//     }
+//     // Array operator getter
+//     T& operator[](uint32_t index) {
+//         if (index < length)
+//             return data[index];
+//         return data[0];
+//     }
+//     // Array operator setter (avoid overloaded 'operator[]' cannot have more than one parameter before C++2b)
+//     void set(uint32_t index, T value) {
+//         if (index < length)
+//             data[index] = value;
+//     }
 
-};
+// };
 
-OutputBuffer<unsigned char> myBuffer(10);
+// OutputBuffer<unsigned char> myBuffer(10);
 
-int export_request_count = 0;
-WASM_EXPORT void* export_output() {
-    export_request_count++;
-    if (myBuffer.length > 9)
-        myBuffer.shift();
-    myBuffer.push(export_request_count);
-    //Print buffer contents
-    Serial.print(F("Buffer <"));
-    for (uint32_t i = 0; i < myBuffer.length; i++) {
-        Serial.print(myBuffer[i], HEX);
-        if (i < myBuffer.length - 1) Serial.print(F(", "));
-    }
-    Serial.println(F(">"));
-    return (void*) (&myBuffer);
-}
-
-
-
-// Export program definition API
-WASM_EXPORT int API_resizeProgram(int new_size) {
-    runtime.program->format(new_size);
-    return 0;
-}
-WASM_EXPORT int API_getProgramSize() {
-    return runtime.program->size();
-}
-WASM_EXPORT int API_getProgramSizeMax() {
-    return runtime.program->MAX_PROGRAM_SIZE;
-}
-WASM_EXPORT void API_printProgram() {
-    runtime.program->println();
-}
-
-// Export program instruction API
-WASM_EXPORT RuntimeError API_push_INSTRUCTION(uint8_t instruction) {
-    return runtime.program->push(instruction);
-}
-WASM_EXPORT RuntimeError API_push_U8(uint8_t value) {
-    return runtime.program->push_uint8_t(value);
-}
-WASM_EXPORT RuntimeError API_push_U16(uint16_t value) {
-    return runtime.program->push_uint16_t(value);
-}
-WASM_EXPORT RuntimeError API_push_U32(uint32_t value) {
-    return runtime.program->push_uint32_t(value);
-}
-WASM_EXPORT RuntimeError API_push_U64(uint64_t value) {
-    return runtime.program->push_uint64_t(value);
-}
-WASM_EXPORT RuntimeError API_push_S8(int8_t value) {
-    return runtime.program->push_int8_t(value);
-}
-WASM_EXPORT RuntimeError API_push_S16(int16_t value) {
-    return runtime.program->push_int16_t(value);
-}
-WASM_EXPORT RuntimeError API_push_S32(int32_t value) {
-    return runtime.program->push_int32_t(value);
-}
-WASM_EXPORT RuntimeError API_push_S64(int64_t value) {
-    return runtime.program->push_int64_t(value);
-}
-WASM_EXPORT RuntimeError API_push_F32(float value) {
-    return runtime.program->push_float(value);
-}
-WASM_EXPORT RuntimeError API_push_F64(double value) {
-    return runtime.program->push_double(value);
-}
+// int export_request_count = 0;
+// WASM_EXPORT void* export_output() {
+//     export_request_count++;
+//     if (myBuffer.length > 9)
+//         myBuffer.shift();
+//     myBuffer.push(export_request_count);
+//     //Print buffer contents
+//     Serial.print(F("Buffer <"));
+//     for (uint32_t i = 0; i < myBuffer.length; i++) {
+//         Serial.print(myBuffer[i], HEX);
+//         if (i < myBuffer.length - 1) Serial.print(F(", "));
+//     }
+//     Serial.println(F(">"));
+//     return (void*) (&myBuffer);
+// }
 
 
-WASM_EXPORT void printErrorMessage() {
-    Error.println("Error: This is a test error message.");
-}
-WASM_EXPORT void printStreamTest() {
-    Stream.print("{ \"test\": \"This is a test stream message.\" }");
-}
+
+// // Export program definition API
+// WASM_EXPORT int API_resizeProgram(int new_size) {
+//     runtime.program->format(new_size);
+//     return 0;
+// }
+// WASM_EXPORT int API_getProgramSize() {
+//     return runtime.program->size();
+// }
+// WASM_EXPORT int API_getProgramSizeMax() {
+//     return runtime.program->MAX_PROGRAM_SIZE;
+// }
+// WASM_EXPORT void API_printProgram() {
+//     runtime.program->println();
+// }
+
+// WASM_EXPORT void printErrorMessage() {
+//     Error.println("Error: This is a test error message.");
+// }
+// WASM_EXPORT void printStreamTest() {
+//     Stream.print("{ \"test\": \"This is a test stream message.\" }");
+// }
