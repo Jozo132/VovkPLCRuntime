@@ -550,8 +550,9 @@ Bytecode Instruction Set:
     0x0b:  PUSH double    (9 bytes)
 
     0x10:  MOV            (8 bytes)
-    0x11:  PUT            (4 bytes)
-    0x12:  GET            (4 bytes)
+    0x11:  CVT            (3 bytes)
+    0x12:  PUT            (4 bytes)
+    0x13:  GET            (4 bytes)
 
     0x20:  ADD            (2 bytes)
     0x21:  SUB            (2 bytes)

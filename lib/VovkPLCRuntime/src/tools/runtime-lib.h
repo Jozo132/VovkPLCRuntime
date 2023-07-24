@@ -203,6 +203,7 @@ RuntimeError VovkPLCRuntime::step(uint8_t* program, uint32_t program_size, uint3
         case LOGIC_OR: return PLCMethods::LOGIC_OR(this->stack);
         case LOGIC_NOT: return PLCMethods::LOGIC_NOT(this->stack);
         case LOGIC_XOR: return PLCMethods::LOGIC_XOR(this->stack);
+        case CVT: return PLCMethods::CVT(this->stack, program, program_size, index);
         case PUT: return PLCMethods::PUT(this->stack, program, program_size, index);
         case GET: return PLCMethods::GET(this->stack, program, program_size, index);
         case JMP: return PLCMethods::handle_JMP(this->stack, program, program_size, index);

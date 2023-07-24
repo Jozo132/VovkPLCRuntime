@@ -662,6 +662,34 @@ int programLineCount = 0;
     built_bytecode_length = address_end; \
     continue;
 
+
+bool typeFromToken(Token& token, uint8_t& type) {
+    if (token.type == TOKEN_KEYWORD) {
+        // "u8" = type_uint8_t
+        for (int i = 0; i < sizeof(data_type_keywords) / sizeof(data_type_keywords[0]); i++) {
+            if (str_cmp(token, data_type_keywords[i])) {
+                switch (i) {
+                    case 0:  type = type_int8_t; break;
+                    case 1:  type = type_int16_t; break;
+                    case 2:  type = type_int32_t; break;
+                    case 3:  type = type_int64_t; break;
+                    case 4:  type = type_uint8_t; break;
+                    case 5:  type = type_uint16_t; break;
+                    case 6:  type = type_uint32_t; break;
+                    case 7:  type = type_uint64_t; break;
+                    case 8:  type = type_float; break;
+                    case 9:  type = type_double; break;
+                    case 10: type = type_bool; break;
+                        // case 11: type = type_string; break;
+                    default: return true;
+                }
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 bool boolFromToken(Token& token, bool& output) {
     if (token.type == TOKEN_INTEGER) {
         output = token.value_int != 0;
@@ -909,6 +937,24 @@ bool build(bool finalPass) {
                 }
             }
         }
+
+        bool hasThird = i + 2 < token_count;
+        Token& token_p2 = hasThird ? tokens[i + 2] : tokens[i];
+        // [cvt , keyword , keyword]
+        if (hasThird) {
+            uint8_t type_1;
+            uint8_t type_2;
+            bool e_dataType1 = typeFromToken(token_p1, type_1);
+            bool e_dataType2 = typeFromToken(token_p2, type_2);
+            if (str_cmp(token, "cvt")) {
+                if (e_dataType1) return e_dataType1; i++;
+                if (e_dataType2) return e_dataType2; i++;
+                if (type_1 == type_2) continue; // No need to convert if types are the same
+                line.size = InstructionCompiler::pushCVT(bytecode, (PLCRuntimeInstructionSet) type_1, (PLCRuntimeInstructionSet) type_2);
+                _line_push;
+            }
+        }
+
 
         if (type == TOKEN_KEYWORD && str_cmp(token, "exit")) {
             line.size = InstructionCompiler::push(bytecode, EXIT);

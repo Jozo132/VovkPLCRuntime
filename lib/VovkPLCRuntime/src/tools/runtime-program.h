@@ -174,6 +174,14 @@ class InstructionCompiler {
         return 3;
     }
 
+    // Convert a data type to another data type
+    static uint8_t pushCVT(uint8_t* location, PLCRuntimeInstructionSet from, PLCRuntimeInstructionSet to) {
+        location[0] = CVT;
+        location[1] = (uint8_t) from;
+        location[2] = (uint8_t) to;
+        return 3;
+    }
+
     // Pushes the byte at the given address of the memory into the stack
     static uint8_t pushGET(uint8_t* location, uint32_t location_address, PLCRuntimeInstructionSet type = type_uint8_t) {
         location[0] = GET;
@@ -616,6 +624,17 @@ public:
             return status;
         }
         program_size += InstructionCompiler::pushJMP_IF_NOT(program + program_size, program_address);
+        status = STATUS_SUCCESS;
+        return status;
+    }
+
+    // Convert a data type to another data type
+    RuntimeError pushCVT(PLCRuntimeInstructionSet from, PLCRuntimeInstructionSet to) {
+        if (program_size + 3 > MAX_PROGRAM_SIZE) {
+            status = PROGRAM_SIZE_EXCEEDED;
+            return status;
+        }
+        program_size += InstructionCompiler::pushCVT(program + program_size, from, to);
         status = STATUS_SUCCESS;
         return status;
     }

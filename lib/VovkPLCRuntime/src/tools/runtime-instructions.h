@@ -138,6 +138,7 @@ enum PLCRuntimeInstructionSet {
     type_double,        // Constant double value
 
     MOV = 0x10,         // Universal value move. Example: [ uint8_t MOV, uint8_t type, uint8_t source_location, uint16_t source_address, uint8_t destination_location, uint16_t destination_address ]     
+    CVT,                // Convert value from one type to another. Example: [ uint8_t CVT, uint8_t source_type, uint8_t destination_type ]
     PUT,                // Put value from stack to memory. Example: [ uint8_t PUT, uint8_t type, uint16_t address ]
     GET,                // Get value from memory to stack. Example: [ uint8_t GET, uint8_t type, uint16_t address ]
 
@@ -249,6 +250,7 @@ bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
         case type_float:
         case type_double:
         case MOV:
+        case CVT:
         case PUT:
         case GET:
         case ADD:
@@ -346,6 +348,7 @@ const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
         case type_float: return F("PUSH float");
         case type_double: return F("PUSH double");
         case MOV: return F("MOV");
+        case CVT: return F("CVT");
         case PUT: return F("PUT");
         case GET: return F("GET");
         case ADD: return F("ADD");
@@ -443,6 +446,7 @@ uint8_t OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
         case type_float: return 5;
         case type_double: return 9;
         case MOV: return 8;
+        case CVT: return 3;
         case PUT: return 4;
         case GET: return 4;
         case ADD: return 2;
