@@ -24,10 +24,10 @@ if code:
     print("Error building the WASM executable.")
     print(code)
 else:
-    msg = "The compiled WASM file is located in: ./" + BUILD_PATH + "simulator.wasm"
+    msg = "The compiled WASM file is located in: " + BUILD_PATH + "simulator.wasm"
     print("-" * len(msg))
     print(msg)
-    print("Along with the JS wrapper: ./" + BUILD_PATH + "simulator.js")
+    print("Along with the JS wrapper: " + BUILD_PATH + "simulator.js")
     print("-" * len(msg))
     print("To use it, navigate into the " + BUILD_PATH + " directory")
     print("and you can either test it like for example:")
