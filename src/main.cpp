@@ -9,16 +9,21 @@
 #define __RUNTIME_FULL_UNIT_TEST___ // Only use this for testing the library
 #endif // __RUNTIME_PRODUCTION__
 
+
+// #define __RUNTIME_DEBUG__
+// #define __RUNTIME_FULL_UNIT_TEST___
+
 #include <VovkPLCRuntime.h>
 
 #define stack_size 64
 #define memory_size 64
 #define program_size 128
 
-VovkPLCRuntime runtime(stack_size, memory_size, program_size); // Stack size
+VovkPLCRuntime runtime(stack_size, memory_size, program_size); // Stack size, memory size, program size
 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(USER_BTN, INPUT_PULLUP);
   Serial.begin(115200);
   while (!Serial && (millis() < 10000)) { // wait for serial port to connect. Needed for native USB port only
     digitalWrite(LED_BUILTIN, LOW);
@@ -26,13 +31,102 @@ void setup() {
     digitalWrite(LED_BUILTIN, HIGH);
     delay(100);
   }
+
+#ifdef __RUNTIME_PRODUCTION__
+  runtime.startup();
+  uint8_t* program = new uint8_t[256];
+  // input  = I0.0  (10.0 absolute position)
+  // output = Q0.0  (20.0 absolute position)
+  // The PLCASM:
+  /*
+    u8.load 20
+    u8.load 10
+    u8.0.get
+
+    jump_if_not RESET
+    u8.0.set
+    jump END
+
+    RESET:
+    u8.0.rset
+
+    END:
+    u8.store 20
+    exit
+  */
+  // 13 02 00 0A 40 13 02 00 14 15 02 C2 00 12 48 C0 00 13 50 12 02 00 14 FF
+  int i = 0;
+  program[i++] = 0x13;
+  program[i++] = 0x02;
+  program[i++] = 0x00;
+  program[i++] = 0x0A;
+  program[i++] = 0x40;
+  program[i++] = 0x13;
+  program[i++] = 0x02;
+  program[i++] = 0x00;
+  program[i++] = 0x14;
+  program[i++] = 0x15;
+  program[i++] = 0x02;
+  program[i++] = 0xC2;
+  program[i++] = 0x00;
+  program[i++] = 0x12;
+  program[i++] = 0x48;
+  program[i++] = 0xC0;
+  program[i++] = 0x00;
+  program[i++] = 0x13;
+  program[i++] = 0x50;
+  program[i++] = 0x12;
+  program[i++] = 0x02;
+  program[i++] = 0x00;
+  program[i++] = 0x14;
+  program[i++] = 0x50;
+  program[i++] = 0xFF;
+
+  constexpr uint16_t size = sizeof(program);
+  runtime.program->loadUnsafe(program, i);
+#else // __RUNTIME_PRODUCTION__
   // Start the runtime unit test
   runtime_unit_test();
+  runtime.startup();
+#endif // __RUNTIME_PRODUCTION__
 }
 
 bool startup = true;
 
+
+int cycle = 0;
 void loop() {
+#ifdef __RUNTIME_PRODUCTION__
+
+  bool input = digitalRead(USER_BTN);
+  runtime.setInputBit(0, 0, input);
+  runtime.cleanRun();
+  bool output = runtime.getOutputBit(0, 0);
+  digitalWrite(LED_BUILTIN, output);
+
+
+  // RuntimeError status = UnitTest::fullProgramDebug(runtime);
+  // const char* status_name = RUNTIME_ERROR_NAME(status);
+  // Serial.print(F("Runtime status: ")); Serial.println(status_name);
+
+  cycle++;
+  Serial.print(cycle);
+
+  // uint8_t* memory = new uint8_t[32];
+  // runtime.readMemory(0, memory, 32);
+  // Serial.print(F("  Memory: "));
+  // for (int i = 0; i < 32; i++) {
+  //   if (memory[i] < 0x10) Serial.print('0');
+  //   Serial.print(memory[i], HEX);
+  //   Serial.print(' ');
+  //   if (i % 10 == 9) Serial.print(' ');
+  // }
+
+  Serial.println();
+
+  // delay(1000);
+
+#else // __RUNTIME_PRODUCTION__
   // Blink the LED to indicate that the tests are done
   digitalWrite(LED_BUILTIN, LOW);
   delay(2);
@@ -41,7 +135,6 @@ void loop() {
 
   // Custom program test
   if (startup) {
-    runtime.startup();
     Serial.println(F("Custom program test"));
     Serial.println(F("Variables  = { a: 1, b: 2, c: 3, d: 4, e: 5, f: 6 }"));
     Serial.println(F("Function   = 10 * (1 - 'a' * ('b' + 'c' * ('c' + 'd' * ('d'-'e' *('e'-'f')))) / 'd')"));
@@ -121,4 +214,5 @@ void loop() {
   float ms = t / 1000.0;
   int mem = freeMemory();
   Serial.print(F("Program executed for ")); Serial.print(cycles); Serial.print(F(" cycles in ")); Serial.print(ms, 3); Serial.print(F(" ms. Result: ")); Serial.print(result); Serial.print(F("  Free memory: ")); Serial.print(mem); Serial.println(F(" bytes."));
+#endif
 }
