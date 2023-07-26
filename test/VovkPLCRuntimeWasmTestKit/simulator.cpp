@@ -30,12 +30,7 @@
 #define WASM_EXPORT
 #endif // WASM_EXPORT
 
-
-// TODO: Remove this and implement a working WASM interface for the simulator
-
-
-RuntimeProgram program(86); // Program size
-VovkPLCRuntime runtime(64, program); // Stack size
+VovkPLCRuntime runtime(64, 64, 60000); // Stack size, memory size, program size
 
 bool startup = true;
 
