@@ -939,9 +939,9 @@ bool build(bool finalPass) {
 
         if (type == TOKEN_KEYWORD) {
             { // Handle flow
-                if (hasNext && str_cmp(token, "jmp")) { if (finalPass && e_label) return e_label; i++; line.size = InstructionCompiler::pushJMP(bytecode, label_address); _line_push; }
-                if (hasNext && str_cmp(token, "jmp_if")) { if (finalPass && e_label) return e_label; i++; line.size = InstructionCompiler::pushJMP_IF(bytecode, label_address); _line_push; }
-                if (hasNext && str_cmp(token, "jmp_if_not")) { if (finalPass && e_label) return e_label; i++; line.size = InstructionCompiler::pushJMP_IF_NOT(bytecode, label_address); _line_push; }
+                if (hasNext && (str_cmp(token, "jmp") || str_cmp(token, "jump"))) { if (finalPass && e_label) return e_label; i++; line.size = InstructionCompiler::pushJMP(bytecode, label_address); _line_push; }
+                if (hasNext && (str_cmp(token, "jmp_if") || str_cmp(token, "jump_if"))) { if (finalPass && e_label) return e_label; i++; line.size = InstructionCompiler::pushJMP_IF(bytecode, label_address); _line_push; }
+                if (hasNext && (str_cmp(token, "jmp_if_not") || str_cmp(token, "jump_if_not"))) { if (finalPass && e_label) return e_label; i++; line.size = InstructionCompiler::pushJMP_IF_NOT(bytecode, label_address); _line_push; }
                 if (hasNext && str_cmp(token, "call")) { if (finalPass && e_label) return e_label; i++; line.size = InstructionCompiler::pushCALL(bytecode, label_address); _line_push; }
                 if (hasNext && str_cmp(token, "call_if")) { if (finalPass && e_label) return e_label; i++; line.size = InstructionCompiler::pushCALL_IF(bytecode, label_address); _line_push; }
                 if (hasNext && str_cmp(token, "call_if_not")) { if (finalPass && e_label) return e_label; i++; line.size = InstructionCompiler::pushCALL_IF_NOT(bytecode, label_address); _line_push; }
