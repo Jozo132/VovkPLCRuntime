@@ -34,21 +34,27 @@
 #include "runtime-program.h"
 #include "runtime-cmd-parser.h"
 
+#ifndef PLCRUNTIME_INPUT_OFFSET 
+#define PLCRUNTIME_INPUT_OFFSET 10
+#endif // PLCRUNTIME_INPUT_OFFSET
+
+#ifndef PLCRUNTIME_OUTPUT_OFFSET
+#define PLCRUNTIME_OUTPUT_OFFSET 10
+#endif // PLCRUNTIME_OUTPUT_OFFSET
+
 class VovkPLCRuntime {
 private:
     bool started_up = false;
 public:
-    uint32_t input_offset = 10; // Output offset in memory
-    uint32_t output_offset = 20; // Output offset in memory
+    const uint32_t input_offset = PLCRUNTIME_INPUT_OFFSET; // Output offset in memory
+    const uint32_t output_offset = PLCRUNTIME_OUTPUT_OFFSET + PLCRUNTIME_INPUT_OFFSET; // Output offset in memory
     uint32_t max_stack_size = 0; // Maximum stack size
     uint32_t memory_size = 0; // PLC memory size
 #ifdef __WASM__
     RuntimeStack* stack = nullptr; // Active memory stack for PLC execution
-    Stack<uint8_t>* memory = nullptr; // PLC memory to manipulate
     RuntimeProgram* program = nullptr; // Active PLC program
 #else
     RuntimeStack* stack = new RuntimeStack(); // Active memory stack for PLC execution
-    Stack<uint8_t>* memory = new Stack<uint8_t>(); // PLC memory to manipulate
     RuntimeProgram* program = new RuntimeProgram(); // Active PLC program
 #endif
     RuntimeCommandParser cmd_parser; // Command parser for PLC commands
@@ -61,7 +67,7 @@ public:
         Serial.println(F(":: Using VovkPLCRuntime Library - Author J.Vovk <jozo132@gmail.com> ::"));
         REPRINTLN(70, ':');
 
-        stack = new RuntimeStack(max_stack_size);
+        stack = new RuntimeStack(max_stack_size, max_stack_size, memory_size);
         if (program == nullptr) program = new RuntimeProgram();
         program->begin();
         formatMemory(memory_size);
@@ -69,10 +75,14 @@ public:
 
     void formatMemory(uint32_t size, uint8_t* data = nullptr) {
         if (size == 0) return;
-        memory->format(size);
-        if (data == nullptr) return;
-        for (uint32_t i = 0; i < size; i++)
-            memory->push(data[i]);
+        stack->memory->format(size);
+        if (data == nullptr) {
+            for (uint32_t i = 0; i < size; i++)
+                stack->memory->push(0);
+        } else {
+            for (uint32_t i = 0; i < size; i++)
+                stack->memory->push(data[i]);
+        }
     }
 
     VovkPLCRuntime(uint32_t max_stack_size, uint32_t memory_size, uint32_t program_size) {
@@ -155,33 +165,50 @@ public:
     int printStack();
 
     void setInput(uint32_t index, byte value) {
-        if (memory == nullptr) return;
-        memory->set(index + input_offset, value);
+        if (stack == nullptr) return;
+        if (stack->memory == nullptr) return;
+        stack->memory->set(index + input_offset, value);
     }
 
     void setInputBit(uint32_t index, uint8_t bit, bool value) {
-        if (memory == nullptr) return;
+        if (stack == nullptr) return;
+        if (stack->memory == nullptr) return;
         byte temp = 0;
-        bool error = memory->get(index + input_offset, temp);
+        bool error = stack->memory->get(index + input_offset, temp);
         if (error) return;
         if (value) temp |= (1 << bit);
         else temp &= ~(1 << bit);
-        memory->set(index + input_offset, temp);
+        stack->memory->set(index + input_offset, temp);
     }
 
     byte getOutput(uint32_t index) {
-        if (memory == nullptr) return 0;
+        if (stack == nullptr) return 0;
+        if (stack->memory == nullptr) return 0;
         byte value;
-        memory->get(index + output_offset, value);
+        stack->memory->get(index + output_offset, value);
         return value;
     }
 
     bool getOutputBit(uint32_t index, uint8_t bit) {
-        if (memory == nullptr) return false;
+        if (stack == nullptr) return false;
+        if (stack->memory == nullptr) return false;
         byte temp = 0;
-        bool error = memory->get(index + output_offset, temp);
+        bool error = stack->memory->get(index + output_offset, temp);
         if (error) return false;
         return temp & (1 << bit);
+    }
+
+    bool readMemory(uint32_t offset, uint8_t*& value, uint32_t size = 1) {
+        if (stack == nullptr) return false;
+        if (stack->memory == nullptr) return false;
+        bool error = false;
+        uint8_t temp = 0;
+        for (uint32_t i = 0; i < size; i++) {
+            error = stack->memory->get(offset + i, temp);
+            value[i] = temp;
+            if (error) return error;
+        }
+        return false;
     }
 };
 
