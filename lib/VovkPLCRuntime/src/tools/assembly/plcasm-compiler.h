@@ -723,7 +723,7 @@ bool tokenize() {
 
 
 // data type keywords
-const char* data_type_keywords [] = { "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "string" };
+const char* data_type_keywords [] = { "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "string", "bit", "byte" };
 const char* op_type_keywords [] = { "const", "put", "get", "cmp_gt", "cmp_lt", "cmp_eq", "cmp_ne", "cmp_ge", "cmp_le", "cmp_and", "cmp_or", "cmp_xor", "cmp_not", "add", "sub", "mul", "div", "mod", "and", "or", "xor", "not", "shl", "shr", "rol", "ror", "neg", "inc", "dec", "jmp", "jmp_if", "jmp_if_not", "call", "call_if", "call_if_not", "ret", "return", "nop", "halt" };
 
 #define __MAX_BUILT_BYTECODE_SIZE 1024
@@ -768,7 +768,9 @@ bool typeFromToken(Token& token, uint8_t& type) {
                     case 8:  type = type_float; break;
                     case 9:  type = type_double; break;
                     case 10: type = type_bool; break;
-                        // case 11: type = type_string; break;
+                    case 11: return false; // type = type_string; break; // TODO: Add support for strings
+                    case 12: type = type_bool; break;
+                    case 13: type = type_uint8_t; break;
                     default: return true;
                 }
                 return false;
