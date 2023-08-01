@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include "runtime-parsing.h"
 #include "math-u8.h"
 #include "math-u16.h"
 #include "math-u32.h"
