@@ -78,10 +78,10 @@ public:
         stack->memory->format(size);
         if (data == nullptr) {
             for (uint32_t i = 0; i < size; i++)
-                stack->memory->push(0);
+                stack->memory->set(i, 0);
         } else {
             for (uint32_t i = 0; i < size; i++)
-                stack->memory->push(data[i]);
+                stack->memory->set(i, data[i]);
         }
     }
 
