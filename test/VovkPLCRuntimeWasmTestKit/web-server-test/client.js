@@ -61,7 +61,7 @@ const do_compile_test = async () => {
     if (!verifyCode) throw new Error("'verifyCode' function not found")
     console.log("Running compileTest()...") // @ts-ignore
     uploadAssembly(assembly)
-    compileTest()
+    if (compileTest()) return // Check for errors
     verifyCode()
 }
 
