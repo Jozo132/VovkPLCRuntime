@@ -75,6 +75,20 @@ int print_hex(uint32_t value) {
     length += Serial.print(value, HEX);
     return length;
 }
+int print_hex(uint16_t value) {
+    int length = 0;
+    if (value < 0x10) length += Serial.print('0');
+    if (value < 0x100) length += Serial.print('0');
+    if (value < 0x1000) length += Serial.print('0');
+    length += Serial.print(value, HEX);
+    return length;
+}
+int print_hex(uint8_t value) {
+    int length = 0;
+    if (value < 0x10) length += Serial.print('0');
+    length += Serial.print(value, HEX);
+    return length;
+}
 
 
 
