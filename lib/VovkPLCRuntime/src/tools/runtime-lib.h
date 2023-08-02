@@ -116,6 +116,16 @@ public:
         this->program = &program;
     }
 
+    void loadProgramUnsafe(uint8_t* program, uint32_t program_size) {
+        if (this->program == nullptr) this->program = new RuntimeProgram(program_size);
+        this->program->loadUnsafe(program, program_size);
+    }
+
+    void loadProgram(uint8_t* program, uint32_t program_size, uint32_t checksum) {
+        if (this->program == nullptr) this->program = new RuntimeProgram(program_size);
+        this->program->load(program, program_size, checksum);
+    }
+
     // Clear the stack
     void clear();
     // Clear the stack and reset the program line
