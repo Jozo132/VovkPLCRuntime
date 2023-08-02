@@ -34,6 +34,7 @@
 #endif
 
 #include "runtime-tools.h"
+#include "arithmetics/crc8.h"
 #include "stack/stack-struct.h"
 #include "runtime-memory.h"
 #include "runtime-instructions.h"
@@ -120,7 +121,7 @@ public:
         this->program->loadUnsafe(program, program_size);
     }
 
-    void loadProgram(uint8_t* program, uint32_t program_size, uint32_t checksum) {
+    void loadProgram(uint8_t* program, uint32_t program_size, uint8_t checksum) {
         if (this->program == nullptr) this->program = new RuntimeProgram(program_size);
         this->program->load(program, program_size, checksum);
     }

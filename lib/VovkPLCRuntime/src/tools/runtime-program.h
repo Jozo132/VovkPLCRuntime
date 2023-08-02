@@ -263,10 +263,16 @@ public:
         if (program != nullptr) delete [] program;
     }
 
-    void begin(const uint8_t* program, uint32_t program_size) {
+    void begin(const uint8_t* program, uint32_t program_size, uint8_t checksum) {
         format(program_size + 1);
-        load(program, program_size);
+        load(program, program_size, checksum);
     }
+
+    void beginUnsafe(const uint8_t* program, uint32_t program_size) {
+        format(program_size + 1);
+        loadUnsafe(program, program_size);
+    }
+
     void begin(uint32_t program_size = 0) {
         if (program_size == 0) return;
         MAX_PROGRAM_SIZE = program_size;
@@ -283,12 +289,6 @@ public:
         this->status = UNDEFINED_STATE;
     }
 
-    static uint32_t calculateChecksum(const uint8_t* data, uint32_t size) {
-        uint32_t checksum = 0;
-        for (uint32_t i = 0; i < size; i++) checksum += (uint32_t) data[i];
-        return checksum;
-    }
-
     RuntimeError loadUnsafe(const uint8_t* program, uint32_t program_size) {
         if (program_size > MAX_PROGRAM_SIZE) status = PROGRAM_SIZE_EXCEEDED;
         else if (program_size == 0) status = UNDEFINED_STATE;
@@ -301,8 +301,9 @@ public:
         return status;
     }
 
-    RuntimeError load(const uint8_t* program, uint32_t program_size, uint32_t checksum = 0) {
-        uint32_t calculated_checksum = calculateChecksum(program, program_size);
+    RuntimeError load(const uint8_t* program, uint32_t program_size, uint8_t checksum) {
+        uint8_t calculated_checksum = 0;
+        crc8_simple(calculated_checksum, program, program_size);
         if (calculated_checksum != checksum) {
             status = INVALID_CHECKSUM;
             Serial.println(F("Failed to load program: CHECKSUM MISMATCH"));

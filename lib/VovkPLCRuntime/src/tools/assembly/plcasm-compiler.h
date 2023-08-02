@@ -777,7 +777,7 @@ const int data_type_keywords_count = sizeof(data_type_keywords) / sizeof(data_ty
 
 uint8_t built_bytecode[__MAX_BUILT_BYTECODE_SIZE] = { };
 int built_bytecode_length = 0;
-uint32_t built_bytecode_checksum = 0;
+uint8_t built_bytecode_checksum = 0;
 
 struct ProgramLine {
     uint8_t code[16];
@@ -795,7 +795,7 @@ int address_end = 0;
     if (address_end >= __MAX_BUILT_BYTECODE_SIZE) return buildErrorSizeLimit(token); \
     for (int j = 0; j < line.size; j++) { \
         built_bytecode[built_bytecode_length + j] = bytecode[j]; \
-        built_bytecode_checksum += bytecode[j]; \
+        crc8_simple(built_bytecode_checksum, bytecode[j]); \
     } \
     built_bytecode_length = address_end; \
     continue;
