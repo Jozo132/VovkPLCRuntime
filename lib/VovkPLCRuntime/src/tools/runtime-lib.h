@@ -21,6 +21,14 @@
 
 #pragma once
 
+#ifndef PLCRUNTIME_INPUT_OFFSET 
+#define PLCRUNTIME_INPUT_OFFSET 10
+#endif // PLCRUNTIME_INPUT_OFFSET
+
+#ifndef PLCRUNTIME_OUTPUT_OFFSET
+#define PLCRUNTIME_OUTPUT_OFFSET 10
+#endif // PLCRUNTIME_OUTPUT_OFFSET
+
 #ifdef __WASM__
 #include "assembly/wasm/wasm.h"
 #endif
@@ -33,14 +41,6 @@
 #include "arithmetics/runtime-arithmetics.h"
 #include "runtime-program.h"
 #include "runtime-cmd-parser.h"
-
-#ifndef PLCRUNTIME_INPUT_OFFSET 
-#define PLCRUNTIME_INPUT_OFFSET 10
-#endif // PLCRUNTIME_INPUT_OFFSET
-
-#ifndef PLCRUNTIME_OUTPUT_OFFSET
-#define PLCRUNTIME_OUTPUT_OFFSET 10
-#endif // PLCRUNTIME_OUTPUT_OFFSET
 
 class VovkPLCRuntime {
 private:
@@ -58,7 +58,6 @@ public:
     RuntimeStack* stack = new RuntimeStack(); // Active memory stack for PLC execution
     RuntimeProgram* program = new RuntimeProgram(); // Active PLC program
 #endif
-    RuntimeCommandParser cmd_parser; // Command parser for PLC commands
 
     void startup() {
         if (started_up) return;
