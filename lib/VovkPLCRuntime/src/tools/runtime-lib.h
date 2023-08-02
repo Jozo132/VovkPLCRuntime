@@ -48,8 +48,9 @@ private:
 public:
     const uint32_t input_offset = PLCRUNTIME_INPUT_OFFSET; // Output offset in memory
     const uint32_t output_offset = PLCRUNTIME_OUTPUT_OFFSET + PLCRUNTIME_INPUT_OFFSET; // Output offset in memory
-    uint32_t max_stack_size = 0; // Maximum stack size
-    uint32_t memory_size = 0; // PLC memory size
+    uint32_t max_stack_size = 64; // Maximum stack size
+    uint32_t memory_size = 64; // PLC memory size
+    uint32_t program_size = 1024; // PLC program size
 #ifdef __WASM__
     RuntimeStack* stack = nullptr; // Active memory stack for PLC execution
     RuntimeProgram* program = nullptr; // Active PLC program
@@ -67,14 +68,17 @@ public:
         Serial.println(F(":: Using VovkPLCRuntime Library - Author J.Vovk <jozo132@gmail.com> ::"));
         REPRINTLN(70, ':');
 
-        stack = new RuntimeStack(max_stack_size, max_stack_size, memory_size);
-        if (program == nullptr) program = new RuntimeProgram();
+        if (stack == nullptr) stack = new RuntimeStack(max_stack_size, max_stack_size, memory_size);
+        else stack->format(max_stack_size, max_stack_size, memory_size);
+        if (program == nullptr) program = new RuntimeProgram(program_size);
+        else program->format(program_size);
         program->begin();
         formatMemory(memory_size);
     }
 
     void formatMemory(uint32_t size, uint8_t* data = nullptr) {
         if (size == 0) return;
+        if (stack == nullptr) stack = new RuntimeStack(max_stack_size, max_stack_size, memory_size);
         stack->memory->format(size);
         if (data == nullptr) {
             for (uint32_t i = 0; i < size; i++)
@@ -88,13 +92,11 @@ public:
     VovkPLCRuntime(uint32_t max_stack_size, uint32_t memory_size, uint32_t program_size) {
         this->max_stack_size = max_stack_size;
         this->memory_size = memory_size;
-        this->program = new RuntimeProgram(program_size);
+        this->program_size = program_size;
     }
-    VovkPLCRuntime(uint32_t max_stack_size, uint32_t memory_size, uint8_t* program, uint32_t program_size) {
+    VovkPLCRuntime(uint32_t max_stack_size, uint32_t memory_size) {
         this->max_stack_size = max_stack_size;
         this->memory_size = memory_size;
-        this->program = new RuntimeProgram(program, program_size);
-
     }
     VovkPLCRuntime(uint32_t max_stack_size, RuntimeProgram& program) {
         this->max_stack_size = max_stack_size;
