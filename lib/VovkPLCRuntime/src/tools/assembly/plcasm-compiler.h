@@ -1156,15 +1156,21 @@ WASM_EXPORT void logBytecode() {
     Serial.println();
 }
 
+int num_of_compile_runs = 0;
 WASM_EXPORT bool compileTest() {
+    num_of_compile_runs++;
     long total = millis();
-    Serial.print(F("Compiling "));
+    if (num_of_compile_runs == 1) {
+        VovkPLCRuntime::splash();
+    }
+    Serial.println(F("VovkPLCRuntime - PLCASM Compiler v1.0"));
+    Serial.print(F("Compiling assembly to bytecode "));
     bool error = false;
     Serial.print(F("."));
     long t1 = millis();
     error = tokenize();
     t1 = millis() - t1;
-    if (error) { Serial.println(F(" FAILED"));  return error; }
+    if (error) { Serial.println(F("Failed at tokenization"));  return error; }
 
     // if (token_count > 0) {
     //     Serial.print(F("Tokens ")); Serial.print(token_count); Serial.println(F(":"));
@@ -1186,14 +1192,14 @@ WASM_EXPORT bool compileTest() {
     t1 = millis();
     error = build(false); // First pass
     t1 = millis() - t1;
-    if (error) { Serial.println(F(" FAILED"));  return error; }
+    if (error) { Serial.println(F("Failed at building"));  return error; }
 
 
     Serial.print(F("."));
     t1 = millis();
     error = build(true); // Second pass to link labels
     t1 = millis() - t1;
-    if (error) { Serial.println(F(" FAILED"));  return error; }
+    if (error) { Serial.println(F("Failed at linking"));  return error; }
     Serial.println(F(" OK"));
 
     total = millis() - total;

@@ -60,14 +60,17 @@ public:
     RuntimeProgram* program = new RuntimeProgram(); // Active PLC program
 #endif
 
-    void startup() {
-        if (started_up) return;
-        started_up = true;
+    static void splash() {
         Serial.println();
         REPRINTLN(70, ':');
         Serial.println(F(":: Using VovkPLCRuntime Library - Author J.Vovk <jozo132@gmail.com> ::"));
         REPRINTLN(70, ':');
+    }
 
+    void startup() {
+        if (started_up) return;
+        started_up = true;
+        splash();
         if (stack == nullptr) stack = new RuntimeStack(max_stack_size, max_stack_size, memory_size);
         else stack->format(max_stack_size, max_stack_size, memory_size);
         if (program == nullptr) program = new RuntimeProgram(program_size);
