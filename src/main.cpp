@@ -23,7 +23,9 @@ VovkPLCRuntime runtime(stack_size, memory_size, program_size); // Stack size, me
 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
+#ifdef USER_BTN
   pinMode(USER_BTN, INPUT_PULLUP);
+#endif // USER_BTN
   Serial.begin(115200);
   while (!Serial && (millis() < 10000)) { // wait for serial port to connect. Needed for native USB port only
     digitalWrite(LED_BUILTIN, LOW);
@@ -34,7 +36,6 @@ void setup() {
 
 #ifdef __RUNTIME_PRODUCTION__
   runtime.startup();
-  uint8_t* program = new uint8_t[256];
   // input  = I0.0  (10.0 absolute position)
   // output = Q0.0  (20.0 absolute position)
   // The PLCASM:
@@ -55,35 +56,9 @@ void setup() {
     exit
   */
   // 13 02 00 0A 40 13 02 00 14 15 02 C2 00 12 48 C0 00 13 50 12 02 00 14 FF
-  int i = 0;
-  program[i++] = 0x13;
-  program[i++] = 0x02;
-  program[i++] = 0x00;
-  program[i++] = 0x0A;
-  program[i++] = 0x40;
-  program[i++] = 0x13;
-  program[i++] = 0x02;
-  program[i++] = 0x00;
-  program[i++] = 0x14;
-  program[i++] = 0x15;
-  program[i++] = 0x02;
-  program[i++] = 0xC2;
-  program[i++] = 0x00;
-  program[i++] = 0x12;
-  program[i++] = 0x48;
-  program[i++] = 0xC0;
-  program[i++] = 0x00;
-  program[i++] = 0x13;
-  program[i++] = 0x50;
-  program[i++] = 0x12;
-  program[i++] = 0x02;
-  program[i++] = 0x00;
-  program[i++] = 0x14;
-  program[i++] = 0x50;
-  program[i++] = 0xFF;
-
-  constexpr uint16_t size = sizeof(program);
-  runtime.program->loadUnsafe(program, i);
+  const uint8_t program[] = { 0x13,0x02,0x00,0x0A,0x40,0x13,0x02,0x00,0x14,0x15,0x02,0xC2,0x00,0x12,0x48,0xC0,0x00,0x13,0x50,0x12,0x02,0x00,0x14,0xFF };
+  const uint16_t size = sizeof(program);
+  runtime.program->loadUnsafe(program, size);
 #else // __RUNTIME_PRODUCTION__
   // Start the runtime unit test
   runtime_unit_test();
@@ -93,12 +68,18 @@ void setup() {
 
 bool startup = true;
 
-
+long timer_temp = 0;
 int cycle = 0;
+int last_cycle = 0;
 void loop() {
 #ifdef __RUNTIME_PRODUCTION__
-
+  long t = millis();
+#ifdef USER_BTN
   bool input = digitalRead(USER_BTN);
+#else // USER_BTN
+  int t_temp = t / 2000;
+  bool input = t_temp % 2 == 0;
+#endif // USER_BTN
   runtime.setInputBit(0, 0, input);
   runtime.cleanRun();
   bool output = runtime.getOutputBit(0, 0);
@@ -110,21 +91,28 @@ void loop() {
   // Serial.print(F("Runtime status: ")); Serial.println(status_name);
 
   cycle++;
-  Serial.print(cycle);
-
-  // uint8_t* memory = new uint8_t[32];
-  // runtime.readMemory(0, memory, 32);
-  // Serial.print(F("  Memory: "));
-  // for (int i = 0; i < 32; i++) {
-  //   if (memory[i] < 0x10) Serial.print('0');
-  //   Serial.print(memory[i], HEX);
-  //   Serial.print(' ');
-  //   if (i % 10 == 9) Serial.print(' ');
-  // }
-
-  Serial.println();
-
-  // delay(1000);
+  if (timer_temp > t) timer_temp = t;
+  long diff = t - timer_temp;
+  if (diff >= 200) {
+    timer_temp = t;
+    long mem = freeMemory();
+    long cycles = cycle - last_cycle;
+    last_cycle = cycle;
+    long cps = cycles * 1000 / diff;
+    // Serial.printf("Free mem: %6d bytes  CPS: %6d", mem, cps); // AVR doesn't support printf
+    Serial.print(F("Free mem: ")); Serial.print(mem); Serial.print(F(" bytes  CPS: ")); Serial.print(cps);
+    uint8_t* memory = new uint8_t[32];
+    runtime.readMemory(0, memory, 32);
+    Serial.print(F("  Memory: "));
+    for (int i = 0; i < 32; i++) {
+      if (memory[i] < 0x10) Serial.print('0');
+      Serial.print(memory[i], HEX);
+      Serial.print(' ');
+      if (i % 10 == 9) Serial.print(' ');
+    }
+    delete [] memory;
+    Serial.println();
+  }
 
 #else // __RUNTIME_PRODUCTION__
   // Blink the LED to indicate that the tests are done

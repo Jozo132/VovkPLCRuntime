@@ -290,10 +290,12 @@ public:
     }
 
     RuntimeError loadUnsafe(const uint8_t* program, uint32_t program_size) {
-        this->program = (uint8_t*) program;
         if (program_size > MAX_PROGRAM_SIZE) status = PROGRAM_SIZE_EXCEEDED;
         else if (program_size == 0) status = UNDEFINED_STATE;
         else status = STATUS_SUCCESS;
+        if (this->program != nullptr) delete [] this->program;
+        this->program = new uint8_t[program_size];
+        memcpy(this->program, program, program_size);
         this->MAX_PROGRAM_SIZE = program_size;
         this->program_size = program_size;
         return status;
