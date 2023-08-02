@@ -63,6 +63,21 @@ void println__int64_t(int64_t big_number) {
     Serial.println();
 }
 
+int print_hex(uint32_t value) {
+    int length = 0;
+    if (value < 0x10) length += Serial.print('0');
+    if (value < 0x100) length += Serial.print('0');
+    if (value < 0x1000) length += Serial.print('0');
+    if (value < 0x10000) length += Serial.print('0');
+    if (value < 0x100000) length += Serial.print('0');
+    if (value < 0x1000000) length += Serial.print('0');
+    if (value < 0x10000000) length += Serial.print('0');
+    length += Serial.print(value, HEX);
+    return length;
+}
+
+
+
 #ifdef __RUNTIME_FULL_UNIT_TEST___
 struct UnitTest {
     static const uint32_t memory_size = 16;
