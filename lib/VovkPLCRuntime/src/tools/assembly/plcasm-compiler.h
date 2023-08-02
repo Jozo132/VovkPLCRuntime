@@ -206,6 +206,30 @@ struct Token {
         if (type == TOKEN_STRING) return printf("'") + string.print() + printf("'");
         return printf("\"") + string.print() + printf("\"");
     }
+    void highlight() {
+        // jump test
+        //      ~~~~
+        int row = 1;
+        char* c = assembly_string;
+        while (*c != '\0') {
+            if (*c == '\n') row++;
+            c++;
+            if (row == line) {
+                fill(' ', 8);
+                while (*c != '\n' && *c != '\0') {
+                    Serial.print(*c);
+                    length++;
+                    c++;
+                };
+                Serial.println();
+                fill(' ', 8);
+                fill(' ', column - 1);
+                fill('~', string.length);
+                Serial.println();
+            }
+        }
+
+    }
     void parse();
 };
 
@@ -249,6 +273,29 @@ bool str_cmp(Token a, Token b) {
         if (a.string.data[i] != b.string.data[i]) return false;
     }
     return true;
+}
+
+bool str_includes(StringView a, const char* b) {
+    int b_length = string_len(b);
+    if (a.length < b_length) return false;
+    int matching_chars = 0;
+    for (int i = 0; i < a.length; i++) {
+        if (a.data[i] == b[matching_chars]) matching_chars++;
+        else matching_chars = 0;
+        if (matching_chars == b_length) return true;
+    }
+    return false;
+}
+bool str_includes(Token a, const char* b) {
+    int b_length = string_len(b);
+    if (a.length < b_length) return false;
+    int matching_chars = 0;
+    for (int i = 0; i < a.length; i++) {
+        if (a.string.data[i] == b[matching_chars]) matching_chars++;
+        else matching_chars = 0;
+        if (matching_chars == b_length) return true;
+    }
+    return false;
 }
 
 bool endsWith(StringView a, StringView b) {
@@ -463,7 +510,7 @@ int LUT_const_count = 0;
 
 // List of illegal keywords
 const char* illegal_keywords [] = { "const", "var", "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "string", "true", "false", "if", "else", "while", "for", "do", "break", "continue", "return", "function" };
-constexpr int illegal_keywords_count = sizeof(illegal_keywords) / sizeof(illegal_keywords[0]);
+const int illegal_keywords_count = sizeof(illegal_keywords) / sizeof(illegal_keywords[0]);
 
 bool add_label(Token& token, int address) {
     for (int i = 0; i < LUT_label_count; i++) {
@@ -616,8 +663,8 @@ bool add_token_optional(char* string, int length) {
     return add_token(string, length);
 }
 
-const char lex_ignored [] = { ' ', ';', '\t', '\r', '\n' };
-const char lex_dividers [] = { '(', ')', '=', '+', '-', '*', '/', '%', '&', '|', '^', '~', '!', '<', '>', '?', ':', ',', ';', '[', ']', '{', '}', '\'', '"', '`', '\\' };
+const char lex_ignored [] = { ' ', ';', '\t', '\r', '\n', '\0' };
+const char lex_dividers [] = { '(', ')', '=', '+', '-', '*', '/', '%', '&', '|', '^', '~', '!', '<', '>', '?', ':', ',', ';', '[', ']', '{', '}', '\'', '"', '`', '\\', '\0' };
 
 bool tokenize() {
     LUT_label_count = 0;
@@ -724,12 +771,13 @@ bool tokenize() {
 
 // data type keywords
 const char* data_type_keywords [] = { "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "string", "bit", "byte" };
-const char* op_type_keywords [] = { "const", "put", "get", "cmp_gt", "cmp_lt", "cmp_eq", "cmp_ne", "cmp_ge", "cmp_le", "cmp_and", "cmp_or", "cmp_xor", "cmp_not", "add", "sub", "mul", "div", "mod", "and", "or", "xor", "not", "shl", "shr", "rol", "ror", "neg", "inc", "dec", "jmp", "jmp_if", "jmp_if_not", "call", "call_if", "call_if_not", "ret", "return", "nop", "halt" };
+const int data_type_keywords_count = sizeof(data_type_keywords) / sizeof(data_type_keywords[0]);
 
 #define __MAX_BUILT_BYTECODE_SIZE 1024
 
 uint8_t built_bytecode[__MAX_BUILT_BYTECODE_SIZE] = { };
 int built_bytecode_length = 0;
+uint32_t built_bytecode_checksum = 0;
 
 struct ProgramLine {
     uint8_t code[16];
@@ -744,9 +792,11 @@ int programLineCount = 0;
 int address_end = 0;
 #define _line_push \
     address_end = built_bytecode_length + line.size; \
-    if (address_end >= __MAX_BUILT_BYTECODE_SIZE) error = true; \
-    if (error) return error; \
-    for (int j = 0; j < line.size; j++) built_bytecode[built_bytecode_length + j] = bytecode[j]; \
+    if (address_end >= __MAX_BUILT_BYTECODE_SIZE) return buildErrorSizeLimit(token); \
+    for (int j = 0; j < line.size; j++) { \
+        built_bytecode[built_bytecode_length + j] = bytecode[j]; \
+        built_bytecode_checksum += bytecode[j]; \
+    } \
     built_bytecode_length = address_end; \
     continue;
 
@@ -754,7 +804,7 @@ int address_end = 0;
 bool typeFromToken(Token& token, uint8_t& type) {
     if (token.type == TOKEN_KEYWORD) {
         // "u8" = type_uint8_t
-        for (int i = 0; i < sizeof(data_type_keywords) / sizeof(data_type_keywords[0]); i++) {
+        for (int i = 0; i < data_type_keywords_count; i++) {
             if (startsWith(token, data_type_keywords[i])) {
                 switch (i) {
                     case 0:  type = type_int8_t; break;
@@ -778,6 +828,16 @@ bool typeFromToken(Token& token, uint8_t& type) {
         }
     }
     return true;
+}
+
+int typeSize(uint8_t& type) {
+    switch ((PLCRuntimeInstructionSet) type) {
+        case type_bool: case type_int8_t: case type_uint8_t: return 8;
+        case type_int16_t: case type_uint16_t: return 16;
+        case type_int32_t: case type_uint32_t: case type_float: return 32;
+        case type_int64_t: case type_uint64_t: case type_double: return 64;
+        default: return -1;
+    }
 }
 
 bool boolFromToken(Token& token, bool& output) {
@@ -897,15 +957,26 @@ bool labelFromToken(Token& token, int& output) {
     return true;
 }
 
+bool buildError(Token token, const char* message) {
+    Serial.print(F(" ERROR: ")); Serial.print(F(message)); Serial.print(F(" -> ")); token.print(); Serial.print(F(" at line ")); Serial.print(token.line); Serial.print(F(":")); Serial.println(token.column);
+    token.highlight();
+    return true;
+}
+
+bool buildErrorSizeLimit(Token token) { return buildError(token, "program size limit reached"); }
+bool buildErrorUnknownToken(Token token) { return buildError(token, "unknown token"); }
+bool buildErrorExpectedInt(Token token) { return buildError(token, "unexpected token, expected integer"); }
+bool buildErrorExpectedFloat(Token token) { return buildError(token, "unexpected token, expected float"); }
+bool buildErrorUnknownLabel(Token token) { return buildError(token, "unknown label"); }
+
 bool build(bool finalPass) {
-    bool error = false;
     programLineCount = 0;
     built_bytecode_length = 0;
+    built_bytecode_checksum = 0;
     for (int i = 0; i < token_count; i++) {
         Token& token = tokens[i];
         TokenType type = token.type;
-        if (type == TOKEN_UNKNOWN) error = true;
-        if (error) return error;
+        if (type == TOKEN_UNKNOWN) return buildErrorUnknownToken(token);
 
         if (type == TOKEN_LABEL) {
             if (finalPass) continue;
@@ -939,14 +1010,18 @@ bool build(bool finalPass) {
         bool e_real = realFromToken(token_p1, value_float);
         /* bool e_data_type = */ typeFromToken(token, data_type);
 
+
+        bool hasThird = i + 2 < token_count;
+        Token& token_p2 = hasThird ? tokens[i + 2] : tokens[i];
+
         if (type == TOKEN_KEYWORD) {
             { // Handle flow
-                if (hasNext && (str_cmp(token, "jmp") || str_cmp(token, "jump"))) { if (finalPass && e_label) return e_label; i++; line.size = InstructionCompiler::pushJMP(bytecode, label_address); _line_push; }
-                if (hasNext && (str_cmp(token, "jmp_if") || str_cmp(token, "jump_if"))) { if (finalPass && e_label) return e_label; i++; line.size = InstructionCompiler::pushJMP_IF(bytecode, label_address); _line_push; }
-                if (hasNext && (str_cmp(token, "jmp_if_not") || str_cmp(token, "jump_if_not"))) { if (finalPass && e_label) return e_label; i++; line.size = InstructionCompiler::pushJMP_IF_NOT(bytecode, label_address); _line_push; }
-                if (hasNext && str_cmp(token, "call")) { if (finalPass && e_label) return e_label; i++; line.size = InstructionCompiler::pushCALL(bytecode, label_address); _line_push; }
-                if (hasNext && str_cmp(token, "call_if")) { if (finalPass && e_label) return e_label; i++; line.size = InstructionCompiler::pushCALL_IF(bytecode, label_address); _line_push; }
-                if (hasNext && str_cmp(token, "call_if_not")) { if (finalPass && e_label) return e_label; i++; line.size = InstructionCompiler::pushCALL_IF_NOT(bytecode, label_address); _line_push; }
+                if (hasNext && (str_cmp(token, "jmp") || str_cmp(token, "jump"))) { if (finalPass && e_label) return buildErrorUnknownLabel(token_p1); i++; line.size = InstructionCompiler::pushJMP(bytecode, label_address); _line_push; }
+                if (hasNext && (str_cmp(token, "jmp_if") || str_cmp(token, "jump_if"))) { if (finalPass && e_label) return buildErrorUnknownLabel(token_p1); i++; line.size = InstructionCompiler::pushJMP_IF(bytecode, label_address); _line_push; }
+                if (hasNext && (str_cmp(token, "jmp_if_not") || str_cmp(token, "jump_if_not"))) { if (finalPass && e_label) return buildErrorUnknownLabel(token_p1); i++; line.size = InstructionCompiler::pushJMP_IF_NOT(bytecode, label_address); _line_push; }
+                if (hasNext && str_cmp(token, "call")) { if (finalPass && e_label) return buildErrorUnknownLabel(token_p1); i++; line.size = InstructionCompiler::pushCALL(bytecode, label_address); _line_push; }
+                if (hasNext && str_cmp(token, "call_if")) { if (finalPass && e_label) return buildErrorUnknownLabel(token_p1); i++; line.size = InstructionCompiler::pushCALL_IF(bytecode, label_address); _line_push; }
+                if (hasNext && str_cmp(token, "call_if_not")) { if (finalPass && e_label) return buildErrorUnknownLabel(token_p1); i++; line.size = InstructionCompiler::pushCALL_IF_NOT(bytecode, label_address); _line_push; }
                 if (str_cmp(token, "ret") || str_cmp(token, "return")) { line.size = InstructionCompiler::push(bytecode, RET); _line_push; }
                 if (str_cmp(token, "ret_if") || str_cmp(token, "return_if")) { line.size = InstructionCompiler::push(bytecode, RET_IF); _line_push; }
                 if (str_cmp(token, "ret_if_not") || str_cmp(token, "return_if_not")) { line.size = InstructionCompiler::push(bytecode, RET_IF_NOT); _line_push; }
@@ -990,22 +1065,22 @@ bool build(bool finalPass) {
                 if (data_type) {
                     PLCRuntimeInstructionSet type = (PLCRuntimeInstructionSet) data_type;
                     if (hasNext && endsWith(token, ".const")) {
-                        if (type == type_bool) { if (e_int) return e_int; i++; line.size = InstructionCompiler::push_bool(bytecode, value_int != 0); _line_push; }
-                        if (type == type_uint8_t) { if (e_int) return e_int; i++; line.size = InstructionCompiler::push_uint8_t(bytecode, value_int); _line_push; }
-                        if (type == type_uint16_t) { if (e_int) return e_int; i++; line.size = InstructionCompiler::push_uint16_t(bytecode, value_int); _line_push; }
-                        if (type == type_uint32_t) { if (e_int) return e_int; i++; line.size = InstructionCompiler::push_uint32_t(bytecode, value_int); _line_push; }
-                        if (type == type_uint64_t) { if (e_int) return e_int; i++; line.size = InstructionCompiler::push_uint64_t(bytecode, value_int); _line_push; }
-                        if (type == type_int8_t) { if (e_int) return e_int; i++; line.size = InstructionCompiler::push_int8_t(bytecode, value_int); _line_push; }
-                        if (type == type_int16_t) { if (e_int) return e_int; i++; line.size = InstructionCompiler::push_int16_t(bytecode, value_int); _line_push; }
-                        if (type == type_int32_t) { if (e_int) return e_int; i++; line.size = InstructionCompiler::push_int32_t(bytecode, value_int); _line_push; }
-                        if (type == type_int64_t) { if (e_int) return e_int; i++; line.size = InstructionCompiler::push_int64_t(bytecode, value_int); _line_push; }
-                        if (type == type_float) { if (e_real) return e_real; i++; line.size = InstructionCompiler::push_float(bytecode, value_float); _line_push; }
-                        if (type == type_double) { if (e_real) return e_real; i++; line.size = InstructionCompiler::push_double(bytecode, value_float); _line_push; }
+                        if (type == type_bool) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_bool(bytecode, value_int != 0); _line_push; }
+                        if (type == type_uint8_t) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_uint8_t(bytecode, value_int); _line_push; }
+                        if (type == type_uint16_t) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_uint16_t(bytecode, value_int); _line_push; }
+                        if (type == type_uint32_t) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_uint32_t(bytecode, value_int); _line_push; }
+                        if (type == type_uint64_t) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_uint64_t(bytecode, value_int); _line_push; }
+                        if (type == type_int8_t) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_int8_t(bytecode, value_int); _line_push; }
+                        if (type == type_int16_t) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_int16_t(bytecode, value_int); _line_push; }
+                        if (type == type_int32_t) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_int32_t(bytecode, value_int); _line_push; }
+                        if (type == type_int64_t) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_int64_t(bytecode, value_int); _line_push; }
+                        if (type == type_float) { if (e_real) return buildErrorExpectedFloat(token_p1); i++; line.size = InstructionCompiler::push_float(bytecode, value_float); _line_push; }
+                        if (type == type_double) { if (e_real) return buildErrorExpectedFloat(token_p1); i++; line.size = InstructionCompiler::push_double(bytecode, value_float); _line_push; }
                         Serial.print(F("Error: unknown data type ")); token.print(); Serial.print(F(" at ")); Serial.print(token.line); Serial.print(F(":")); Serial.println(token.column);
                         return true;
                     }
-                    if (hasNext && endsWith(token, ".load")) { if (e_int) return e_int; i++; line.size = InstructionCompiler::pushGET(bytecode, value_int, type); _line_push; }
-                    if (hasNext && endsWith(token, ".store")) { if (e_int) return e_int; i++; line.size = InstructionCompiler::pushPUT(bytecode, value_int, type); _line_push; }
+                    if (hasNext && endsWith(token, ".load")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::pushGET(bytecode, value_int, type); _line_push; }
+                    if (hasNext && endsWith(token, ".store")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::pushPUT(bytecode, value_int, type); _line_push; }
                     if (hasNext && endsWith(token, ".copy")) { line.size = InstructionCompiler::pushCOPY(bytecode, type); _line_push; }
                     if (hasNext && endsWith(token, ".swap")) { line.size = InstructionCompiler::pushSWAP(bytecode, type); _line_push; }
                     if (hasNext && endsWith(token, ".drop")) { line.size = InstructionCompiler::pushDROP(bytecode, type); _line_push; }
@@ -1023,8 +1098,6 @@ bool build(bool finalPass) {
             }
         }
 
-        bool hasThird = i + 2 < token_count;
-        Token& token_p2 = hasThird ? tokens[i + 2] : tokens[i];
         // [cvt , keyword , keyword]
         if (hasThird) {
             uint8_t type_1;
@@ -1040,14 +1113,18 @@ bool build(bool finalPass) {
             }
         }
 
+        // if (type == TOKEN_KEYWORD && str_cmp(token, "u8.loadI")) {
+        //     if (!hasNext || !hasThird) return buildError(token_p1, "requires numeric parameter");
+        //     bool nextHasDot = str_includes(token_p1, ".");
+        //     i += 1;
+        // }
 
         if (type == TOKEN_KEYWORD && str_cmp(token, "exit")) {
             line.size = InstructionCompiler::push(bytecode, EXIT);
             _line_push;
         }
 
-        Serial.print(F("Error: unknown token ")); token.print(); Serial.print(F(" at ")); Serial.print(token.line); Serial.print(F(":")); Serial.println(token.column);
-        return true;
+        return buildErrorUnknownToken(token);
     }
     for (int i = 0; i < LUT_label_count; i++) {
         LUT_label& label = LUT_labels[i];
@@ -1056,7 +1133,7 @@ bool build(bool finalPass) {
             return true;
         }
     }
-    return error;
+    return false;
 }
 
 
@@ -1065,17 +1142,29 @@ WASM_EXPORT void loadAssembly() {
     streamRead(assembly_string, size, max_assembly_string_size);
 }
 
+
+WASM_EXPORT void logBytecode() {
+    Serial.print(F("Bytecode checksum ")); print_hex(built_bytecode_checksum); Serial.print(F(", ")); Serial.print(built_bytecode_length); Serial.println(F(" bytes:"));
+    for (int i = 0; i < built_bytecode_length; i++) {
+        uint8_t byte = built_bytecode[i]; // Format it as hex
+        char c1 = ((byte >> 4) & 0xF) + '0';
+        char c2 = ((byte) & 0xF) + '0';
+        if (c1 > '9') c1 += 'A' - '9' - 1;
+        if (c2 > '9') c2 += 'A' - '9' - 1;
+        Serial.print(F(" ")); Serial.print(c1); Serial.print(c2);
+    }
+    Serial.println();
+}
+
 WASM_EXPORT bool compileTest() {
     long total = millis();
-    Serial.println(F("Compiling ..."));
+    Serial.print(F("Compiling "));
     bool error = false;
-    Serial.print(F(" - Tokenization "));
+    Serial.print(F("."));
     long t1 = millis();
     error = tokenize();
     t1 = millis() - t1;
-    if (error) { Serial.println(F("FAILED"));  return error; }
-    Serial.print(F("OK (")); Serial.print(t1); Serial.println(F(" ms)"));
-
+    if (error) { Serial.println(F(" FAILED"));  return error; }
 
     // if (token_count > 0) {
     //     Serial.print(F("Tokens ")); Serial.print(token_count); Serial.println(F(":"));
@@ -1093,20 +1182,19 @@ WASM_EXPORT bool compileTest() {
     //     }
     // } else Serial.println(F("No tokens"));
 
-    Serial.print(F(" - Building "));
+    Serial.print(F("."));
     t1 = millis();
     error = build(false); // First pass
     t1 = millis() - t1;
-    if (error) { Serial.println(F("FAILED"));  return error; }
-    Serial.print(F("OK (")); Serial.print(t1); Serial.println(F(" ms)"));
+    if (error) { Serial.println(F(" FAILED"));  return error; }
 
 
-    Serial.print(F(" - Linking "));
+    Serial.print(F("."));
     t1 = millis();
     error = build(true); // Second pass to link labels
     t1 = millis() - t1;
-    if (error) { Serial.println(F("FAILED"));  return error; }
-    Serial.print(F("OK (")); Serial.print(t1); Serial.println(F(" ms)"));
+    if (error) { Serial.println(F(" FAILED"));  return error; }
+    Serial.println(F(" OK"));
 
     total = millis() - total;
     Serial.print(F("Compilation finished in ")); Serial.print(total); Serial.println(F(" ms"));
@@ -1149,25 +1237,14 @@ WASM_EXPORT bool compileTest() {
     // } else Serial.println(F("No tokens"));
 
     // Serial.print(F("Assembly: \"")); Serial.print(assembly_string); Serial.println(F("\""));
-
-    Serial.print(F("Bytecode ")); Serial.print(built_bytecode_length); Serial.println(F(" bytes:"));
-    for (int i = 0; i < built_bytecode_length; i++) {
-        uint8_t byte = built_bytecode[i]; // Format it as hex
-        char c1 = ((byte >> 4) & 0xF) + '0';
-        char c2 = ((byte) & 0xF) + '0';
-        if (c1 > '9') c1 += 'A' - '9' - 1;
-        if (c2 > '9') c2 += 'A' - '9' - 1;
-        Serial.print(F(" ")); Serial.print(c1); Serial.print(c2);
-    }
-    Serial.println();
+    logBytecode();
     return false;
 }
 
-
-
 WASM_EXPORT void verifyCode() {
-    VovkPLCRuntime runtime(128, 10000, built_bytecode, built_bytecode_length); // Stack size
+    VovkPLCRuntime runtime(128, 128, 10000); // Stack size, memory size, program size
     runtime.startup();
+    runtime.loadProgram(built_bytecode, built_bytecode_length, built_bytecode_checksum);
     RuntimeError status = UnitTest::fullProgramDebug(runtime);
     const char* status_name = RUNTIME_ERROR_NAME(status);
     Serial.print(F("Runtime status: ")); Serial.println(status_name);
