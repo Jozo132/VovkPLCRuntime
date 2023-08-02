@@ -23,8 +23,13 @@
 
 class RuntimeStack {
 public:
+#ifdef __WASM__
     Stack<uint8_t>* stack = nullptr;
     Stack<uint16_t>* call_stack = nullptr;
+#else
+    Stack<uint8_t>* stack = new Stack<uint8_t>;
+    Stack<uint16_t>* call_stack = new Stack<uint16_t>;
+#endif // __WASM__
     uint32_t max_size = 0;
     uint32_t max_call_stack_size = 0;
 
@@ -32,14 +37,7 @@ public:
 
     // Create a stack with a maximum size
     RuntimeStack(uint32_t max_size = 0, uint32_t call_stack_size = 10, uint32_t memory_size = 4) {
-        this->max_size = max_size;
-        this->max_call_stack_size = call_stack_size;
-        if (stack == nullptr) stack = new Stack<uint8_t>;
-        if (call_stack == nullptr) call_stack = new Stack<uint16_t>;
-        if (memory == nullptr) memory = new Stack<uint8_t>;
-        stack->format(max_size);
-        call_stack->format(call_stack_size);
-        memory->format(memory_size);
+        this->format(max_size, call_stack_size, memory_size);
     }
     ~RuntimeStack() {
         if (stack != nullptr) delete stack;
@@ -48,6 +46,17 @@ public:
         stack = nullptr;
         call_stack = nullptr;
         memory = nullptr;
+    }
+
+    void format(uint32_t max_size = 0, uint32_t call_stack_size = 10, uint32_t memory_size = 4) {
+        this->max_size = max_size;
+        this->max_call_stack_size = call_stack_size;
+        if (stack == nullptr) stack = new Stack<uint8_t>;
+        if (call_stack == nullptr) call_stack = new Stack<uint16_t>;
+        if (memory == nullptr) memory = new Stack<uint8_t>;
+        stack->format(max_size);
+        call_stack->format(call_stack_size);
+        memory->format(memory_size);
     }
 
     int print() { return stack->print(); }
