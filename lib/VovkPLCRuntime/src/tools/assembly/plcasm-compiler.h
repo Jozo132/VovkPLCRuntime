@@ -1200,10 +1200,9 @@ WASM_EXPORT bool compileTest() {
     error = build(true); // Second pass to link labels
     t1 = millis() - t1;
     if (error) { Serial.println(F("Failed at linking"));  return error; }
-    Serial.println(F(" OK"));
 
     total = millis() - total;
-    Serial.print(F("Compilation finished in ")); Serial.print(total); Serial.println(F(" ms"));
+    Serial.print(F(" finished in ")); Serial.print(total); Serial.println(F(" ms"));
 
     if (LUT_label_count > 0) {
         Serial.print(F("Labels ")); Serial.print(LUT_label_count); Serial.println(F(":"));
