@@ -59,9 +59,9 @@ const   incr = 10
 
 ################# Set initial values
 u8.const  0
-u8.store    sum   // set u8 at address 0 to value 0
+u8.store  sum   // set u8 at address 0 to value 0
 u8.const  0
-u8.store    index // set u8 at address 1 to value 0
+u8.store  index // set u8 at address 1 to value 0
 
 ################# Run test for loop
 loop:
@@ -117,6 +117,21 @@ u8.7.get
 u8.const 5
 call FunctionTest
 u8.drop
+
+// Simple PLC logic test
+    u8.load 20
+    u8.load 10
+    u8.0.get
+
+    jump_if_not RESET
+    u8.0.set
+    jump END
+
+    RESET:
+    u8.0.rset
+
+    END:
+    u8.store 20
 exit
 
 FunctionTest:
