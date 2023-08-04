@@ -21,10 +21,9 @@
 
 #pragma once
 
-#include "wasm/wasm.h"
-
 #ifdef __WASM__
 
+#include "wasm/wasm.h"
 
 #define max_assembly_string_size 64535
 #define MAX_NUM_OF_TOKENS 10000
@@ -1254,5 +1253,11 @@ WASM_EXPORT void verifyCode() {
     const char* status_name = RUNTIME_ERROR_NAME(status);
     Serial.print(F("Runtime status: ")); Serial.println(status_name);
 }
+
+#else
+
+void set_assembly_string(char* new_assembly_string) { }
+bool compileTest() { return false; }
+void verifyCode() { }
 
 #endif // __WASM__
