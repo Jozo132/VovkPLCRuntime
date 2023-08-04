@@ -132,6 +132,21 @@ int freeMemory() {
 #endif  // ESP8266
 }
 
+void processExit();
+void processExit() {
+#ifdef __WASM__
+    throw 1;
+#elif defined(ESP8266) || defined(ESP32)
+    ESP.restart();
+#elif defined(__arm__)
+    NVIC_SystemReset();
+#elif defined(__SIMULATOR__)
+    exit(0);
+#else
+    ((void (*)()) 0)(); // Call function null pointer
+#endif // __WASM__
+}
+
 #define LOG_FREE_MEMORY() Serial.print(F("Free memory: ")); Serial.print(freeMemory()); Serial.println(F(" bytes"));
 
 void fstrcpy(char* buff, const char* fstr);
@@ -389,6 +404,43 @@ Serial_t Stream(STREAM_TO_STREAMOUT);
 int get_used_memory();
 int get_used_memory() {
     return 0;
+}
+
+bool serial_timeout = false;
+char serialReadTimeout(unsigned long timeout = 100);
+char serialReadTimeout(unsigned long timeout) {
+    unsigned long t = millis();
+    unsigned long start = t;
+    unsigned long elapsed = 0;
+    serial_timeout = false;
+    while (Serial.available() == 0) {
+        t = millis();
+        elapsed = t - start;
+        if (elapsed >= timeout || start > t) {
+            serial_timeout = true;
+            Serial.println(F("Serial read timeout"));
+            return 0;
+        }
+        delay(1);
+    }
+    return Serial.read();
+}
+
+uint8_t serialReadHexByteTimeout(unsigned long timeout = 100);
+uint8_t serialReadHexByteTimeout(unsigned long timeout) {
+    uint8_t b = 0;
+    char c = serialReadTimeout(timeout);
+    if (c >= '0' && c <= '9') b = c - '0';
+    else if (c >= 'A' && c <= 'F') b = c - 'A' + 10;
+    else if (c >= 'a' && c <= 'f') b = c - 'a' + 10;
+    else return 0xff;
+    b <<= 4;
+    c = serialReadTimeout(timeout);
+    if (c >= '0' && c <= '9') b |= c - '0';
+    else if (c >= 'A' && c <= 'F') b |= c - 'A' + 10;
+    else if (c >= 'a' && c <= 'f') b |= c - 'a' + 10;
+    else return 0xff;
+    return b;
 }
 
 #endif // __SIMULATOR__
