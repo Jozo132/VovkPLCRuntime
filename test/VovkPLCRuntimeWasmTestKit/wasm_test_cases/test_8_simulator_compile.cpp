@@ -103,6 +103,6 @@ FunctionTest:
 
 void custom_test() {
     set_assembly_string((char*) testAssembly);
-    if (!compileTest()) return;
+    if (compileTest()) return;
     verifyCode();
 }
