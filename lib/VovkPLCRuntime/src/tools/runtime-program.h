@@ -239,24 +239,24 @@ public:
 };
 
 class RuntimeProgram {
+private:
+    uint32_t MAX_PROGRAM_SIZE = PLCRUNTIME_DEFAULT_PROGRAM_SIZE; // Max program size in bytes
 public:
 #ifdef __WASM__
     uint8_t* program = nullptr; // PLC program to execute
-#else 
-    uint8_t* program = new uint8_t[1]; // PLC program to execute
-#endif
-    uint32_t MAX_PROGRAM_SIZE = 0; // Max program size in bytes
+#else
+    uint8_t* program = new uint8_t[PLCRUNTIME_DEFAULT_PROGRAM_SIZE]; // PLC program to execute
+#endif // __WASM__
     uint32_t program_size = 0; // Current program size in bytes
     uint32_t program_line = 0; // Active program line
     RuntimeError status = UNDEFINED_STATE;
 
-    RuntimeProgram(const uint8_t* program, uint32_t program_size) {
-        this->MAX_PROGRAM_SIZE = program_size;
-        this->program_size = program_size;
-        this->program = (uint8_t*) program;
-    }
     RuntimeProgram(uint32_t program_size) {
-        this->MAX_PROGRAM_SIZE = program_size;
+        if (program_size > PLCRUNTIME_DEFAULT_PROGRAM_SIZE) {
+            if (program != nullptr) delete [] program;
+            program = new uint8_t[program_size];
+            this->MAX_PROGRAM_SIZE = program_size;
+        }
     }
     RuntimeProgram() { }
     ~RuntimeProgram() {
@@ -264,26 +264,23 @@ public:
     }
 
     void begin(const uint8_t* program, uint32_t program_size, uint8_t checksum) {
-        format(program_size + 1);
+        format(program_size);
         load(program, program_size, checksum);
     }
 
     void beginUnsafe(const uint8_t* program, uint32_t program_size) {
-        format(program_size + 1);
+        format(program_size);
         loadUnsafe(program, program_size);
     }
 
     void begin(uint32_t program_size = 0) {
-        if (program_size == 0) return;
-        MAX_PROGRAM_SIZE = program_size;
-        if (MAX_PROGRAM_SIZE > 0 && program == nullptr) format(MAX_PROGRAM_SIZE);
+        format(program_size);
     }
 
     void format(uint32_t program_size = 0) {
         if (program_size == 0) program_size = MAX_PROGRAM_SIZE;
-        this->MAX_PROGRAM_SIZE = program_size;
-        if (this->program != nullptr) delete [] this->program;
-        this->program = new uint8_t[program_size];
+        if (program_size > MAX_PROGRAM_SIZE) program_size = MAX_PROGRAM_SIZE;
+        if (this->program == nullptr) this->program = new uint8_t[MAX_PROGRAM_SIZE];
         this->program_size = 0;
         this->program_line = 0;
         this->status = UNDEFINED_STATE;
@@ -293,10 +290,8 @@ public:
         if (program_size > MAX_PROGRAM_SIZE) status = PROGRAM_SIZE_EXCEEDED;
         else if (program_size == 0) status = UNDEFINED_STATE;
         else status = STATUS_SUCCESS;
-        if (this->program != nullptr) delete [] this->program;
-        this->program = new uint8_t[program_size];
+        format(program_size);
         memcpy(this->program, program, program_size);
-        this->MAX_PROGRAM_SIZE = program_size;
         this->program_size = program_size;
         return status;
     }

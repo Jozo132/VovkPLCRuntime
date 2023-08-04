@@ -29,6 +29,18 @@
 #define PLCRUNTIME_OUTPUT_OFFSET 10
 #endif // PLCRUNTIME_OUTPUT_OFFSET
 
+#ifndef PLCRUNTIME_DEFAULT_STACK_SIZE
+#define PLCRUNTIME_DEFAULT_STACK_SIZE 16
+#endif // PLCRUNTIME_DEFAULT_STACK_SIZE
+
+#ifndef PLCRUNTIME_DEFAULT_MEMORY_SIZE
+#define PLCRUNTIME_DEFAULT_MEMORY_SIZE 64
+#endif // PLCRUNTIME_DEFAULT_MEMORY_SIZE
+
+#ifndef PLCRUNTIME_DEFAULT_PROGRAM_SIZE
+#define PLCRUNTIME_DEFAULT_PROGRAM_SIZE 1024
+#endif // PLCRUNTIME_DEFAULT_PROGRAM_SIZE
+
 #ifdef __WASM__
 #include "assembly/wasm/wasm.h"
 #endif
@@ -43,15 +55,18 @@
 #include "runtime-program.h"
 #include "runtime-cmd-parser.h"
 
+#define SERIAL_TIMEOUT_RETURN if (serial_timeout) return;
+#define SERIAL_TIMEOUT_JOB(task) if (serial_timeout) { task; return; };
+
 class VovkPLCRuntime {
 private:
     bool started_up = false;
 public:
     const uint32_t input_offset = PLCRUNTIME_INPUT_OFFSET; // Output offset in memory
     const uint32_t output_offset = PLCRUNTIME_OUTPUT_OFFSET + PLCRUNTIME_INPUT_OFFSET; // Output offset in memory
-    uint32_t max_stack_size = 64; // Maximum stack size
-    uint32_t memory_size = 64; // PLC memory size
-    uint32_t program_size = 1024; // PLC program size
+    uint32_t max_stack_size = PLCRUNTIME_DEFAULT_STACK_SIZE; // Maximum stack size
+    uint32_t memory_size = PLCRUNTIME_DEFAULT_MEMORY_SIZE; // PLC memory size
+    uint32_t program_size = PLCRUNTIME_DEFAULT_PROGRAM_SIZE; // PLC program size
 #ifdef __WASM__
     RuntimeStack* stack = nullptr; // Active memory stack for PLC execution
     RuntimeProgram* program = nullptr; // Active PLC program
@@ -224,6 +239,316 @@ public:
             if (error) return error;
         }
         return false;
+    }
+
+public:
+    void listen() {
+#ifdef __WASM__
+        // Unused, access is available directly through the wasm.h interface
+#else // __WASM__
+        // Production code for microcontrollers
+        // Listen for input from [serial, ethernet, wifi, etc.]
+#ifdef PLCRUNTIME_SERIAL_ENABLED
+            // If the serial port is available and the first character is not 'P' or 'M', skip the character
+        while (Serial.available() && Serial.peek() != 'R' && Serial.peek() != 'P' && Serial.peek() != 'M' && Serial.peek() != 'S') Serial.read();
+        if (Serial.available() > 1) {
+            // Command syntax:
+            // <command>[<size>][<data>]<checksum>
+            // Where the command is always 2 characters and the rest is %02x encoded
+            // Possible commands:
+            //  - PLC reset:        'RS<uint8_t>' (checksum)
+            //  - Program download: 'PD<uint32_t><uint8_t[]><uint8_t>' (size, data, checksum)
+            //  - Program upload:   'PU<uint8_t>' (checksum)
+            //  - Program run:      'PR<uint8_t>' (checksum)
+            //  - Program stop:     'PS<uint8_t>' (checksum)
+            //  - Memory read:      'MR<uint32_t><uint32_t><uint8_t>' (address, size, checksum)
+            //  - Memory write:     'MW<uint32_t><uint32_t><uint8_t[]><uint8_t>' (address, size, data, checksum)
+            //  - Memory format:    'MF<uint32_t><uint32_t><uint8_t><uint8_t>' (address, size, value, checksum)
+            //  - Source download:  'SD<uint32_t><uint8_t[]><uint8_t>' (size, data, checksum) // Only available if PLCRUNTIME_SOURCE_ENABLED is defined
+            //  - Source upload:    'SU<uint32_t><uint8_t>' (size, checksum) // Only available if PLCRUNTIME_SOURCE_ENABLED is defined
+            // If the program is downloaded and the checksum is invalid, the runtime will restart
+            uint8_t cmd[2] = { 0, 0 };
+            uint32_t size = 0;
+            uint32_t address = 0;
+            uint8_t* data = nullptr;
+            uint8_t checksum = 0;
+            uint8_t checksum_calc = 0;
+
+            // Read the command
+            cmd[0] = serialReadTimeout(); SERIAL_TIMEOUT_RETURN;
+            cmd[1] = serialReadTimeout(); SERIAL_TIMEOUT_RETURN;
+
+            crc8_simple(checksum_calc, cmd[0]);
+            crc8_simple(checksum_calc, cmd[1]);
+
+            bool plc_reset = cmd[0] == 'R' && cmd[1] == 'S';
+            bool program_download = cmd[0] == 'P' && cmd[1] == 'D';
+            bool program_upload = cmd[0] == 'P' && cmd[1] == 'U';
+            bool program_run = cmd[0] == 'P' && cmd[1] == 'R';
+            bool program_stop = cmd[0] == 'P' && cmd[1] == 'S';
+            bool memory_read = cmd[0] == 'M' && cmd[1] == 'R';
+            bool memory_write = cmd[0] == 'M' && cmd[1] == 'W';
+            bool memory_format = cmd[0] == 'M' && cmd[1] == 'F';
+            bool source_download = cmd[0] == 'S' && cmd[1] == 'D';
+            bool source_upload = cmd[0] == 'S' && cmd[1] == 'U';
+
+            if (plc_reset) {
+                Serial.print(F("PLC RESET - "));
+
+                // Read the checksum
+                checksum = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+
+                // Verify the checksum
+                if (checksum != checksum_calc) {
+                    Serial.println(F("Invalid checksum"));
+                    Serial.flush();
+                    return;
+                }
+
+                Serial.println(F("Complete"));
+                Serial.flush();
+                processExit();
+                return;
+
+            } else if (program_download) {
+                Serial.print(F("PROGRAM DOWNLOAD - "));
+                // Read the size
+                size = (uint32_t) serialReadHexByteTimeout();  SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (size & 0xff));
+                size = size << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (size & 0xff));
+                size = size << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (size & 0xff));
+                size = size << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (size & 0xff));
+
+
+                // Read the data
+                program->format(size);
+                program->program_size = size;
+                uint8_t b = 0;
+                for (uint32_t i = 0; i < size; i++) {
+                    b = serialReadHexByteTimeout(); SERIAL_TIMEOUT_JOB(processExit());
+                    program->modify(i, b);
+                    crc8_simple(checksum_calc, b);
+                }
+
+                // Read the checksum
+                checksum = serialReadHexByteTimeout(); SERIAL_TIMEOUT_JOB(processExit());
+
+                // If the checksum is invalid, restart the runtime
+                if (checksum != checksum_calc) {
+                    Serial.println(F("Invalid checksum, restarting the runtime..."));
+                    Serial.flush();
+                    delay(1000);
+                    processExit();
+                    return;
+                }
+                program->resetLine();
+
+                Serial.flush();
+                Serial.println(F("Complete"));
+            } else if (program_upload) {
+                Serial.print(F("PROGRAM UPLOAD - "));
+                // Read the checksum
+                checksum = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+
+                // Verify the checksum
+                if (checksum != checksum_calc) {
+                    Serial.println(F("Invalid checksum"));
+                    Serial.flush();
+                    return;
+                }
+
+                // Print the program
+                program->println();
+
+                Serial.flush();
+                Serial.println(F("Complete"));
+            } else if (program_run) {
+                Serial.print(F("PROGRAM RUN - "));
+                // Read the checksum
+                checksum = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+
+                // Verify the checksum
+                if (checksum != checksum_calc) {
+                    Serial.println(F("Invalid checksum"));
+                    Serial.flush();
+                    return;
+                }
+
+                Serial.flush();
+                Serial.println(F("Complete"));
+            } else if (program_stop) {
+                Serial.print(F("PROGRAM STOP - "));
+                // Read the checksum
+                checksum = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+
+                // Verify the checksum
+                if (checksum != checksum_calc) {
+                    Serial.println(F("Invalid checksum"));
+                    Serial.flush();
+                    return;
+                }
+
+                Serial.flush();
+                Serial.println(F("Complete"));
+            } else if (memory_read) {
+                Serial.print(F("MEMORY READ - "));
+                // Read the address
+                address = (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (address & 0xff));
+                address = address << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (address & 0xff));
+                address = address << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (address & 0xff));
+                address = address << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (address & 0xff));
+
+                // Read the size
+                size = (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (size & 0xff));
+                size = size << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (size & 0xff));
+                size = size << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (size & 0xff));
+                size = size << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (size & 0xff));
+
+                // Read the checksum
+                checksum = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+
+                // Verify the checksum
+                if (checksum != checksum_calc) {
+                    Serial.println(F("Invalid checksum"));
+                    Serial.flush();
+                    return;
+                }
+
+                // Read the data
+                uint8_t value;
+                for (uint32_t i = 0; i < size; i++) {
+                    stack->memory->get(address + i, value);
+                    char c1 = (value >> 4) & 0x0f;
+                    char c2 = value & 0x0f;
+                    if (c1 < 10) c1 += '0';
+                    else c1 += 'A' - 10;
+                    if (c2 < 10) c2 += '0';
+                    else c2 += 'A' - 10;
+                    Serial.print(c1);
+                    Serial.print(c2);
+                    Serial.print(' ');
+                }
+
+                // Print the data
+                Serial.println();
+                Serial.flush();
+
+                Serial.flush();
+                Serial.println(F("Complete"));
+            } else if (memory_write) {
+                Serial.print(F("MEMORY WRITE - "));
+                // Read the address
+                address = (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (address & 0xff));
+                address = address << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (address & 0xff));
+                address = address << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (address & 0xff));
+                address = address << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (address & 0xff));
+
+                // Read the size
+                size = (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (size & 0xff));
+                size = size << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (size & 0xff));
+                size = size << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (size & 0xff));
+                size = size << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (size & 0xff));
+
+                // Read the data
+                data = new uint8_t[size];
+                for (uint32_t i = 0; i < size; i++) {
+                    data[i] = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                    crc8_simple(checksum_calc, data[i]);
+                }
+
+                // Read the checksum
+                checksum = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+
+                // Verify the checksum
+                if (checksum != checksum_calc) {
+                    Serial.println(F("Invalid checksum"));
+                    Serial.flush();
+                    return;
+                }
+
+                // Write the data
+                for (uint32_t i = 0; i < size; i++)
+                    stack->memory->set(address + i, data[i]);
+
+                Serial.flush();
+                Serial.println(F("Complete"));
+            } else if (memory_format) {
+                Serial.print(F("MEMORY FORMAT - "));
+                // Read the address
+                address = (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (address & 0xff));
+                address = address << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (address & 0xff));
+                address = address << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (address & 0xff));
+                address = address << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (address & 0xff));
+
+                // Read the size
+                size = (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (size & 0xff));
+                size = size << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (size & 0xff));
+                size = size << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (size & 0xff));
+                size = size << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (size & 0xff));
+
+                // Read the value
+                uint8_t value = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, value);
+
+                // Read the checksum
+                checksum = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+
+                // Verify the checksum
+                if (checksum != checksum_calc) {
+                    Serial.println(F("Invalid checksum"));
+                    Serial.flush();
+                    return;
+                }
+
+                // Format the memory
+                for (uint32_t i = 0; i < size; i++)
+                    stack->memory->set(address + i, value);
+
+                Serial.flush();
+                Serial.println(F("Complete"));
+            } else if (source_download) {
+                Serial.println(F("SOURCE DOWNLOAD - Not implemented"));
+            } else if (source_upload) {
+                Serial.println(F("SOURCE UPLOAD - Not implemented"));
+            }
+        }
+#endif // PLCRUNTIME_SERIAL_ENABLED
+
+#ifdef PLCRUNTIME_ETHERNET_ENABLED
+        // To be implemented
+#endif // PLCRUNTIME_ETHERNET_ENABLED
+
+#ifdef PLCRUNTIME_WIFI_ENABLED
+        // To be implemented
+#endif // PLCRUNTIME_WIFI_ENABLED
+#endif // __WASM__
     }
 };
 

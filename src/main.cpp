@@ -13,11 +13,13 @@
 // #define __RUNTIME_DEBUG__
 // #define __RUNTIME_FULL_UNIT_TEST___
 
+#define PLCRUNTIME_SERIAL_ENABLED
+
 #include <VovkPLCRuntime.h>
 
 #define stack_size 64
 #define memory_size 64
-#define program_size 128
+#define program_size 1024
 
 VovkPLCRuntime runtime(stack_size, memory_size, program_size); // Stack size, memory size, program size
 
@@ -80,6 +82,7 @@ void loop() {
   int t_temp = t / 2000;
   bool input = t_temp % 2 == 0;
 #endif // USER_BTN
+  runtime.listen(); // Listen for remote commands
   runtime.setInputBit(0, 0, input);
   runtime.cleanRun();
   bool output = runtime.getOutputBit(0, 0);

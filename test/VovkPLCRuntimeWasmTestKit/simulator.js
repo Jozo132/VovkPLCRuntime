@@ -9,6 +9,10 @@ class PLCRuntimeWasm_class {
     error_message = ''
     stream_message = ''
 
+    /** @type { Uint8Array } */
+    crc8_table = new Uint8Array(256)
+    crc8_table_loaded = false
+
     constructor() { }
 
     initialize = async (wasm_path = '', debug = false) => {
@@ -111,6 +115,173 @@ class PLCRuntimeWasm_class {
         this.stream_message = ''
         return output
     }
+
+    /** @param { number | number[] } data * @param { number } [crc] */
+    crc8 = (data, crc = 0) => {
+        if (!this.crc8_table_loaded) {
+            this.crc8_table_loaded = true
+            for (let i = 0; i < 256; i++) {
+                let crc8 = i
+                for (let j = 0; j < 8; j++)
+                    crc8 = crc8 & 0x80 ? (crc8 << 1) ^ 0x31 : crc8 << 1;
+                this.crc8_table[i] = crc8 & 0xff;
+            }
+        }
+        data = Array.isArray(data) ? data : [data];
+        const size = data.length;
+        for (let i = 0; i < size; i++)
+            if (!(data[i] >= 0 && data[i] <= 255)) throw new Error(`Invalid data byte at index ${i}: ${data[i]}`);
+        for (let i = 0; i < size; i++) {
+            let index = (crc ^ data[i]) & 0xff;
+            crc = this.crc8_table[index] & 0xff;
+        }
+        return crc;
+    }
+
+    /** @param { string } hex_string * @returns { number[] } */
+    parseHex = hex_string => {
+        // Parse 02x formatted HEX string
+        if (typeof hex_string !== 'string') throw new Error(`Invalid HEX string: ${hex_string}`);
+        if (hex_string.length % 2 !== 0) throw new Error(`Invalid HEX string length: ${hex_string.length}`);
+        const hex_array = hex_string.match(/.{1,2}/g);
+        if (!hex_array) throw new Error(`Invalid HEX string: ${hex_string}`);
+        const num_array = [];
+        for (let i = 0; i < hex_array.length; i++) {
+            const num = parseInt(hex_array[i], 16);
+            if (num < 0 || num > 255) throw new Error(`Invalid HEX string byte at index ${i}: ${hex_array[i]}`);
+            num_array.push(num);
+        }
+        return num_array;
+    }
+    /** @param { string } str * @returns { string } */
+    stringToHex = str => str.split('').map(c => c.charCodeAt(0).toString(16).padStart(2, '0')).join('')
+
+    //  - PLC reset:        'RS<uint8_t>' (checksum)
+    //  - Program download: 'PD<uint32_t><uint8_t[]><uint8_t>' (size, data, checksum)
+    //  - Program upload:   'PU<uint8_t>' (checksum)
+    //  - Program run:      'PR<uint8_t>' (checksum)
+    //  - Program stop:     'PS<uint8_t>' (checksum)
+    //  - Memory read:      'MR<uint32_t><uint32_t><uint8_t>' (address, size, checksum)
+    //  - Memory write:     'MW<uint32_t><uint32_t><uint8_t[]><uint8_t>' (address, size, data, checksum)
+    //  - Memory format:    'MF<uint32_t><uint32_t><uint8_t><uint8_t>' (address, size, value, checksum)
+    //  - Source download:  'SD<uint32_t><uint8_t[]><uint8_t>' (size, data, checksum) // Only available if PLCRUNTIME_SOURCE_ENABLED is defined
+    //  - Source upload:    'SU<uint32_t><uint8_t>' (size, checksum) // Only available if PLCRUNTIME_SOURCE_ENABLED is defined
+    buildCommand = {
+
+        /** @returns { string } */
+        plcReset: () => {
+            const cmd = "RS"
+            const cmd_hex = this.stringToHex(cmd)
+            const checksum = this.crc8(this.parseHex(cmd_hex))
+            const checksum_hex = checksum.toString(16).padStart(2, '0');
+            const command = cmd + checksum_hex;
+            return command;
+        },
+
+        /** @param { number[] | [number[]] | [string] } input * @returns { string } */
+        programDownload: (...input) => {
+            const cmd = "PD"
+            const cmd_hex = this.stringToHex(cmd)
+            let checksum = this.crc8(this.parseHex(cmd_hex))
+            input = Array.isArray(input[0]) ? input[0] : input
+            const allowedChars = '0123456789abcdefABCDEF'
+            if (typeof input[0] === 'string') input = this.parseHex(input[0].split('').filter(c => allowedChars.includes(c)).join('') || '')
+            /** @type { number[] } */// @ts-ignore
+            const data = input
+            const data_hex = data.map(d => d.toString(16).padStart(2, '0'))
+            const size = data.length;
+            const size_hex_u32 = size.toString(16).padStart(8, '0');
+            checksum = this.crc8(this.parseHex(size_hex_u32), checksum)
+            checksum = this.crc8(data, checksum)
+            const checksum_hex = checksum.toString(16).padStart(2, '0');
+            const command = cmd + size_hex_u32 + data_hex.join('') + checksum_hex;
+            return command;
+        },
+
+        /** @returns { string } */
+        programUpload: () => {
+            const cmd = "PU"
+            const cmd_hex = this.stringToHex(cmd)
+            const checksum = this.crc8(this.parseHex(cmd_hex))
+            const checksum_hex = checksum.toString(16).padStart(2, '0');
+            const command = cmd + checksum_hex;
+            return command;
+        },
+
+        /** @returns { string } */
+        programRun: () => {
+            const cmd = "PR"
+            const cmd_hex = this.stringToHex(cmd)
+            const checksum = this.crc8(this.parseHex(cmd_hex))
+            const checksum_hex = checksum.toString(16).padStart(2, '0');
+            const command = cmd + checksum_hex;
+            return command;
+        },
+
+        /** @returns { string } */
+        programStop: () => {
+            const cmd = "PS"
+            const cmd_hex = this.stringToHex(cmd)
+            const checksum = this.crc8(this.parseHex(cmd_hex))
+            const checksum_hex = checksum.toString(16).padStart(2, '0');
+            const command = cmd + checksum_hex;
+            return command;
+        },
+
+        /** @param { number } address * @param { number } size * @returns { string } */
+        memoryRead: (address, size = 1) => {
+            const cmd = "MR"
+            const cmd_hex = this.stringToHex(cmd)
+            const address_hex_u32 = address.toString(16).padStart(8, '0');
+            const size_hex_u32 = size.toString(16).padStart(8, '0');
+            let checksum = this.crc8(this.parseHex(cmd_hex))
+            checksum = this.crc8(this.parseHex(address_hex_u32), checksum)
+            checksum = this.crc8(this.parseHex(size_hex_u32), checksum)
+            const checksum_hex = checksum.toString(16).padStart(2, '0');
+            const command = cmd + address_hex_u32 + size_hex_u32 + checksum_hex;
+            return command;
+        },
+
+        /** @param { number } address * @param { number[] | [number[]] | [string] } input * @returns { string } */
+        memoryWrite: (address, input) => {
+            const cmd = "MW"
+            const cmd_hex = this.stringToHex(cmd)
+            let checksum = this.crc8(this.parseHex(cmd_hex))
+            const address_hex_u32 = address.toString(16).padStart(8, '0');
+            checksum = this.crc8(this.parseHex(address_hex_u32), checksum)
+            input = Array.isArray(input[0]) ? input[0] : input
+            const allowedChars = '0123456789abcdefABCDEF'
+            if (typeof input[0] === 'string') input = this.parseHex(input[0].split('').filter(c => allowedChars.includes(c)).join('') || '')
+            /** @type { number[] } */// @ts-ignore
+            const data = input
+            const data_hex = data.map(d => d.toString(16).padStart(2, '0')).join('')
+            const size = data.length;
+            const size_hex_u32 = size.toString(16).padStart(8, '0');
+            checksum = this.crc8(this.parseHex(size_hex_u32), checksum)
+            checksum = this.crc8(data, checksum)
+            const checksum_hex = checksum.toString(16).padStart(2, '0');
+            const command = cmd + address_hex_u32 + size_hex_u32 + data_hex + checksum_hex;
+            return command;
+        },
+
+        /** @param { number } address * @param { number } size * @param { number } value * @returns { string } */
+        memoryFormat: (address, size, value) => {
+            const cmd = "MF"
+            const cmd_hex = this.stringToHex(cmd)
+            const address_hex_u32 = address.toString(16).padStart(8, '0');
+            const size_hex_u32 = size.toString(16).padStart(8, '0');
+            const value_hex = value.toString(16).padStart(2, '0');
+            let checksum = this.crc8(this.parseHex(cmd_hex))
+            checksum = this.crc8(this.parseHex(address_hex_u32), checksum)
+            checksum = this.crc8(this.parseHex(size_hex_u32), checksum)
+            checksum = this.crc8(this.parseHex(value_hex), checksum)
+            const checksum_hex = checksum.toString(16).padStart(2, '0');
+            const command = cmd + address_hex_u32 + size_hex_u32 + value_hex + checksum_hex;
+            return command;
+        },
+
+    }
+
 }
 
 const ________PLCRuntimeWasm_______ = new PLCRuntimeWasm_class()
