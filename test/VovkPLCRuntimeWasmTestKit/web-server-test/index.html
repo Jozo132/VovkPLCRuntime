@@ -119,9 +119,15 @@ call FunctionTest
 u8.drop
 
 // Simple PLC logic test
+    u8.readBit.0 10
+    // u8.not
+    u8.writeBit.0 20
+
+// Previous way of doing the same task
     u8.load 20
     u8.load 10
     u8.0.get
+    // u8.not
 
     jump_if_not RESET
     u8.0.set
@@ -133,6 +139,7 @@ u8.drop
     END:
     u8.store 20
 exit
+
 
 FunctionTest:
         // At the top of the stack should be the input value
@@ -146,7 +153,6 @@ FunctionTest:
         u8.sub
         call FunctionTest
         ret
-
 
         </textarea>
         <div id="output"></div>

@@ -55,14 +55,18 @@ const do_compile_test = async () => {
     const d = document.getElementById('assembly')
     if (!d) throw new Error("Assembly element not found") // @ts-ignore
     const assembly = d.value
-    const { uploadAssembly, compileTest, verifyCode } = wasm.getExports()
-    if (!uploadAssembly) throw new Error("'uploadAssembly' function not found")
+    const { downloadAssembly, compileTest, verifyCode, extractProgram } = wasm.getExports()
+    if (!downloadAssembly) throw new Error("'downloadAssembly' function not found")
     if (!compileTest) throw new Error("'compileTest' function not found")
     if (!verifyCode) throw new Error("'verifyCode' function not found")
+    if (!extractProgram) throw new Error("'extractProgram' function not found")
     console.log("Running compileTest()...") // @ts-ignore
-    uploadAssembly(assembly)
+    downloadAssembly(assembly)
     if (compileTest()) return // Check for errors
     verifyCode()
+    const { size, output } = extractProgram() // @ts-ignore
+    const downloadString = PLCRuntimeWasm.buildCommand.programDownload(output)
+    console.log(`Program download string for Serial/UART/RS232: ${downloadString}`)
 }
 
 

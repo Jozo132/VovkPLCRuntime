@@ -52,24 +52,67 @@ class PLCRuntimeWasm_class {
     }
 
     /** @param { string } assembly */
-    uploadAssembly = (assembly) => {
-        // Use 'bool streamIn(char)' to upload the assembly character by character
+    downloadAssembly = (assembly) => {
+        // Use 'bool streamIn(char)' to download the assembly character by character
         // Use 'void loadAssembly()' to load the assembly into the PLC from the stream buffer
         if (!this.wasm) throw new Error("WebAssembly module not initialized")
         const { streamIn, loadAssembly } = this.wasm.exports
+        const translate = {
+            P_On: "u8.const 1",
+            P_Off: "u8.const 0",
+            P_100ms: "u8.readBit.0 1",
+            P_200ms: "u8.readBit.1 1",
+            P_300ms: "u8.readBit.2 1",
+            P_500ms: "u8.readBit.3 1",
+            P_1s: "u8.readBit.4 1",
+            P_2s: "u8.readBit.5 1",
+            P_5s: "u8.readBit.6 1",
+            P_10s: "u8.readBit.7 1",
+            P_30s: "u8.readBit.0 2",
+            P_1min: "u8.readBit.1 2",
+            P_2min: "u8.readBit.2 2",
+            P_5min: "u8.readBit.3 2",
+            P_10min: "u8.readBit.4 2",
+            P_30min: "u8.readBit.5 2",
+            P_1hr: "u8.readBit.6 2",
+            P_2hr: "u8.readBit.7 2",
+            P_3hr: "u8.readBit.0 3",
+            P_4hr: "u8.readBit.1 3",
+            P_5hr: "u8.readBit.2 3",
+            P_6hr: "u8.readBit.3 3",
+            P_12hr: "u8.readBit.4 3",
+            P_1day: "u8.readBit.5 3",
+        }
+        for (const key in translate) {
+            const value = translate[key]
+            assembly = assembly.replace(new RegExp(key, 'g'), value)
+        }
         let ok = true
         for (let i = 0; i < assembly.length && ok; i++) {
             const char = assembly[i]
             const c = char.charCodeAt(0) // @ts-ignore
             ok = streamIn(c)
         }
-        if (!ok) throw new Error("Failed to upload assembly") // @ts-ignore
+        if (!ok) throw new Error("Failed to download assembly") // @ts-ignore
         loadAssembly()
+    }
+
+    extractProgram = () => {
+        if (!this.wasm) throw new Error("WebAssembly module not initialized")
+        const { uploadProgram } = this.wasm.exports
+        if (!uploadProgram) throw new Error("'uploadProgram' function not found")
+        this.stream_message = '' // @ts-ignore
+        const size = uploadProgram()
+        const output = this.readStream()
+        return { size, output }
     }
 
     getExports = () => {
         if (!this.wasm) throw new Error("WebAssembly module not initialized")
-        return Object.assign({}, this.wasm.exports, { uploadAssembly: this.uploadAssembly })
+        return Object.assign({}, this.wasm.exports, {
+            downloadAssembly: this.downloadAssembly,
+            extractProgram: this.extractProgram,
+        })
     }
 
     console_print = c => {
