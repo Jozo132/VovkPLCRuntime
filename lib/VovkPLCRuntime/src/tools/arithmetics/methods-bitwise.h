@@ -28,7 +28,7 @@ RuntimeError MANIPULATE_RSET_X8_MACRO(RuntimeStack* stack, uint8_t bit_index) { 
 RuntimeError READ_X8_MACRO(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index, uint8_t bit_index) {
     IGNORE_UNUSED uint32_t index_start = index;
     uint32_t size = 2;
-    if (index + size > program_size) CHECK_PROGRAM_POINTER_BOUNDS_HEAD;
+    if (index + size > program_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, program_size, index, index_start);
     u8A_to_u16 cvt;
     cvt.u8A[1] = program[index];
     cvt.u8A[0] = program[index + 1];
@@ -39,14 +39,14 @@ RuntimeError READ_X8_MACRO(RuntimeStack* stack, uint8_t* program, uint32_t progr
     x = (x >> bit_index) & 1;
     stack->push_uint8_t(x);
     index += size;
-    if (index >= program_size) CHECK_PROGRAM_POINTER_BOUNDS_HEAD;
+    if (index >= program_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, program_size, index, index_start);
     return STATUS_SUCCESS;
 }
 
 RuntimeError WRITE_X8_MACRO(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index, uint8_t bit_index) {
     IGNORE_UNUSED uint32_t index_start = index;
     uint32_t size = 2;
-    if (index + size > program_size) CHECK_PROGRAM_POINTER_BOUNDS_HEAD;
+    if (index + size > program_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, program_size, index, index_start);
     u8A_to_u16 cvt;
     cvt.u8A[1] = program[index];
     cvt.u8A[0] = program[index + 1];
@@ -59,14 +59,14 @@ RuntimeError WRITE_X8_MACRO(RuntimeStack* stack, uint8_t* program, uint32_t prog
     error = stack->memory->set(address, x);
     if (error) return INVALID_MEMORY_ADDRESS;
     index += size;
-    if (index >= program_size) CHECK_PROGRAM_POINTER_BOUNDS_HEAD;
+    if (index >= program_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, program_size, index, index_start);
     return STATUS_SUCCESS;
 }
 
 RuntimeError WRITE_S_X8_MACRO(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index, uint8_t bit_index) {
     IGNORE_UNUSED uint32_t index_start = index;
     uint32_t size = 2;
-    if (index + size > program_size) CHECK_PROGRAM_POINTER_BOUNDS_HEAD;
+    if (index + size > program_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, program_size, index, index_start);
     u8A_to_u16 cvt;
     cvt.u8A[1] = program[index];
     cvt.u8A[0] = program[index + 1];
@@ -78,14 +78,14 @@ RuntimeError WRITE_S_X8_MACRO(RuntimeStack* stack, uint8_t* program, uint32_t pr
     error = stack->memory->set(address, x);
     if (error) return INVALID_MEMORY_ADDRESS;
     index += size;
-    if (index >= program_size) CHECK_PROGRAM_POINTER_BOUNDS_HEAD;
+    if (index >= program_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, program_size, index, index_start);
     return STATUS_SUCCESS;
 }
 
 RuntimeError WRITE_R_X8_MACRO(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index, uint8_t bit_index) {
     IGNORE_UNUSED uint32_t index_start = index;
     uint32_t size = 2;
-    if (index + size > program_size) CHECK_PROGRAM_POINTER_BOUNDS_HEAD;
+    if (index + size > program_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, program_size, index, index_start);
     u8A_to_u16 cvt;
     cvt.u8A[1] = program[index];
     cvt.u8A[0] = program[index + 1];
@@ -97,14 +97,14 @@ RuntimeError WRITE_R_X8_MACRO(RuntimeStack* stack, uint8_t* program, uint32_t pr
     error = stack->memory->set(address, x);
     if (error) return INVALID_MEMORY_ADDRESS;
     index += size;
-    if (index >= program_size) CHECK_PROGRAM_POINTER_BOUNDS_HEAD;
+    if (index >= program_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, program_size, index, index_start);
     return STATUS_SUCCESS;
 }
 
 RuntimeError WRITE_INV_X8_MACRO(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index, uint8_t bit_index) {
     IGNORE_UNUSED uint32_t index_start = index;
     uint32_t size = 2;
-    if (index + size > program_size) CHECK_PROGRAM_POINTER_BOUNDS_HEAD;
+    if (index + size > program_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, program_size, index, index_start);
     u8A_to_u16 cvt;
     cvt.u8A[1] = program[index];
     cvt.u8A[0] = program[index + 1];
@@ -117,7 +117,7 @@ RuntimeError WRITE_INV_X8_MACRO(RuntimeStack* stack, uint8_t* program, uint32_t 
     error = stack->memory->set(address, x);
     if (error) return INVALID_MEMORY_ADDRESS;
     index += size;
-    if (index >= program_size) CHECK_PROGRAM_POINTER_BOUNDS_HEAD;
+    if (index >= program_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, program_size, index, index_start);
     return STATUS_SUCCESS;
 }
 namespace PLCMethods {
@@ -194,7 +194,7 @@ namespace PLCMethods {
     RuntimeError handle_WRITE_INV_X8_B5(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_INV_X8_MACRO(stack, program, program_size, index, 5); }
     RuntimeError handle_WRITE_INV_X8_B6(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_INV_X8_MACRO(stack, program, program_size, index, 6); }
     RuntimeError handle_WRITE_INV_X8_B7(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_INV_X8_MACRO(stack, program, program_size, index, 7); }
-    
+
     RuntimeError handle_BW_AND_X8(RuntimeStack* stack) {
         uint8_t b = stack->pop_uint8_t();
         uint8_t a = stack->pop_uint8_t();
