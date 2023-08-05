@@ -36,9 +36,6 @@
 #include "string.h"
 
 int get_used_memory();
-int get_used_memory() {
-    return 0;
-}
 #endif // __WASM__
 
 #define PROGMEM
@@ -83,26 +80,8 @@ int get_used_memory() {
 #define LN10 2.3025850929940456840179914546844
 
 double ln(double x);
-double ln(double x) {
-    double old_sum = 0.0;
-    double xmlxpl = (x - 1) / (x + 1);
-    double xmlxpl_2 = xmlxpl * xmlxpl;
-    double denom = 1.0;
-    double frac = xmlxpl;
-    double term = frac;                 // denom start from 1.0
-    double sum = term;
-
-    while (sum != old_sum) {
-        old_sum = sum;
-        denom += 2.0;
-        frac *= xmlxpl_2;
-        sum += frac / denom;
-    }
-    return 2.0 * sum;
-}
 
 double log10(double x);
-double log10(double x) { return ln(x) / LN10; }
 
 #else // __SIMULATOR__
 #include <Arduino.h>
@@ -118,65 +97,13 @@ extern "C" char* sbrk(int incr);
 extern char* __brkval;
 #endif  // __arm__
 
-int freeMemory() {
-#ifdef __WASM__
-    return heap_size - heap_used;
-#elif defined(ESP8266) || defined(ESP32)
-    return ESP.getFreeHeap();
-#elif defined(__SIMULATOR__)
-    return 9000;
-#else
-    char top;
-#ifdef __arm__
-    return &top - reinterpret_cast<char*>(sbrk(0));
-#elif defined(CORE_TEENSY) || (ARDUINO > 103 && ARDUINO != 151)
-    return &top - __brkval;
-#else  // __arm__
-    return __brkval ? &top - __brkval : &top - __malloc_heap_start;
-#endif  // __arm__
-#endif  // ESP8266
-}
-
+int freeMemory();
 void processExit();
-void processExit() {
-#ifdef __WASM__
-    throw 1;
-#elif defined(ESP8266) || defined(ESP32)
-    ESP.restart();
-#elif defined(__arm__)
-    NVIC_SystemReset();
-#elif defined(__SIMULATOR__)
-    exit(0);
-#else
-    ((void (*)()) 0)(); // Call function null pointer
-#endif // __WASM__
-}
 
 #define LOG_FREE_MEMORY() Serial.print(F("Free memory: ")); Serial.print(freeMemory()); Serial.println(F(" bytes"));
 
 void fstrcpy(char* buff, const char* fstr);
-void fstrcpy(char* buff, const char* fstr) {
-    uint8_t i = 0;
-    uint8_t c = 0;
-    for (;;) {
-        c = pgm_read_byte(fstr + i);
-        buff[i++] = c;
-        if (c == 0) return;
-        if (i > 254) {
-            buff[255] = 0;
-            return;
-        }
-    }
-}
-
 void byteToHex(uint8_t byte, char& c1, char& c2);
-void byteToHex(uint8_t byte, char& c1, char& c2) {
-    c1 = ((byte >> 4) & 0xF) + '0';
-    c2 = ((byte) & 0xF) + '0';
-    if (c1 > '9') c1 += 'A' - '9' - 1;
-    if (c2 > '9') c2 += 'A' - '9' - 1;
-}
-
 
 // Define an empty F() macro if it isn't defined, so that the code can be compiled on non-Arduino platforms
 #ifndef F 
@@ -210,32 +137,25 @@ union u8A_to_u16 { uint8_t u8A[2]; uint16_t u16; };
 
 // BCD to DEC
 uint8_t bcd2dec(uint8_t bcd);
-uint8_t bcd2dec(uint8_t bcd) {
-    return ((bcd >> 4) * 10) + (bcd & 0xF);
-}
 
 // DEC to BCD
 uint8_t dec2bcd(uint8_t dec);
-uint8_t dec2bcd(uint8_t dec) {
-    return ((dec / 10) << 4) + (dec % 10);
-}
 
-const char PROGRAM_SIZE_EXCEEDED_MSG[] PROGMEM = "Program size exceeded: ";
-
+const char PROGRAM_SIZE_EXCEEDED_MSG [] PROGMEM = "Program size exceeded: ";
 
 #ifdef __SIMULATOR__
-void pinMode(int pin, int mode) {}
-void digitalWrite(int pin, int value) {}
-int digitalRead(int pin) { return 0; }
+void pinMode(int pin, int mode);
+void digitalWrite(int pin, int value);
+int digitalRead(int pin);
 #ifndef __WASM__
-void delay(int ms) {}
-void delayMicroseconds(int us) {}
-unsigned long millis() { return 0; }
-unsigned long micros() { return 0; }
+void delay(int ms);
+void delayMicroseconds(int us);
+unsigned long millis();
+unsigned long micros();
 #endif // __WASM__
-void attachInterrupt(int pin, void (*callback)(), int mode) {}
-void detachInterrupt(int pin) {}
-void yield() {}
+void attachInterrupt(int pin, void (*callback)(), int mode);
+void detachInterrupt(int pin);
+void yield();
 
 
 #if !defined(__WASM__)
@@ -243,19 +163,13 @@ void yield() {}
 #define STREAM_TO_STDERR 1
 #define STREAM_TO_STREAMOUT 2
 int print_direction = STREAM_TO_STDOUT;
-void __print(char c) { printf("%c", c); }
+void __print(char c);
 #endif // __WASM__
 
 char buff[64];
 
 // To upper case
-void toUpper(char* buff) {
-    for (int i = 0; buff[i]; i++) {
-        if (buff[i] >= 'a' && buff[i] <= 'z') {
-            buff[i] -= 'a' - 'A';
-        }
-    }
-}
+void toUpper(char* buff);
 
 
 
@@ -265,161 +179,40 @@ class Serial_t {
     int stream_direction = STREAM_TO_STDOUT;
     void (*print_func)(char) = nullptr;
 public:
-    operator bool() { return true; }
-    Serial_t(int STREAM_DIRECTION = STREAM_TO_STDOUT) {
-        stream_direction = STREAM_DIRECTION;
-        // Define a function pointer to redirect standard output
-        print_func =
-#ifdef __WASM__
-            stream_direction == STREAM_TO_STREAMOUT ? (void(*)(char)) streamOut :
-            stream_direction == STREAM_TO_STDERR ? (void(*)(char)) stderr :
-            (void(*)(char)) stdout;
-#else // __WASM__
-            (void(*)(char)) __print;
-#endif // __WASM__
-    }
-    void begin(int baudrate) {}
-    void end() {}
-    int print(const char* str) {
-        int size = 0;
-        char c = 0;
-        while (*str) {
-            c = *str++;
-            size++;
-            print_func(c);
-        }
-        return size;
-    }
-    int print(const char* str, int len) {
-        int size = 0;
-        char c = 0;
-        while (len--) {
-            c = *str++;
-            size++;
-            print_func(c);
-        }
-        return size;
-    }
-    int print(char c) {
-        print_func(c);
-        return 1;
-    }
-    int print(int i, int base = DEC) {
-        int size = 0;
-        if (base == HEX) {
-            sprintf(buff, "%x", i);
-            toUpper(buff);
-        } else if (base == OCT) sprintf(buff, "%o", i);
-        else if (base == BIN) {
-            int j = 0;
-            for (j = 0; j < 32; j++) {
-                buff[j] = (i & 0x80000000) ? '1' : '0';
-                i <<= 1;
-            }
-            buff[j] = 0;
-        } else sprintf(buff, "%d", i);
-        size = print(buff);
-        return size;
-    }
-    int print(unsigned int i, int base = DEC) {
-        int size = 0;
-        if (base == HEX) {
-            sprintf(buff, "%x", i);
-            toUpper(buff);
-        } else if (base == OCT) sprintf(buff, "%o", i);
-        else if (base == BIN) {
-            int j = 0;
-            for (j = 0; j < 32; j++) {
-                buff[j] = (i & 0x80000000) ? '1' : '0';
-                i <<= 1;
-            }
-            buff[j] = 0;
-        } else sprintf(buff, "%u", i);
-        size = print(buff);
-        return size;
-    }
-    int print(long i, int base = DEC) {
-        int size = 0;
-        if (base == HEX) {
-            sprintf(buff, "%lx", i);
-            toUpper(buff);
-        } else if (base == OCT) sprintf(buff, "%lo", i);
-        else if (base == BIN) {
-            int j = 0;
-            for (j = 0; j < 32; j++) {
-                buff[j] = (i & 0x80000000) ? '1' : '0';
-                i <<= 1;
-            }
-            buff[j] = 0;
-        } else sprintf(buff, "%ld", i);
-        size = print(buff);
-        return size;
-    }
-    int print(unsigned long i, int base = DEC) {
-        int size = 0;
-        if (base == HEX) {
-            sprintf(buff, "%lx", i);
-            toUpper(buff);
-        } else if (base == OCT) sprintf(buff, "%lo", i);
-        else if (base == BIN) {
-            int j = 0;
-            for (j = 0; j < 32; j++) {
-                buff[j] = (i & 0x80000000) ? '1' : '0';
-                i <<= 1;
-            }
-            buff[j] = 0;
-        } else sprintf(buff, "%lu", i);
-        size = print(buff);
-        return size;
-    }
-    int print(float i, int decimals = -1) {
-        int size = 0;
-        if (decimals < 0) sprintf(buff, "%f", i);
-        else sprintf(buff, "%.*f", decimals, i);
-        size = print(buff);
-        return size;
-    }
-    int print(double i, int decimals = -1) {
-        int size = 0;
-        if (decimals < 0) sprintf(buff, "%f", i);
-        else sprintf(buff, "%.*f", decimals, i);
-        size = print(buff);
-        return size;
-    }
-    int println(const char* str) { int size = print(str); size += print("\n"); return size; }
-    int println(const char* str, int len) { int size = print(str, len); size += print("\n"); return size; }
-    int println(char c) { int size = print(c); size += print("\n"); return size; }
-    int println(int i, int base = DEC) { int size = print(i, base); size += print("\n"); return size; }
-    int println(unsigned int i, int base = DEC) { int size = print(i, base); size += print("\n"); return size; }
-    int println(long i, int base = DEC) { int size = print(i, base); size += print("\n"); return size; }
-    int println(unsigned long i, int base = DEC) { int size = print(i, base); size += print("\n"); return size; }
-    int println(double i, int base = DEC) { int size = print(i, base); size += print("\n"); return size; }
-    int println() { int size = print("\n"); return size; }
-    int available() {
-        return input_len;
-    }
-    int read() {
-        if (input_len == 0) return -1;
-        int c = input[0];
-        for (int i = 0; i < input_len - 1; i++) {
-            input[i] = input[i + 1];
-        }
-        input_len--;
-        return c;
-    }
-    void write(char c) { print_func(c); }
-    void write(const char* str) { print(str); }
-    void write(const char* str, int len) { print(str, len); }
-    void write(int i, int base = DEC) { print(i, base); }
-    void write(unsigned int i, int base = DEC) { print(i, base); }
-    void write(long i, int base = DEC) { print(i, base); }
-    void write(unsigned long i, int base = DEC) { print(i, base); }
-    void write(double i, int base = DEC) { print(i, base); }
-    void flush() {}
-    void clear() {
-        input_len = 0;
-        input[0] = 0;
-    }
+    operator bool();
+    Serial_t(int STREAM_DIRECTION = STREAM_TO_STDOUT);
+    void begin(int baudrate);
+    void end();
+    int print(const char* str);
+    int print(const char* str, int len);
+    int print(char c);
+    int print(int i, int base = DEC);
+    int print(unsigned int i, int base = DEC);
+    int print(long i, int base = DEC);
+    int print(unsigned long i, int base = DEC);
+    int print(float i, int decimals = -1);
+    int print(double i, int decimals = -1);
+    int println(const char* str);
+    int println(const char* str, int len);
+    int println(char c);
+    int println(int i, int base = DEC);
+    int println(unsigned int i, int base = DEC);
+    int println(long i, int base = DEC);
+    int println(unsigned long i, int base = DEC);
+    int println(double i, int base = DEC);
+    int println();
+    int available();
+    int read();
+    void write(char c);
+    void write(const char* str);
+    void write(const char* str, int len);
+    void write(int i, int base = DEC);
+    void write(unsigned int i, int base = DEC);
+    void write(long i, int base = DEC);
+    void write(unsigned long i, int base = DEC);
+    void write(double i, int base = DEC);
+    void flush();
+    void clear();
 };
 
 Serial_t Serial(STREAM_TO_STDOUT);
@@ -429,95 +222,15 @@ Serial_t Stream(STREAM_TO_STREAMOUT);
 #else // __SIMULATOR__
 
 int get_used_memory();
-int get_used_memory() {
-    return 0;
-}
 
-bool serial_timeout = false;
+extern bool serial_timeout;
 char serialReadTimeout(unsigned long timeout = 100);
-char serialReadTimeout(unsigned long timeout) {
-    unsigned long t = millis();
-    unsigned long start = t;
-    unsigned long elapsed = 0;
-    serial_timeout = false;
-    while (Serial.available() == 0) {
-        t = millis();
-        elapsed = t - start;
-        if (elapsed >= timeout || start > t) {
-            serial_timeout = true;
-            Serial.println(F("Serial read timeout"));
-            return 0;
-        }
-        delay(1);
-    }
-    return Serial.read();
-}
-
 uint8_t serialReadHexByteTimeout(unsigned long timeout = 100);
-uint8_t serialReadHexByteTimeout(unsigned long timeout) {
-    uint8_t b = 0;
-    char c = serialReadTimeout(timeout);
-    if (c >= '0' && c <= '9') b = c - '0';
-    else if (c >= 'A' && c <= 'F') b = c - 'A' + 10;
-    else if (c >= 'a' && c <= 'f') b = c - 'a' + 10;
-    else return 0xff;
-    b <<= 4;
-    c = serialReadTimeout(timeout);
-    if (c >= '0' && c <= '9') b |= c - '0';
-    else if (c >= 'A' && c <= 'F') b |= c - 'A' + 10;
-    else if (c >= 'a' && c <= 'f') b |= c - 'a' + 10;
-    else return 0xff;
-    return b;
-}
 
 #endif // __SIMULATOR__
 
-
-
-
-
-
-
-
-
 int print_number_padStart(int value, int pad, char padChar = ' ', int base = 10);
-int print_number_padStart(int value, int pad, char padChar, int base) {
-    int strlen = 0;
-    int temp = value;
-    int num_of_digits = temp == 0 ? 1 : 0;
-    if (temp < 0) {
-        num_of_digits++;
-        temp = -temp;
-    }
-    while (temp > 0) {
-        num_of_digits++;
-        temp /= base;
-    }
-    if (num_of_digits < pad)
-        for (int i = 0; i < pad - num_of_digits; i++)
-            strlen += Serial.print(padChar);
-    strlen += Serial.print(value, base);
-    return strlen;
-}
 int pring_number_padEnd(int value, int pad, char padChar = ' ', int base = 10);
-int pring_number_padEnd(int value, int pad, char padChar, int base) {
-    int strlen = 0;
-    int temp = value;
-    int num_of_digits = temp == 0 ? 1 : 0;
-    if (temp < 0) {
-        num_of_digits++;
-        temp = -temp;
-    }
-    while (temp > 0) {
-        num_of_digits++;
-        temp /= base;
-    }
-    strlen += Serial.print(value, base);
-    if (num_of_digits < pad)
-        for (int i = 0; i < pad - num_of_digits; i++)
-            strlen += Serial.print(padChar);
-    return strlen;
-}
 
 #define REPRINT(count, str) for (uint8_t i = 0; i < count; i++) { Serial.print(str); }
 #define REPRINTLN(count, str) REPRINT(count, str); Serial.println();

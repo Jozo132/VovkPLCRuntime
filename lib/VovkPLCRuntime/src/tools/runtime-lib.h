@@ -48,7 +48,7 @@
 #include "runtime-tools.h"
 #include "runtime-interval.h"
 #include "arithmetics/crc8.h"
-#include "stack/stack-struct.h"
+#include "stack/stack-struct-impl.h"
 #include "runtime-instructions.h"
 #include "stack/runtime-stack.h"
 #include "arithmetics/runtime-arithmetics.h"
