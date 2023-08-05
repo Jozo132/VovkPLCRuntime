@@ -53,7 +53,6 @@
 #include "stack/runtime-stack.h"
 #include "arithmetics/runtime-arithmetics.h"
 #include "runtime-program.h"
-#include "runtime-cmd-parser.h"
 
 #define SERIAL_TIMEOUT_RETURN if (serial_timeout) return;
 #define SERIAL_TIMEOUT_JOB(task) if (serial_timeout) { Serial.flush(); task; return; };
