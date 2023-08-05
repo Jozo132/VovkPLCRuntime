@@ -21,8 +21,6 @@
 
 #pragma once
 
-char foo;
-
 class InstructionCompiler {
 public:
     // Push a new sequence of bytes to the PLC Program
