@@ -133,13 +133,15 @@ namespace PLCMethods {
                     case type_uint8_t: return stack->push_uint8_t(stack->pop_bool());
                     case type_uint16_t: return stack->push_uint16_t(stack->pop_bool());
                     case type_uint32_t: return stack->push_uint32_t(stack->pop_bool());
-                    case type_uint64_t: return stack->push_uint64_t(stack->pop_bool());
                     case type_int8_t: return stack->push_int8_t(stack->pop_bool());
                     case type_int16_t: return stack->push_int16_t(stack->pop_bool());
                     case type_int32_t: return stack->push_int32_t(stack->pop_bool());
-                    case type_int64_t: return stack->push_int64_t(stack->pop_bool());
                     case type_float: return stack->push_float(stack->pop_bool());
+#ifdef USE_X64_OPS
+                    case type_uint64_t: return stack->push_uint64_t(stack->pop_bool());
+                    case type_int64_t: return stack->push_int64_t(stack->pop_bool());
                     case type_double: return stack->push_double(stack->pop_bool());
+#endif // USE_X64_OPS
                     default: return INVALID_DATA_TYPE;
                 }
             case type_uint8_t:

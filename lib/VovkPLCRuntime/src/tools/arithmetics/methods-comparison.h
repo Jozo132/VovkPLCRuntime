@@ -41,12 +41,14 @@ namespace PLCMethods {
         stack->push_uint8_t(a == b);
         return STATUS_SUCCESS;
     }
+#ifdef USE_X64_OPS
     RuntimeError CMP_EQ_uint64_t(RuntimeStack* stack) {
         uint64_t b = stack->pop_uint64_t();
         uint64_t a = stack->pop_uint64_t();
         stack->push_uint8_t(a == b);
         return STATUS_SUCCESS;
     }
+#endif // USE_X64_OPS
     RuntimeError CMP_EQ_int8_t(RuntimeStack* stack) {
         int8_t b = stack->pop_int8_t();
         int8_t a = stack->pop_int8_t();
@@ -65,24 +67,28 @@ namespace PLCMethods {
         stack->push_uint8_t(a == b);
         return STATUS_SUCCESS;
     }
+#ifdef USE_X64_OPS
     RuntimeError CMP_EQ_int64_t(RuntimeStack* stack) {
         int64_t b = stack->pop_int64_t();
         int64_t a = stack->pop_int64_t();
         stack->push_uint8_t(a == b);
         return STATUS_SUCCESS;
     }
+#endif // USE_X64_OPS
     RuntimeError CMP_EQ_float(RuntimeStack* stack) {
         float b = stack->pop_float();
         float a = stack->pop_float();
         stack->push_uint8_t(a == b);
         return STATUS_SUCCESS;
     }
+#ifdef USE_X64_OPS
     RuntimeError CMP_EQ_double(RuntimeStack* stack) {
         double b = stack->pop_double();
         double a = stack->pop_double();
         stack->push_uint8_t(a == b);
         return STATUS_SUCCESS;
     }
+#endif // USE_X64_OPS
 
     RuntimeError CMP_NEQ_uint8_t(RuntimeStack* stack) {
         uint8_t b = stack->pop_uint8_t();
@@ -102,12 +108,14 @@ namespace PLCMethods {
         stack->push_uint8_t(a != b);
         return STATUS_SUCCESS;
     }
+#ifdef USE_X64_OPS
     RuntimeError CMP_NEQ_uint64_t(RuntimeStack* stack) {
         uint64_t b = stack->pop_uint64_t();
         uint64_t a = stack->pop_uint64_t();
         stack->push_uint8_t(a != b);
         return STATUS_SUCCESS;
     }
+#endif // USE_X64_OPS
     RuntimeError CMP_NEQ_int8_t(RuntimeStack* stack) {
         int8_t b = stack->pop_int8_t();
         int8_t a = stack->pop_int8_t();
@@ -126,24 +134,28 @@ namespace PLCMethods {
         stack->push_uint8_t(a != b);
         return STATUS_SUCCESS;
     }
+#ifdef USE_X64_OPS
     RuntimeError CMP_NEQ_int64_t(RuntimeStack* stack) {
         int64_t b = stack->pop_int64_t();
         int64_t a = stack->pop_int64_t();
         stack->push_uint8_t(a != b);
         return STATUS_SUCCESS;
     }
+#endif // USE_X64_OPS
     RuntimeError CMP_NEQ_float(RuntimeStack* stack) {
         float b = stack->pop_float();
         float a = stack->pop_float();
         stack->push_uint8_t(a != b);
         return STATUS_SUCCESS;
     }
+#ifdef USE_X64_OPS
     RuntimeError CMP_NEQ_double(RuntimeStack* stack) {
         double b = stack->pop_double();
         double a = stack->pop_double();
         stack->push_uint8_t(a != b);
         return STATUS_SUCCESS;
     }
+#endif // USE_X64_OPS
 
     RuntimeError CMP_GT_uint8_t(RuntimeStack* stack) {
         uint8_t b = stack->pop_uint8_t();
@@ -163,12 +175,14 @@ namespace PLCMethods {
         stack->push_uint8_t(a > b);
         return STATUS_SUCCESS;
     }
+#ifdef USE_X64_OPS
     RuntimeError CMP_GT_uint64_t(RuntimeStack* stack) {
         uint64_t b = stack->pop_uint64_t();
         uint64_t a = stack->pop_uint64_t();
         stack->push_uint8_t(a > b);
         return STATUS_SUCCESS;
     }
+#endif // USE_X64_OPS
     RuntimeError CMP_GT_int8_t(RuntimeStack* stack) {
         int8_t b = stack->pop_int8_t();
         int8_t a = stack->pop_int8_t();
@@ -187,24 +201,28 @@ namespace PLCMethods {
         stack->push_uint8_t(a > b);
         return STATUS_SUCCESS;
     }
+#ifdef USE_X64_OPS
     RuntimeError CMP_GT_int64_t(RuntimeStack* stack) {
         int64_t b = stack->pop_int64_t();
         int64_t a = stack->pop_int64_t();
         stack->push_uint8_t(a > b);
         return STATUS_SUCCESS;
     }
+#endif // USE_X64_OPS
     RuntimeError CMP_GT_float(RuntimeStack* stack) {
         float b = stack->pop_float();
         float a = stack->pop_float();
         stack->push_uint8_t(a > b);
         return STATUS_SUCCESS;
     }
+#ifdef USE_X64_OPS
     RuntimeError CMP_GT_double(RuntimeStack* stack) {
         double b = stack->pop_double();
         double a = stack->pop_double();
         stack->push_uint8_t(a > b);
         return STATUS_SUCCESS;
     }
+#endif // USE_X64_OPS
 
     RuntimeError CMP_LT_uint8_t(RuntimeStack* stack) {
         uint8_t b = stack->pop_uint8_t();
@@ -224,12 +242,14 @@ namespace PLCMethods {
         stack->push_uint8_t(a < b);
         return STATUS_SUCCESS;
     }
+#ifdef USE_X64_OPS
     RuntimeError CMP_LT_uint64_t(RuntimeStack* stack) {
         uint64_t b = stack->pop_uint64_t();
         uint64_t a = stack->pop_uint64_t();
         stack->push_uint8_t(a < b);
         return STATUS_SUCCESS;
     }
+#endif // USE_X64_OPS
     RuntimeError CMP_LT_int8_t(RuntimeStack* stack) {
         int8_t b = stack->pop_int8_t();
         int8_t a = stack->pop_int8_t();
@@ -248,24 +268,28 @@ namespace PLCMethods {
         stack->push_uint8_t(a < b);
         return STATUS_SUCCESS;
     }
+#ifdef USE_X64_OPS
     RuntimeError CMP_LT_int64_t(RuntimeStack* stack) {
         int64_t b = stack->pop_int64_t();
         int64_t a = stack->pop_int64_t();
         stack->push_uint8_t(a < b);
         return STATUS_SUCCESS;
     }
+#endif // USE_X64_OPS
     RuntimeError CMP_LT_float(RuntimeStack* stack) {
         float b = stack->pop_float();
         float a = stack->pop_float();
         stack->push_uint8_t(a < b);
         return STATUS_SUCCESS;
     }
+#ifdef USE_X64_OPS
     RuntimeError CMP_LT_double(RuntimeStack* stack) {
         double b = stack->pop_double();
         double a = stack->pop_double();
         stack->push_uint8_t(a < b);
         return STATUS_SUCCESS;
     }
+#endif // USE_X64_OPS
 
     RuntimeError CMP_GTE_uint8_t(RuntimeStack* stack) {
         uint8_t b = stack->pop_uint8_t();
@@ -285,12 +309,14 @@ namespace PLCMethods {
         stack->push_uint8_t(a >= b);
         return STATUS_SUCCESS;
     }
+#ifdef USE_X64_OPS
     RuntimeError CMP_GTE_uint64_t(RuntimeStack* stack) {
         uint64_t b = stack->pop_uint64_t();
         uint64_t a = stack->pop_uint64_t();
         stack->push_uint8_t(a >= b);
         return STATUS_SUCCESS;
     }
+#endif // USE_X64_OPS
     RuntimeError CMP_GTE_int8_t(RuntimeStack* stack) {
         int8_t b = stack->pop_int8_t();
         int8_t a = stack->pop_int8_t();
@@ -309,24 +335,28 @@ namespace PLCMethods {
         stack->push_uint8_t(a >= b);
         return STATUS_SUCCESS;
     }
+#ifdef USE_X64_OPS
     RuntimeError CMP_GTE_int64_t(RuntimeStack* stack) {
         int64_t b = stack->pop_int64_t();
         int64_t a = stack->pop_int64_t();
         stack->push_uint8_t(a >= b);
         return STATUS_SUCCESS;
     }
+#endif // USE_X64_OPS
     RuntimeError CMP_GTE_float(RuntimeStack* stack) {
         float b = stack->pop_float();
         float a = stack->pop_float();
         stack->push_uint8_t(a >= b);
         return STATUS_SUCCESS;
     }
+#ifdef USE_X64_OPS
     RuntimeError CMP_GTE_double(RuntimeStack* stack) {
         double b = stack->pop_double();
         double a = stack->pop_double();
         stack->push_uint8_t(a >= b);
         return STATUS_SUCCESS;
     }
+#endif // USE_X64_OPS
 
     RuntimeError CMP_LTE_uint8_t(RuntimeStack* stack) {
         uint8_t b = stack->pop_uint8_t();
@@ -346,12 +376,14 @@ namespace PLCMethods {
         stack->push_uint8_t(a <= b);
         return STATUS_SUCCESS;
     }
+#ifdef USE_X64_OPS
     RuntimeError CMP_LTE_uint64_t(RuntimeStack* stack) {
         uint64_t b = stack->pop_uint64_t();
         uint64_t a = stack->pop_uint64_t();
         stack->push_uint8_t(a <= b);
         return STATUS_SUCCESS;
     }
+#endif // USE_X64_OPS
     RuntimeError CMP_LTE_int8_t(RuntimeStack* stack) {
         int8_t b = stack->pop_int8_t();
         int8_t a = stack->pop_int8_t();
@@ -370,23 +402,26 @@ namespace PLCMethods {
         stack->push_uint8_t(a <= b);
         return STATUS_SUCCESS;
     }
+#ifdef USE_X64_OPS
     RuntimeError CMP_LTE_int64_t(RuntimeStack* stack) {
         int64_t b = stack->pop_int64_t();
         int64_t a = stack->pop_int64_t();
         stack->push_uint8_t(a <= b);
         return STATUS_SUCCESS;
     }
+#endif // USE_X64_OPS
     RuntimeError CMP_LTE_float(RuntimeStack* stack) {
         float b = stack->pop_float();
         float a = stack->pop_float();
         stack->push_uint8_t(a <= b);
         return STATUS_SUCCESS;
     }
+#ifdef USE_X64_OPS
     RuntimeError CMP_LTE_double(RuntimeStack* stack) {
         double b = stack->pop_double();
         double a = stack->pop_double();
         stack->push_uint8_t(a <= b);
         return STATUS_SUCCESS;
     }
-
+#endif // USE_X64_OPS
 }
