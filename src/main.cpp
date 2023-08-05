@@ -42,23 +42,11 @@ void setup() {
   // output = Q0.0  (20.0 absolute position)
   // The PLCASM:
   /*
-    u8.load 20
-    u8.load 10
-    u8.0.get
-
-    jump_if_not RESET
-    u8.0.set
-    jump END
-
-    RESET:
-    u8.0.rset
-
-    END:
-    u8.store 20
-    exit
+    u8.readBit.0 10     // Read bit 10.0
+    u8.writeBit.0 20    // Set bit 10.0 to the resulting state
   */
-  // 13 02 00 0A 40 13 02 00 14 15 02 C2 00 12 48 C0 00 13 50 12 02 00 14 FF
-  const uint8_t program[] = { 0x13,0x02,0x00,0x0A,0x40,0x13,0x02,0x00,0x14,0x15,0x02,0xC2,0x00,0x12,0x48,0xC0,0x00,0x13,0x50,0x12,0x02,0x00,0x14,0xFF };
+  // Program[7] [58 00 0A 60 00 14 FF]
+  const uint8_t program [] = { 0x58, 0x00, 0x0A, 0x60, 0x00, 0x14, 0xFF };
   const uint16_t size = sizeof(program);
   runtime.program->loadUnsafe(program, size);
 #else // __RUNTIME_PRODUCTION__
@@ -77,7 +65,7 @@ void loop() {
 #ifdef __RUNTIME_PRODUCTION__
   long t = millis();
 #ifdef USER_BTN
-  bool input = digitalRead(USER_BTN);
+  bool input = !digitalRead(USER_BTN);
 #else // USER_BTN
   int t_temp = t / 2000;
   bool input = t_temp % 2 == 0;
@@ -86,7 +74,7 @@ void loop() {
   runtime.setInputBit(0, 0, input);
   runtime.cleanRun();
   bool output = runtime.getOutputBit(0, 0);
-  digitalWrite(LED_BUILTIN, output);
+  digitalWrite(LED_BUILTIN, !output);
 
 
   // RuntimeError status = UnitTest::fullProgramDebug(runtime);
@@ -96,14 +84,18 @@ void loop() {
   cycle++;
   if (timer_temp > t) timer_temp = t;
   long diff = t - timer_temp;
-  if (diff >= 200) {
+  // if (diff >= 200) {
+  bool b = 0;
+  runtime.stack->memory->getBit(1, 1, b); // Get P_200ms pulse
+  if (b) {
     timer_temp = t;
     long mem = freeMemory();
     long cycles = cycle - last_cycle;
     last_cycle = cycle;
     long cps = cycles * 1000 / diff;
+    float duration_ms = cps > 0 ? 1000.0 / (float) cps : 0;
     // Serial.printf("Free mem: %6d bytes  CPS: %6d", mem, cps); // AVR doesn't support printf
-    Serial.print(F("Free mem: ")); Serial.print(mem); Serial.print(F(" bytes  CPS: ")); Serial.print(cps);
+    Serial.print(F("Free mem: ")); Serial.print(mem); Serial.print(F(" bytes  Cycle time: ")); Serial.print(duration_ms, 2); Serial.print(F(" ms"));
     uint8_t* memory = new uint8_t[32];
     runtime.readMemory(0, memory, 32);
     Serial.print(F("  Memory: "));
