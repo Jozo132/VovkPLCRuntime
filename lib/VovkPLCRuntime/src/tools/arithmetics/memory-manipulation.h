@@ -47,12 +47,14 @@ namespace PLCMethods {
         if (extract_status != STATUS_SUCCESS) return extract_status;
         return stack->push_uint32_t(value);
     }
+#ifdef USE_X64_OPS
     RuntimeError PUSH_uint64_t(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) {
         uint64_t value = 0;
         extract_status = ProgramExtract.type_uint64_t(program, program_size, index, &value);
         if (extract_status != STATUS_SUCCESS) return extract_status;
         return stack->push_uint64_t(value);
     }
+#endif // USE_X64_OPS
     RuntimeError PUSH_int8_t(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) {
         int8_t value = 0;
         extract_status = ProgramExtract.type_int8_t(program, program_size, index, &value);
@@ -71,24 +73,30 @@ namespace PLCMethods {
         if (extract_status != STATUS_SUCCESS) return extract_status;
         return stack->push_int32_t(value);
     }
+
+#ifdef USE_X64_OPS
     RuntimeError PUSH_int64_t(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) {
         int64_t value = 0;
         extract_status = ProgramExtract.type_int64_t(program, program_size, index, &value);
         if (extract_status != STATUS_SUCCESS) return extract_status;
         return stack->push_int64_t(value);
     }
+#endif // USE_X64_OPS
     RuntimeError PUSH_float(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) {
         float value = 0;
         extract_status = ProgramExtract.type_float(program, program_size, index, &value);
         if (extract_status != STATUS_SUCCESS) return extract_status;
         return stack->push_float(value);
     }
+
+#ifdef USE_X64_OPS
     RuntimeError PUSH_double(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) {
         double value = 0;
         extract_status = ProgramExtract.type_double(program, program_size, index, &value);
         if (extract_status != STATUS_SUCCESS) return extract_status;
         return stack->push_double(value);
     }
+#endif // USE_X64_OPS
 
     /*
     uint8_t data_type = program[index++];
@@ -140,13 +148,15 @@ namespace PLCMethods {
                     case type_uint8_t: return stack->push_uint8_t(stack->pop_uint8_t());
                     case type_uint16_t: return stack->push_uint16_t(stack->pop_uint8_t());
                     case type_uint32_t: return stack->push_uint32_t(stack->pop_uint8_t());
-                    case type_uint64_t: return stack->push_uint64_t(stack->pop_uint8_t());
                     case type_int8_t: return stack->push_int8_t(stack->pop_uint8_t());
                     case type_int16_t: return stack->push_int16_t(stack->pop_uint8_t());
                     case type_int32_t: return stack->push_int32_t(stack->pop_uint8_t());
-                    case type_int64_t: return stack->push_int64_t(stack->pop_uint8_t());
                     case type_float: return stack->push_float(stack->pop_uint8_t());
+#ifdef USE_X64_OPS
+                    case type_uint64_t: return stack->push_uint64_t(stack->pop_uint8_t());
+                    case type_int64_t: return stack->push_int64_t(stack->pop_uint8_t());
                     case type_double: return stack->push_double(stack->pop_uint8_t());
+#endif // USE_X64_OPS
                     default: return INVALID_DATA_TYPE;
                 }
             case type_uint16_t:
@@ -155,13 +165,15 @@ namespace PLCMethods {
                     case type_uint8_t: return stack->push_uint8_t(stack->pop_uint16_t());
                     case type_uint16_t: return stack->push_uint16_t(stack->pop_uint16_t());
                     case type_uint32_t: return stack->push_uint32_t(stack->pop_uint16_t());
-                    case type_uint64_t: return stack->push_uint64_t(stack->pop_uint16_t());
                     case type_int8_t: return stack->push_int8_t(stack->pop_uint16_t());
                     case type_int16_t: return stack->push_int16_t(stack->pop_uint16_t());
                     case type_int32_t: return stack->push_int32_t(stack->pop_uint16_t());
-                    case type_int64_t: return stack->push_int64_t(stack->pop_uint16_t());
                     case type_float: return stack->push_float(stack->pop_uint16_t());
+#ifdef USE_X64_OPS
+                    case type_uint64_t: return stack->push_uint64_t(stack->pop_uint16_t());
+                    case type_int64_t: return stack->push_int64_t(stack->pop_uint16_t());
                     case type_double: return stack->push_double(stack->pop_uint16_t());
+#endif // USE_X64_OPS
                     default: return INVALID_DATA_TYPE;
                 }
             case type_uint32_t:
@@ -170,15 +182,19 @@ namespace PLCMethods {
                     case type_uint8_t: return stack->push_uint8_t(stack->pop_uint32_t());
                     case type_uint16_t: return stack->push_uint16_t(stack->pop_uint32_t());
                     case type_uint32_t: return stack->push_uint32_t(stack->pop_uint32_t());
-                    case type_uint64_t: return stack->push_uint64_t(stack->pop_uint32_t());
                     case type_int8_t: return stack->push_int8_t(stack->pop_uint32_t());
                     case type_int16_t: return stack->push_int16_t(stack->pop_uint32_t());
                     case type_int32_t: return stack->push_int32_t(stack->pop_uint32_t());
-                    case type_int64_t: return stack->push_int64_t(stack->pop_uint32_t());
                     case type_float: return stack->push_float(stack->pop_uint32_t());
+#ifdef USE_X64_OPS
+                    case type_uint64_t: return stack->push_uint64_t(stack->pop_uint32_t());
+                    case type_int64_t: return stack->push_int64_t(stack->pop_uint32_t());
                     case type_double: return stack->push_double(stack->pop_uint32_t());
+#endif // USE_X64_OPS
                     default: return INVALID_DATA_TYPE;
                 }
+
+#ifdef USE_X64_OPS
             case type_uint64_t:
                 switch (to_type) {
                     case type_bool: return stack->push_bool(stack->pop_uint64_t());
@@ -194,19 +210,22 @@ namespace PLCMethods {
                     case type_double: return stack->push_double(stack->pop_uint64_t());
                     default: return INVALID_DATA_TYPE;
                 }
+#endif // USE_X64_OPS
             case type_int8_t:
                 switch (to_type) {
                     case type_bool: return stack->push_bool(stack->pop_int8_t());
                     case type_uint8_t: return stack->push_uint8_t(stack->pop_int8_t());
                     case type_uint16_t: return stack->push_uint16_t(stack->pop_int8_t());
                     case type_uint32_t: return stack->push_uint32_t(stack->pop_int8_t());
-                    case type_uint64_t: return stack->push_uint64_t(stack->pop_int8_t());
                     case type_int8_t: return stack->push_int8_t(stack->pop_int8_t());
                     case type_int16_t: return stack->push_int16_t(stack->pop_int8_t());
                     case type_int32_t: return stack->push_int32_t(stack->pop_int8_t());
-                    case type_int64_t: return stack->push_int64_t(stack->pop_int8_t());
                     case type_float: return stack->push_float(stack->pop_int8_t());
+#ifdef USE_X64_OPS
+                    case type_uint64_t: return stack->push_uint64_t(stack->pop_int8_t());
+                    case type_int64_t: return stack->push_int64_t(stack->pop_int8_t());
                     case type_double: return stack->push_double(stack->pop_int8_t());
+#endif // USE_X64_OPS
                     default: return INVALID_DATA_TYPE;
                 }
             case type_int16_t:
@@ -215,13 +234,15 @@ namespace PLCMethods {
                     case type_uint8_t: return stack->push_uint8_t(stack->pop_int16_t());
                     case type_uint16_t: return stack->push_uint16_t(stack->pop_int16_t());
                     case type_uint32_t: return stack->push_uint32_t(stack->pop_int16_t());
-                    case type_uint64_t: return stack->push_uint64_t(stack->pop_int16_t());
                     case type_int8_t: return stack->push_int8_t(stack->pop_int16_t());
                     case type_int16_t: return stack->push_int16_t(stack->pop_int16_t());
                     case type_int32_t: return stack->push_int32_t(stack->pop_int16_t());
-                    case type_int64_t: return stack->push_int64_t(stack->pop_int16_t());
                     case type_float: return stack->push_float(stack->pop_int16_t());
+#ifdef USE_X64_OPS
+                    case type_uint64_t: return stack->push_uint64_t(stack->pop_int16_t());
+                    case type_int64_t: return stack->push_int64_t(stack->pop_int16_t());
                     case type_double: return stack->push_double(stack->pop_int16_t());
+#endif // USE_X64_OPS
                     default: return INVALID_DATA_TYPE;
                 }
             case type_int32_t:
@@ -230,15 +251,18 @@ namespace PLCMethods {
                     case type_uint8_t: return stack->push_uint8_t(stack->pop_int32_t());
                     case type_uint16_t: return stack->push_uint16_t(stack->pop_int32_t());
                     case type_uint32_t: return stack->push_uint32_t(stack->pop_int32_t());
-                    case type_uint64_t: return stack->push_uint64_t(stack->pop_int32_t());
                     case type_int8_t: return stack->push_int8_t(stack->pop_int32_t());
                     case type_int16_t: return stack->push_int16_t(stack->pop_int32_t());
                     case type_int32_t: return stack->push_int32_t(stack->pop_int32_t());
-                    case type_int64_t: return stack->push_int64_t(stack->pop_int32_t());
                     case type_float: return stack->push_float(stack->pop_int32_t());
+#ifdef USE_X64_OPS
+                    case type_uint64_t: return stack->push_uint64_t(stack->pop_int32_t());
+                    case type_int64_t: return stack->push_int64_t(stack->pop_int32_t());
                     case type_double: return stack->push_double(stack->pop_int32_t());
+#endif // USE_X64_OPS
                     default: return INVALID_DATA_TYPE;
                 }
+#ifdef USE_X64_OPS
             case type_int64_t:
                 switch (to_type) {
                     case type_bool: return stack->push_bool(stack->pop_int64_t());
@@ -254,21 +278,25 @@ namespace PLCMethods {
                     case type_double: return stack->push_double(stack->pop_int64_t());
                     default: return INVALID_DATA_TYPE;
                 }
+#endif // USE_X64_OPS
             case type_float:
                 switch (to_type) {
                     case type_bool: return stack->push_bool((int) stack->pop_float());
                     case type_uint8_t: return stack->push_uint8_t((int) stack->pop_float());
                     case type_uint16_t: return stack->push_uint16_t(stack->pop_float());
                     case type_uint32_t: return stack->push_uint32_t(stack->pop_float());
-                    case type_uint64_t: return stack->push_uint64_t(stack->pop_float());
                     case type_int8_t: return stack->push_int8_t(stack->pop_float());
                     case type_int16_t: return stack->push_int16_t(stack->pop_float());
                     case type_int32_t: return stack->push_int32_t(stack->pop_float());
-                    case type_int64_t: return stack->push_int64_t(stack->pop_float());
                     case type_float: return stack->push_float(stack->pop_float());
+#ifdef USE_X64_OPS
+                    case type_uint64_t: return stack->push_uint64_t(stack->pop_float());
+                    case type_int64_t: return stack->push_int64_t(stack->pop_float());
                     case type_double: return stack->push_double(stack->pop_float());
+#endif // USE_X64_OPS
                     default: return INVALID_DATA_TYPE;
                 }
+#ifdef USE_X64_OPS
             case type_double:
                 switch (to_type) {
                     case type_bool: return stack->push_bool((int) stack->pop_double());
@@ -284,6 +312,7 @@ namespace PLCMethods {
                     case type_double: return stack->push_double(stack->pop_double());
                     default: return INVALID_DATA_TYPE;
                 }
+#endif // USE_X64_OPS
             default: return INVALID_DATA_TYPE;
         }
     }
@@ -348,13 +377,15 @@ namespace PLCMethods {
             case type_uint8_t: return stack->push_uint8_t(stack->peek_uint8_t());
             case type_uint16_t: return stack->push_uint16_t(stack->peek_uint16_t());
             case type_uint32_t: return stack->push_uint32_t(stack->peek_uint32_t());
-            case type_uint64_t: return stack->push_uint64_t(stack->peek_uint64_t());
             case type_int8_t: return stack->push_int8_t(stack->peek_int8_t());
             case type_int16_t: return stack->push_int16_t(stack->peek_int16_t());
             case type_int32_t: return stack->push_int32_t(stack->peek_int32_t());
-            case type_int64_t: return stack->push_int64_t(stack->peek_int64_t());
             case type_float: return stack->push_float(stack->peek_float());
+#ifdef USE_X64_OPS
+            case type_uint64_t: return stack->push_uint64_t(stack->peek_uint64_t());
+            case type_int64_t: return stack->push_int64_t(stack->peek_int64_t());
             case type_double: return stack->push_double(stack->peek_double());
+#endif // USE_X64_OPS
             default: return INVALID_DATA_TYPE;
         }
     }
@@ -394,6 +425,7 @@ namespace PLCMethods {
                 stack->push_uint32_t(b);
                 return STATUS_SUCCESS;
             }
+#ifdef USE_X64_OPS
             case type_uint64_t: {
                 uint64_t a = stack->pop_uint64_t();
                 uint64_t b = stack->pop_uint64_t();
@@ -401,6 +433,7 @@ namespace PLCMethods {
                 stack->push_uint64_t(b);
                 return STATUS_SUCCESS;
             }
+#endif // USE_X64_OPS
             case type_int8_t: {
                 int8_t a = stack->pop_int8_t();
                 int8_t b = stack->pop_int8_t();
@@ -422,6 +455,7 @@ namespace PLCMethods {
                 stack->push_int32_t(b);
                 return STATUS_SUCCESS;
             }
+#ifdef USE_X64_OPS
             case type_int64_t: {
                 int64_t a = stack->pop_int64_t();
                 int64_t b = stack->pop_int64_t();
@@ -429,6 +463,7 @@ namespace PLCMethods {
                 stack->push_int64_t(b);
                 return STATUS_SUCCESS;
             }
+#endif // USE_X64_OPS
             case type_float: {
                 float a = stack->pop_float();
                 float b = stack->pop_float();
@@ -436,6 +471,7 @@ namespace PLCMethods {
                 stack->push_float(b);
                 return STATUS_SUCCESS;
             }
+#ifdef USE_X64_OPS
             case type_double: {
                 double a = stack->pop_double();
                 double b = stack->pop_double();
@@ -443,6 +479,7 @@ namespace PLCMethods {
                 stack->push_double(b);
                 return STATUS_SUCCESS;
             }
+#endif // USE_X64_OPS
             default: return INVALID_DATA_TYPE;
         }
     }
@@ -458,13 +495,15 @@ namespace PLCMethods {
             case type_uint8_t: stack->pop_uint8_t(); break;
             case type_uint16_t: stack->pop_uint16_t(); break;
             case type_uint32_t: stack->pop_uint32_t(); break;
-            case type_uint64_t: stack->pop_uint64_t(); break;
             case type_int8_t: stack->pop_int8_t(); break;
             case type_int16_t: stack->pop_int16_t(); break;
             case type_int32_t: stack->pop_int32_t(); break;
-            case type_int64_t: stack->pop_int64_t(); break;
             case type_float: stack->pop_float(); break;
+#ifdef USE_X64_OPS
+            case type_uint64_t: stack->pop_uint64_t(); break;
+            case type_int64_t: stack->pop_int64_t(); break;
             case type_double: stack->pop_double(); break;
+#endif // USE_X64_OPS
             default: return INVALID_DATA_TYPE;
         }
         return STATUS_SUCCESS;

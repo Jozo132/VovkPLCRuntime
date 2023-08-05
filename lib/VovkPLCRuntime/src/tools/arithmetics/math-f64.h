@@ -21,6 +21,7 @@
 
 #pragma once
 
+#ifdef USE_X64_OPS
 namespace PLCMethods {
 
     RuntimeError ADD_double(RuntimeStack* stack) {
@@ -52,3 +53,5 @@ namespace PLCMethods {
     }
 
 }
+
+#endif // USE_X64_OPS

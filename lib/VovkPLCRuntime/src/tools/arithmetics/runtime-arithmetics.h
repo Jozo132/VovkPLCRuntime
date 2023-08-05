@@ -49,13 +49,15 @@ namespace PLCMethods {
             case type_uint8_t: return ADD_uint8_t(stack);
             case type_uint16_t: return ADD_uint16_t(stack);
             case type_uint32_t: return ADD_uint32_t(stack);
-            case type_uint64_t: return ADD_uint64_t(stack);
             case type_int8_t: return ADD_int8_t(stack);
             case type_int16_t: return ADD_int16_t(stack);
             case type_int32_t: return ADD_int32_t(stack);
-            case type_int64_t: return ADD_int64_t(stack);
             case type_float: return ADD_float(stack);
+#ifdef USE_X64_OPS
+            case type_uint64_t: return ADD_uint64_t(stack);
+            case type_int64_t: return ADD_int64_t(stack);
             case type_double: return ADD_double(stack);
+#endif // USE_X64_OPS
             default: return INVALID_DATA_TYPE;
         }
     }
@@ -69,13 +71,15 @@ namespace PLCMethods {
             case type_uint8_t: return SUB_uint8_t(stack);
             case type_uint16_t: return SUB_uint16_t(stack);
             case type_uint32_t: return SUB_uint32_t(stack);
-            case type_uint64_t: return SUB_uint64_t(stack);
             case type_int8_t: return SUB_int8_t(stack);
             case type_int16_t: return SUB_int16_t(stack);
             case type_int32_t: return SUB_int32_t(stack);
-            case type_int64_t: return SUB_int64_t(stack);
             case type_float: return SUB_float(stack);
+#ifdef USE_X64_OPS
+            case type_uint64_t: return SUB_uint64_t(stack);
+            case type_int64_t: return SUB_int64_t(stack);
             case type_double: return SUB_double(stack);
+#endif // USE_X64_OPS
             default: return INVALID_DATA_TYPE;
         }
     }
@@ -89,13 +93,15 @@ namespace PLCMethods {
             case type_uint8_t: return MUL_uint8_t(stack);
             case type_uint16_t: return MUL_uint16_t(stack);
             case type_uint32_t: return MUL_uint32_t(stack);
-            case type_uint64_t: return MUL_uint64_t(stack);
             case type_int8_t: return MUL_int8_t(stack);
             case type_int16_t: return MUL_int16_t(stack);
             case type_int32_t: return MUL_int32_t(stack);
-            case type_int64_t: return MUL_int64_t(stack);
             case type_float: return MUL_float(stack);
+#ifdef USE_X64_OPS
+            case type_uint64_t: return MUL_uint64_t(stack);
+            case type_int64_t: return MUL_int64_t(stack);
             case type_double: return MUL_double(stack);
+#endif // USE_X64_OPS
             default: return INVALID_DATA_TYPE;
         }
     }
@@ -109,13 +115,15 @@ namespace PLCMethods {
             case type_uint8_t: return DIV_uint8_t(stack);
             case type_uint16_t: return DIV_uint16_t(stack);
             case type_uint32_t: return DIV_uint32_t(stack);
-            case type_uint64_t: return DIV_uint64_t(stack);
             case type_int8_t: return DIV_int8_t(stack);
             case type_int16_t: return DIV_int16_t(stack);
             case type_int32_t: return DIV_int32_t(stack);
-            case type_int64_t: return DIV_int64_t(stack);
             case type_float: return DIV_float(stack);
+#ifdef USE_X64_OPS
+            case type_uint64_t: return DIV_uint64_t(stack);
+            case type_int64_t: return DIV_int64_t(stack);
             case type_double: return DIV_double(stack);
+#endif // USE_X64_OPS
             default: return INVALID_DATA_TYPE;
         }
     }
@@ -132,13 +140,15 @@ namespace PLCMethods {
             case type_uint8_t: return CMP_EQ_uint8_t(stack);
             case type_uint16_t: return CMP_EQ_uint16_t(stack);
             case type_uint32_t: return CMP_EQ_uint32_t(stack);
-            case type_uint64_t: return CMP_EQ_uint64_t(stack);
             case type_int8_t: return CMP_EQ_int8_t(stack);
             case type_int16_t: return CMP_EQ_int16_t(stack);
             case type_int32_t: return CMP_EQ_int32_t(stack);
-            case type_int64_t: return CMP_EQ_int64_t(stack);
             case type_float: return CMP_EQ_float(stack);
+#ifdef USE_X64_OPS
+            case type_uint64_t: return CMP_EQ_uint64_t(stack);
+            case type_int64_t: return CMP_EQ_int64_t(stack);
             case type_double: return CMP_EQ_double(stack);
+#endif // USE_X64_OPS
             default: return INVALID_DATA_TYPE;
         }
     }
@@ -151,13 +161,15 @@ namespace PLCMethods {
             case type_uint8_t: return CMP_NEQ_uint8_t(stack);
             case type_uint16_t: return CMP_NEQ_uint16_t(stack);
             case type_uint32_t: return CMP_NEQ_uint32_t(stack);
-            case type_uint64_t: return CMP_NEQ_uint64_t(stack);
             case type_int8_t: return CMP_NEQ_int8_t(stack);
             case type_int16_t: return CMP_NEQ_int16_t(stack);
             case type_int32_t: return CMP_NEQ_int32_t(stack);
-            case type_int64_t: return CMP_NEQ_int64_t(stack);
             case type_float: return CMP_NEQ_float(stack);
+#ifdef USE_X64_OPS
+            case type_uint64_t: return CMP_NEQ_uint64_t(stack);
+            case type_int64_t: return CMP_NEQ_int64_t(stack);
             case type_double: return CMP_NEQ_double(stack);
+#endif // USE_X64_OPS
             default: return INVALID_DATA_TYPE;
         }
     }
@@ -170,13 +182,15 @@ namespace PLCMethods {
             case type_uint8_t: return CMP_GT_uint8_t(stack);
             case type_uint16_t: return CMP_GT_uint16_t(stack);
             case type_uint32_t: return CMP_GT_uint32_t(stack);
-            case type_uint64_t: return CMP_GT_uint64_t(stack);
             case type_int8_t: return CMP_GT_int8_t(stack);
             case type_int16_t: return CMP_GT_int16_t(stack);
             case type_int32_t: return CMP_GT_int32_t(stack);
-            case type_int64_t: return CMP_GT_int64_t(stack);
             case type_float: return CMP_GT_float(stack);
+#ifdef USE_X64_OPS
+            case type_uint64_t: return CMP_GT_uint64_t(stack);
+            case type_int64_t: return CMP_GT_int64_t(stack);
             case type_double: return CMP_GT_double(stack);
+#endif // USE_X64_OPS
             default: return INVALID_DATA_TYPE;
         }
     }
@@ -189,13 +203,15 @@ namespace PLCMethods {
             case type_uint8_t: return CMP_GTE_uint8_t(stack);
             case type_uint16_t: return CMP_GTE_uint16_t(stack);
             case type_uint32_t: return CMP_GTE_uint32_t(stack);
-            case type_uint64_t: return CMP_GTE_uint64_t(stack);
             case type_int8_t: return CMP_GTE_int8_t(stack);
             case type_int16_t: return CMP_GTE_int16_t(stack);
             case type_int32_t: return CMP_GTE_int32_t(stack);
-            case type_int64_t: return CMP_GTE_int64_t(stack);
             case type_float: return CMP_GTE_float(stack);
+#ifdef USE_X64_OPS
+            case type_uint64_t: return CMP_GTE_uint64_t(stack);
+            case type_int64_t: return CMP_GTE_int64_t(stack);
             case type_double: return CMP_GTE_double(stack);
+#endif // USE_X64_OPS
             default: return INVALID_DATA_TYPE;
         }
     }
@@ -208,13 +224,15 @@ namespace PLCMethods {
             case type_uint8_t: return CMP_LT_uint8_t(stack);
             case type_uint16_t: return CMP_LT_uint16_t(stack);
             case type_uint32_t: return CMP_LT_uint32_t(stack);
-            case type_uint64_t: return CMP_LT_uint64_t(stack);
             case type_int8_t: return CMP_LT_int8_t(stack);
             case type_int16_t: return CMP_LT_int16_t(stack);
             case type_int32_t: return CMP_LT_int32_t(stack);
-            case type_int64_t: return CMP_LT_int64_t(stack);
             case type_float: return CMP_LT_float(stack);
+#ifdef USE_X64_OPS
+            case type_uint64_t: return CMP_LT_uint64_t(stack);
+            case type_int64_t: return CMP_LT_int64_t(stack);
             case type_double: return CMP_LT_double(stack);
+#endif // USE_X64_OPS
             default: return INVALID_DATA_TYPE;
         }
     }
@@ -227,13 +245,15 @@ namespace PLCMethods {
             case type_uint8_t: return CMP_LTE_uint8_t(stack);
             case type_uint16_t: return CMP_LTE_uint16_t(stack);
             case type_uint32_t: return CMP_LTE_uint32_t(stack);
-            case type_uint64_t: return CMP_LTE_uint64_t(stack);
             case type_int8_t: return CMP_LTE_int8_t(stack);
             case type_int16_t: return CMP_LTE_int16_t(stack);
             case type_int32_t: return CMP_LTE_int32_t(stack);
-            case type_int64_t: return CMP_LTE_int64_t(stack);
             case type_float: return CMP_LTE_float(stack);
+#ifdef USE_X64_OPS
+            case type_uint64_t: return CMP_LTE_uint64_t(stack);
+            case type_int64_t: return CMP_LTE_int64_t(stack);
             case type_double: return CMP_LTE_double(stack);
+#endif // USE_X64_OPS
             default: return INVALID_DATA_TYPE;
         }
     }

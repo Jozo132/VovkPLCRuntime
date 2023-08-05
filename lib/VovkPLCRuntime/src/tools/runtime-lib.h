@@ -56,7 +56,7 @@
 #include "runtime-cmd-parser.h"
 
 #define SERIAL_TIMEOUT_RETURN if (serial_timeout) return;
-#define SERIAL_TIMEOUT_JOB(task) if (serial_timeout) { task; return; };
+#define SERIAL_TIMEOUT_JOB(task) if (serial_timeout) { Serial.flush(); task; return; };
 
 class VovkPLCRuntime {
 private:
@@ -175,7 +175,7 @@ public:
     }
     // Run the whole PLC program from the beginning, returns an error code (0 on success)
     RuntimeError cleanRun() {
-        if (!started_up)startup();
+        if (!started_up) startup();
         if (program == nullptr) return NO_PROGRAM;
         clear();
         return run(program->program, program->program_size);
@@ -626,10 +626,12 @@ RuntimeError VovkPLCRuntime::step(uint8_t* program, uint32_t program_size, uint3
         case type_int16_t: return PLCMethods::PUSH_int16_t(this->stack, program, program_size, index);
         case type_uint32_t: return PLCMethods::PUSH_uint32_t(this->stack, program, program_size, index);
         case type_int32_t: return PLCMethods::PUSH_int32_t(this->stack, program, program_size, index);
+        case type_float: return PLCMethods::PUSH_float(this->stack, program, program_size, index);
+#ifdef USE_X64_OPS
         case type_uint64_t: return PLCMethods::PUSH_uint64_t(this->stack, program, program_size, index);
         case type_int64_t: return PLCMethods::PUSH_int64_t(this->stack, program, program_size, index);
-        case type_float: return PLCMethods::PUSH_float(this->stack, program, program_size, index);
         case type_double: return PLCMethods::PUSH_double(this->stack, program, program_size, index);
+#endif // USE_X64_OPS
         case ADD: return PLCMethods::handle_ADD(this->stack, program, program_size, index);
         case SUB: return PLCMethods::handle_SUB(this->stack, program, program_size, index);
         case MUL: return PLCMethods::handle_MUL(this->stack, program, program_size, index);
@@ -659,23 +661,65 @@ RuntimeError VovkPLCRuntime::step(uint8_t* program, uint32_t program_size, uint3
         case RSET_X8_B5: return PLCMethods::handle_RSET_X8_B5(this->stack);
         case RSET_X8_B6: return PLCMethods::handle_RSET_X8_B6(this->stack);
         case RSET_X8_B7: return PLCMethods::handle_RSET_X8_B7(this->stack);
+        case READ_X8_B0: return PLCMethods::handle_READ_X8_B0(this->stack, program, program_size, index);
+        case READ_X8_B1: return PLCMethods::handle_READ_X8_B1(this->stack, program, program_size, index);
+        case READ_X8_B2: return PLCMethods::handle_READ_X8_B2(this->stack, program, program_size, index);
+        case READ_X8_B3: return PLCMethods::handle_READ_X8_B3(this->stack, program, program_size, index);
+        case READ_X8_B4: return PLCMethods::handle_READ_X8_B4(this->stack, program, program_size, index);
+        case READ_X8_B5: return PLCMethods::handle_READ_X8_B5(this->stack, program, program_size, index);
+        case READ_X8_B6: return PLCMethods::handle_READ_X8_B6(this->stack, program, program_size, index);
+        case READ_X8_B7: return PLCMethods::handle_READ_X8_B7(this->stack, program, program_size, index);
+        case WRITE_X8_B0: return PLCMethods::handle_WRITE_X8_B0(this->stack, program, program_size, index);
+        case WRITE_X8_B1: return PLCMethods::handle_WRITE_X8_B1(this->stack, program, program_size, index);
+        case WRITE_X8_B2: return PLCMethods::handle_WRITE_X8_B2(this->stack, program, program_size, index);
+        case WRITE_X8_B3: return PLCMethods::handle_WRITE_X8_B3(this->stack, program, program_size, index);
+        case WRITE_X8_B4: return PLCMethods::handle_WRITE_X8_B4(this->stack, program, program_size, index);
+        case WRITE_X8_B5: return PLCMethods::handle_WRITE_X8_B5(this->stack, program, program_size, index);
+        case WRITE_X8_B6: return PLCMethods::handle_WRITE_X8_B6(this->stack, program, program_size, index);
+        case WRITE_X8_B7: return PLCMethods::handle_WRITE_X8_B7(this->stack, program, program_size, index);
+        case WRITE_S_X8_B0: return PLCMethods::handle_WRITE_S_X8_B0(this->stack, program, program_size, index);
+        case WRITE_S_X8_B1: return PLCMethods::handle_WRITE_S_X8_B1(this->stack, program, program_size, index);
+        case WRITE_S_X8_B2: return PLCMethods::handle_WRITE_S_X8_B2(this->stack, program, program_size, index);
+        case WRITE_S_X8_B3: return PLCMethods::handle_WRITE_S_X8_B3(this->stack, program, program_size, index);
+        case WRITE_S_X8_B4: return PLCMethods::handle_WRITE_S_X8_B4(this->stack, program, program_size, index);
+        case WRITE_S_X8_B5: return PLCMethods::handle_WRITE_S_X8_B5(this->stack, program, program_size, index);
+        case WRITE_S_X8_B6: return PLCMethods::handle_WRITE_S_X8_B6(this->stack, program, program_size, index);
+        case WRITE_S_X8_B7: return PLCMethods::handle_WRITE_S_X8_B7(this->stack, program, program_size, index);
+        case WRITE_R_X8_B0: return PLCMethods::handle_WRITE_R_X8_B0(this->stack, program, program_size, index);
+        case WRITE_R_X8_B1: return PLCMethods::handle_WRITE_R_X8_B1(this->stack, program, program_size, index);
+        case WRITE_R_X8_B2: return PLCMethods::handle_WRITE_R_X8_B2(this->stack, program, program_size, index);
+        case WRITE_R_X8_B3: return PLCMethods::handle_WRITE_R_X8_B3(this->stack, program, program_size, index);
+        case WRITE_R_X8_B4: return PLCMethods::handle_WRITE_R_X8_B4(this->stack, program, program_size, index);
+        case WRITE_R_X8_B5: return PLCMethods::handle_WRITE_R_X8_B5(this->stack, program, program_size, index);
+        case WRITE_R_X8_B6: return PLCMethods::handle_WRITE_R_X8_B6(this->stack, program, program_size, index);
+        case WRITE_R_X8_B7: return PLCMethods::handle_WRITE_R_X8_B7(this->stack, program, program_size, index);
+        case WRITE_INV_X8_B0: return PLCMethods::handle_WRITE_INV_X8_B0(this->stack, program, program_size, index);
+        case WRITE_INV_X8_B1: return PLCMethods::handle_WRITE_INV_X8_B1(this->stack, program, program_size, index);
+        case WRITE_INV_X8_B2: return PLCMethods::handle_WRITE_INV_X8_B2(this->stack, program, program_size, index);
+        case WRITE_INV_X8_B3: return PLCMethods::handle_WRITE_INV_X8_B3(this->stack, program, program_size, index);
+        case WRITE_INV_X8_B4: return PLCMethods::handle_WRITE_INV_X8_B4(this->stack, program, program_size, index);
+        case WRITE_INV_X8_B5: return PLCMethods::handle_WRITE_INV_X8_B5(this->stack, program, program_size, index);
+        case WRITE_INV_X8_B6: return PLCMethods::handle_WRITE_INV_X8_B6(this->stack, program, program_size, index);
+        case WRITE_INV_X8_B7: return PLCMethods::handle_WRITE_INV_X8_B7(this->stack, program, program_size, index);
 
         case BW_AND_X8: return PLCMethods::handle_BW_AND_X8(this->stack);
         case BW_AND_X16: return PLCMethods::handle_BW_AND_X16(this->stack);
         case BW_AND_X32: return PLCMethods::handle_BW_AND_X32(this->stack);
-        case BW_AND_X64: return PLCMethods::handle_BW_AND_X64(this->stack);
         case BW_OR_X8: return PLCMethods::handle_BW_OR_X8(this->stack);
         case BW_OR_X16: return PLCMethods::handle_BW_OR_X16(this->stack);
         case BW_OR_X32: return PLCMethods::handle_BW_OR_X32(this->stack);
-        case BW_OR_X64: return PLCMethods::handle_BW_OR_X64(this->stack);
         case BW_XOR_X8: return PLCMethods::handle_BW_XOR_X8(this->stack);
         case BW_XOR_X16: return PLCMethods::handle_BW_XOR_X16(this->stack);
         case BW_XOR_X32: return PLCMethods::handle_BW_XOR_X32(this->stack);
-        case BW_XOR_X64: return PLCMethods::handle_BW_XOR_X64(this->stack);
         case BW_NOT_X8: return PLCMethods::handle_BW_NOT_X8(this->stack);
         case BW_NOT_X16: return PLCMethods::handle_BW_NOT_X16(this->stack);
         case BW_NOT_X32: return PLCMethods::handle_BW_NOT_X32(this->stack);
+#ifdef USE_X64_OPS
+        case BW_AND_X64: return PLCMethods::handle_BW_AND_X64(this->stack);
+        case BW_OR_X64: return PLCMethods::handle_BW_OR_X64(this->stack);
+        case BW_XOR_X64: return PLCMethods::handle_BW_XOR_X64(this->stack);
         case BW_NOT_X64: return PLCMethods::handle_BW_NOT_X64(this->stack);
+#endif // USE_X64_OPS
         case CMP_EQ: return PLCMethods::handle_CMP_EQ(this->stack, program, program_size, index);
         case CMP_NEQ: return PLCMethods::handle_CMP_NEQ(this->stack, program, program_size, index);
         case CMP_GT: return PLCMethods::handle_CMP_GT(this->stack, program, program_size, index);

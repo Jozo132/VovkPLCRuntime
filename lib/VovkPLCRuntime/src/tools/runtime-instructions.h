@@ -47,6 +47,7 @@ enum RuntimeError {
     MEMORY_ACCESS_ERROR,
 };
 
+#ifdef __RUNTIME_DEBUG__
 const char* const RuntimeErrorNames [] PROGMEM = {
     STRINGIFY(STATUS_SUCCESS),
     STRINGIFY(UNKNOWN_INSTRUCTION),
@@ -93,6 +94,7 @@ void logRuntimeErrorList() {
     }
     Serial.println();
 }
+#endif
 
 // Reverse Polish Notation (RPN) to custom bytecode
 
@@ -211,9 +213,53 @@ enum PLCRuntimeInstructionSet {
     RSET_X8_B6,         // Reset the seventh bit of the 1 byte size value (x)
     RSET_X8_B7,         // Reset the eighth bit of the 1 byte size value (x)
 
+    READ_X8_B0,         // Read the first bit of the 1 byte at the given address (x)
+    READ_X8_B1,         // Read the second bit of the 1 byte at the given address (x)
+    READ_X8_B2,         // Read the third bit of the 1 byte at the given address (x)
+    READ_X8_B3,         // Read the fourth bit of the 1 byte at the given address (x)
+    READ_X8_B4,         // Read the fifth bit of the 1 byte at the given address (x)
+    READ_X8_B5,         // Read the sixth bit of the 1 byte at the given address (x)
+    READ_X8_B6,         // Read the seventh bit of the 1 byte at the given address (x)
+    READ_X8_B7,         // Read the eighth bit of the 1 byte at the given address (x)
+
+    WRITE_X8_B0,        // Write the first bit of the 1 byte at the given address (x)
+    WRITE_X8_B1,        // Write the second bit of the 1 byte at the given address (x)
+    WRITE_X8_B2,        // Write the third bit of the 1 byte at the given address (x)
+    WRITE_X8_B3,        // Write the fourth bit of the 1 byte at the given address (x)
+    WRITE_X8_B4,        // Write the fifth bit of the 1 byte at the given address (x)
+    WRITE_X8_B5,        // Write the sixth bit of the 1 byte at the given address (x)
+    WRITE_X8_B6,        // Write the seventh bit of the 1 byte at the given address (x)
+    WRITE_X8_B7,        // Write the eighth bit of the 1 byte at the given address (x)
+
+    WRITE_S_X8_B0,      // Write the first bit of the 1 byte at the given address (x) to value 1 (SET)
+    WRITE_S_X8_B1,      // Write the second bit of the 1 byte at the given address (x) to value 1 (SET)
+    WRITE_S_X8_B2,      // Write the third bit of the 1 byte at the given address (x) to value 1 (SET)
+    WRITE_S_X8_B3,      // Write the fourth bit of the 1 byte at the given address (x) to value 1 (SET)
+    WRITE_S_X8_B4,      // Write the fifth bit of the 1 byte at the given address (x) to value 1 (SET)
+    WRITE_S_X8_B5,      // Write the sixth bit of the 1 byte at the given address (x) to value 1 (SET)
+    WRITE_S_X8_B6,      // Write the seventh bit of the 1 byte at the given address (x) to value 1 (SET)
+    WRITE_S_X8_B7,      // Write the eighth bit of the 1 byte at the given address (x) to value 1 (SET)
+
+    WRITE_R_X8_B0,      // Write the first bit of the 1 byte at the given address (x) to value 0 (RESET)
+    WRITE_R_X8_B1,      // Write the second bit of the 1 byte at the given address (x) to value 0 (RESET)
+    WRITE_R_X8_B2,      // Write the third bit of the 1 byte at the given address (x) to value 0 (RESET)
+    WRITE_R_X8_B3,      // Write the fourth bit of the 1 byte at the given address (x) to value 0 (RESET)
+    WRITE_R_X8_B4,      // Write the fifth bit of the 1 byte at the given address (x) to value 0 (RESET)
+    WRITE_R_X8_B5,      // Write the sixth bit of the 1 byte at the given address (x) to value 0 (RESET)
+    WRITE_R_X8_B6,      // Write the seventh bit of the 1 byte at the given address (x) to value 0 (RESET)
+    WRITE_R_X8_B7,      // Write the eighth bit of the 1 byte at the given address (x) to value 0 (RESET)
+
+    WRITE_INV_X8_B0,    // Write the first bit of the 1 byte at the given address (x) to inverted value (INVERT)
+    WRITE_INV_X8_B1,    // Write the second bit of the 1 byte at the given address (x) to inverted value (INVERT)
+    WRITE_INV_X8_B2,    // Write the third bit of the 1 byte at the given address (x) to inverted value (INVERT)
+    WRITE_INV_X8_B3,    // Write the fourth bit of the 1 byte at the given address (x) to inverted value (INVERT)
+    WRITE_INV_X8_B4,    // Write the fifth bit of the 1 byte at the given address (x) to inverted value (INVERT)
+    WRITE_INV_X8_B5,    // Write the sixth bit of the 1 byte at the given address (x) to inverted value (INVERT)
+    WRITE_INV_X8_B6,    // Write the seventh bit of the 1 byte at the given address (x) to inverted value (INVERT)
+    WRITE_INV_X8_B7,    // Write the eighth bit of the 1 byte at the given address (x) to inverted value (INVERT)
 
     // Bitwise operations
-    BW_AND_X8 = 0x60,   // Bitwise AND for 1 byte size values (x, y)
+    BW_AND_X8 = 0xA0,   // Bitwise AND for 1 byte size values (x, y)
     BW_AND_X16,         // Bitwise AND for 2 byte size values (x, y)
     BW_AND_X32,         // Bitwise AND for 4 byte size values (x, y)
     BW_AND_X64,         // Bitwise AND for 8 byte size values (x, y)
@@ -244,13 +290,13 @@ enum PLCRuntimeInstructionSet {
     BW_RSHIFT_X64,      // Bitwise right shift for 8 byte size values (x, y)
 
     // Logical operations
-    LOGIC_AND = 0x80,   // Logical AND for bool (x, y)
+    LOGIC_AND = 0xC0,   // Logical AND for bool (x, y)
     LOGIC_OR,           // Logical OR for bool (x, y)
     LOGIC_XOR,          // Logical XOR for bool (x, y)
     LOGIC_NOT,          // Logical NOT for bool (x)
 
     // Comparison operations
-    CMP_EQ = 0xA0,      // Compare  (x, y)
+    CMP_EQ = 0xD0,      // Compare  (x, y)
     CMP_NEQ,            // Compare  (x, y)
     CMP_GT,             // Compare  (x, y)
     CMP_LT,             // Compare  (x, y)
@@ -258,7 +304,7 @@ enum PLCRuntimeInstructionSet {
     CMP_LTE,            // Compare  (x, y)
 
     // Control flow
-    JMP = 0xC0,         // Jump to the given address in the program bytecode (uint16_t)
+    JMP = 0xE0,         // Jump to the given address in the program bytecode (uint16_t)
     JMP_IF,             // Jump to the given address in the program bytecode if the top of the stack is true (uint16_t)
     JMP_IF_NOT,         // Jump to the given address in the program bytecode if the top of the stack is false (uint16_t)
     CALL,               // Call a function (uint16_t)
@@ -282,10 +328,12 @@ bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
         case type_int16_t:
         case type_uint32_t:
         case type_int32_t:
+        case type_float:
+#ifdef USE_X64_OPS
         case type_uint64_t:
         case type_int64_t:
-        case type_float:
         case type_double:
+#endif
         case MOV:
         case CVT:
         case PUT:
@@ -351,31 +399,73 @@ bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
         case RSET_X8_B5:
         case RSET_X8_B6:
         case RSET_X8_B7:
+        case READ_X8_B0:
+        case READ_X8_B1:
+        case READ_X8_B2:
+        case READ_X8_B3:
+        case READ_X8_B4:
+        case READ_X8_B5:
+        case READ_X8_B6:
+        case READ_X8_B7:
+        case WRITE_X8_B0:
+        case WRITE_X8_B1:
+        case WRITE_X8_B2:
+        case WRITE_X8_B3:
+        case WRITE_X8_B4:
+        case WRITE_X8_B5:
+        case WRITE_X8_B6:
+        case WRITE_X8_B7:
+        case WRITE_S_X8_B0:
+        case WRITE_S_X8_B1:
+        case WRITE_S_X8_B2:
+        case WRITE_S_X8_B3:
+        case WRITE_S_X8_B4:
+        case WRITE_S_X8_B5:
+        case WRITE_S_X8_B6:
+        case WRITE_S_X8_B7:
+        case WRITE_R_X8_B0:
+        case WRITE_R_X8_B1:
+        case WRITE_R_X8_B2:
+        case WRITE_R_X8_B3:
+        case WRITE_R_X8_B4:
+        case WRITE_R_X8_B5:
+        case WRITE_R_X8_B6:
+        case WRITE_R_X8_B7:
+        case WRITE_INV_X8_B0:
+        case WRITE_INV_X8_B1:
+        case WRITE_INV_X8_B2:
+        case WRITE_INV_X8_B3:
+        case WRITE_INV_X8_B4:
+        case WRITE_INV_X8_B5:
+        case WRITE_INV_X8_B6:
+        case WRITE_INV_X8_B7:
 
         case BW_AND_X8:
         case BW_AND_X16:
         case BW_AND_X32:
-        case BW_AND_X64:
         case BW_OR_X8:
         case BW_OR_X16:
         case BW_OR_X32:
-        case BW_OR_X64:
         case BW_XOR_X8:
         case BW_XOR_X16:
         case BW_XOR_X32:
-        case BW_XOR_X64:
         case BW_NOT_X8:
         case BW_NOT_X16:
         case BW_NOT_X32:
-        case BW_NOT_X64:
         case BW_LSHIFT_X8:
         case BW_LSHIFT_X16:
         case BW_LSHIFT_X32:
-        case BW_LSHIFT_X64:
         case BW_RSHIFT_X8:
         case BW_RSHIFT_X16:
         case BW_RSHIFT_X32:
+#ifdef USE_X64_OPS
+        case BW_AND_X64:
+        case BW_OR_X64:
+        case BW_XOR_X64:
+        case BW_NOT_X64:
+        case BW_LSHIFT_X64:
         case BW_RSHIFT_X64:
+#endif
         case LOGIC_AND:
         case LOGIC_OR:
         case LOGIC_XOR:
@@ -401,6 +491,7 @@ bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
     return false;
 }
 
+#ifdef __RUNTIME_DEBUG__
 const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
     switch (opcode) {
         case NOP: return F("NOP");
@@ -411,10 +502,12 @@ const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
         case type_int16_t: return F("PUSH int16_t");
         case type_uint32_t: return F("PUSH uint32_t");
         case type_int32_t: return F("PUSH int32_t");
+        case type_float: return F("PUSH float");
+#ifdef USE_X64_OPS
         case type_uint64_t: return F("PUSH uint64_t");
         case type_int64_t: return F("PUSH int64_t");
-        case type_float: return F("PUSH float");
         case type_double: return F("PUSH double");
+#endif
         case MOV: return F("MOV");
         case CVT: return F("CVT");
         case PUT: return F("PUT");
@@ -480,31 +573,73 @@ const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
         case RSET_X8_B5: return F("RSET_X8_B5");
         case RSET_X8_B6: return F("RSET_X8_B6");
         case RSET_X8_B7: return F("RSET_X8_B7");
+        case READ_X8_B0: return F("READ_X8_B0");
+        case READ_X8_B1: return F("READ_X8_B1");
+        case READ_X8_B2: return F("READ_X8_B2");
+        case READ_X8_B3: return F("READ_X8_B3");
+        case READ_X8_B4: return F("READ_X8_B4");
+        case READ_X8_B5: return F("READ_X8_B5");
+        case READ_X8_B6: return F("READ_X8_B6");
+        case READ_X8_B7: return F("READ_X8_B7");
+        case WRITE_X8_B0: return F("WRITE_X8_B0");
+        case WRITE_X8_B1: return F("WRITE_X8_B1");
+        case WRITE_X8_B2: return F("WRITE_X8_B2");
+        case WRITE_X8_B3: return F("WRITE_X8_B3");
+        case WRITE_X8_B4: return F("WRITE_X8_B4");
+        case WRITE_X8_B5: return F("WRITE_X8_B5");
+        case WRITE_X8_B6: return F("WRITE_X8_B6");
+        case WRITE_X8_B7: return F("WRITE_X8_B7");
+        case WRITE_S_X8_B0: return F("WRITE_S_X8_B0");
+        case WRITE_S_X8_B1: return F("WRITE_S_X8_B1");
+        case WRITE_S_X8_B2: return F("WRITE_S_X8_B2");
+        case WRITE_S_X8_B3: return F("WRITE_S_X8_B3");
+        case WRITE_S_X8_B4: return F("WRITE_S_X8_B4");
+        case WRITE_S_X8_B5: return F("WRITE_S_X8_B5");
+        case WRITE_S_X8_B6: return F("WRITE_S_X8_B6");
+        case WRITE_S_X8_B7: return F("WRITE_S_X8_B7");
+        case WRITE_R_X8_B0: return F("WRITE_R_X8_B0");
+        case WRITE_R_X8_B1: return F("WRITE_R_X8_B1");
+        case WRITE_R_X8_B2: return F("WRITE_R_X8_B2");
+        case WRITE_R_X8_B3: return F("WRITE_R_X8_B3");
+        case WRITE_R_X8_B4: return F("WRITE_R_X8_B4");
+        case WRITE_R_X8_B5: return F("WRITE_R_X8_B5");
+        case WRITE_R_X8_B6: return F("WRITE_R_X8_B6");
+        case WRITE_R_X8_B7: return F("WRITE_R_X8_B7");
+        case WRITE_INV_X8_B0: return F("WRITE_INV_X8_B0");
+        case WRITE_INV_X8_B1: return F("WRITE_INV_X8_B1");
+        case WRITE_INV_X8_B2: return F("WRITE_INV_X8_B2");
+        case WRITE_INV_X8_B3: return F("WRITE_INV_X8_B3");
+        case WRITE_INV_X8_B4: return F("WRITE_INV_X8_B4");
+        case WRITE_INV_X8_B5: return F("WRITE_INV_X8_B5");
+        case WRITE_INV_X8_B6: return F("WRITE_INV_X8_B6");
+        case WRITE_INV_X8_B7: return F("WRITE_INV_X8_B7");
 
         case BW_AND_X8: return F("BW_AND_X8");
         case BW_AND_X16: return F("BW_AND_X16");
         case BW_AND_X32: return F("BW_AND_X32");
-        case BW_AND_X64: return F("BW_AND_X64");
         case BW_OR_X8: return F("BW_OR_X8");
         case BW_OR_X16: return F("BW_OR_X16");
         case BW_OR_X32: return F("BW_OR_X32");
-        case BW_OR_X64: return F("BW_OR_X64");
         case BW_XOR_X8: return F("BW_XOR_X8");
         case BW_XOR_X16: return F("BW_XOR_X16");
         case BW_XOR_X32: return F("BW_XOR_X32");
-        case BW_XOR_X64: return F("BW_XOR_X64");
         case BW_NOT_X8: return F("BW_NOT_X8");
         case BW_NOT_X16: return F("BW_NOT_X16");
         case BW_NOT_X32: return F("BW_NOT_X32");
-        case BW_NOT_X64: return F("BW_NOT_X64");
         case BW_LSHIFT_X8: return F("BW_LSHIFT_X8");
         case BW_LSHIFT_X16: return F("BW_LSHIFT_X16");
         case BW_LSHIFT_X32: return F("BW_LSHIFT_X32");
-        case BW_LSHIFT_X64: return F("BW_LSHIFT_X64");
         case BW_RSHIFT_X8: return F("BW_RSHIFT_X8");
         case BW_RSHIFT_X16: return F("BW_RSHIFT_X16");
         case BW_RSHIFT_X32: return F("BW_RSHIFT_X32");
+#ifdef USE_X64_OPS
+        case BW_AND_X64: return F("BW_AND_X64");
+        case BW_OR_X64: return F("BW_OR_X64");
+        case BW_XOR_X64: return F("BW_XOR_X64");
+        case BW_NOT_X64: return F("BW_NOT_X64");
+        case BW_LSHIFT_X64: return F("BW_LSHIFT_X64");
         case BW_RSHIFT_X64: return F("BW_RSHIFT_X64");
+#endif
         case LOGIC_AND: return F("LOGIC_AND");
         case LOGIC_OR: return F("LOGIC_OR");
         case LOGIC_XOR: return F("LOGIC_XOR");
@@ -529,6 +664,13 @@ const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
     }
     return F("UNKNOWN OPCODE");
 }
+#else
+const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
+    bool exists = OPCODE_EXISTS(opcode);
+    if (exists) return F("OPTIMIZED OUT");
+    return F("UNKNOWN OPCODE");
+}
+#endif
 
 uint8_t OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
     switch (opcode) {
@@ -540,10 +682,12 @@ uint8_t OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
         case type_int16_t: return 3;
         case type_uint32_t: return 5;
         case type_int32_t: return 5;
+        case type_float: return 5;
+#ifdef USE_X64_OPS
         case type_uint64_t: return 9;
         case type_int64_t: return 9;
-        case type_float: return 5;
         case type_double: return 9;
+#endif
         case MOV: return 8;
         case CVT: return 3;
         case PUT: return 4;
@@ -585,75 +729,118 @@ uint8_t OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
             // case ACOSH: return 2;
             // case ATANH: return 2;
 
-        case GET_X8_B0: return 1;
-        case GET_X8_B1: return 1;
-        case GET_X8_B2: return 1;
-        case GET_X8_B3: return 1;
-        case GET_X8_B4: return 1;
-        case GET_X8_B5: return 1;
-        case GET_X8_B6: return 1;
-        case GET_X8_B7: return 1;
-        case SET_X8_B0: return 1;
-        case SET_X8_B1: return 1;
-        case SET_X8_B2: return 1;
-        case SET_X8_B3: return 1;
-        case SET_X8_B4: return 1;
-        case SET_X8_B5: return 1;
-        case SET_X8_B6: return 1;
-        case SET_X8_B7: return 1;
-        case RSET_X8_B0: return 1;
-        case RSET_X8_B1: return 1;
-        case RSET_X8_B2: return 1;
-        case RSET_X8_B3: return 1;
-        case RSET_X8_B4: return 1;
-        case RSET_X8_B5: return 1;
-        case RSET_X8_B6: return 1;
+        case GET_X8_B0:
+        case GET_X8_B1:
+        case GET_X8_B2:
+        case GET_X8_B3:
+        case GET_X8_B4:
+        case GET_X8_B5:
+        case GET_X8_B6:
+        case GET_X8_B7:
+        case SET_X8_B0:
+        case SET_X8_B1:
+        case SET_X8_B2:
+        case SET_X8_B3:
+        case SET_X8_B4:
+        case SET_X8_B5:
+        case SET_X8_B6:
+        case SET_X8_B7:
+        case RSET_X8_B0:
+        case RSET_X8_B1:
+        case RSET_X8_B2:
+        case RSET_X8_B3:
+        case RSET_X8_B4:
+        case RSET_X8_B5:
+        case RSET_X8_B6:
         case RSET_X8_B7: return 1;
+        case READ_X8_B0:
+        case READ_X8_B1:
+        case READ_X8_B2:
+        case READ_X8_B3:
+        case READ_X8_B4:
+        case READ_X8_B5:
+        case READ_X8_B6:
+        case READ_X8_B7:
+        case WRITE_X8_B0:
+        case WRITE_X8_B1:
+        case WRITE_X8_B2:
+        case WRITE_X8_B3:
+        case WRITE_X8_B4:
+        case WRITE_X8_B5:
+        case WRITE_X8_B6:
+        case WRITE_X8_B7:
+        case WRITE_S_X8_B0:
+        case WRITE_S_X8_B1:
+        case WRITE_S_X8_B2:
+        case WRITE_S_X8_B3:
+        case WRITE_S_X8_B4:
+        case WRITE_S_X8_B5:
+        case WRITE_S_X8_B6:
+        case WRITE_S_X8_B7:
+        case WRITE_R_X8_B0:
+        case WRITE_R_X8_B1:
+        case WRITE_R_X8_B2:
+        case WRITE_R_X8_B3:
+        case WRITE_R_X8_B4:
+        case WRITE_R_X8_B5:
+        case WRITE_R_X8_B6:
+        case WRITE_R_X8_B7:
+        case WRITE_INV_X8_B0:
+        case WRITE_INV_X8_B1:
+        case WRITE_INV_X8_B2:
+        case WRITE_INV_X8_B3:
+        case WRITE_INV_X8_B4:
+        case WRITE_INV_X8_B5:
+        case WRITE_INV_X8_B6:
+        case WRITE_INV_X8_B7: return 3;
 
-        case BW_AND_X8: return 1;
-        case BW_AND_X16: return 1;
-        case BW_AND_X32: return 1;
-        case BW_AND_X64: return 1;
-        case BW_OR_X8: return 1;
-        case BW_OR_X16: return 1;
-        case BW_OR_X32: return 1;
-        case BW_OR_X64: return 1;
-        case BW_XOR_X8: return 1;
-        case BW_XOR_X16: return 1;
-        case BW_XOR_X32: return 1;
-        case BW_XOR_X64: return 1;
-        case BW_NOT_X8: return 1;
-        case BW_NOT_X16: return 1;
-        case BW_NOT_X32: return 1;
-        case BW_NOT_X64: return 1;
-        case BW_LSHIFT_X8: return 1;
-        case BW_LSHIFT_X16: return 1;
-        case BW_LSHIFT_X32: return 1;
-        case BW_LSHIFT_X64: return 1;
-        case BW_RSHIFT_X8: return 1;
-        case BW_RSHIFT_X16: return 1;
+        case BW_AND_X8:
+        case BW_AND_X16:
+        case BW_AND_X32:
+        case BW_OR_X8:
+        case BW_OR_X16:
+        case BW_OR_X32:
+        case BW_XOR_X8:
+        case BW_XOR_X16:
+        case BW_XOR_X32:
+        case BW_NOT_X8:
+        case BW_NOT_X16:
+        case BW_NOT_X32:
+        case BW_LSHIFT_X8:
+        case BW_LSHIFT_X16:
+        case BW_LSHIFT_X32:
+        case BW_RSHIFT_X8:
+        case BW_RSHIFT_X16:
         case BW_RSHIFT_X32: return 1;
+#ifdef USE_X64_OPS
+        case BW_AND_X64:
+        case BW_OR_X64:
+        case BW_XOR_X64:
+        case BW_NOT_X64:
+        case BW_LSHIFT_X64:
         case BW_RSHIFT_X64: return 1;
-        case LOGIC_AND: return 1;
-        case LOGIC_OR: return 1;
-        case LOGIC_XOR: return 1;
+#endif
+        case LOGIC_AND:
+        case LOGIC_OR:
+        case LOGIC_XOR:
         case LOGIC_NOT: return 1;
-        case CMP_EQ: return 2;
-        case CMP_NEQ: return 2;
-        case CMP_GT: return 2;
-        case CMP_LT: return 2;
-        case CMP_GTE: return 2;
+        case CMP_EQ:
+        case CMP_NEQ:
+        case CMP_GT:
+        case CMP_LT:
+        case CMP_GTE:
         case CMP_LTE: return 2;
 
-        case JMP: return 3;
-        case JMP_IF: return 3;
-        case JMP_IF_NOT: return 3;
-        case CALL: return 3;
-        case CALL_IF: return 3;
+        case JMP:
+        case JMP_IF:
+        case JMP_IF_NOT:
+        case CALL:
+        case CALL_IF:
         case CALL_IF_NOT: return 3;
-        case RET: return 1;
-        case RET_IF: return 1;
-        case RET_IF_NOT: return 1;
+
+        case RET:
+        case RET_IF:
+        case RET_IF_NOT:
         case EXIT: return 1;
         default: break;
     }
@@ -661,7 +848,7 @@ uint8_t OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
 }
 
 
-
+#ifdef __RUNTIME_DEBUG__
 void logRuntimeInstructionSet() {
     Serial.println(F("Bytecode Instruction Set:"));
     uint32_t position = 0;
@@ -691,3 +878,7 @@ void logRuntimeInstructionSet() {
     }
     Serial.println();
 }
+
+#else
+void logRuntimeInstructionSet() {}
+#endif

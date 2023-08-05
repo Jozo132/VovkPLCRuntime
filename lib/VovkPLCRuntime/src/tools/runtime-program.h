@@ -153,6 +153,14 @@ public:
         return 9;
     }
 
+    // Push instruction + uint16_t value to the PLC Program
+    static uint8_t push_InstructionWithU32(uint8_t* location, PLCRuntimeInstructionSet instruction, uint16_t value) {
+        location[0] = instruction;
+        location[1] = value >> 8;
+        location[2] = value & 0xFF;
+        return 3;
+    }
+
     // Push flow control instructions to the PLC Program
     static uint8_t pushJMP(uint8_t* location, uint32_t location_address) {
         location[0] = JMP;
@@ -404,7 +412,7 @@ public:
             auto instruction_name = OPCODE_NAME(opcode);
             int length = Serial.print(instruction_name);
             length += Serial.print(' ');
-            while (length < 13) length += Serial.print('-');
+            while (length < 16) length += Serial.print('-');
             Serial.print(' ');
             Serial.print(F("[size "));
             if (instruction_size < 10) Serial.print(' ');
@@ -454,8 +462,8 @@ public:
         length += Serial.print(OPCODE_NAME(opcode));
         length += Serial.print(' ');
         length += Serial.print(' ');
-        while (length < 25) length += Serial.print('-');
-        while (length < 27) length += Serial.print(' ');
+        while (length < 27) length += Serial.print('-');
+        while (length < 29) length += Serial.print(' ');
         Serial.print('[');
         for (uint8_t i = 0; i < opcode_size; i++) {
             uint8_t value = program[index + i];
@@ -475,7 +483,7 @@ public:
     RuntimeError push(uint8_t* code, uint32_t code_size) {
         if (program_size + code_size > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
         program_size += InstructionCompiler::push(program + program_size, code, code_size);
@@ -487,7 +495,7 @@ public:
     RuntimeError push(uint8_t instruction) {
         if (program_size + 1 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
         program_size += InstructionCompiler::push(program + program_size, instruction);
@@ -499,7 +507,7 @@ public:
     RuntimeError push(uint8_t instruction, uint8_t data_type) {
         if (program_size + 2 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
         program_size += InstructionCompiler::push(program + program_size, instruction, data_type);
@@ -516,7 +524,7 @@ public:
     RuntimeError push_uint8_t(uint8_t value) {
         if (program_size + 2 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
         program_size += InstructionCompiler::push_uint8_t(program + program_size, value);
@@ -528,7 +536,7 @@ public:
     RuntimeError push_int8_t(int8_t value) {
         if (program_size + 2 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
         program_size += InstructionCompiler::push_int8_t(program + program_size, value);
@@ -540,7 +548,7 @@ public:
     RuntimeError push_uint16_t(uint32_t value) {
         if (program_size + 3 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
         program_size += InstructionCompiler::push_uint16_t(program + program_size, value);
@@ -552,7 +560,7 @@ public:
     RuntimeError push_int16_t(int16_t value) {
         if (program_size + 3 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
         program_size += InstructionCompiler::push_int16_t(program + program_size, value);
@@ -564,7 +572,7 @@ public:
     RuntimeError push_uint32_t(uint32_t value) {
         if (program_size + 5 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
         program_size += InstructionCompiler::push_uint32_t(program + program_size, value);
@@ -576,7 +584,7 @@ public:
     RuntimeError push_int32_t(int32_t value) {
         if (program_size + 5 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
         program_size += InstructionCompiler::push_int32_t(program + program_size, value);
@@ -588,7 +596,7 @@ public:
     RuntimeError push_uint64_t(uint64_t value) {
         if (program_size + 9 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
         program_size += InstructionCompiler::push_uint64_t(program + program_size, value);
@@ -600,7 +608,7 @@ public:
     RuntimeError push_int64_t(int64_t value) {
         if (program_size + 9 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
         program_size += InstructionCompiler::push_int64_t(program + program_size, value);
@@ -612,7 +620,7 @@ public:
     RuntimeError push_float(float value) {
         if (program_size + 5 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
         program_size += InstructionCompiler::push_float(program + program_size, value);
@@ -624,7 +632,7 @@ public:
     RuntimeError push_double(double value) {
         if (program_size + 9 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
         program_size += InstructionCompiler::push_double(program + program_size, value);
@@ -636,7 +644,7 @@ public:
     RuntimeError pushJMP(uint32_t program_address) {
         if (program_size + 3 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
         program_size += InstructionCompiler::pushJMP(program + program_size, program_address);
@@ -646,7 +654,7 @@ public:
     RuntimeError pushJMP_IF(uint32_t program_address) {
         if (program_size + 3 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
         program_size += InstructionCompiler::pushJMP_IF(program + program_size, program_address);
@@ -656,7 +664,7 @@ public:
     RuntimeError pushJMP_IF_NOT(uint32_t program_address) {
         if (program_size + 3 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
         program_size += InstructionCompiler::pushJMP_IF_NOT(program + program_size, program_address);
@@ -679,7 +687,7 @@ public:
     RuntimeError pushGET(uint32_t program_address, PLCRuntimeInstructionSet type = type_uint8_t) {
         if (program_size + 4 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
         program_size += InstructionCompiler::pushGET(program + program_size, program_address, type);
@@ -690,7 +698,7 @@ public:
     RuntimeError pushPUT(uint32_t program_address, PLCRuntimeInstructionSet type = type_uint8_t) {
         if (program_size + 4 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(F("Program size exceeded: ")); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
         program_size += InstructionCompiler::pushPUT(program + program_size, program_address, type);

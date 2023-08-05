@@ -23,6 +23,11 @@
 #ifndef __RUNTIME_TOOLS_H__
 #define __RUNTIME_TOOLS_H__
 
+// Use x64 operations on all architectures except AVR to fit the memory
+#ifndef __AVR__
+#define USE_X64_OPS
+#endif // __AVR__
+
 #ifdef __SIMULATOR__
 
 #ifndef __WASM__
@@ -164,6 +169,14 @@ void fstrcpy(char* buff, const char* fstr) {
     }
 }
 
+void byteToHex(uint8_t byte, char& c1, char& c2);
+void byteToHex(uint8_t byte, char& c1, char& c2) {
+    c1 = ((byte >> 4) & 0xF) + '0';
+    c2 = ((byte) & 0xF) + '0';
+    if (c1 > '9') c1 += 'A' - '9' - 1;
+    if (c2 > '9') c2 += 'A' - '9' - 1;
+}
+
 
 // Define an empty F() macro if it isn't defined, so that the code can be compiled on non-Arduino platforms
 #ifndef F 
@@ -194,6 +207,20 @@ CVT_64(double);
 
 union u8A_to_u16 { uint8_t u8A[2]; uint16_t u16; };
 
+
+// BCD to DEC
+uint8_t bcd2dec(uint8_t bcd);
+uint8_t bcd2dec(uint8_t bcd) {
+    return ((bcd >> 4) * 10) + (bcd & 0xF);
+}
+
+// DEC to BCD
+uint8_t dec2bcd(uint8_t dec);
+uint8_t dec2bcd(uint8_t dec) {
+    return ((dec / 10) << 4) + (dec % 10);
+}
+
+const char PROGRAM_SIZE_EXCEEDED_MSG[] PROGMEM = "Program size exceeded: ";
 
 
 #ifdef __SIMULATOR__

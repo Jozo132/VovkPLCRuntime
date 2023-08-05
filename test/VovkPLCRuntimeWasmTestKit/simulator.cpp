@@ -23,6 +23,7 @@
 #define __SIMULATOR__
 #define __RUNTIME_DEBUG__
 #define __RUNTIME_FULL_UNIT_TEST___
+#define USE_X64_OPS
 
 #include "../../lib/VovkPLCRuntime/src/VovkPLCRuntime.h"
 

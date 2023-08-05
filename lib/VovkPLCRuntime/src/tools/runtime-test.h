@@ -38,6 +38,7 @@ template <typename T> struct TestCase {
     void (*build)(RuntimeProgram& program);
 };
 
+#ifdef USE_X64_OPS
 void print__uint64_t(uint64_t big_number) {
     const uint16_t NUM_DIGITS = log10(big_number) + 1;
     char sz[NUM_DIGITS + 1];
@@ -62,6 +63,7 @@ void println__int64_t(int64_t big_number) {
     print__int64_t(big_number);
     Serial.println();
 }
+#endif // USE_X64_OPS
 
 int print_hex(uint32_t value) {
     int length = 0;
@@ -264,6 +266,7 @@ const TestCase<uint32_t> case_demo_uint32_t({ "demo_uint32_t => (1 + 2) * 3", ST
     program.push_uint32_t(3);
     program.push(MUL, type_uint32_t);
 } });
+#ifdef USE_X64_OPS
 const TestCase<uint64_t> case_demo_uint64_t({ "demo_uint64_t => (1 + 2) * 3", STATUS_SUCCESS, 9, [](RuntimeProgram& program) {
     program.push_uint64_t(1);
     program.push_uint64_t(2);
@@ -271,6 +274,7 @@ const TestCase<uint64_t> case_demo_uint64_t({ "demo_uint64_t => (1 + 2) * 3", ST
     program.push_uint64_t(3);
     program.push(MUL, type_uint64_t);
 } });
+#endif // USE_X64_OPS
 
 const TestCase<int8_t> case_demo_int8_t({ "demo_int8_t => (1 - 2) * 3", STATUS_SUCCESS, -3, [](RuntimeProgram& program) {
     program.push_int8_t(1);
@@ -287,6 +291,8 @@ const TestCase<float> case_demo_float({ "demo_float => (0.1 + 0.2) * -1", STATUS
     program.push_float(-1);
     program.push(MUL, type_float);
 } });
+
+#ifdef USE_X64_OPS
 const TestCase<double> case_demo_double({ "demo_double => (0.1 + 0.2) * -1", STATUS_SUCCESS, -0.30000000000000004, [](RuntimeProgram& program) {
     program.push_double(0.1);
     program.push_double(0.2);
@@ -294,6 +300,7 @@ const TestCase<double> case_demo_double({ "demo_double => (0.1 + 0.2) * -1", STA
     program.push_double(-1);
     program.push(MUL, type_double);
 } });
+#endif // USE_X64_OPS
 
 // Bitwise operations
 const TestCase<uint8_t> case_bitwise_and_X8({ "bitwise_and_X8", STATUS_SUCCESS, 0b00000101, [](RuntimeProgram& program) {
@@ -381,7 +388,7 @@ const TestCase<uint8_t> case_jump_if({ "jump_if => for loop sum", PROGRAM_EXITED
 } });
 
 /* BROWSER TEST:
-PLCRuntimeWasm.uploadAssembly(`
+PLCRuntimeWasm.downloadAssembly(`
     # This is a comment
     // This is also a comment
 
@@ -443,10 +450,14 @@ void runtime_unit_test() {
     TesterMethod run(case_demo_uint8_t);
     TesterMethod run(case_demo_uint16_t);
     TesterMethod run(case_demo_uint32_t);
+#ifdef USE_X64_OPS
     TesterMethod run(case_demo_uint64_t);
+#endif // USE_X64_OPS
     TesterMethod run(case_demo_int8_t);
     TesterMethod run(case_demo_float);
+#ifdef USE_X64_OPS
     TesterMethod run(case_demo_double);
+#endif // USE_X64_OPS
     TesterMethod run(case_bitwise_and_X8);
     TesterMethod run(case_bitwise_and_X16);
     TesterMethod run(case_logic_and);
@@ -466,10 +477,14 @@ void runtime_unit_test() {
     TesterMethod review(case_demo_uint8_t);
     TesterMethod review(case_demo_uint16_t);
     TesterMethod review(case_demo_uint32_t);
+#ifdef USE_X64_OPS
     TesterMethod review(case_demo_uint64_t);
+#endif // USE_X64_OPS
     TesterMethod review(case_demo_int8_t);
     TesterMethod review(case_demo_float);
+#ifdef USE_X64_OPS
     TesterMethod review(case_demo_double);
+#endif // USE_X64_OPS
     TesterMethod review(case_bitwise_and_X8);
     TesterMethod review(case_bitwise_and_X16);
     TesterMethod review(case_logic_and);
@@ -509,233 +524,3 @@ public:
 };
 
 #endif // __RUNTIME_UNIT_TEST__
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/*
-::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-:: Using VovkPLCRuntime Library - Author J.Vovk <jozo132@gmail.com> ::
-::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
-----------------------------------------------------------------------
-Runtime Unit Test
-----------------------------------------------------------------------
-RuntimeError Status List:
-
-     0: STATUS_SUCCESS
-     1: UNKNOWN_INSTRUCTION
-     2: INVALID_INSTRUCTION
-     3: INVALID_DATA_TYPE
-     4: STACK_OVERFLOW
-     5: STACK_UNDERFLOW
-     6: INVALID_STACK_SIZE
-     7: EMPTY_STACK
-     8: CALL_STACK_OVERFLOW
-     9: CALL_STACK_UNDERFLOW
-    10: INVALID_MEMORY_ADDRESS
-    11: INVALID_MEMORY_SIZE
-    12: UNDEFINED_STATE
-    13: INVALID_PROGRAM_INDEX
-    14: PROGRAM_SIZE_EXCEEDED
-    15: PROGRAM_POINTER_OUT_OF_BOUNDS
-    16: PROGRAM_EXITED
-    17: EMPTY_PROGRAM
-    18: NO_PROGRAM
-    19: INVALID_CHECKSUM
-    20: EXECUTION_ERROR
-    21: EXECUTION_TIMEOUT
-    22: MEMORY_ACCESS_ERROR
-
-----------------------------------------------------------------------
-Bytecode Instruction Set:
-
-    0x00:  NOP            (1 byte)
-
-    0x01:  PUSH boolean   (2 bytes)
-    0x02:  PUSH uint8_t   (2 bytes)
-    0x03:  PUSH uint16_t  (3 bytes)
-    0x04:  PUSH uint32_t  (5 bytes)
-    0x05:  PUSH uint64_t  (9 bytes)
-    0x06:  PUSH int8_t    (2 bytes)
-    0x07:  PUSH int16_t   (3 bytes)
-    0x08:  PUSH int32_t   (5 bytes)
-    0x09:  PUSH int64_t   (9 bytes)
-    0x0a:  PUSH float     (5 bytes)
-    0x0b:  PUSH double    (9 bytes)
-
-    0x10:  MOV            (8 bytes)
-    0x11:  CVT            (3 bytes)
-    0x12:  PUT            (4 bytes)
-    0x13:  GET            (4 bytes)
-
-    0x20:  ADD            (2 bytes)
-    0x21:  SUB            (2 bytes)
-    0x22:  MUL            (2 bytes)
-    0x23:  DIV            (2 bytes)
-
-    0x60:  BW_AND_X8      (1 byte)
-    0x61:  BW_AND_X16     (1 byte)
-    0x62:  BW_AND_X32     (1 byte)
-    0x63:  BW_AND_X64     (1 byte)
-    0x64:  BW_OR_X8       (1 byte)
-    0x65:  BW_OR_X16      (1 byte)
-    0x66:  BW_OR_X32      (1 byte)
-    0x67:  BW_OR_X64      (1 byte)
-    0x68:  BW_XOR_X8      (1 byte)
-    0x69:  BW_XOR_X16     (1 byte)
-    0x6a:  BW_XOR_X32     (1 byte)
-    0x6b:  BW_XOR_X64     (1 byte)
-    0x6c:  BW_NOT_X8      (1 byte)
-    0x6d:  BW_NOT_X16     (1 byte)
-    0x6e:  BW_NOT_X32     (1 byte)
-    0x6f:  BW_NOT_X64     (1 byte)
-    0x70:  BW_LSHIFT_X8   (1 byte)
-    0x71:  BW_LSHIFT_X16  (1 byte)
-    0x72:  BW_LSHIFT_X32  (1 byte)
-    0x73:  BW_LSHIFT_X64  (1 byte)
-    0x74:  BW_RSHIFT_X8   (1 byte)
-    0x75:  BW_RSHIFT_X16  (1 byte)
-    0x76:  BW_RSHIFT_X32  (1 byte)
-    0x77:  BW_RSHIFT_X64  (1 byte)
-
-    0x80:  LOGIC_AND      (1 byte)
-    0x81:  LOGIC_OR       (1 byte)
-    0x82:  LOGIC_XOR      (1 byte)
-    0x83:  LOGIC_NOT      (1 byte)
-
-    0xa0:  CMP_EQ         (2 bytes)
-    0xa1:  CMP_NEQ        (2 bytes)
-    0xa2:  CMP_GT         (2 bytes)
-    0xa3:  CMP_LT         (2 bytes)
-    0xa4:  CMP_GTE        (2 bytes)
-    0xa5:  CMP_LTE        (2 bytes)
-
-    0xc0:  JMP            (3 bytes)
-    0xc1:  JMP_IF         (3 bytes)
-    0xc2:  JMP_IF_NOT     (3 bytes)
-    0xc3:  CALL           (3 bytes)
-    0xc4:  CALL_IF        (3 bytes)
-    0xc5:  CALL_IF_NOT    (3 bytes)
-    0xc6:  RET            (1 byte)
-
-    0xff:  EXIT           (1 byte)
-
-----------------------------------------------------------------------
-######################################################################
-Executing Runtime Unit Tests...
-
-######################################################################
-Erasing program ...
-Building program ...
-Running test:
-Program[10] [02 01 02 02 20 02 02 03 22 02]
-#### Program Explanation:
-       0 [00 00] - 02: PUSH uint8_t  [size  2] 0201
-       2 [00 02] - 02: PUSH uint8_t  [size  2] 0202
-       4 [00 04] - 20: ADD --------- [size  2] 2002
-       6 [00 06] - 02: PUSH uint8_t  [size  2] 0203
-       8 [00 08] - 22: MUL --------- [size  2] 2202
-#### End of program explanation.
-Starting detailed program debug...
-    Step    0 [00 00]: Executed in [ 0 ms]  Opcode[02]: PUSH uint8_t   [02 01]  --------------------------  Stack( 0) []
-    Step    2 [00 02]: Executed in [ 0 ms]  Opcode[02]: PUSH uint8_t   [02 02]  --------------------------  Stack( 0) []
-    Step    4 [00 04]: Executed in [ 0 ms]  Opcode[20]: ADD  --------  [20 02]  --------------------------  Stack( 0) []
-    Step    6 [00 06]: Executed in [ 0 ms]  Opcode[02]: PUSH uint8_t   [02 03]  --------------------------  Stack( 0) []
-    Step    8 [00 08]: Executed in [ 0 ms]  Opcode[22]: MUL  --------  [22 02]  --------------------------  Stack( 0) []
-Leftover Stack( 0) []
-Time to execute program: 0 ms
-Program result: 0
-Expected result: 34
-Test status: --------------------> !!! FAILED !!! <--------------------
-
-
-######################################################################
-Erasing program ...
-Building program ...
-Running test:
-Program[13] [03 00 01 03 00 02 20 03 03 00 03 22 03]
-#### Program Explanation:
-       0 [00 00] - 03: PUSH uint16_t  [size  3] 030001
-       3 [00 03] - 03: PUSH uint16_t  [size  3] 030002
-       6 [00 06] - 20: ADD --------- [size  2] 2003
-       8 [00 08] - 03: PUSH uint16_t  [size  3] 030003
-      11 [00 0b] - 22: MUL --------- [size  2] 2203
-#### End of program explanation.
-Starting detailed program debug...
-    Step    0 [00 00]: Executed in [ 0 ms]  Opcode[03]: PUSH uint16_t  [03 00 01]  -----------------------  Stack( 0) []
-    Step    3 [00 03]: Executed in [ 0 ms]  Opcode[03]: PUSH uint16_t  [03 00 02]  -----------------------  Stack( 0) []
-    Step    6 [00 06]: Executed in [ 0 ms]  Opcode[20]: ADD  --------  [20 03]  --------------------------  Stack( 0) []
-    Step    8 [00 08]: Executed in [ 0 ms]  Opcode[03]: PUSH uint16_t  [03 00 03]  -----------------------  Stack( 0) []
-    Step   11 [00 0b]: Executed in [ 0 ms]  Opcode[22]: MUL  --------  [22 03]  --------------------------  Stack( 0) []
-Leftover Stack( 0) []
-Time to execute program: 0 ms
-Program result: 0
-Expected result: 3
-Test status: --------------------> !!! FAILED !!! <--------------------
-
-
-######################################################################
-Erasing program ...
-Building program ...
-Running test: 
-Program[19] [04 00 00 00 01 04 00 00 00 02 20 04 00 00 00 00 03 22 04]
-#### Program Explanation:
-       0 [00 00] - 04: PUSH uint32_t  [size  5] 0400000001
-       5 [00 05] - 04: PUSH uint32_t  [size  5] 0400000002
-      10 [00 0a] - 20: ADD --------- [size  2] 2004
-      12 [00 0c] - 00: NOP --------- [size  1] 00
-      13 [00 0d] - 00: NOP --------- [size  1] 00
-      14 [00 0e] - 00: NOP --------- [size  1] 00
-      15 [00 0f] - 00: NOP --------- [size  1] 00
-      16 [00 10] - 03: PUSH uint16_t  [size  3] 032204
-#### End of program explanation.
-Starting detailed program debug...
-    Step    0 [00 00]: Executed in [ 0 ms]  Opcode[04]: PUSH uint32_t  [04 00 00 00 01]  -----------------  Stack( 4) [00 00 00 01]
-    Step    5 [00 05]: Executed in [ 0 ms]  Opcode[04]: PUSH uint32_t  [04 00 00 00 02]  -----------------  Stack( 8) [00 00 00 01 00 00 00 02]
-    Step   10 [00 0a]: Executed in [ 0 ms]  Opcode[20]: ADD  --------  [20 04]  --------------------------  Stack( 4) [00 00 00 03]
-    Step   12 [00 0c]: Executed in [ 0 ms]  Opcode[08]: PUSH int32_t   [08 00 00 00 03]  -----------------  Stack( 8) [00 00 00 03 00 00 00 03]
-    Step   17 [00 11]: Executed in [ 0 ms]  Opcode[22]: MUL  --------  [22 04]  --------------------------  Stack( 4) [00 00 00 09]
-Leftover Stack( 4) [00 00 00 09]
-Time to execute program: 0 ms
-Program result: 9
-Expected result: 69206528
-Test status: --------------------> !!! FAILED !!! <--------------------
-
-
-######################################################################
-Erasing program ...
-Building program ...
-Running test:
-Program[31] [05 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 02 20 05 05 00 00 00 00 00 00 00 03 22 05]
-#### Program Explanation:
-       0 [00 00] - 05: PUSH uint64_t  [size  9] 050000000000000000
-       9 [00 09] - 00: NOP --------- [size  1] 00
-      10 [00 0a] - 00: NOP --------- [size  1] 00
-      11 [00 0b] - 00: NOP --------- [size  1] 00
-      12 [00 0c] - 00: NOP --------- [size  1] 00
-      13 [00 0d] - 00: NOP --------- [size  1] 00
-      14 [00 0e] - 00: NOP --------- [size  1] 00
-      15 [00 0f] - 00: NOP --------- [size  1] 00
-      16 [00 10] - 00: NOP --------- [size  1] 00
-      17 [00 11] - 02: PUSH uint8_t  [size  2] 0220
-      19 [00 13] - 05: PUSH uint64_t  [size  9] 050500000000000000
-      28 [00 1c] - 03: PUSH uint16_t  [size  3] 032205
-#### End of program explanation.
-Starting detailed program debug...
-    Step    0 [00 00]: Error at program pointer 0: STACK_OVERFLOW
-*/

@@ -90,6 +90,21 @@ template <typename T> struct Stack {
         return false;
     }
 
+    bool setBit(uint32_t index, uint8_t bit, bool value) {
+        if (index >= _size) return true;
+        if (bit >= 8) return true;
+        if (value) _data[index] |= 1 << bit;
+        else _data[index] &= ~(1 << bit);
+        return false;
+    }
+    
+    bool getBit(uint32_t index, uint8_t bit, bool& value) {
+        if (index >= _size) return true;
+        if (bit >= 8) return true;
+        value = _data[index] & (1 << bit);
+        return false;
+    }
+
 
     // Returns the number of elements in the stack
     uint32_t size() { return _size; }

@@ -99,3 +99,49 @@ struct Extract_t {
 } ProgramExtract;
 
 RuntimeError extract_status;
+
+
+RuntimeError printOpcodeAt(const uint8_t* program, uint32_t size, uint32_t index) {
+    if (index >= size) return INVALID_PROGRAM_INDEX;
+    PLCRuntimeInstructionSet opcode = (PLCRuntimeInstructionSet) program[index];
+    bool valid_opcode = OPCODE_EXISTS(opcode);
+    if (!valid_opcode) {
+        Serial.print(F("Opcode [0x"));
+        if (opcode < 0x10) Serial.print('0');
+        Serial.print(opcode, HEX);
+        Serial.print(F("] <Invalid>"));
+        return INVALID_INSTRUCTION;
+    }
+    uint8_t opcode_size = OPCODE_SIZE(opcode);
+    Serial.print(F("Opcode ("));
+    Serial.print(OPCODE_NAME(opcode));
+    Serial.print(F(") ["));
+    for (uint8_t i = 0; i < opcode_size; i++) {
+        uint8_t value = program[index + i];
+        if (value < 0x10) Serial.print('0');
+        Serial.print(value, HEX);
+        if (i < opcode_size - 1) Serial.print(' ');
+    }
+    Serial.print(']');
+    return STATUS_SUCCESS;
+}
+RuntimeError printlnOpcodeAt(const uint8_t* program, uint32_t size, uint32_t index) {
+    RuntimeError error = printOpcodeAt(program, size, index);
+    Serial.println();
+    return error;
+}
+
+#ifdef __RUNTIME_DEBUG__
+#define CHECK_PROGRAM_POINTER_BOUNDS_HEAD                               \
+{                                                                       \
+    Serial.print(F("Program pointer points out of bounds: "));          \
+    Serial.print(index);                                                \
+    Serial.print(F(" > "));                                             \
+    Serial.println(program_size);                                       \
+    printOpcodeAt(program, program_size, index_start);                  \
+    return PROGRAM_POINTER_OUT_OF_BOUNDS;                               \
+}
+#else
+#define CHECK_PROGRAM_POINTER_BOUNDS_HEAD                               \
+    return PROGRAM_POINTER_OUT_OF_BOUNDS; 
+#endif
