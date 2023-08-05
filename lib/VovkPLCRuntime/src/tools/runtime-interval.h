@@ -25,35 +25,58 @@
 #include <Arduino.h>
 #endif // __WASM__
 
-extern uint32_t interval_counter_100ms;
+uint32_t interval_millis_now = 0;
+uint32_t interval_millis_last = 0;
+uint32_t interval_counter_100ms = 0;
 
-extern uint8_t interval_time_seconds;
-extern uint8_t interval_time_minutes;
-extern uint8_t interval_time_hours;
-extern uint8_t interval_time_days;
+uint8_t interval_time_seconds = 0;
+uint8_t interval_time_minutes = 0;
+uint8_t interval_time_hours = 0;
+uint8_t interval_time_days = 0;
 
-extern bool P_100ms;
-extern bool P_200ms;
-extern bool P_300ms;
-extern bool P_500ms;
-extern bool P_1s;
-extern bool P_2s;
-extern bool P_5s;
-extern bool P_10s;
-extern bool P_30s;
-extern bool P_1min;
-extern bool P_2min;
-extern bool P_5min;
-extern bool P_10min;
-extern bool P_15min;
-extern bool P_30min;
-extern bool P_1hr;
-extern bool P_2hr;
-extern bool P_3hr;
-extern bool P_4hr;
-extern bool P_5hr;
-extern bool P_6hr;
-extern bool P_12hr;
-extern bool P_1day;
+bool P_100ms = false;
+bool P_200ms = false;
+bool P_300ms = false;
+bool P_500ms = false;
+bool P_1s = false;
+bool P_2s = false;
+bool P_5s = false;
+bool P_10s = false;
+bool P_30s = false;
+bool P_1min = false;
+bool P_2min = false;
+bool P_5min = false;
+bool P_10min = false;
+bool P_15min = false;
+bool P_30min = false;
+bool P_1hr = false;
+bool P_2hr = false;
+bool P_3hr = false;
+bool P_4hr = false;
+bool P_5hr = false;
+bool P_6hr = false;
+bool P_12hr = false;
+bool P_1day = false;
+
+uint32_t P_1day_hour_cnt = 0;
+uint32_t P_12hr_hour_cnt = 0;
+uint32_t P_6hr_hour_cnt = 0;
+uint32_t P_3hr_hour_cnt = 0;
+uint32_t P_2hr_hour_cnt = 0;
+uint32_t P_1hr_min_cnt = 0;
+uint32_t P_30min_min_cnt = 0;
+uint32_t P_15min_min_cnt = 0;
+uint32_t P_10min_min_cnt = 0;
+uint32_t P_5min_min_cnt = 0;
+uint32_t P_2min_sec_cnt = 0;
+uint32_t P_1min_sec_cnt = 0;
+uint32_t P_30s_sec_cnt = 0;
+uint32_t P_10s_sec_cnt = 0;
+uint32_t P_5s_sec_cnt = 0;
+uint32_t P_2s_sec_cnt = 0;
+uint32_t P_1s_sec_cnt = 0;
+
 
 void IntervalGlobalLoopCheck();
+
+#include "runtime-interval-impl.h"

@@ -166,7 +166,6 @@ int print_direction = STREAM_TO_STDOUT;
 void __print(char c);
 #endif // __WASM__
 
-char buff[64];
 
 // To upper case
 void toUpper(char* buff);
@@ -234,5 +233,8 @@ int pring_number_padEnd(int value, int pad, char padChar = ' ', int base = 10);
 
 #define REPRINT(count, str) for (uint8_t i = 0; i < count; i++) { Serial.print(str); }
 #define REPRINTLN(count, str) REPRINT(count, str); Serial.println();
+
+
+#include "runtime-tools-impl.h"
 
 #endif // __RUNTIME_TOOLS_H__

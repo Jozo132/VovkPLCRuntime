@@ -307,3 +307,6 @@ bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode);
 const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode);
 uint8_t OPCODE_SIZE(PLCRuntimeInstructionSet opcode);
 void logRuntimeInstructionSet();
+
+
+#include "runtime-instructions-impl.h"

@@ -130,3 +130,5 @@ public:
     uint32_t size();
     void clear();
 };
+
+#include "runtime-stack-impl.h"
