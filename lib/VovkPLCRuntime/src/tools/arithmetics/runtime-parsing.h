@@ -93,9 +93,11 @@ struct Extract_t {
     EXTRACT_TYPE_32(int32_t);
     EXTRACT_TYPE_32_CVT(float);
 
+#ifdef USE_X64_OPS
     EXTRACT_TYPE_64(uint64_t);
     EXTRACT_TYPE_64(int64_t);
     EXTRACT_TYPE_64_CVT(double);
+#endif
 } ProgramExtract;
 
 RuntimeError extract_status;

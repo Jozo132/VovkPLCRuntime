@@ -126,11 +126,16 @@ void byteToHex(uint8_t byte, char& c1, char& c2);
 #define CVT_8(type) union uint8_t_to_##type { uint8_t type_uint8_t; type type_##type; }
 #define CVT_16(type) union uint16_t_to_##type { uint16_t type_uint16_t; type type_##type; }
 #define CVT_32(type) union uint32_t_to_##type { uint32_t type_uint32_t; type type_##type; }
-#define CVT_64(type) union uint64_t_to_##type { uint64_t type_uint64_t; type type_##type; }
 
+#ifdef USE_X64_OPS
+#define CVT_64(type) union uint64_t_to_##type { uint64_t type_uint64_t; type type_##type; }
+#endif // USE_X64_OPS
 
 CVT_32(float);
+
+#ifdef USE_X64_OPS
 CVT_64(double);
+#endif // USE_X64_OPS
 
 union u8A_to_u16 { uint8_t u8A[2]; uint16_t u16; };
 

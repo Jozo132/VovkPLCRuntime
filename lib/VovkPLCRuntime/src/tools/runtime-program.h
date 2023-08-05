@@ -99,6 +99,7 @@ public:
         return 5;
     }
 
+#ifdef USE_X64_OPS
     // Push an uint64_t value to the PLC Program
     static uint8_t push_uint64_t(uint8_t* location, uint64_t value) {
         location[0] = type_uint64_t;
@@ -126,6 +127,7 @@ public:
         location[8] = value & 0xFF;
         return 9;
     }
+#endif // USE_X64_OPS
 
     // Push a float value to the PLC Program
     static uint8_t push_float(uint8_t* location, float value) {
@@ -138,6 +140,7 @@ public:
         return 5;
     }
 
+#ifdef USE_X64_OPS
     // Push a double value to the PLC Program
     static uint8_t push_double(uint8_t* location, double value) {
         location[0] = type_double;
@@ -152,6 +155,7 @@ public:
         location[8] = *value_ptr & 0xFF;
         return 9;
     }
+#endif // USE_X64_OPS
 
     // Push instruction + uint16_t value to the PLC Program
     static uint8_t push_InstructionWithU32(uint8_t* location, PLCRuntimeInstructionSet instruction, uint16_t value) {
@@ -592,6 +596,7 @@ public:
         return status;
     }
 
+#ifdef USE_X64_OPS
     // Push an uint64_t value to the PLC Program
     RuntimeError push_uint64_t(uint64_t value) {
         if (program_size + 9 > MAX_PROGRAM_SIZE) {
@@ -615,6 +620,7 @@ public:
         status = STATUS_SUCCESS;
         return status;
     }
+#endif // USE_X64_OPS
 
     // Push a float value to the PLC Program
     RuntimeError push_float(float value) {
@@ -628,6 +634,7 @@ public:
         return status;
     }
 
+#ifdef USE_X64_OPS
     // Push a double value to the PLC Program
     RuntimeError push_double(double value) {
         if (program_size + 9 > MAX_PROGRAM_SIZE) {
@@ -639,6 +646,7 @@ public:
         status = STATUS_SUCCESS;
         return status;
     }
+#endif // USE_X64_OPS
 
     // Push flow control instructions to the PLC Program
     RuntimeError pushJMP(uint32_t program_address) {
