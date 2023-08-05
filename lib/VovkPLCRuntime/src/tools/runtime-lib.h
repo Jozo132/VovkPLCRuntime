@@ -46,6 +46,7 @@
 #endif
 
 #include "runtime-tools.h"
+#include "runtime-interval.h"
 #include "arithmetics/crc8.h"
 #include "stack/stack-struct.h"
 #include "runtime-memory.h"
@@ -573,6 +574,40 @@ RuntimeError VovkPLCRuntime::run(RuntimeProgram& program) { return run(program.p
 // Execute the whole PLC program, returns an erro code (0 on success)
 RuntimeError VovkPLCRuntime::run(uint8_t* program, uint32_t program_size) {
     if (!started_up) startup();
+    IntervalGlobalLoopCheck();
+    uint8_t state = 0;
+    state = state << 1 | P_10s;
+    state = state << 1 | P_5s;
+    state = state << 1 | P_2s;
+    state = state << 1 | P_1s;
+    state = state << 1 | P_500ms;
+    state = state << 1 | P_300ms;
+    state = state << 1 | P_200ms;
+    state = state << 1 | P_100ms;
+    stack->memory->set(1, state); // uint8_t -> 1 byte
+    state = 0;
+    state = state << 1 | P_2hr;
+    state = state << 1 | P_1hr;
+    state = state << 1 | P_30min;
+    state = state << 1 | P_10min;
+    state = state << 1 | P_5min;
+    state = state << 1 | P_2min;
+    state = state << 1 | P_1min;
+    state = state << 1 | P_30s;
+    stack->memory->set(2, state); // uint8_t -> 1 byte
+    state = 0;
+    state = state << 1 | P_1day;
+    state = state << 1 | P_12hr;
+    state = state << 1 | P_6hr;
+    state = state << 1 | P_5hr;
+    state = state << 1 | P_4hr;
+    state = state << 1 | P_3hr;
+    stack->memory->set(3, state); // uint8_t -> 1 byte
+    
+    stack->memory->set(4, interval_time_days);
+    stack->memory->set(5, interval_time_hours);
+    stack->memory->set(6, interval_time_minutes);
+    stack->memory->set(7, interval_time_seconds);
     uint32_t index = 0;
     while (index < program_size) {
         RuntimeError status = step(program, program_size, index);
