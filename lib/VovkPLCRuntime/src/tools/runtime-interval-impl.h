@@ -84,6 +84,7 @@ void IntervalGlobalLoopCheck() {
         }
         P_2s_sec_cnt++;
         P_5s_sec_cnt++;
+        P_10s_sec_cnt++;
         if (P_2s_sec_cnt >= 2) {
             P_2s_sec_cnt = 0;
             P_2s = true;
@@ -91,6 +92,10 @@ void IntervalGlobalLoopCheck() {
         if (P_5s_sec_cnt >= 5) {
             P_5s_sec_cnt = 0;
             P_5s = true;
+        }
+        if (P_10s_sec_cnt >= 10) {
+            P_10s_sec_cnt = 0;
+            P_10s = true;
         }
     }
     if (P_10s) {
