@@ -370,7 +370,7 @@ int print_number_padStart(int value, int pad, char padChar, int base) {
     strlen += Serial.print(value, base);
     return strlen;
 }
-int pring_number_padEnd(int value, int pad, char padChar, int base) {
+int print_number_padEnd(int value, int pad, char padChar, int base) {
     int strlen = 0;
     int temp = value;
     int num_of_digits = temp == 0 ? 1 : 0;

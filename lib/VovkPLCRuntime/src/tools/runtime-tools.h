@@ -20,8 +20,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #pragma once
-#ifndef __RUNTIME_TOOLS_H__
-#define __RUNTIME_TOOLS_H__
 
 // Use x64 operations on all architectures except AVR to fit the memory
 #ifndef __AVR__
@@ -234,12 +232,9 @@ uint8_t serialReadHexByteTimeout(unsigned long timeout = 100);
 #endif // __SIMULATOR__
 
 int print_number_padStart(int value, int pad, char padChar = ' ', int base = 10);
-int pring_number_padEnd(int value, int pad, char padChar = ' ', int base = 10);
+int print_number_padEnd(int value, int pad, char padChar = ' ', int base = 10);
 
 #define REPRINT(count, str) for (uint8_t i = 0; i < count; i++) { Serial.print(str); }
 #define REPRINTLN(count, str) REPRINT(count, str); Serial.println();
 
-
 #include "runtime-tools-impl.h"
-
-#endif // __RUNTIME_TOOLS_H__
