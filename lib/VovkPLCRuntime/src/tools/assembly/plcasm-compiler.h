@@ -149,6 +149,13 @@ struct StringView {
         for (int i = 0; i < length; i++) printf("%c", data[i]);
         return length;
     }
+    // Array operator get/set
+    char& operator[](int index) {
+        return data[index];
+    }
+    char operator[](int index) const {
+        return data[index];
+    }
 };
 
 enum TokenType {
@@ -198,6 +205,13 @@ struct Token {
     int value_int;
     float value_float;
     TokenType type;
+    // Array operator get/set
+    char& operator[](int index) {
+        return string[index];
+    }
+    char operator[](int index) const {
+        return string[index];
+    }
     int print() {
         if (type == TOKEN_BOOLEAN) return printf("%s", value_bool ? "true" : "false");
         if (type == TOKEN_INTEGER) return printf("%d", value_int);
@@ -235,7 +249,7 @@ struct Token {
 bool str_cmp(StringView a, StringView b) {
     if (a.length != b.length) return false;
     for (int i = 0; i < a.length; i++) {
-        if (a.data[i] != b.data[i]) return false;
+        if (a[i] != b[i]) return false;
     }
     return true;
 }
@@ -244,7 +258,7 @@ bool str_cmp(StringView a, const char* b) {
     int b_length = string_len(b);
     if (a.length != b_length) return false;
     for (int i = 0; i < a.length; i++) {
-        if (a.data[i] != b[i]) return false;
+        if (a[i] != b[i]) return false;
     }
     return true;
 }
@@ -252,7 +266,7 @@ bool str_cmp(StringView a, const char* b) {
 bool str_cmp(Token a, StringView b) {
     if (a.length != b.length) return false;
     for (int i = 0; i < a.length; i++) {
-        if (a.string.data[i] != b.data[i]) return false;
+        if (a[i] != b[i]) return false;
     }
     return true;
 }
@@ -261,7 +275,7 @@ bool str_cmp(Token a, const char* b) {
     int b_length = string_len(b);
     if (a.length != b_length) return false;
     for (int i = 0; i < a.length; i++) {
-        if (a.string.data[i] != b[i]) return false;
+        if (a[i] != b[i]) return false;
     }
     return true;
 }
@@ -269,7 +283,7 @@ bool str_cmp(Token a, const char* b) {
 bool str_cmp(Token a, Token b) {
     if (a.length != b.length) return false;
     for (int i = 0; i < a.length; i++) {
-        if (a.string.data[i] != b.string.data[i]) return false;
+        if (a[i] != b[i]) return false;
     }
     return true;
 }
@@ -279,7 +293,7 @@ bool str_includes(StringView a, const char* b) {
     if (a.length < b_length) return false;
     int matching_chars = 0;
     for (int i = 0; i < a.length; i++) {
-        if (a.data[i] == b[matching_chars]) matching_chars++;
+        if (a[i] == b[matching_chars]) matching_chars++;
         else matching_chars = 0;
         if (matching_chars == b_length) return true;
     }
@@ -290,7 +304,7 @@ bool str_includes(Token a, const char* b) {
     if (a.length < b_length) return false;
     int matching_chars = 0;
     for (int i = 0; i < a.length; i++) {
-        if (a.string.data[i] == b[matching_chars]) matching_chars++;
+        if (a[i] == b[matching_chars]) matching_chars++;
         else matching_chars = 0;
         if (matching_chars == b_length) return true;
     }
@@ -300,7 +314,7 @@ bool str_includes(Token a, const char* b) {
 bool endsWith(StringView a, StringView b) {
     if (a.length < b.length) return false;
     for (int i = 0; i < b.length; i++) {
-        if (a.data[a.length - b.length + i] != b.data[i]) return false;
+        if (a[a.length - b.length + i] != b[i]) return false;
     }
     return true;
 }
@@ -309,7 +323,7 @@ bool endsWith(StringView a, const char* b) {
     int b_length = string_len(b);
     if (a.length < b_length) return false;
     for (int i = 0; i < b_length; i++) {
-        if (a.data[a.length - b_length + i] != b[i]) return false;
+        if (a[a.length - b_length + i] != b[i]) return false;
     }
     return true;
 }
@@ -317,7 +331,7 @@ bool endsWith(StringView a, const char* b) {
 bool endsWith(Token a, StringView b) {
     if (a.length < b.length) return false;
     for (int i = 0; i < b.length; i++) {
-        if (a.string.data[a.length - b.length + i] != b.data[i]) return false;
+        if (a[a.length - b.length + i] != b[i]) return false;
     }
     return true;
 }
@@ -326,7 +340,7 @@ bool endsWith(Token a, const char* b) {
     int b_length = string_len(b);
     if (a.length < b_length) return false;
     for (int i = 0; i < b_length; i++) {
-        if (a.string.data[a.length - b_length + i] != b[i]) return false;
+        if (a[a.length - b_length + i] != b[i]) return false;
     }
     return true;
 }
@@ -334,7 +348,7 @@ bool endsWith(Token a, const char* b) {
 bool startsWith(StringView a, StringView b) {
     if (a.length < b.length) return false;
     for (int i = 0; i < b.length; i++) {
-        if (a.data[i] != b.data[i]) return false;
+        if (a[i] != b[i]) return false;
     }
     return true;
 }
@@ -343,7 +357,7 @@ bool startsWith(StringView a, const char* b) {
     int b_length = string_len(b);
     if (a.length < b_length) return false;
     for (int i = 0; i < b_length; i++) {
-        if (a.data[i] != b[i]) return false;
+        if (a[i] != b[i]) return false;
     }
     return true;
 }
@@ -351,7 +365,7 @@ bool startsWith(StringView a, const char* b) {
 bool startsWith(Token a, StringView b) {
     if (a.length < b.length) return false;
     for (int i = 0; i < b.length; i++) {
-        if (a.string.data[i] != b.data[i]) return false;
+        if (a[i] != b[i]) return false;
     }
     return true;
 }
@@ -360,7 +374,7 @@ bool startsWith(Token a, const char* b) {
     int b_length = string_len(b);
     if (a.length < b_length) return false;
     for (int i = 0; i < b_length; i++) {
-        if (a.string.data[i] != b[i]) return false;
+        if (a[i] != b[i]) return false;
     }
     return true;
 }
@@ -386,11 +400,11 @@ bool isBoolean(StringView string, bool& output) {
         return true;
     }
     if (string.length == 1) {
-        if (string.data[0] == '1') {
+        if (string[0] == '1') {
             output = true;
             return true;
         }
-        if (string.data[0] == '0') {
+        if (string[0] == '0') {
             output = false;
             return true;
         }
@@ -403,15 +417,15 @@ bool isInteger(StringView string, int& output) {
     int number = 0;
     bool is_negative = false;
     int i = 0;
-    if (string.data[0] == '-') {
+    if (string[0] == '-') {
         is_negative = true;
         i++;
     }
-    for (; i < string.length && string.data[i] != '\0'; i++) {
-        if (!isDigit(string.data[i])) {
+    for (; i < string.length && string[i] != '\0'; i++) {
+        if (!isDigit(string[i])) {
             return false;
         }
-        number = number * 10 + (string.data[i] - '0');
+        number = number * 10 + (string[i] - '0');
     }
     if (is_negative) number = -number;
     output = number;
@@ -425,19 +439,19 @@ bool isReal(StringView string, float& output) {
     bool dot = false;
     int decimal_places = 0;
     int i = 0;
-    if (string.data[0] == '-') {
+    if (string[0] == '-') {
         is_negative = true;
         i++;
     }
-    for (; i < string.length && string.data[i] != '\0'; i++) {
-        if (string.data[i] == '.') {
+    for (; i < string.length && string[i] != '\0'; i++) {
+        if (string[i] == '.') {
             if (dot) return false;
             dot = true;
             continue;
         }
-        if (!isDigit(string.data[i])) return false;
+        if (!isDigit(string[i])) return false;
         if (dot) decimal_places++;
-        number = number * 10.0 + float(string.data[i] - '0');
+        number = number * 10.0 + float(string[i] - '0');
     }
     for (int i = 0; i < decimal_places; i++) {
         number *= 0.1;
@@ -451,7 +465,7 @@ void Token::parse() {
     this->type = TOKEN_UNKNOWN;
     if (this->length == 0) return;
     if (this->length == 1) {
-        char c = string.data[0];
+        char c = string[0];
         if (c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '&' || c == '|' || c == '^' || c == '~' || c == '!' || c == '<' || c == '>' || c == '?' || c == ':' || c == ',' || c == ';' || c == '[' || c == ']' || c == '{' || c == '}' || c == '\'' || c == '"' || c == '`' || c == '\\') {
             this->type = TOKEN_OPERATOR;
             return;
