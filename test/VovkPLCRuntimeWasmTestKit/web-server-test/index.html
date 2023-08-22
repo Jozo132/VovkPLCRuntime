@@ -98,17 +98,17 @@ cvt f32 u8
 
 // Test bit operations
 u8.const 0
-u8.0.set
-u8.1.set
-u8.2.set
-u8.3.set
-u8.4.set
-u8.5.set
-u8.6.set
-u8.7.set
+u8.set 0
+u8.set 1
+u8.set 2
+u8.set 3
+u8.set 4
+u8.set 5
+u8.set 6
+u8.set 7
 
 u8.const 255
-u8.7.get
+u8.get 7
 
 // Expected leftover stack after test: [64 82 FF 01]
 
@@ -119,22 +119,22 @@ call FunctionTest
 u8.drop
 
 // Simple PLC logic test
-    u8.readBit.0 10
+    u8.readBit 10.0
     // u8.not
-    u8.writeBit.0 20
+    u8.writeBit 20.0
 
 // Previous way of doing the same task
     u8.load 20
     u8.load 10
-    u8.0.get
+    u8.get 0
     // u8.not
 
     jump_if_not RESET
-    u8.0.set
+    u8.set 0
     jump END
 
     RESET:
-    u8.0.rset
+    u8.rset 0
 
     END:
     u8.store 20
