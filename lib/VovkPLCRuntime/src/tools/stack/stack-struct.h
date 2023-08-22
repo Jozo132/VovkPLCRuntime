@@ -79,3 +79,5 @@ template <typename T> struct LinkedList {
     // Prints the list to the serial port, where the head is on the left and the tail is on the right.
     int print();
 };
+
+#include "stack-struct-impl.h"

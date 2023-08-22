@@ -22,7 +22,7 @@
 #pragma once
 
 #include "../runtime-tools.h"
-#include "stack-struct-impl.h"
+#include "stack-struct.h"
 #include "../runtime-instructions.h"
 
 class RuntimeStack {
