@@ -884,14 +884,17 @@ bool boolFromToken(Token& token, bool& output) {
             LUT_const& c = LUT_consts[i];
             if (str_cmp(token, c.string)) {
                 if (c.type == VAL_BOOLEAN) {
+                    token.string = c.string;
                     output = c.value_bool;
                     return false;
                 }
                 if (c.type == VAL_INTEGER) {
+                    token.string = c.string;
                     output = c.value_int != 0;
                     return false;
                 }
                 if (c.type == VAL_REAL) {
+                    token.string = c.string;
                     output = c.value_float != 0;
                     return false;
                 }
@@ -916,14 +919,17 @@ bool intFromToken(Token& token, int& output) {
             LUT_const& c = LUT_consts[i];
             if (str_cmp(token, c.string)) {
                 if (c.type == VAL_BOOLEAN) {
+                    token.string = c.string;
                     output = c.value_bool;
                     return false;
                 }
                 if (c.type == VAL_INTEGER) {
+                    token.string = c.string;
                     output = c.value_int;
                     return false;
                 }
                 if (c.type == VAL_REAL) {
+                    token.string = c.string;
                     output = c.value_float;
                     return false;
                 }
@@ -948,20 +954,58 @@ bool realFromToken(Token& token, float& output) {
             LUT_const& c = LUT_consts[i];
             if (str_cmp(token, c.string)) {
                 if (c.type == VAL_BOOLEAN) {
+                    token.string = c.string;
                     output = c.value_bool;
                     return false;
                 }
                 if (c.type == VAL_INTEGER) {
+                    token.string = c.string;
                     output = c.value_int;
                     return false;
                 }
                 if (c.type == VAL_REAL) {
+                    token.string = c.string;
                     output = c.value_float;
                     return false;
                 }
                 return true;
             }
         }
+    }
+    return true;
+}
+
+// Parse "2.7" into address and bit, where we separate the two with a dot. The bits range from 0 to 63 for the longest 64 bit types
+bool memoryBitFromToken(Token& token, int& address, int& bit) {
+    if (token.type == TOKEN_INTEGER) { // Expect token "2" to be address 2 at the index 0 by default 
+        address = token.value_int;
+        bit = 0;
+        return false;
+    }
+    float temp = 0;
+    bool e_real = realFromToken(token, temp);
+    bool isReal = !e_real;
+    if (isReal || token.type == TOKEN_REAL) { // Expect token "2.7" to be address 2 at the index 7
+        // Iterate over the token string directly
+        bool isBit = false;
+        StringView string = token.string;
+        address = 0;
+        bit = 0;
+        for (int i = 0; i < string.length; i++) {
+            char c = string[i];
+            if (c == '.') {
+                isBit = true;
+                continue;
+            }
+            if (isBit) {
+                bit *= 10;
+                bit += c - '0';
+            } else {
+                address *= 10;
+                address += c - '0';
+            }
+        }
+        return false;
     }
     return true;
 }
@@ -1059,6 +1103,7 @@ bool build(bool finalPass) {
             }
 
             { // Handle Bit operations (PLC specific)
+                // Stack operations
                 if (str_cmp(token, "u8.0.get")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B0); _line_push; }
                 if (str_cmp(token, "u8.1.get")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B1); _line_push; }
                 if (str_cmp(token, "u8.2.get")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B2); _line_push; }
@@ -1092,59 +1137,24 @@ bool build(bool finalPass) {
                 if (str_cmp(token, "u8.not")) { line.size = InstructionCompiler::push(bytecode, LOGIC_NOT); _line_push; }
 
                 if (data_type) {
+                    // Direct memory read/write
                     PLCRuntimeInstructionSet type = (PLCRuntimeInstructionSet) data_type;
                     if (type == type_uint8_t) {
-                        // READ_X8
-                        if (endsWith(token, ".readBit.0")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, READ_X8_B0, value_int); _line_push; }
-                        if (endsWith(token, ".readBit.1")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, READ_X8_B1, value_int); _line_push; }
-                        if (endsWith(token, ".readBit.2")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, READ_X8_B2, value_int); _line_push; }
-                        if (endsWith(token, ".readBit.3")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, READ_X8_B3, value_int); _line_push; }
-                        if (endsWith(token, ".readBit.4")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, READ_X8_B4, value_int); _line_push; }
-                        if (endsWith(token, ".readBit.5")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, READ_X8_B5, value_int); _line_push; }
-                        if (endsWith(token, ".readBit.6")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, READ_X8_B6, value_int); _line_push; }
-                        if (endsWith(token, ".readBit.7")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, READ_X8_B7, value_int); _line_push; }
-
-                        // WRITE_X8
-                        if (endsWith(token, ".writeBit.0")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, WRITE_X8_B0, value_int); _line_push; }
-                        if (endsWith(token, ".writeBit.1")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, WRITE_X8_B1, value_int); _line_push; }
-                        if (endsWith(token, ".writeBit.2")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, WRITE_X8_B2, value_int); _line_push; }
-                        if (endsWith(token, ".writeBit.3")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, WRITE_X8_B3, value_int); _line_push; }
-                        if (endsWith(token, ".writeBit.4")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, WRITE_X8_B4, value_int); _line_push; }
-                        if (endsWith(token, ".writeBit.5")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, WRITE_X8_B5, value_int); _line_push; }
-                        if (endsWith(token, ".writeBit.6")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, WRITE_X8_B6, value_int); _line_push; }
-                        if (endsWith(token, ".writeBit.7")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, WRITE_X8_B7, value_int); _line_push; }
-
-                        // WRITE_S_X8 (SET)
-                        if (endsWith(token, ".writeBitOn.0")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, WRITE_S_X8_B0, value_int); _line_push; }
-                        if (endsWith(token, ".writeBitOn.1")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, WRITE_S_X8_B1, value_int); _line_push; }
-                        if (endsWith(token, ".writeBitOn.2")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, WRITE_S_X8_B2, value_int); _line_push; }
-                        if (endsWith(token, ".writeBitOn.3")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, WRITE_S_X8_B3, value_int); _line_push; }
-                        if (endsWith(token, ".writeBitOn.4")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, WRITE_S_X8_B4, value_int); _line_push; }
-                        if (endsWith(token, ".writeBitOn.5")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, WRITE_S_X8_B5, value_int); _line_push; }
-                        if (endsWith(token, ".writeBitOn.6")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, WRITE_S_X8_B6, value_int); _line_push; }
-                        if (endsWith(token, ".writeBitOn.7")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, WRITE_S_X8_B7, value_int); _line_push; }
-
-                        // WRITE_R_X8 (RESET)
-                        if (endsWith(token, ".writeBitOff.0")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, WRITE_R_X8_B0, value_int); _line_push; }
-                        if (endsWith(token, ".writeBitOff.1")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, WRITE_R_X8_B1, value_int); _line_push; }
-                        if (endsWith(token, ".writeBitOff.2")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, WRITE_R_X8_B2, value_int); _line_push; }
-                        if (endsWith(token, ".writeBitOff.3")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, WRITE_R_X8_B3, value_int); _line_push; }
-                        if (endsWith(token, ".writeBitOff.4")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, WRITE_R_X8_B4, value_int); _line_push; }
-                        if (endsWith(token, ".writeBitOff.5")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, WRITE_R_X8_B5, value_int); _line_push; }
-                        if (endsWith(token, ".writeBitOff.6")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, WRITE_R_X8_B6, value_int); _line_push; }
-                        if (endsWith(token, ".writeBitOff.7")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, WRITE_R_X8_B7, value_int); _line_push; }
-
-                        // WRITE_INV_X8 (INVERT)
-                        if (endsWith(token, ".writeBitInv.0")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, WRITE_INV_X8_B0, value_int); _line_push; }
-                        if (endsWith(token, ".writeBitInv.1")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, WRITE_INV_X8_B1, value_int); _line_push; }
-                        if (endsWith(token, ".writeBitInv.2")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, WRITE_INV_X8_B2, value_int); _line_push; }
-                        if (endsWith(token, ".writeBitInv.3")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, WRITE_INV_X8_B3, value_int); _line_push; }
-                        if (endsWith(token, ".writeBitInv.4")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, WRITE_INV_X8_B4, value_int); _line_push; }
-                        if (endsWith(token, ".writeBitInv.5")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, WRITE_INV_X8_B5, value_int); _line_push; }
-                        if (endsWith(token, ".writeBitInv.6")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, WRITE_INV_X8_B6, value_int); _line_push; }
-                        if (endsWith(token, ".writeBitInv.7")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_InstructionWithU32(bytecode, WRITE_INV_X8_B7, value_int); _line_push; }
-
-
+                        PLCRuntimeInstructionSet mem_bit_task = (PLCRuntimeInstructionSet) 0;
+                        if (!mem_bit_task && endsWith(token, ".readBit")) mem_bit_task = READ_X8_B0; // READ_X8
+                        if (!mem_bit_task && endsWith(token, ".writeBit")) mem_bit_task = WRITE_X8_B0; // WRITE_X8
+                        if (!mem_bit_task && endsWith(token, ".writeBitOn")) mem_bit_task = WRITE_S_X8_B0; // WRITE_S_X8 (SET)
+                        if (!mem_bit_task && endsWith(token, ".writeBitOff")) mem_bit_task = WRITE_R_X8_B0; // WRITE_R_X8 (RESET)
+                        if (!mem_bit_task && endsWith(token, ".writeBitInv")) mem_bit_task = WRITE_INV_X8_B0; // WRITE_INV_X8 (INVERT)
+                        if (mem_bit_task) {
+                            if (e_int) return buildErrorExpectedInt(token_p1); i++;
+                            int address, bit;
+                            bool e_membit = memoryBitFromToken(token_p1, address, bit);
+                            if (e_membit) return buildError(token_p1, "unexpected token, expected bit representation");
+                            if (bit < 0 || bit > 7) return buildError(token_p1, "bit value out of range for 8-bit type");
+                            mem_bit_task = (PLCRuntimeInstructionSet) ((int) mem_bit_task + bit);
+                            line.size = InstructionCompiler::push_InstructionWithU32(bytecode, mem_bit_task, value_int); _line_push;
+                        }
                     }
                 }
             }
