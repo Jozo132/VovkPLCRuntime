@@ -1103,43 +1103,29 @@ bool build(bool finalPass) {
             }
 
             { // Handle Bit operations (PLC specific)
-                // Stack operations
-                if (str_cmp(token, "u8.0.get")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B0); _line_push; }
-                if (str_cmp(token, "u8.1.get")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B1); _line_push; }
-                if (str_cmp(token, "u8.2.get")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B2); _line_push; }
-                if (str_cmp(token, "u8.3.get")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B3); _line_push; }
-                if (str_cmp(token, "u8.4.get")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B4); _line_push; }
-                if (str_cmp(token, "u8.5.get")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B5); _line_push; }
-                if (str_cmp(token, "u8.6.get")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B6); _line_push; }
-                if (str_cmp(token, "u8.7.get")) { line.size = InstructionCompiler::push(bytecode, GET_X8_B7); _line_push; }
-
-                if (str_cmp(token, "u8.0.set")) { line.size = InstructionCompiler::push(bytecode, SET_X8_B0); _line_push; }
-                if (str_cmp(token, "u8.1.set")) { line.size = InstructionCompiler::push(bytecode, SET_X8_B1); _line_push; }
-                if (str_cmp(token, "u8.2.set")) { line.size = InstructionCompiler::push(bytecode, SET_X8_B2); _line_push; }
-                if (str_cmp(token, "u8.3.set")) { line.size = InstructionCompiler::push(bytecode, SET_X8_B3); _line_push; }
-                if (str_cmp(token, "u8.4.set")) { line.size = InstructionCompiler::push(bytecode, SET_X8_B4); _line_push; }
-                if (str_cmp(token, "u8.5.set")) { line.size = InstructionCompiler::push(bytecode, SET_X8_B5); _line_push; }
-                if (str_cmp(token, "u8.6.set")) { line.size = InstructionCompiler::push(bytecode, SET_X8_B6); _line_push; }
-                if (str_cmp(token, "u8.7.set")) { line.size = InstructionCompiler::push(bytecode, SET_X8_B7); _line_push; }
-
-                if (str_cmp(token, "u8.0.rset")) { line.size = InstructionCompiler::push(bytecode, RSET_X8_B0); _line_push; }
-                if (str_cmp(token, "u8.1.rset")) { line.size = InstructionCompiler::push(bytecode, RSET_X8_B1); _line_push; }
-                if (str_cmp(token, "u8.2.rset")) { line.size = InstructionCompiler::push(bytecode, RSET_X8_B2); _line_push; }
-                if (str_cmp(token, "u8.3.rset")) { line.size = InstructionCompiler::push(bytecode, RSET_X8_B3); _line_push; }
-                if (str_cmp(token, "u8.4.rset")) { line.size = InstructionCompiler::push(bytecode, RSET_X8_B4); _line_push; }
-                if (str_cmp(token, "u8.5.rset")) { line.size = InstructionCompiler::push(bytecode, RSET_X8_B5); _line_push; }
-                if (str_cmp(token, "u8.6.rset")) { line.size = InstructionCompiler::push(bytecode, RSET_X8_B6); _line_push; }
-                if (str_cmp(token, "u8.7.rset")) { line.size = InstructionCompiler::push(bytecode, RSET_X8_B7); _line_push; }
-
-                if (str_cmp(token, "u8.and")) { line.size = InstructionCompiler::push(bytecode, LOGIC_AND); _line_push; }
-                if (str_cmp(token, "u8.or")) { line.size = InstructionCompiler::push(bytecode, LOGIC_OR); _line_push; }
-                if (str_cmp(token, "u8.xor")) { line.size = InstructionCompiler::push(bytecode, LOGIC_XOR); _line_push; }
-                if (str_cmp(token, "u8.not")) { line.size = InstructionCompiler::push(bytecode, LOGIC_NOT); _line_push; }
 
                 if (data_type) {
-                    // Direct memory read/write
                     PLCRuntimeInstructionSet type = (PLCRuntimeInstructionSet) data_type;
                     if (type == type_uint8_t) {
+
+                        // Stack operations
+                        PLCRuntimeInstructionSet stack_bit_task = (PLCRuntimeInstructionSet) 0;
+                        if (!stack_bit_task && endsWith(token, ".get")) stack_bit_task = GET_X8_B0; // READ BIT FROM BYTE
+                        if (!stack_bit_task && endsWith(token, ".set")) stack_bit_task = SET_X8_B0; // SET BIT IN BYTE
+                        if (!stack_bit_task && endsWith(token, ".rset")) stack_bit_task = RSET_X8_B0; // RESET BIT IN BYTE
+                        if (stack_bit_task) {
+                            if (e_int) return buildErrorExpectedInt(token_p1); i++;
+                            if (value_int < 0 || value_int > 7) return buildError(token_p1, "bit value out of range for 8-bit type");
+                            stack_bit_task = (PLCRuntimeInstructionSet) ((int) stack_bit_task + value_int);
+                            line.size = InstructionCompiler::push(bytecode, stack_bit_task); _line_push;
+                        }
+
+                        if (str_cmp(token, "u8.and")) { line.size = InstructionCompiler::push(bytecode, LOGIC_AND); _line_push; }
+                        if (str_cmp(token, "u8.or")) { line.size = InstructionCompiler::push(bytecode, LOGIC_OR); _line_push; }
+                        if (str_cmp(token, "u8.xor")) { line.size = InstructionCompiler::push(bytecode, LOGIC_XOR); _line_push; }
+                        if (str_cmp(token, "u8.not")) { line.size = InstructionCompiler::push(bytecode, LOGIC_NOT); _line_push; }
+
+                        // Direct memory read/write
                         PLCRuntimeInstructionSet mem_bit_task = (PLCRuntimeInstructionSet) 0;
                         if (!mem_bit_task && endsWith(token, ".readBit")) mem_bit_task = READ_X8_B0; // READ_X8
                         if (!mem_bit_task && endsWith(token, ".writeBit")) mem_bit_task = WRITE_X8_B0; // WRITE_X8
