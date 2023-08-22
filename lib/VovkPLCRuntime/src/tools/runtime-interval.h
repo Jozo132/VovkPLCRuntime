@@ -74,9 +74,8 @@ uint32_t P_30s_sec_cnt = 0;
 uint32_t P_10s_sec_cnt = 0;
 uint32_t P_5s_sec_cnt = 0;
 uint32_t P_2s_sec_cnt = 0;
-uint32_t P_1s_sec_cnt = 0;
-
 
 void IntervalGlobalLoopCheck();
+
 
 #include "runtime-interval-impl.h"
