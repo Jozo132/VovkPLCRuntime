@@ -156,6 +156,12 @@ struct StringView {
     char operator[](int index) const {
         return data[index];
     }
+    bool equals(const char* b);
+    bool endsWith(const char* b);
+    bool startsWith(const char* b);
+
+    // Equality operator
+    bool operator==(const char* b) { return equals(b); }
 };
 
 enum TokenType {
@@ -244,6 +250,11 @@ struct Token {
 
     }
     void parse();
+    bool equals(const char* b);
+    bool endsWith(const char* b);
+    bool startsWith(const char* b);
+    // Equality operator
+    bool operator==(const char* b) { return equals(b); }
 };
 
 bool str_cmp(StringView a, StringView b) {
@@ -311,7 +322,7 @@ bool str_includes(Token a, const char* b) {
     return false;
 }
 
-bool endsWith(StringView a, StringView b) {
+bool _endsWith(StringView a, StringView b) {
     if (a.length < b.length) return false;
     for (int i = 0; i < b.length; i++) {
         if (a[a.length - b.length + i] != b[i]) return false;
@@ -319,7 +330,7 @@ bool endsWith(StringView a, StringView b) {
     return true;
 }
 
-bool endsWith(StringView a, const char* b) {
+bool _endsWith(StringView a, const char* b) {
     int b_length = string_len(b);
     if (a.length < b_length) return false;
     for (int i = 0; i < b_length; i++) {
@@ -328,7 +339,7 @@ bool endsWith(StringView a, const char* b) {
     return true;
 }
 
-bool endsWith(Token a, StringView b) {
+bool _endsWith(Token a, StringView b) {
     if (a.length < b.length) return false;
     for (int i = 0; i < b.length; i++) {
         if (a[a.length - b.length + i] != b[i]) return false;
@@ -336,7 +347,7 @@ bool endsWith(Token a, StringView b) {
     return true;
 }
 
-bool endsWith(Token a, const char* b) {
+bool _endsWith(Token a, const char* b) {
     int b_length = string_len(b);
     if (a.length < b_length) return false;
     for (int i = 0; i < b_length; i++) {
@@ -345,7 +356,7 @@ bool endsWith(Token a, const char* b) {
     return true;
 }
 
-bool startsWith(StringView a, StringView b) {
+bool _startsWith(StringView a, StringView b) {
     if (a.length < b.length) return false;
     for (int i = 0; i < b.length; i++) {
         if (a[i] != b[i]) return false;
@@ -353,7 +364,7 @@ bool startsWith(StringView a, StringView b) {
     return true;
 }
 
-bool startsWith(StringView a, const char* b) {
+bool _startsWith(StringView a, const char* b) {
     int b_length = string_len(b);
     if (a.length < b_length) return false;
     for (int i = 0; i < b_length; i++) {
@@ -362,7 +373,7 @@ bool startsWith(StringView a, const char* b) {
     return true;
 }
 
-bool startsWith(Token a, StringView b) {
+bool _startsWith(Token a, StringView b) {
     if (a.length < b.length) return false;
     for (int i = 0; i < b.length; i++) {
         if (a[i] != b[i]) return false;
@@ -370,7 +381,7 @@ bool startsWith(Token a, StringView b) {
     return true;
 }
 
-bool startsWith(Token a, const char* b) {
+bool _startsWith(Token a, const char* b) {
     int b_length = string_len(b);
     if (a.length < b_length) return false;
     for (int i = 0; i < b_length; i++) {
@@ -379,6 +390,15 @@ bool startsWith(Token a, const char* b) {
     return true;
 }
 
+
+
+bool StringView::equals(const char* b) { return str_cmp(*this, b); }
+bool StringView::endsWith(const char* b) { return _endsWith(*this, b); }
+bool StringView::startsWith(const char* b) { return _startsWith(*this, b); }
+
+bool Token::equals(const char* b) { return str_cmp(*this, b); }
+bool Token::endsWith(const char* b) { return _endsWith(*this, b); }
+bool Token::startsWith(const char* b) { return _startsWith(*this, b); }
 
 
 bool isDigit(char c) {
@@ -391,11 +411,11 @@ bool isLetter(char c) {
 
 bool isBoolean(StringView string, bool& output) {
     if (string.length == 0) return false;
-    if (str_cmp(string, "true")) {
+    if (string == "true") {
         output = true;
         return true;
     }
-    if (str_cmp(string, "false")) {
+    if (string == "false") {
         output = false;
         return true;
     }
@@ -471,7 +491,7 @@ void Token::parse() {
             return;
         }
     }
-    if (str_cmp(string, "==") || str_cmp(string, "!=") || str_cmp(string, "<>") || str_cmp(string, "<=") || str_cmp(string, ">=") || str_cmp(string, "&&") || str_cmp(string, "||")) {
+    if (string == "==" || string == "!=" || string == "<>" || string == "<=" || string == ">=" || string == "&&" || string == "||") {
         this->type = TOKEN_OPERATOR;
         return;
     }
@@ -606,7 +626,7 @@ bool add_token(char* string, int length) {
         Serial.print(F("Error: unknown token ")); token.print(); Serial.print(F(" at ")); Serial.print(line); Serial.print(F(":")); Serial.println(column);
         return true;
     }
-    last_token_is_exit = str_cmp(token, "exit");
+    last_token_is_exit = token == "exit";
     bool isNumber = token.type == TOKEN_INTEGER || token.type == TOKEN_REAL;
     if (token_count_temp >= 2 && isNumber) { // handle negative numbers
         Token& p1_token = tokens[token_count_temp - 1];
@@ -649,7 +669,7 @@ bool add_token(char* string, int length) {
         Token& p1_token = tokens[token_count_temp - 1];
         Token& p2_token = tokens[token_count_temp - 2];
         // If [' , * , '] then change to [string]
-        if (str_cmp(token, "'") && str_cmp(p2_token, "'")) {
+        if (token == "'" && p2_token == "'") {
             p2_token.type = TOKEN_STRING;
             p2_token.string = p1_token.string;
             token_count_temp--;
@@ -662,7 +682,7 @@ bool add_token(char* string, int length) {
         TokenType p1_type = p1_token.type;
         // If [keyword , :] then change to [label]
         if (p1_type == TOKEN_KEYWORD) {
-            if (token.type == TOKEN_OPERATOR && str_cmp(token, ":")) {
+            if (token.type == TOKEN_OPERATOR && token == ":") {
                 p1_token.type = TOKEN_LABEL;
                 bool error = add_label(p1_token, token_count_temp - 1);
                 if (error) return error;
@@ -831,7 +851,7 @@ bool typeFromToken(Token& token, uint8_t& type) {
     if (token.type == TOKEN_KEYWORD) {
         // "u8" = type_uint8_t
         for (int i = 0; i < data_type_keywords_count; i++) {
-            if (startsWith(token, data_type_keywords[i])) {
+            if (token.startsWith(data_type_keywords[i])) {
                 switch (i) {
                     case 0:  type = type_int8_t; break;
                     case 1:  type = type_int16_t; break;
@@ -1086,20 +1106,20 @@ bool build(bool finalPass) {
 
         if (type == TOKEN_KEYWORD) {
             { // Handle flow
-                if (hasNext && (str_cmp(token, "jmp") || str_cmp(token, "jump"))) { if (finalPass && e_label) return buildErrorUnknownLabel(token_p1); i++; line.size = InstructionCompiler::pushJMP(bytecode, label_address); _line_push; }
-                if (hasNext && (str_cmp(token, "jmp_if") || str_cmp(token, "jump_if"))) { if (finalPass && e_label) return buildErrorUnknownLabel(token_p1); i++; line.size = InstructionCompiler::pushJMP_IF(bytecode, label_address); _line_push; }
-                if (hasNext && (str_cmp(token, "jmp_if_not") || str_cmp(token, "jump_if_not"))) { if (finalPass && e_label) return buildErrorUnknownLabel(token_p1); i++; line.size = InstructionCompiler::pushJMP_IF_NOT(bytecode, label_address); _line_push; }
-                if (hasNext && str_cmp(token, "call")) { if (finalPass && e_label) return buildErrorUnknownLabel(token_p1); i++; line.size = InstructionCompiler::pushCALL(bytecode, label_address); _line_push; }
-                if (hasNext && str_cmp(token, "call_if")) { if (finalPass && e_label) return buildErrorUnknownLabel(token_p1); i++; line.size = InstructionCompiler::pushCALL_IF(bytecode, label_address); _line_push; }
-                if (hasNext && str_cmp(token, "call_if_not")) { if (finalPass && e_label) return buildErrorUnknownLabel(token_p1); i++; line.size = InstructionCompiler::pushCALL_IF_NOT(bytecode, label_address); _line_push; }
-                if (str_cmp(token, "ret") || str_cmp(token, "return")) { line.size = InstructionCompiler::push(bytecode, RET); _line_push; }
-                if (str_cmp(token, "ret_if") || str_cmp(token, "return_if")) { line.size = InstructionCompiler::push(bytecode, RET_IF); _line_push; }
-                if (str_cmp(token, "ret_if_not") || str_cmp(token, "return_if_not")) { line.size = InstructionCompiler::push(bytecode, RET_IF_NOT); _line_push; }
-                if (str_cmp(token, "nop")) { line.size = InstructionCompiler::push(bytecode, NOP); _line_push; }
+                if (hasNext && (token == "jmp" || token == "jump")) { if (finalPass && e_label) return buildErrorUnknownLabel(token_p1); i++; line.size = InstructionCompiler::pushJMP(bytecode, label_address); _line_push; }
+                if (hasNext && (token == "jmp_if" || token == "jump_if")) { if (finalPass && e_label) return buildErrorUnknownLabel(token_p1); i++; line.size = InstructionCompiler::pushJMP_IF(bytecode, label_address); _line_push; }
+                if (hasNext && (token == "jmp_if_not" || token == "jump_if_not")) { if (finalPass && e_label) return buildErrorUnknownLabel(token_p1); i++; line.size = InstructionCompiler::pushJMP_IF_NOT(bytecode, label_address); _line_push; }
+                if (hasNext && token == "call") { if (finalPass && e_label) return buildErrorUnknownLabel(token_p1); i++; line.size = InstructionCompiler::pushCALL(bytecode, label_address); _line_push; }
+                if (hasNext && token == "call_if") { if (finalPass && e_label) return buildErrorUnknownLabel(token_p1); i++; line.size = InstructionCompiler::pushCALL_IF(bytecode, label_address); _line_push; }
+                if (hasNext && token == "call_if_not") { if (finalPass && e_label) return buildErrorUnknownLabel(token_p1); i++; line.size = InstructionCompiler::pushCALL_IF_NOT(bytecode, label_address); _line_push; }
+                if (token == "ret" || token == "return") { line.size = InstructionCompiler::push(bytecode, RET); _line_push; }
+                if (token == "ret_if" || token == "return_if") { line.size = InstructionCompiler::push(bytecode, RET_IF); _line_push; }
+                if (token == "ret_if_not" || token == "return_if_not") { line.size = InstructionCompiler::push(bytecode, RET_IF_NOT); _line_push; }
+                if (token == "nop") { line.size = InstructionCompiler::push(bytecode, NOP); _line_push; }
             }
 
             { // Stack operations
-                if (str_cmp(token, "clear")) { line.size = InstructionCompiler::push(bytecode, CLEAR); _line_push; }
+                if (token == "clear") { line.size = InstructionCompiler::push(bytecode, CLEAR); _line_push; }
             }
 
             { // Handle Bit operations (PLC specific)
@@ -1110,9 +1130,9 @@ bool build(bool finalPass) {
 
                         // Stack operations
                         PLCRuntimeInstructionSet stack_bit_task = (PLCRuntimeInstructionSet) 0;
-                        if (!stack_bit_task && endsWith(token, ".get")) stack_bit_task = GET_X8_B0; // READ BIT FROM BYTE
-                        if (!stack_bit_task && endsWith(token, ".set")) stack_bit_task = SET_X8_B0; // SET BIT IN BYTE
-                        if (!stack_bit_task && endsWith(token, ".rset")) stack_bit_task = RSET_X8_B0; // RESET BIT IN BYTE
+                        if (!stack_bit_task && token.endsWith(".get")) stack_bit_task = GET_X8_B0; // READ BIT FROM BYTE
+                        if (!stack_bit_task && token.endsWith(".set")) stack_bit_task = SET_X8_B0; // SET BIT IN BYTE
+                        if (!stack_bit_task && token.endsWith(".rset")) stack_bit_task = RSET_X8_B0; // RESET BIT IN BYTE
                         if (stack_bit_task) {
                             if (e_int) return buildErrorExpectedInt(token_p1); i++;
                             if (value_int < 0 || value_int > 7) return buildError(token_p1, "bit value out of range for 8-bit type");
@@ -1120,18 +1140,18 @@ bool build(bool finalPass) {
                             line.size = InstructionCompiler::push(bytecode, stack_bit_task); _line_push;
                         }
 
-                        if (str_cmp(token, "u8.and")) { line.size = InstructionCompiler::push(bytecode, LOGIC_AND); _line_push; }
-                        if (str_cmp(token, "u8.or")) { line.size = InstructionCompiler::push(bytecode, LOGIC_OR); _line_push; }
-                        if (str_cmp(token, "u8.xor")) { line.size = InstructionCompiler::push(bytecode, LOGIC_XOR); _line_push; }
-                        if (str_cmp(token, "u8.not")) { line.size = InstructionCompiler::push(bytecode, LOGIC_NOT); _line_push; }
+                        if (token == "u8.and") { line.size = InstructionCompiler::push(bytecode, LOGIC_AND); _line_push; }
+                        if (token == "u8.or") { line.size = InstructionCompiler::push(bytecode, LOGIC_OR); _line_push; }
+                        if (token == "u8.xor") { line.size = InstructionCompiler::push(bytecode, LOGIC_XOR); _line_push; }
+                        if (token == "u8.not") { line.size = InstructionCompiler::push(bytecode, LOGIC_NOT); _line_push; }
 
                         // Direct memory read/write
                         PLCRuntimeInstructionSet mem_bit_task = (PLCRuntimeInstructionSet) 0;
-                        if (!mem_bit_task && endsWith(token, ".readBit")) mem_bit_task = READ_X8_B0; // READ_X8
-                        if (!mem_bit_task && endsWith(token, ".writeBit")) mem_bit_task = WRITE_X8_B0; // WRITE_X8
-                        if (!mem_bit_task && endsWith(token, ".writeBitOn")) mem_bit_task = WRITE_S_X8_B0; // WRITE_S_X8 (SET)
-                        if (!mem_bit_task && endsWith(token, ".writeBitOff")) mem_bit_task = WRITE_R_X8_B0; // WRITE_R_X8 (RESET)
-                        if (!mem_bit_task && endsWith(token, ".writeBitInv")) mem_bit_task = WRITE_INV_X8_B0; // WRITE_INV_X8 (INVERT)
+                        if (!mem_bit_task && token.endsWith(".readBit")) mem_bit_task = READ_X8_B0; // READ_X8
+                        if (!mem_bit_task && token.endsWith(".writeBit")) mem_bit_task = WRITE_X8_B0; // WRITE_X8
+                        if (!mem_bit_task && token.endsWith(".writeBitOn")) mem_bit_task = WRITE_S_X8_B0; // WRITE_S_X8 (SET)
+                        if (!mem_bit_task && token.endsWith(".writeBitOff")) mem_bit_task = WRITE_R_X8_B0; // WRITE_R_X8 (RESET)
+                        if (!mem_bit_task && token.endsWith(".writeBitInv")) mem_bit_task = WRITE_INV_X8_B0; // WRITE_INV_X8 (INVERT)
                         if (mem_bit_task) {
                             if (e_int) return buildErrorExpectedInt(token_p1); i++;
                             int address, bit;
@@ -1148,7 +1168,7 @@ bool build(bool finalPass) {
             { // Handle data type operations
                 if (data_type) {
                     PLCRuntimeInstructionSet type = (PLCRuntimeInstructionSet) data_type;
-                    if (hasNext && endsWith(token, ".const")) {
+                    if (hasNext && token.endsWith(".const")) {
                         if (type == type_bool) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_bool(bytecode, value_int != 0); _line_push; }
                         if (type == type_uint8_t) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_uint8_t(bytecode, value_int); _line_push; }
                         if (type == type_uint16_t) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_uint16_t(bytecode, value_int); _line_push; }
@@ -1163,22 +1183,22 @@ bool build(bool finalPass) {
                         Serial.print(F("Error: unknown data type ")); token.print(); Serial.print(F(" at ")); Serial.print(token.line); Serial.print(F(":")); Serial.println(token.column);
                         return true;
                     }
-                    if (hasNext && endsWith(token, ".load")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::pushGET(bytecode, value_int, type); _line_push; }
-                    if (hasNext && endsWith(token, ".store")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::pushPUT(bytecode, value_int, type); _line_push; }
-                    if (hasNext && endsWith(token, ".copy")) { line.size = InstructionCompiler::pushCOPY(bytecode, type); _line_push; }
-                    if (hasNext && endsWith(token, ".swap")) { line.size = InstructionCompiler::pushSWAP(bytecode, type); _line_push; }
-                    if (hasNext && endsWith(token, ".drop")) { line.size = InstructionCompiler::pushDROP(bytecode, type); _line_push; }
-                    if (endsWith(token, ".cmp_lt")) { line.size = InstructionCompiler::push(bytecode, CMP_LT, type); _line_push; }
-                    if (endsWith(token, ".cmp_gt")) { line.size = InstructionCompiler::push(bytecode, CMP_GT, type); _line_push; }
-                    if (endsWith(token, ".cmp_eq")) { line.size = InstructionCompiler::push(bytecode, CMP_EQ, type); _line_push; }
-                    if (endsWith(token, ".cmp_neq")) { line.size = InstructionCompiler::push(bytecode, CMP_NEQ, type); _line_push; }
-                    if (endsWith(token, ".cmp_gte")) { line.size = InstructionCompiler::push(bytecode, CMP_GTE, type); _line_push; }
-                    if (endsWith(token, ".cmp_lte")) { line.size = InstructionCompiler::push(bytecode, CMP_LTE, type); _line_push; }
+                    if (hasNext && token.endsWith(".load")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::pushGET(bytecode, value_int, type); _line_push; }
+                    if (hasNext && token.endsWith(".store")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::pushPUT(bytecode, value_int, type); _line_push; }
+                    if (hasNext && token.endsWith(".copy")) { line.size = InstructionCompiler::pushCOPY(bytecode, type); _line_push; }
+                    if (hasNext && token.endsWith(".swap")) { line.size = InstructionCompiler::pushSWAP(bytecode, type); _line_push; }
+                    if (hasNext && token.endsWith(".drop")) { line.size = InstructionCompiler::pushDROP(bytecode, type); _line_push; }
+                    if (token.endsWith(".cmp_lt")) { line.size = InstructionCompiler::push(bytecode, CMP_LT, type); _line_push; }
+                    if (token.endsWith(".cmp_gt")) { line.size = InstructionCompiler::push(bytecode, CMP_GT, type); _line_push; }
+                    if (token.endsWith(".cmp_eq")) { line.size = InstructionCompiler::push(bytecode, CMP_EQ, type); _line_push; }
+                    if (token.endsWith(".cmp_neq")) { line.size = InstructionCompiler::push(bytecode, CMP_NEQ, type); _line_push; }
+                    if (token.endsWith(".cmp_gte")) { line.size = InstructionCompiler::push(bytecode, CMP_GTE, type); _line_push; }
+                    if (token.endsWith(".cmp_lte")) { line.size = InstructionCompiler::push(bytecode, CMP_LTE, type); _line_push; }
 
-                    if (endsWith(token, ".add")) { line.size = InstructionCompiler::push(bytecode, ADD, type); _line_push; }
-                    if (endsWith(token, ".sub")) { line.size = InstructionCompiler::push(bytecode, SUB, type); _line_push; }
-                    if (endsWith(token, ".mul")) { line.size = InstructionCompiler::push(bytecode, MUL, type); _line_push; }
-                    if (endsWith(token, ".div")) { line.size = InstructionCompiler::push(bytecode, DIV, type); _line_push; }
+                    if (token.endsWith(".add")) { line.size = InstructionCompiler::push(bytecode, ADD, type); _line_push; }
+                    if (token.endsWith(".sub")) { line.size = InstructionCompiler::push(bytecode, SUB, type); _line_push; }
+                    if (token.endsWith(".mul")) { line.size = InstructionCompiler::push(bytecode, MUL, type); _line_push; }
+                    if (token.endsWith(".div")) { line.size = InstructionCompiler::push(bytecode, DIV, type); _line_push; }
                 }
             }
         }
@@ -1189,7 +1209,7 @@ bool build(bool finalPass) {
             uint8_t type_2;
             bool e_dataType1 = typeFromToken(token_p1, type_1);
             bool e_dataType2 = typeFromToken(token_p2, type_2);
-            if (str_cmp(token, "cvt")) {
+            if (token == "cvt") {
                 if (e_dataType1) return e_dataType1; i++;
                 if (e_dataType2) return e_dataType2; i++;
                 if (type_1 == type_2) continue; // No need to convert if types are the same
@@ -1198,13 +1218,13 @@ bool build(bool finalPass) {
             }
         }
 
-        // if (type == TOKEN_KEYWORD && str_cmp(token, "u8.loadI")) {
+        // if (type == TOKEN_KEYWORD && token == "u8.loadI") {
         //     if (!hasNext || !hasThird) return buildError(token_p1, "requires numeric parameter");
         //     bool nextHasDot = str_includes(token_p1, ".");
         //     i += 1;
         // }
 
-        if (type == TOKEN_KEYWORD && str_cmp(token, "exit")) {
+        if (type == TOKEN_KEYWORD && token == "exit") {
             line.size = InstructionCompiler::push(bytecode, EXIT);
             _line_push;
         }
