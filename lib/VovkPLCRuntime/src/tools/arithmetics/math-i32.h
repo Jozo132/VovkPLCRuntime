@@ -1,4 +1,4 @@
-// math-s32.h - 1.0.0 - 2022-12-11
+// math-i32.h - 1.0.0 - 2022-12-11
 //
 // Copyright (c) 2022 J.Vovk
 //
@@ -24,30 +24,30 @@
 namespace PLCMethods {
 
     RuntimeError ADD_int32_t(RuntimeStack* stack) {
-        int32_t b = stack->pop_int32_t();
-        int32_t a = stack->pop_int32_t();
-        stack->push_int32_t(a + b);
+        i32 b = stack->pop_i32();
+        i32 a = stack->pop_i32();
+        stack->push_i32(a + b);
         return STATUS_SUCCESS;
     }
     
     RuntimeError SUB_int32_t(RuntimeStack* stack) {
-        int32_t b = stack->pop_int32_t();
-        int32_t a = stack->pop_int32_t();
-        stack->push_int32_t(a - b);
+        i32 b = stack->pop_i32();
+        i32 a = stack->pop_i32();
+        stack->push_i32(a - b);
         return STATUS_SUCCESS;
     }
 
     RuntimeError MUL_int32_t(RuntimeStack* stack) {
-        int32_t b = stack->pop_int32_t();
-        int32_t a = stack->pop_int32_t();
-        stack->push_int32_t(a * b);
+        i32 b = stack->pop_i32();
+        i32 a = stack->pop_i32();
+        stack->push_i32(a * b);
         return STATUS_SUCCESS;
     }
 
     RuntimeError DIV_int32_t(RuntimeStack* stack) {
-        int32_t b = stack->pop_int32_t();
-        int32_t a = stack->pop_int32_t();
-        stack->push_int32_t(a / b);
+        i32 b = stack->pop_i32();
+        i32 a = stack->pop_i32();
+        stack->push_i32(a / b);
         return STATUS_SUCCESS;
     }
     

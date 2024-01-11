@@ -23,7 +23,7 @@
 
 #include "runtime-stack.h"
 
-RuntimeStack::RuntimeStack(uint32_t max_size, uint32_t call_stack_size, uint32_t memory_size) {
+RuntimeStack::RuntimeStack(u32 max_size, u32 call_stack_size, u32 memory_size) {
     this->format(max_size, call_stack_size, memory_size);
 }
 RuntimeStack::~RuntimeStack() {
@@ -34,39 +34,73 @@ RuntimeStack::~RuntimeStack() {
     call_stack = nullptr;
     memory = nullptr;
 }
-void RuntimeStack::format(uint32_t max_size, uint32_t call_stack_size, uint32_t memory_size) {
+void RuntimeStack::format(u32 max_size, u32 call_stack_size, u32 memory_size) {
     this->max_size = max_size;
     this->max_call_stack_size = call_stack_size;
-    if (stack == nullptr) stack = new Stack<uint8_t>;
-    if (call_stack == nullptr) call_stack = new Stack<uint16_t>;
-    if (memory == nullptr) memory = new Stack<uint8_t>;
+    if (stack == nullptr) stack = new Stack<u8>;
+    if (call_stack == nullptr) call_stack = new Stack<u16>;
+    if (memory == nullptr) memory = new Stack<u8>;
     stack->format(max_size);
     call_stack->format(call_stack_size);
     memory->format(memory_size);
 }
 int RuntimeStack::print() { return stack->print(); }
 void RuntimeStack::println() { stack->println(); }
-RuntimeError RuntimeStack::pushCall(uint32_t return_address) {
+RuntimeError RuntimeStack::pushCall(u32 return_address) {
     if (call_stack->size() >= max_call_stack_size) return STACK_OVERFLOW;
     call_stack->push(return_address);
     return STATUS_SUCCESS;
 }
-uint16_t RuntimeStack::popCall() {
+u16 RuntimeStack::popCall() {
     if (call_stack->size() == 0) return STACK_UNDERFLOW;
     return call_stack->pop();
 }
-// Push an uint8_t value to the stack
-RuntimeError RuntimeStack::push(uint8_t value) {
+// Push an u8 value to the stack
+RuntimeError RuntimeStack::push(u8 value) {
     if (stack->size() >= max_size) return STACK_OVERFLOW;
     stack->push(value);
     return STATUS_SUCCESS;
 }
-// Pop an uint8_t value from the stack
-uint8_t RuntimeStack::pop() { return stack->pop(); }
-// Pop an uint8_t value from the stack
+// Pop an u8 value from the stack
+u8 RuntimeStack::pop() { return stack->pop(); }
+// Pop an u8 value from the stack
 void RuntimeStack::pop(int size) { stack->pop(size); }
-// Peek the top uint8_t value from the stack
-uint8_t RuntimeStack::peek(int depth) { return stack->peek(depth); }
+// Peek the top u8 value from the stack
+u8 RuntimeStack::peek(int depth) { return stack->peek(depth); }
+
+template <typename T> bool RuntimeStack::push_custom(T value) {
+    if (stack->size() + sizeof(T) > max_size) return true;
+    for (u32 i = 0; i < sizeof(T); i++) {
+        // stack->push((value >> (8 * (sizeof(T) - i - 1))) & 0xFF);
+        stack->push((value >> (8 * i)) & 0xFF);
+    }
+    return false;
+}
+
+template <typename T> T RuntimeStack::pop_custom() {
+    T value = 0;
+    // for (u32 i = 0; i < sizeof(T); i++) value |= (stack->pop() << (8 * (sizeof(T) - i - 1)));
+    for (u32 i = 0; i < sizeof(T); i++) value |= (stack->pop() << (8 * i));
+    return value;
+}
+
+template <typename T> T RuntimeStack::peek_custom() {
+    T value = 0;
+    for (u32 i = 0; i < sizeof(T); i++) value |= (stack->peek(i) << (8 * i));
+    return value;
+}
+
+// Push a pointer to the stack
+RuntimeError RuntimeStack::push_pointer(MY_PTR_t value) {
+    if (stack->size() + sizeof(MY_PTR_t) > max_size) return STACK_OVERFLOW;
+    return push_custom<MY_PTR_t>(value) ? STACK_OVERFLOW : STATUS_SUCCESS;
+}
+
+// Pop a pointer from the stack
+MY_PTR_t RuntimeStack::pop_pointer() { return pop_custom<MY_PTR_t>(); }
+
+// Peek the top pointer from the stack
+MY_PTR_t RuntimeStack::peek_pointer() { return peek_custom<MY_PTR_t>(); }
 
 // Push a boolean value to the stack
 RuntimeError RuntimeStack::push_bool(bool value) {
@@ -82,39 +116,39 @@ bool RuntimeStack::pop_bool() {
 // Peek the top boolean value from the stack
 bool RuntimeStack::peek_bool() { return stack->peek(); }
 
-// Push an uint8_t value to the stack
-RuntimeError RuntimeStack::push_uint8_t(uint8_t value) {
+// Push an u8 value to the stack
+RuntimeError RuntimeStack::push_u8(u8 value) {
     if (stack->size() + 1 > max_size) return STACK_OVERFLOW;
     stack->push(value);
     return STATUS_SUCCESS;
 }
-// Pop an uint8_t value from the stack
-uint8_t RuntimeStack::pop_uint8_t() { return stack->pop(); }
-// Peek the top uint8_t value from the stack
-uint8_t RuntimeStack::peek_uint8_t() { return stack->peek(); }
+// Pop an u8 value from the stack
+u8 RuntimeStack::pop_u8() { return stack->pop(); }
+// Peek the top u8 value from the stack
+u8 RuntimeStack::peek_u8() { return stack->peek(); }
 
-// Push an uint16_t value to the stack
-RuntimeError RuntimeStack::push_uint16_t(uint16_t value) {
+// Push an u16 value to the stack
+RuntimeError RuntimeStack::push_u16(u16 value) {
     if (stack->size() + 2 > max_size) return STACK_OVERFLOW;
     stack->push(value >> 8);
     stack->push(value & 0xFF);
     return STATUS_SUCCESS;
 }
-// Pop an uint16_t value from the stack
-uint16_t RuntimeStack::pop_uint16_t() {
-    uint16_t b = stack->pop();
-    uint16_t a = stack->pop();
+// Pop an u16 value from the stack
+u16 RuntimeStack::pop_u16() {
+    u16 b = stack->pop();
+    u16 a = stack->pop();
     return (a << 8) | b;
 }
-// Peek the top uint16_t value from the stack
-uint16_t RuntimeStack::peek_uint16_t() {
-    uint16_t b = stack->peek(0);
-    uint16_t a = stack->peek(1);
+// Peek the top u16 value from the stack
+u16 RuntimeStack::peek_u16() {
+    u16 b = stack->peek(0);
+    u16 a = stack->peek(1);
     return (a << 8) | b;
 }
 
-// Push an uint32_t value to the stack
-RuntimeError RuntimeStack::push_uint32_t(uint32_t value) {
+// Push an u32 value to the stack
+RuntimeError RuntimeStack::push_u32(u32 value) {
     if (stack->size() + 4 > max_size) return STACK_OVERFLOW;
     stack->push(value >> 24);
     stack->push((value >> 16) & 0xFF);
@@ -122,26 +156,26 @@ RuntimeError RuntimeStack::push_uint32_t(uint32_t value) {
     stack->push(value & 0xFF);
     return STATUS_SUCCESS;
 }
-// Pop an uint32_t value from the stack
-uint32_t RuntimeStack::pop_uint32_t() {
-    uint32_t d = stack->pop();
-    uint32_t c = stack->pop();
-    uint32_t b = stack->pop();
-    uint32_t a = stack->pop();
+// Pop an u32 value from the stack
+u32 RuntimeStack::pop_u32() {
+    u32 d = stack->pop();
+    u32 c = stack->pop();
+    u32 b = stack->pop();
+    u32 a = stack->pop();
     return (a << 24) | (b << 16) | (c << 8) | d;
 }
-// Peek the top uint32_t value from the stack
-uint32_t RuntimeStack::peek_uint32_t() {
-    uint32_t d = stack->peek(0);
-    uint32_t c = stack->peek(1);
-    uint32_t b = stack->peek(2);
-    uint32_t a = stack->peek(3);
+// Peek the top u32 value from the stack
+u32 RuntimeStack::peek_u32() {
+    u32 d = stack->peek(0);
+    u32 c = stack->peek(1);
+    u32 b = stack->peek(2);
+    u32 a = stack->peek(3);
     return (a << 24) | (b << 16) | (c << 8) | d;
 }
 
 #ifdef USE_X64_OPS
-// Push an uint64_t value to the stack
-RuntimeError RuntimeStack::push_uint64_t(uint64_t value) {
+// Push an u64 value to the stack
+RuntimeError RuntimeStack::push_u64(u64 value) {
     if (stack->size() + 8 > max_size) return STACK_OVERFLOW;
     stack->push(value >> 56);
     stack->push((value >> 48) & 0xFF);
@@ -153,58 +187,128 @@ RuntimeError RuntimeStack::push_uint64_t(uint64_t value) {
     stack->push(value & 0xFF);
     return STATUS_SUCCESS;
 }
-// Pop an uint64_t value from the stack
-uint64_t RuntimeStack::pop_uint64_t() {
-    uint64_t h = stack->pop();
-    uint64_t g = stack->pop();
-    uint64_t f = stack->pop();
-    uint64_t e = stack->pop();
-    uint64_t d = stack->pop();
-    uint64_t c = stack->pop();
-    uint64_t b = stack->pop();
-    uint64_t a = stack->pop();
+// Pop an u64 value from the stack
+u64 RuntimeStack::pop_u64() {
+    u64 h = stack->pop();
+    u64 g = stack->pop();
+    u64 f = stack->pop();
+    u64 e = stack->pop();
+    u64 d = stack->pop();
+    u64 c = stack->pop();
+    u64 b = stack->pop();
+    u64 a = stack->pop();
     return (a << 56) | (b << 48) | (c << 40) | (d << 32) | (e << 24) | (f << 16) | (g << 8) | h;
 }
-// Peek the top uint64_t value from the stack
-uint64_t RuntimeStack::peek_uint64_t() {
-    uint64_t h = stack->peek(0);
-    uint64_t g = stack->peek(1);
-    uint64_t f = stack->peek(2);
-    uint64_t e = stack->peek(3);
-    uint64_t d = stack->peek(4);
-    uint64_t c = stack->peek(5);
-    uint64_t b = stack->peek(6);
-    uint64_t a = stack->peek(7);
+// Peek the top u64 value from the stack
+u64 RuntimeStack::peek_u64() {
+    u64 h = stack->peek(0);
+    u64 g = stack->peek(1);
+    u64 f = stack->peek(2);
+    u64 e = stack->peek(3);
+    u64 d = stack->peek(4);
+    u64 c = stack->peek(5);
+    u64 b = stack->peek(6);
+    u64 a = stack->peek(7);
     return (a << 56) | (b << 48) | (c << 40) | (d << 32) | (e << 24) | (f << 16) | (g << 8) | h;
 }
 #endif // USE_X64_OPS
 
-RuntimeError RuntimeStack::push_int8_t(int8_t value) { return push_uint8_t((uint8_t) value); }
-RuntimeError RuntimeStack::push_int16_t(int16_t value) { return push_uint16_t((uint16_t) value); }
-RuntimeError RuntimeStack::push_int32_t(int32_t value) { return push_uint32_t((uint32_t) value); }
-RuntimeError RuntimeStack::push_float(float value) { uint32_t_to_float cvt; cvt.type_float = value; return push_uint32_t(cvt.type_uint32_t); }
+RuntimeError RuntimeStack::push_i8(i8 value) { return push_u8((u8) value); }
+RuntimeError RuntimeStack::push_i16(i16 value) { return push_u16((u16) value); }
+RuntimeError RuntimeStack::push_i32(i32 value) { return push_u32((u32) value); }
+RuntimeError RuntimeStack::push_f32(f32 value) { u32_to_f32 cvt; cvt.type_f32 = value; return push_u32(cvt.type_u32); }
 #ifdef USE_X64_OPS
-RuntimeError RuntimeStack::push_int64_t(int64_t value) { return push_uint64_t((uint64_t) value); }
-RuntimeError RuntimeStack::push_double(double value) { uint64_t_to_double cvt; cvt.type_double = value; return push_uint64_t(cvt.type_uint64_t); }
+RuntimeError RuntimeStack::push_i64(i64 value) { return push_u64((u64) value); }
+RuntimeError RuntimeStack::push_f64(f64 value) { u64_to_f64 cvt; cvt.type_f64 = value; return push_u64(cvt.type_u64); }
 #endif // USE_X64_OPS
 
-int8_t RuntimeStack::pop_int8_t() { return (int8_t) pop_uint8_t(); }
-int16_t RuntimeStack::pop_int16_t() { return (int16_t) pop_uint16_t(); }
-int32_t RuntimeStack::pop_int32_t() { return (int32_t) pop_uint32_t(); }
-float RuntimeStack::pop_float() { uint32_t_to_float cvt; cvt.type_uint32_t = pop_uint32_t(); return cvt.type_float; }
+i8 RuntimeStack::pop_i8() { return (i8) pop_u8(); }
+i16 RuntimeStack::pop_i16() { return (i16) pop_u16(); }
+i32 RuntimeStack::pop_i32() { return (i32) pop_u32(); }
+f32 RuntimeStack::pop_f32() { u32_to_f32 cvt; cvt.type_u32 = pop_u32(); return cvt.type_f32; }
 #ifdef USE_X64_OPS
-int64_t RuntimeStack::pop_int64_t() { return (int64_t) pop_uint64_t(); }
-double RuntimeStack::pop_double() { uint64_t_to_double cvt; cvt.type_uint64_t = pop_uint64_t(); return cvt.type_double; }
+i64 RuntimeStack::pop_i64() { return (i64) pop_u64(); }
+f64 RuntimeStack::pop_f64() { u64_to_f64 cvt; cvt.type_u64 = pop_u64(); return cvt.type_f64; }
 #endif // USE_X64_OPS
 
-int8_t RuntimeStack::peek_int8_t() { return (int8_t) peek_uint8_t(); }
-int16_t RuntimeStack::peek_int16_t() { return (int16_t) peek_uint16_t(); }
-int32_t RuntimeStack::peek_int32_t() { return (int32_t) peek_uint32_t(); }
-float RuntimeStack::peek_float() { uint32_t_to_float cvt; cvt.type_uint32_t = peek_uint32_t(); return cvt.type_float; }
+i8 RuntimeStack::peek_i8() { return (i8) peek_u8(); }
+i16 RuntimeStack::peek_i16() { return (i16) peek_u16(); }
+i32 RuntimeStack::peek_i32() { return (i32) peek_u32(); }
+f32 RuntimeStack::peek_f32() { u32_to_f32 cvt; cvt.type_u32 = peek_u32(); return cvt.type_f32; }
 #ifdef USE_X64_OPS
-int64_t RuntimeStack::peek_int64_t() { return (int64_t) peek_uint64_t(); }
-double RuntimeStack::peek_double() { uint64_t_to_double cvt; cvt.type_uint64_t = peek_uint64_t(); return cvt.type_double; }
+i64 RuntimeStack::peek_i64() { return (i64) peek_u64(); }
+f64 RuntimeStack::peek_f64() { u64_to_f64 cvt; cvt.type_u64 = peek_u64(); return cvt.type_f64; }
 #endif // USE_X64_OPS
 
-uint32_t RuntimeStack::size() { return stack->size(); }
+u32 RuntimeStack::size() { return stack->size(); }
 void RuntimeStack::clear() { while (!stack->empty()) stack->pop(); while (!call_stack->empty()) call_stack->pop(); }
+
+
+
+
+template <typename T> RuntimeError RuntimeStack::load_from_memory_to_stack() {
+    if (stack->size() < sizeof(MY_PTR_t)) return  RuntimeError::STACK_UNDERFLOW;
+    MY_PTR_t address = pop_pointer();
+    if (address + sizeof(T) > memory->size()) return  RuntimeError::INVALID_MEMORY_ADDRESS;
+    // address = reverse_byte_order(address);
+    T value = 0;
+    bool error = memory->readArea(address, reinterpret_cast<u8*&>(value), sizeof(T));
+    if (error) return RuntimeError::INVALID_MEMORY_ADDRESS;
+    error = push_custom(value);
+    if (error) return RuntimeError::STACK_OVERFLOW;
+    return  RuntimeError::STATUS_SUCCESS;
+}
+
+template <typename T> RuntimeError RuntimeStack::store_from_stack_to_memory(bool copy) {
+    if (stack->size() < (sizeof(T) + sizeof(MY_PTR_t))) return  RuntimeError::STACK_UNDERFLOW;
+    T value = pop_custom<T>();
+    MY_PTR_t address = pop_pointer();
+    if ((address + sizeof(T)) > memory->size()) return  RuntimeError::INVALID_MEMORY_ADDRESS;
+    // address = reverse_byte_order(address);
+    bool error = memory->writeArea(address, reinterpret_cast<u8*>(&value), sizeof(T));
+    if (error) return  RuntimeError::INVALID_MEMORY_ADDRESS;
+    if (copy) error = push_custom(value);
+    return error ? RuntimeError::STACK_OVERFLOW : RuntimeError::STATUS_SUCCESS;
+}
+
+RuntimeError RuntimeStack::load_from_memory_to_stack(u8 data_type) {
+    switch (data_type) {
+        case type_pointer: return load_from_memory_to_stack<MY_PTR_t>();
+        case type_bool:
+        case type_u8:
+        case type_i8: return load_from_memory_to_stack<u8>();
+        case type_u16:
+        case type_i16: return load_from_memory_to_stack<u16>();
+        case type_u32:
+        case type_i32:
+        case type_f32: return load_from_memory_to_stack<u32>();
+#ifdef USE_X64_OPS
+        case type_u64:
+        case type_i64:
+        case type_f64: return load_from_memory_to_stack<u64>();
+#endif // USE_X64_OPS
+        default: return  RuntimeError::INVALID_DATA_TYPE;
+    }
+    return RuntimeError::INVALID_DATA_TYPE;
+}
+
+RuntimeError RuntimeStack::store_from_stack_to_memory(u8 data_type, bool copy) {
+    switch (data_type) {
+        case type_pointer: return store_from_stack_to_memory<MY_PTR_t>(copy);
+        case type_bool:
+        case type_u8:
+        case type_i8: return store_from_stack_to_memory<u8>(copy);
+        case type_u16:
+        case type_i16: return store_from_stack_to_memory<u16>(copy);
+        case type_u32:
+        case type_i32:
+        case type_f32: return store_from_stack_to_memory<u32>(copy);
+#ifdef USE_X64_OPS
+        case type_u64:
+        case type_i64:
+        case type_f64: return store_from_stack_to_memory<u64>(copy);
+#endif // USE_X64_OPS
+        default: return RuntimeError::INVALID_DATA_TYPE;
+    }
+    return RuntimeError::INVALID_DATA_TYPE;
+}

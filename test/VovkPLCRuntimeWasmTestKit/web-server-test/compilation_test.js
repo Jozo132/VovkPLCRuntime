@@ -1,6 +1,8 @@
 // @ts-check
 "use strict"
 
+const ptr_list = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', "k", "l", "x", "y"]
+
 global.a = 1
 global.b = 2
 global.c = 3
@@ -110,59 +112,17 @@ const isModifier = t => {
 const isNumeric = t => {
     // Check each character is a digit AND check there is at most one decimal point
     t = t || ""
-    let is_hex = false
-    let is_binary = false
-    let is_octal = false
-    if (t.startsWith('0x')) is_hex = true
-    if (t.startsWith('0b')) is_binary = true
-    if (t.startsWith('0o')) is_octal = true
-    if (is_hex) {
-        t = t.substr(2)
-        for (let i = 0; i < t.length; i++) {
-            const c = t[i]
-            const is_underscore = c === "_"
-            const is_num = c >= "0" && c <= "9"
-            const is_hex = c >= "a" && c <= "f"
-            const is_hex_upper = c >= "A" && c <= "F"
-            if (!is_underscore && !is_num && !is_hex && !is_hex_upper) return false
-        }
-        return true
-    }
-    if (is_binary) {
-        t = t.substr(2)
-        for (let i = 0; i < t.length; i++) {
-            const c = t[i]
-            const is_underscore = c === "_"
-            const is_num = c >= "0" && c <= "1"
-            if (!is_underscore && !is_num) return false
-        }
-        return true
-    }
-    if (is_octal) {
-        t = t.substr(2)
-        for (let i = 0; i < t.length; i++) {
-            const c = t[i]
-            const is_underscore = c === "_"
-            const is_num = c >= "0" && c <= "7"
-            if (!is_underscore && !is_num) return false
-        }
-        return true
-    }    
-    let digits = 0
     let decimal_point_count = 0
     for (let i = 0; i < t.length; i++) {
         const c = t[i]
         const is_num = c >= "0" && c <= "9"
-        const is_underscore = c === "_"
         if (c === ".") {
             decimal_point_count++
-        } else if (!is_underscore && !is_num && c !== '-' && c !== '+') {
+        } else if (!is_num && c !== '-' && c !== '+') {
             return false
         }
-
-        if (is_num) digits++
     }
-    return digits > 0 && decimal_point_count <= 1
+    return decimal_point_count <= 1
 }
 
 const isVariable = t => {
@@ -193,6 +153,10 @@ const isSeperator = t => {
     return t === "," || t === ";" || t === "\n"
 }
 
+const isAssignment = t => {
+    return OPERATOR_GROUPS.assignment.includes(t)
+}
+
 const getType = t => {
     if (isOperator(t)) return "operator"
     if (isModifier(t)) return "modifier"
@@ -204,9 +168,9 @@ const getType = t => {
 }
 
 
+/** @type { (code: string) => Token[] } */
 const tokenize = code => {
     const tokens = []
-    let t0 = ""
     let t1 = ""
 
     /** @type { (char?: string) => void } */
@@ -214,16 +178,16 @@ const tokenize = code => {
         if (c) t1 += c
         if (t1 !== "") {
             tokens.push(t1)
-            t0 = t1
             t1 = ""
         }
     }
 
     let c0 = ""
-    code = code.split('\n').map(line => line.trim()).filter(Boolean).join('; ')
+    code = code.split('\r\n').join('\n').split('\n').map(line => line.trim()).filter(Boolean).join('\n')
     for (let i = 0; i < code.length; i++) {
         const c = code[i]
         const isSeperator = OPERATOR_GROUPS.seperator.includes(c)
+        const isBracket = c === "(" || c === ")"
         if (c === " ") {
             push()
         } else if (c === '=') {
@@ -234,9 +198,12 @@ const tokenize = code => {
                 push()
                 push(c)
             }
-        } else if (c === "(" || c === ")" || c == "," || c === ";") {
+        } else if (isBracket) {
             push()
             push(c)
+        } else if (isSeperator) {
+            push()
+            push(c === '\n' ? ';' : c)
         } else if (c === "+" || c === "-" || c === "*" || c === "/") {
             if (c0 === c)
                 tokens[tokens.length - 1] += c
@@ -244,9 +211,6 @@ const tokenize = code => {
                 push()
                 push(c)
             }
-        } else if (isSeperator) {
-            push()
-            push(c)
         } else {
             t1 += c
         }
@@ -331,6 +295,11 @@ const encode = infix => {
         if (type === "number" || type === "variable") {
             postfix.push(t)
         } else if (type === "operator") {
+            if (isAssignment(t)) {
+                const top = postfix.pop()
+                postfix.push('ptr')
+                postfix.push(top)
+            }
             while (operator_stack.length > 0 && getPrecedence(operator_stack[operator_stack.length - 1]) >= getPrecedence(t)) {
                 postfix.push(operator_stack.pop() + '')
             }
@@ -348,6 +317,7 @@ const encode = infix => {
             while (operator_stack[operator_stack.length - 1]) {
                 postfix.push(operator_stack.pop() + '')
             }
+            postfix.push(t)
         } else {
             throw new Error(`Unknown token type: ${type} -> "${t}"`)
         }
@@ -387,11 +357,20 @@ const parseValue = (x) => {
     throw new Error(`Unknown value type: ${type}`)
 }
 
-const evaluateOperator = (operator, x, y) => {
-    const x_name = typeof x === 'string' ? x.replace(/"/g, '').replace(/-/g, '').replace(/\+/g, '') : ''
-    const y_name = typeof y === 'string' ? y.replace(/"/g, '').replace(/-/g, '').replace(/\+/g, '') : ''
-    const a = parseValue(x)
+const solveOperator = (operator, x, y) => {
     const b = parseValue(y)
+    if (OPERATOR_GROUPS.assignment.includes(operator)) {
+        const x_name = ptr_list[+x]
+        if (typeof x_name !== 'string') throw new Error(`Unknown pointer: ${x}`)
+        if (operator === "=") global[x_name] = b
+        if (operator === "+=") global[x_name] += b
+        if (operator === "-=") global[x_name] -= b
+        if (operator === "*=") global[x_name] *= b
+        if (operator === "/=") global[x_name] /= b
+        return global[x_name]
+    }
+
+    const a = parseValue(x)
     if (operator === "+") return a + b
     if (operator === "-") return a - b
     if (operator === "*") return a * b
@@ -411,20 +390,11 @@ const evaluateOperator = (operator, x, y) => {
     if (operator === ">") return a > b
     if (operator === "<=") return a <= b
     if (operator === ">=") return a >= b
-    if (OPERATOR_GROUPS.assignment.includes(operator)) {
-        if (!x || getType(x) !== "variable") throw new Error(`Left side of assignment must be a variable: ${x}`)
-        if (operator === "=") global[x_name] = b
-        if (operator === "+=") global[x_name] += b
-        if (operator === "-=") global[x_name] -= b
-        if (operator === "*=") global[x_name] *= b
-        if (operator === "/=") global[x_name] /= b
-        return global[x_name]
-    }
 
     throw new Error(`Unknown operator: ${operator}`)
 }
 
-const evaluate = postfix => {
+const solveRPN = postfix => {
     const stack = []
     for (let i = 0; i < postfix.length; i++) {
         const t = postfix[i]
@@ -436,168 +406,201 @@ const evaluate = postfix => {
         } else if (type === "operator") {
             const b = stack.pop()
             const a = stack.pop()
-            const result = evaluateOperator(t, a, b)
+            const result = solveOperator(t, a, b)
             stack.push(result)
+        } else if (t === ';' && i < postfix.length - 1) {
+            const x = stack.pop()
+            parseValue(x) // This will handle any modifiers
+        } else if (t === 'ptr') {
+            i++
+            const name = postfix[i].replace(/"/g, '').replace(/-/g, '').replace(/\+/g, '')
+            const index = ptr_list.indexOf(name)
+            if (index === -1) throw new Error(`Unknown pointer: ${name}`)
+            stack.push(`${index}`)
+        } else {
+            throw new Error(`Unknown token type: ${type} -> "${t}"`)
         }
     }
-    return stack[stack.length - 1]
-}
-
-
-const ITOP = code => {
-    console.log("infix:", code)
-    const tokens = tokenize(code)
-    // console.log("tokens:", tokens.join(' '))
-    const rpn = encode(tokens)
-    const output = rpn.join(' ')
-    console.log(`postfix: "${output}"`)
-    reset()
-    const result = evaluate(rpn)
-    console.log("\nparsed RPN result:", result)
-    console.log(`Final value: "x" = ${global.x}`)
-    reset()
-    const expected_result = eval(code.replace(/"/g, ''))
-    console.log("\nreal eval result:", expected_result)
-    console.log(`Final value: "x" = ${global.x}`)
-    return rpn
+    // return stack[stack.length - 1]
+    return stack
 }
 
 
 const rpn_to_vplc = (rpn) => {
     const output = []
     const variables = []
-    const stack = []
+    const temp_stack = []
+    let next_is_ptr = false
     for (let i = 0; i < rpn.length; i++) {
         const is_last = i === rpn.length - 1
         const token = rpn[i]
         const type = getType(token)
         if (type === 'number') {
-            output.push(`i32.const ${token} // 1 - push the number "${token}" onto the stack`)
-            stack.push(token)
+            output.push(`i32.const ${token} // Constant numeric value`)
+            temp_stack.push(token)
         } else if (type === 'variable') {
             const name = token.replace(/"/g, '').replace(/-/g, '').replace(/\+/g, '')
             if (!variables.find(v => v.name === name)) {
                 const index = variables.length * 4
-                const create = `const ${name} = ${index} // 2 - memory index for variable "${name}"`
+                const create = `const ${name} = ${index}`
                 variables.push({ name, create })
             }
-            output.push(`i32.load ${name} // 3 - load the value of the variable "${name}"`)
-            stack.push(token)
+            temp_stack.push(token)
             const prefix_modifier = token.startsWith('--') || token.startsWith('++')
             const postfix_modifier = token.endsWith('--') || token.endsWith('++')
-            if (prefix_modifier) {
-                output.push(`i32.const 1 // 4 - push the number "1" onto the stack - handling ++${name} or --${name}`)
-                if (token.startsWith('++')) output.push(`i32.add // 5 - add the number "1" to the variable "${name}"`)
-                else output.push(`i32.sub // 6 - subtract the number "1" from the variable "${name}"`)
-                output.push(`i32.copy // 7 - keep the updated value for return`)
-                output.push(`i32.store ${name} // 8 - store the updated value of the variable "${name}"`)
+            const pre_op = prefix_modifier ? token.startsWith('++') ? 'add' : 'sub' : null
+            const post_op = postfix_modifier ? token.endsWith('++') ? 'add' : 'sub' : null
+            if (pre_op) {
+                output.push(`i32.const ${name} // Handle unary operation: ${token}`)
+                output.push(`ptr.const ${name}`)
+                output.push(`i32.const 1`)
+                output.push(`i32.${pre_op}`)
+                if (next_is_ptr) {
+                    output.push(`i32.move`)
+                    output.push(`i32.const ${name}`)
+                    next_is_ptr = false
+                } else {
+                    output.push(`i32.move_copy`)
+                }
             }
             if (postfix_modifier) {
-                output.push(`i32.copy // 9 - keep the original value for return - handling ${name}++ or ${name}--`)
-                output.push(`i32.const 1 // 10 - push the number "1" onto the stack`)
-                if (token.endsWith('++')) output.push(`i32.add // 11 - add the number "1" to the variable "${name}"`)
-                else output.push(`i32.sub // 12 - subtract the number "1" from the variable "${name}"`)
-                output.push(`i32.store ${name} // 13 - store the updated value of the variable "${name}"`)
+                if (prefix_modifier) throw new Error(`Cannot have both unary prefix and unary postfix operations: ${token}`)
+                output.push(`ptr.const ${name} // Handle unary operation: ${token}`)
+                output.push(`i32.load`)
+                output.push(`i32.copy`)
+                output.push(`i32.const ${name}`)
+                output.push(`i32.swap`)
+                output.push(`i32.const 1`)
+                output.push(`i32.${post_op}`)
+                output.push(`i32.move`)
+                if (next_is_ptr) {
+                    output.push(`i32.drop`)
+                    output.push(`ptr.const ${name}`)
+                    next_is_ptr = false
+                }
+            }
+            if (!pre_op && !post_op) {
+                if (next_is_ptr) {
+                    output.push(`ptr.const ${name} // Load address of "${name}" (pointer)`)
+                    next_is_ptr = false
+                } else {
+                    output.push(`ptr.const ${name} // Load value of "${name}"`)
+                    output.push(`i32.load`)
+                }
             }
         } else if (type === 'operator') {
 
-            const token_b = stack.pop() // Remove the last value from the stack
-            const token_a = stack.pop() // Remove the second last value from the stack
+            const token_b = temp_stack.pop() // Remove the last value from the stack
+            const token_a = temp_stack.pop() // Remove the second last value from the stack
 
             const token_a_type = getType(token_a)
             const token_b_type = getType(token_b)
 
             const isAssignment = OPERATOR_GROUPS.assignment.includes(token)
             if (isAssignment) {
-                const oneToOne = token_a && token_b && token_a_type === 'variable' && (token_b_type === 'variable' || token_b_type === 'number')
-                if (oneToOne) {
-                    output.pop() // Remove the last value from the stack
-                    output.pop() // Remove the second last value from the stack
-                    const name = token_a.replace(/"/g, '').replace(/-/g, '').replace(/\+/g, '')
-                    const name_b = token_b_type === 'variable' ? token_b.replace(/"/g, '').replace(/-/g, '').replace(/\+/g, '') : null
-                    if (token === '=') {
-                        if (token_b_type === 'variable') output.push(`i32.load ${name_b} // 14 - load the value of the variable "${name_b}"`)
-                        else output.push(`i32.const ${token_b} // 15 - push the number "${token_b}" onto the stack`)
-                        if (is_last) output.push(`i32.copy // 16 - keep the last value for return`)
-                        output.push(`i32.store ${name} // 17 - store the value of the variable "${name}"`)
-                    } else {
-                        output.push(`i32.load ${name} // 18 - load the value of the variable "${name}"`)
-                        if (token_b_type === 'variable') output.push(`i32.load ${name_b} // 19 - load the value of the variable "${name_b}"`)
-                        else output.push(`i32.const ${token_b} // 20 - push the number "${token_b}" onto the stack`)
-                        switch (token) {
-                            case '+=': output.push(`i32.add // 21`); break
-                            case '-=': output.push(`i32.sub // 22`); break
-                            case '*=': output.push(`i32.mul // 23`); break
-                            case '/=': output.push(`i32.div // 24`); break
-                            default: throw new Error(`Unknown assignment operator: ${token}`)
-                        }
-                        if (is_last) output.push(`i32.copy // 25 - keep the last value for return`)
-                        output.push(`i32.store ${name} // 26 - store the value of the variable "${name}"`)
-                    }
+                if (token_a_type !== 'variable') throw new Error(`Left side of assignment must be a variable: ${token_a}`)
+                const name = token_a.replace(/"/g, '').replace(/-/g, '').replace(/\+/g, '')
+                if (token === '=') {
+                    output.push(`i32.move_copy // Save value to "${name}"`)
                 } else {
-                    if (token_a_type !== 'variable') throw new Error(`Left side of assignment must be a variable: ${token_a}`)
-                    const name = token_a.replace(/"/g, '').replace(/-/g, '').replace(/\+/g, '')
-                    if (token === '=') {
-                        output.push(`i32.store ${name} // 27 - store the value of the variable "${name}"`)
-                        output.push(`i32.drop // 28 - drop original value of the variable "${name}" since we stored it directly to memory`)
-                        if (is_last) output.push(`i32.load ${name} // 29 - load the value of the variable "${name}"`)
-                    } else {
-                        output.push(`i32.swap // 30 - swap the last two values on the stack`)
-                        output.push(`i32.drop // 31 - drop original value of the variable "${name}" since we stored it directly to memory`)
-                        output.push(`i32.load ${name} // 32 - load the value of the variable "${name}"`)
-                        switch (token) {
-                            case '+=':
-                                output.push(`i32.add // 33`);
-                                break
-                            case '-=':
-                                output.push(`i32.swap // 34 - swap the last two values on the stack`);
-                                output.push(`i32.sub // 35`);
-                                break
-                            case '*=':
-                                output.push(`i32.mul // 36`);
-                                break
-                            case '/=':
-                                output.push(`i32.swap // 37 - swap the last two values on the stack`);
-                                output.push(`i32.div // 38`);
-                                break
-                            default: throw new Error(`Unknown assignment operator: ${token}`)
-                        }
-                        if (is_last) output.push(`i32.copy // 39 - keep the last value for return`)
-                        output.push(`i32.store ${name} // 40 - store the value of the variable "${name}"`)
+                    output.push(`ptr.const ${name} // Load value of "${name}"`)
+                    output.push(`i32.load`)
+                    switch (token) {
+                        case '+=':
+                            output.push(`i32.add`);
+                            break
+                        case '-=':
+                            output.push(`i32.swap`);
+                            output.push(`i32.sub`);
+                            break
+                        case '*=':
+                            output.push(`i32.mul`);
+                            break
+                        case '/=':
+                            output.push(`i32.swap`);
+                            output.push(`i32.div`);
+                            break
+                        default: throw new Error(`Unknown assignment operator: ${token}`)
                     }
+                    output.push(`i32.move_copy // Save value to "${name}"`)
                 }
 
             } else {
                 switch (token) {
-                    case '+': output.push(`i32.add // 41`); break
-                    case '-': output.push(`i32.sub // 42`); break
-                    case '*': output.push(`i32.mul // 43`); break
-                    case '/': output.push(`i32.div // 44`); break
-                    case '%': output.push(`i32.mod // 45`); break
-                    case '<': output.push(`i32.cmp_lt // 46`); break
-                    case '>': output.push(`i32.cmp_gt // 47`); break
-                    case '==': output.push(`i32.cmp_eq // 48`); break
-                    case '!=': output.push(`i32.cmp_neq // 49`); break
-                    case '>=': output.push(`i32.cmp_gte // 50`); break
-                    case '<=': output.push(`i32.cmp_lte // 51`); break
+                    case '+': output.push(`i32.add`); break
+                    case '-': output.push(`i32.sub`); break
+                    case '*': output.push(`i32.mul`); break
+                    case '/': output.push(`i32.div`); break
+                    case '%': output.push(`i32.mod`); break
+                    case '<': output.push(`i32.cmp_lt`); break
+                    case '>': output.push(`i32.cmp_gt`); break
+                    case '==': output.push(`i32.cmp_eq`); break
+                    case '!=': output.push(`i32.cmp_neq`); break
+                    case '>=': output.push(`i32.cmp_gte`); break
+                    case '<=': output.push(`i32.cmp_lte`); break
                     default: throw new Error(`Unknown operator: ${token}`)
                 }
             }
 
-            stack.push(undefined) // Push a null value to the stack to keep the stack size the same
+            temp_stack.push(undefined) // Push a null value to the stack to keep the stack size the same
+        } else if (type === 'seperator') {
+            const last = output[output.length - 1]
+            if (last) {
+                const [code, comment] = last.split('//').map(x => x.trim())
+                if (code === 'i32.move_copy') {
+                    output[output.length - 1] = `i32.move${comment ? ` // ${comment.replace('Save', 'Move')}` : ''}`
+                }
+            }
+            output.push(`// ------------------`)
+        } else if (token === 'ptr') {
+            next_is_ptr = true
         } else {
             throw new Error(`Unknown token type: ${type} -> "${token}"`)
         }
     }
-    while (variables.length > 0) {
-        const variable = variables.pop()
-        output.unshift(variable?.create)
+    output.unshift(`// Bytecode:`)
+    if (variables.length > 0) {
+        while (variables.length > 0) {
+            const variable = variables.pop()
+            output.unshift(variable?.create)
+        }
+        output.unshift(`// Variable offsets:`)
     }
-    output.forEach((line, i) => {
-        output[i] = line.split('//')[0]
-    })
     return output
 }
+
+
+
+const ITOP = code => {
+    console.log(`infix: ${code}`)
+    const tokens = tokenize(code)
+    // console.log(`tokens: ${tokens.join(' ')}`)
+    const rpn = encode(tokens)
+    const output = rpn.join(' ')
+    console.log(`postfix: ${output}`)
+    reset()
+    const result = solveRPN(rpn)
+    console.log("\nparsed RPN result:", result)
+    console.log(`Final value: "x" = ${global.x}`)
+    reset()
+    const expected_result = eval(code.replace(/"/g, ''))
+    console.log("\nreal eval result:", expected_result)
+    console.log(`Final value: "x" = ${global.x}`)
+
+
+    const vplc = rpn_to_vplc(rpn)
+    vplc.forEach((line, i) => {
+        const [code, comment] = line.split('//').map(x => x.trim())
+        if (!code) return
+        vplc[i] = `${code.padEnd(16, ' ')} ${comment ? `// ${comment}` : ''}`
+        // vplc[i] = code
+    })
+    console.log(`\nPLC ASM:`)
+    console.log(vplc.map(x => '  ' + x).join('\n'))
+
+    return rpn
+}
+
 
 // const temp_code = `1 + (2 * 3 + -4 * (++"a" + --"b" * (3 + 1)) + "c"++ - "a"++ - "a"++) % 13`
 // const temp_code = `1 + 2 * 3 + -4 * ("a" + "b" * (3 + 1)) + "c"`
@@ -605,18 +608,18 @@ const rpn_to_vplc = (rpn) => {
 // const temp_code = '10 * (1 - "a" * ("b" + "c" * ("c" + "d" * ("d"-"e" *("e"-"f")))) / "d")'
 // const temp_code = '5 + 4 * 8 / 3 + 1'
 // const temp_code = '(2 + (9 - 3)) * 3'
+// const temp_code = '"x" += ("a" + "b") * "c"'
 const temp_code = `
    "a" = 1
    "b" = 2
    "c" = 3
    "x" = 1
+   "x"++
+   ++"x"
    "x" += ("a" + "b") * "c"
 `
 
 const rpn = ITOP(temp_code)
-const vplc = rpn_to_vplc(rpn)
-console.log(`\nPLC ASM:`)
-console.log(vplc.map(x => '  ' + x).join('\n'))
 
 
 

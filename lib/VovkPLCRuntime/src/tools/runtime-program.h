@@ -24,62 +24,69 @@
 class InstructionCompiler {
 public:
     // Push a new sequence of bytes to the PLC Program
-    static uint32_t push(uint8_t* location, uint8_t* code, uint32_t code_size) {
+    static u32 push(u8* location, u8* code, u32 code_size) {
         memcpy(location, code, code_size);
         return code_size;
     }
 
     // Push a new instruction to the PLC Program
-    static uint8_t push(uint8_t* location, uint8_t instruction) {
+    static u8 push(u8* location, u8 instruction) {
         location[0] = instruction;
         return 1;
     }
 
     // Push a new instruction to the PLC Program
-    static uint8_t push(uint8_t* location, uint8_t instruction, uint8_t data_type) {
+    static u8 push(u8* location, u8 instruction, u8 data_type) {
         location[0] = instruction;
         location[1] = data_type;
         return 2;
     }
 
+    static u8 push_pointer(u8* location, MY_PTR_t pointer) {
+        location[0] = type_pointer;
+        // memcpy(location + 1, &pointer, sizeof(MY_PTR_t)); // Wrong endianess
+        for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[i + 1] = (pointer >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
+        return 1 + sizeof(MY_PTR_t);        
+    }
+
     // Push a boolean value to the PLC Program
-    static uint8_t push_bool(uint8_t* location, bool value) {
-        return push_uint8_t(location, value ? 1 : 0);
+    static u8 push_bool(u8* location, bool value) {
+        return push_u8(location, value ? 1 : 0);
     }
 
-    // Push an uint8_t value to the PLC Program
-    static uint8_t push_uint8_t(uint8_t* location, uint8_t value) {
-        location[0] = type_uint8_t;
+    // Push an u8 value to the PLC Program
+    static u8 push_u8(u8* location, u8 value) {
+        location[0] = type_u8;
         location[1] = value;
         return 2;
     }
 
-    // Push an int8_t value to the PLC Program
-    static uint8_t push_int8_t(uint8_t* location, int8_t value) {
-        location[0] = type_int8_t;
+    // Push an i8 value to the PLC Program
+    static u8 push_i8(u8* location, i8 value) {
+        location[0] = type_i8;
         location[1] = value;
         return 2;
     }
 
-    // Push an uint16_t value to the PLC Program
-    static uint8_t push_uint16_t(uint8_t* location, uint32_t value) {
-        location[0] = type_uint16_t;
+    // Push an u16 value to the PLC Program
+    static u8 push_u16(u8* location, u32 value) {
+        location[0] = type_u16;
         location[1] = value >> 8;
         location[2] = value & 0xFF;
         return 3;
     }
 
-    // Push an int16_t value to the PLC Program
-    static uint8_t push_int16_t(uint8_t* location, int16_t value) {
-        location[0] = type_int16_t;
+    // Push an i16 value to the PLC Program
+    static u8 push_i16(u8* location, i16 value) {
+        location[0] = type_i16;
         location[1] = value >> 8;
         location[2] = value & 0xFF;
         return 3;
     }
 
-    // Push an uint32_t value to the PLC Program
-    static uint8_t push_uint32_t(uint8_t* location, uint32_t value) {
-        location[0] = type_uint32_t;
+    // Push an u32 value to the PLC Program
+    static u8 push_u32(u8* location, u32 value) {
+        location[0] = type_u32;
         location[1] = value >> 24;
         location[2] = (value >> 16) & 0xFF;
         location[3] = (value >> 8) & 0xFF;
@@ -87,9 +94,9 @@ public:
         return 5;
     }
 
-    // Push an int32_t value to the PLC Program
-    static uint8_t push_int32_t(uint8_t* location, int32_t value) {
-        location[0] = type_int32_t;
+    // Push an i32 value to the PLC Program
+    static u8 push_i32(u8* location, i32 value) {
+        location[0] = type_i32;
         location[1] = value >> 24;
         location[2] = (value >> 16) & 0xFF;
         location[3] = (value >> 8) & 0xFF;
@@ -98,39 +105,39 @@ public:
     }
 
 #ifdef USE_X64_OPS
-    // Push an uint64_t value to the PLC Program
-    static uint8_t push_uint64_t(uint8_t* location, uint64_t value) {
-        location[0] = type_uint64_t;
-        location[1] = value >> (uint64_t) 56;
-        location[2] = (value >> (uint64_t) 48) & 0xFF;
-        location[3] = (value >> (uint64_t) 40) & 0xFF;
-        location[4] = (value >> (uint64_t) 32) & 0xFF;
-        location[5] = (value >> (uint64_t) 24) & 0xFF;
-        location[6] = (value >> (uint64_t) 16) & 0xFF;
-        location[7] = (value >> (uint64_t) 8) & 0xFF;
+    // Push an u64 value to the PLC Program
+    static u8 push_u64(u8* location, u64 value) {
+        location[0] = type_u64;
+        location[1] = value >> (u64) 56;
+        location[2] = (value >> (u64) 48) & 0xFF;
+        location[3] = (value >> (u64) 40) & 0xFF;
+        location[4] = (value >> (u64) 32) & 0xFF;
+        location[5] = (value >> (u64) 24) & 0xFF;
+        location[6] = (value >> (u64) 16) & 0xFF;
+        location[7] = (value >> (u64) 8) & 0xFF;
         location[8] = value & 0xFF;
         return 9;
     }
 
-    // Push an int64_t value to the PLC Program
-    static uint8_t push_int64_t(uint8_t* location, int64_t value) {
-        location[0] = type_int64_t;
-        location[1] = value >> (int64_t) 56;
-        location[2] = (value >> (int64_t) 48) & 0xFF;
-        location[3] = (value >> (int64_t) 40) & 0xFF;
-        location[4] = (value >> (int64_t) 32) & 0xFF;
-        location[5] = (value >> (int64_t) 24) & 0xFF;
-        location[6] = (value >> (int64_t) 16) & 0xFF;
-        location[7] = (value >> (int64_t) 8) & 0xFF;
+    // Push an i64 value to the PLC Program
+    static u8 push_i64(u8* location, i64 value) {
+        location[0] = type_i64;
+        location[1] = value >> (i64) 56;
+        location[2] = (value >> (i64) 48) & 0xFF;
+        location[3] = (value >> (i64) 40) & 0xFF;
+        location[4] = (value >> (i64) 32) & 0xFF;
+        location[5] = (value >> (i64) 24) & 0xFF;
+        location[6] = (value >> (i64) 16) & 0xFF;
+        location[7] = (value >> (i64) 8) & 0xFF;
         location[8] = value & 0xFF;
         return 9;
     }
 #endif // USE_X64_OPS
 
     // Push a float value to the PLC Program
-    static uint8_t push_float(uint8_t* location, float value) {
-        location[0] = type_float;
-        uint32_t* value_ptr = (uint32_t*) &value;
+    static u8 push_f32(u8* location, float value) {
+        location[0] = type_f32;
+        u32* value_ptr = (u32*) &value;
         location[1] = *value_ptr >> 24;
         location[2] = (*value_ptr >> 16) & 0xFF;
         location[3] = (*value_ptr >> 8) & 0xFF;
@@ -140,9 +147,9 @@ public:
 
 #ifdef USE_X64_OPS
     // Push a double value to the PLC Program
-    static uint8_t push_double(uint8_t* location, double value) {
-        location[0] = type_double;
-        uint64_t* value_ptr = (uint64_t*) &value;
+    static u8 push_f64(u8* location, double value) {
+        location[0] = type_f64;
+        u64* value_ptr = (u64*) &value;
         location[1] = *value_ptr >> 56;
         location[2] = (*value_ptr >> 48) & 0xFF;
         location[3] = (*value_ptr >> 40) & 0xFF;
@@ -155,8 +162,8 @@ public:
     }
 #endif // USE_X64_OPS
 
-    // Push instruction + uint16_t value to the PLC Program
-    static uint8_t push_InstructionWithU32(uint8_t* location, PLCRuntimeInstructionSet instruction, uint16_t value) {
+    // Push instruction + u16 value to the PLC Program
+    static u8 push_InstructionWithU32(u8* location, PLCRuntimeInstructionSet instruction, u16 value) {
         location[0] = instruction;
         location[1] = value >> 8;
         location[2] = value & 0xFF;
@@ -164,38 +171,38 @@ public:
     }
 
     // Push flow control instructions to the PLC Program
-    static uint8_t pushJMP(uint8_t* location, uint32_t location_address) {
+    static u8 push_jmp(u8* location, u32 location_address) {
         location[0] = JMP;
         location[1] = location_address >> 8;
         location[2] = location_address & 0xFF;
         return 3;
     }
-    static uint8_t pushJMP_IF(uint8_t* location, uint32_t location_address) {
+    static u8 push_jmp_if(u8* location, u32 location_address) {
         location[0] = JMP_IF;
         location[1] = location_address >> 8;
         location[2] = location_address & 0xFF;
         return 3;
     }
-    static uint8_t pushJMP_IF_NOT(uint8_t* location, uint32_t location_address) {
+    static u8 push_jmp_if_not(u8* location, u32 location_address) {
         location[0] = JMP_IF_NOT;
         location[1] = location_address >> 8;
         location[2] = location_address & 0xFF;
         return 3;
     }
 
-    static uint8_t pushCALL(uint8_t* location, uint32_t location_address) {
+    static u8 pushCALL(u8* location, u32 location_address) {
         location[0] = CALL;
         location[1] = location_address >> 8;
         location[2] = location_address & 0xFF;
         return 3;
     }
-    static uint8_t pushCALL_IF(uint8_t* location, uint32_t location_address) {
+    static u8 pushCALL_IF(u8* location, u32 location_address) {
         location[0] = CALL_IF;
         location[1] = location_address >> 8;
         location[2] = location_address & 0xFF;
         return 3;
     }
-    static uint8_t pushCALL_IF_NOT(uint8_t* location, uint32_t location_address) {
+    static u8 pushCALL_IF_NOT(u8* location, u32 location_address) {
         location[0] = CALL_IF_NOT;
         location[1] = location_address >> 8;
         location[2] = location_address & 0xFF;
@@ -204,44 +211,48 @@ public:
 
 
     // Convert a data type to another data type
-    static uint8_t pushCVT(uint8_t* location, PLCRuntimeInstructionSet from, PLCRuntimeInstructionSet to) {
+    static u8 push_cvt(u8* location, PLCRuntimeInstructionSet from, PLCRuntimeInstructionSet to) {
         location[0] = CVT;
-        location[1] = (uint8_t) from;
-        location[2] = (uint8_t) to;
+        location[1] = (u8) from;
+        location[2] = (u8) to;
         return 3;
     }
 
-    // Pushes the byte at the given address of the memory into the stack
-    static uint8_t pushGET(uint8_t* location, uint32_t location_address, PLCRuntimeInstructionSet type = type_uint8_t) {
-        location[0] = GET;
-        location[1] = (uint8_t) type;
-        location[2] = location_address >> 8;
-        location[3] = location_address & 0xFF;
-        return 4;
+    // Pop the pointer from the stack and load the value type from the pointer address
+    static u8 push_load(u8* location, PLCRuntimeInstructionSet type = type_u8) {
+        location[0] = LOAD;
+        location[1] = type;
+        return 2;
     }
-    // Stores the byte at the top of the stack into the given address in memory and pops the stack
-    static uint8_t pushPUT(uint8_t* location, uint32_t location_address, PLCRuntimeInstructionSet type = type_uint8_t) {
-        location[0] = PUT;
-        location[1] = (uint8_t) type;
-        location[2] = location_address >> 8;
-        location[3] = location_address & 0xFF;
-        return 4;
+
+    // Pop(1) the value from the stack and pop(2) the pointer from the stack and set the memory at the pointer address to the value
+    static u8 push_move(u8* location, PLCRuntimeInstructionSet type = type_u8) {
+        location[0] = MOVE;
+        location[1] = type;
+        return 2;
+    }
+
+    // Pop(1) the value from the stack, pop(2) the pointer from the stack, push(3) the value back into the stack and set the memory at the pointer address to the value
+    static u8 push_move_copy(u8* location, PLCRuntimeInstructionSet type = type_u8) {
+        location[0] = MOVE_COPY;
+        location[1] = type;
+        return 2;
     }
 
     // Make a duplica of the top of the stack
-    static uint8_t pushCOPY(uint8_t* location, PLCRuntimeInstructionSet type = type_uint8_t) {
+    static u8 push_copy(u8* location, PLCRuntimeInstructionSet type = type_u8) {
         location[0] = COPY;
         location[1] = type;
         return 2;
     }
     // Swap the top two values on the stack
-    static uint8_t pushSWAP(uint8_t* location, PLCRuntimeInstructionSet type = type_uint8_t) {
+    static u8 push_swap(u8* location, PLCRuntimeInstructionSet type = type_u8) {
         location[0] = SWAP;
         location[1] = type;
         return 2;
     }
     // Drop the top value from the stack
-    static uint8_t pushDROP(uint8_t* location, PLCRuntimeInstructionSet type = type_uint8_t) {
+    static u8 push_drop(u8* location, PLCRuntimeInstructionSet type = type_u8) {
         location[0] = DROP;
         location[1] = type;
         return 2;
@@ -250,21 +261,21 @@ public:
 
 class RuntimeProgram {
 private:
-    uint32_t MAX_PROGRAM_SIZE = PLCRUNTIME_DEFAULT_PROGRAM_SIZE; // Max program size in bytes
+    u32 MAX_PROGRAM_SIZE = PLCRUNTIME_DEFAULT_PROGRAM_SIZE; // Max program size in bytes
 public:
 #ifdef __WASM__
-    uint8_t* program = nullptr; // PLC program to execute
+    u8* program = nullptr; // PLC program to execute
 #else
-    uint8_t* program = new uint8_t[PLCRUNTIME_DEFAULT_PROGRAM_SIZE]; // PLC program to execute
+    u8* program = new u8[PLCRUNTIME_DEFAULT_PROGRAM_SIZE]; // PLC program to execute
 #endif // __WASM__
-    uint32_t program_size = 0; // Current program size in bytes
-    uint32_t program_line = 0; // Active program line
+    u32 program_size = 0; // Current program size in bytes
+    u32 program_line = 0; // Active program line
     RuntimeError status = UNDEFINED_STATE;
 
-    RuntimeProgram(uint32_t program_size) {
+    RuntimeProgram(u32 program_size) {
         if (program_size > PLCRUNTIME_DEFAULT_PROGRAM_SIZE) {
             if (program != nullptr) delete [] program;
-            program = new uint8_t[program_size];
+            program = new u8[program_size];
             this->MAX_PROGRAM_SIZE = program_size;
         }
     }
@@ -273,30 +284,30 @@ public:
         if (program != nullptr) delete [] program;
     }
 
-    void begin(const uint8_t* program, uint32_t program_size, uint8_t checksum) {
+    void begin(const u8* program, u32 program_size, u8 checksum) {
         format(program_size);
         load(program, program_size, checksum);
     }
 
-    void beginUnsafe(const uint8_t* program, uint32_t program_size) {
+    void beginUnsafe(const u8* program, u32 program_size) {
         format(program_size);
         loadUnsafe(program, program_size);
     }
 
-    void begin(uint32_t program_size = 0) {
+    void begin(u32 program_size = 0) {
         format(program_size);
     }
 
-    void format(uint32_t program_size = 0) {
+    void format(u32 program_size = 0) {
         if (program_size == 0) program_size = MAX_PROGRAM_SIZE;
         if (program_size > MAX_PROGRAM_SIZE) program_size = MAX_PROGRAM_SIZE;
-        if (this->program == nullptr) this->program = new uint8_t[MAX_PROGRAM_SIZE];
+        if (this->program == nullptr) this->program = new u8[MAX_PROGRAM_SIZE];
         this->program_size = 0;
         this->program_line = 0;
         this->status = UNDEFINED_STATE;
     }
 
-    RuntimeError loadUnsafe(const uint8_t* program, uint32_t program_size) {
+    RuntimeError loadUnsafe(const u8* program, u32 program_size) {
         if (program_size > MAX_PROGRAM_SIZE) status = PROGRAM_SIZE_EXCEEDED;
         else if (program_size == 0) status = UNDEFINED_STATE;
         else status = STATUS_SUCCESS;
@@ -306,8 +317,8 @@ public:
         return status;
     }
 
-    RuntimeError load(const uint8_t* program, uint32_t program_size, uint8_t checksum) {
-        uint8_t calculated_checksum = 0;
+    RuntimeError load(const u8* program, u32 program_size, u8 checksum) {
+        u8 calculated_checksum = 0;
         crc8_simple(calculated_checksum, program, program_size);
         if (calculated_checksum != checksum) {
             status = INVALID_CHECKSUM;
@@ -318,45 +329,45 @@ public:
     }
 
     // Get the size of used program memory
-    uint32_t size() { return program_size; }
+    u32 size() { return program_size; }
 
     // Hot update the running program. This is a very dangerous operation, so use it with caution!
-    RuntimeError modify(uint32_t index, uint8_t value) {
+    RuntimeError modify(u32 index, u8 value) {
         if (index >= program_size) return INVALID_PROGRAM_INDEX;
         program[index] = value;
         return STATUS_SUCCESS;
     }
 
     // Hot update the running program. This is a very dangerous operation, so use it with caution!
-    RuntimeError modify(uint32_t index, uint8_t* data, uint32_t size) {
+    RuntimeError modify(u32 index, u8* data, u32 size) {
         if (index + size > program_size) return INVALID_PROGRAM_INDEX;
-        for (uint32_t i = 0; i < size; i++) program[index + i] = data[i];
+        for (u32 i = 0; i < size; i++) program[index + i] = data[i];
         return STATUS_SUCCESS;
     }
 
-    RuntimeError modifyValue(uint32_t index, uint32_t value) {
-        if (index + sizeof(uint32_t) > program_size) return INVALID_PROGRAM_INDEX;
+    RuntimeError modifyValue(u32 index, u32 value) {
+        if (index + sizeof(u32) > program_size) return INVALID_PROGRAM_INDEX;
         program[index] = value >> 8;
         program[index + 1] = value & 0xFF;
         return STATUS_SUCCESS;
     }
 
     // Set the active PLC Program line number
-    RuntimeError setLine(uint32_t line_number) {
+    RuntimeError setLine(u32 line_number) {
         if (line_number >= MAX_PROGRAM_SIZE) return INVALID_PROGRAM_INDEX;
         program_line = line_number;
         return STATUS_SUCCESS;
     }
 
     // Get the active PLC Program line number
-    uint32_t getLine() { return program_line; }
+    u32 getLine() { return program_line; }
 
     // Reset the active PLC Program line number to the beginning
     void resetLine() { program_line = 0; }
 
     bool finished() { return program_line >= program_size; }
 
-    uint32_t getProgramSize() { return program_size; }
+    u32 getProgramSize() { return program_size; }
 
     int print() {
         int length = Serial.print(F("Program["));
@@ -366,8 +377,8 @@ public:
             return length;
         }
         length += Serial.print(F("] ["));
-        for (uint32_t i = 0; i < program_size; i++) {
-            uint8_t value = program[i];
+        for (u32 i = 0; i < program_size; i++) {
+            u8 value = program[i];
             if (value < 0x10) length += Serial.print('0');
             length += Serial.print(value, HEX);
             if (i < program_size - 1) length += Serial.print(' ');
@@ -384,7 +395,7 @@ public:
             Serial.println(F("Program is empty."));
             return;
         }
-        uint32_t index = 0;
+        u32 index = 0;
         bool done = false;
         while (!done) {
             // Get current opcode
@@ -393,8 +404,8 @@ public:
             Serial.print(F("    "));
             print_number_padStart(index, 4);
             Serial.print(F(" ["));
-            uint8_t hi = index >> 8;
-            uint8_t lo = index & 0xFF;
+            u8 hi = index >> 8;
+            u8 lo = index & 0xFF;
             print_number_padStart(hi, 2, '0', HEX);
             Serial.print(' ');
             print_number_padStart(lo, 2, '0', HEX);
@@ -409,7 +420,7 @@ public:
             }
 
             // Get current instruction size
-            uint8_t instruction_size = OPCODE_SIZE(opcode);
+            u8 instruction_size = OPCODE_SIZE(opcode);
             // Get current instruction name
             auto instruction_name = OPCODE_NAME(opcode);
             int length = Serial.print(instruction_name);
@@ -421,12 +432,12 @@ public:
             Serial.print(instruction_size);
             Serial.print(F("] "));
             // Print instruction arguments
-            for (uint8_t i = 0; i < instruction_size; i++) {
+            for (u8 i = 0; i < instruction_size; i++) {
                 if ((i + index) >= program_size) {
                     Serial.println(F(" - OUT OF PROGRAM BOUNDS\n"));
                     return;
                 }
-                uint8_t value = program[i + index];
+                u8 value = program[i + index];
                 // Serial.printf(" %02X", value);
                 print_number_padStart(value, 2, '0', HEX);
             }
@@ -442,9 +453,9 @@ public:
         return (PLCRuntimeInstructionSet) program[program_line];
     }
 
-    uint8_t sizeOfCurrentBytecode() { return OPCODE_SIZE(getCurrentBytecode()); }
+    u8 sizeOfCurrentBytecode() { return OPCODE_SIZE(getCurrentBytecode()); }
 
-    int printOpcodeAt(uint32_t index) {
+    int printOpcodeAt(u32 index) {
         int length = 0;
         if (index >= program_size) return length;
         PLCRuntimeInstructionSet opcode = (PLCRuntimeInstructionSet) program[index];
@@ -456,7 +467,7 @@ public:
             length += Serial.print(F("] <Invalid>"));
             return length;
         }
-        uint8_t opcode_size = OPCODE_SIZE(opcode);
+        u8 opcode_size = OPCODE_SIZE(opcode);
         length += Serial.print(F("Opcode["));
         if (opcode < 0x10) length += Serial.print('0');
         length += Serial.print(opcode, HEX);
@@ -467,8 +478,8 @@ public:
         while (length < 27) length += Serial.print('-');
         while (length < 29) length += Serial.print(' ');
         Serial.print('[');
-        for (uint8_t i = 0; i < opcode_size; i++) {
-            uint8_t value = program[index + i];
+        for (u8 i = 0; i < opcode_size; i++) {
+            u8 value = program[index + i];
             if (value < 0x10) length += Serial.print('0');
             length += Serial.print(value, HEX);
             if (i < opcode_size - 1) length += Serial.print(' ');
@@ -476,13 +487,13 @@ public:
         length += Serial.print(']');
         return length;
     }
-    void printlnOpcodeAt(uint32_t index) {
+    void printlnOpcodeAt(u32 index) {
         printOpcodeAt(index);
         Serial.println();
     }
 
     // Push a new sequence of bytes to the PLC Program
-    RuntimeError push(uint8_t* code, uint32_t code_size) {
+    RuntimeError push(u8* code, u32 code_size) {
         if (program_size + code_size > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
@@ -494,7 +505,7 @@ public:
     }
 
     // Push a new instruction to the PLC Program
-    RuntimeError push(uint8_t instruction) {
+    RuntimeError push(u8 instruction) {
         if (program_size + 1 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
@@ -506,7 +517,7 @@ public:
     }
 
     // Push a new instruction to the PLC Program
-    RuntimeError push(uint8_t instruction, uint8_t data_type) {
+    RuntimeError push(u8 instruction, u8 data_type) {
         if (program_size + 2 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
@@ -517,228 +528,246 @@ public:
         return status;
     }
 
+    // Push a pointer to the PLC Program
+    RuntimeError push_pointer(MY_PTR_t pointer) {
+        if (program_size + sizeof(MY_PTR_t) > MAX_PROGRAM_SIZE) {
+            status = PROGRAM_SIZE_EXCEEDED;
+            return status;
+        }
+        program_size += InstructionCompiler::push_pointer(program + program_size, pointer);
+        status = STATUS_SUCCESS;
+        return status;
+    }
+
     // Push a boolean value to the PLC Program
     RuntimeError push_bool(bool value) {
-        return push_uint8_t(value ? 1 : 0);
+        return push_u8(value ? 1 : 0);
     }
 
-    // Push an uint8_t value to the PLC Program
-    RuntimeError push_uint8_t(uint8_t value) {
+    // Push an u8 value to the PLC Program
+    RuntimeError push_u8(u8 value) {
         if (program_size + 2 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
-        program_size += InstructionCompiler::push_uint8_t(program + program_size, value);
+        program_size += InstructionCompiler::push_u8(program + program_size, value);
         status = STATUS_SUCCESS;
         return status;
     }
 
-    // Push an int8_t value to the PLC Program
-    RuntimeError push_int8_t(int8_t value) {
+    // Push an i8 value to the PLC Program
+    RuntimeError push_i8(i8 value) {
         if (program_size + 2 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
-        program_size += InstructionCompiler::push_int8_t(program + program_size, value);
+        program_size += InstructionCompiler::push_i8(program + program_size, value);
         status = STATUS_SUCCESS;
         return status;
     }
 
-    // Push an uint16_t value to the PLC Program
-    RuntimeError push_uint16_t(uint32_t value) {
+    // Push an u16 value to the PLC Program
+    RuntimeError push_u16(u32 value) {
         if (program_size + 3 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
-        program_size += InstructionCompiler::push_uint16_t(program + program_size, value);
+        program_size += InstructionCompiler::push_u16(program + program_size, value);
         status = STATUS_SUCCESS;
         return status;
     }
 
-    // Push an int16_t value to the PLC Program
-    RuntimeError push_int16_t(int16_t value) {
+    // Push an i16 value to the PLC Program
+    RuntimeError push_i16(i16 value) {
         if (program_size + 3 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
-        program_size += InstructionCompiler::push_int16_t(program + program_size, value);
+        program_size += InstructionCompiler::push_i16(program + program_size, value);
         status = STATUS_SUCCESS;
         return status;
     }
 
-    // Push an uint32_t value to the PLC Program
-    RuntimeError push_uint32_t(uint32_t value) {
+    // Push an u32 value to the PLC Program
+    RuntimeError push_u32(u32 value) {
         if (program_size + 5 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
-        program_size += InstructionCompiler::push_uint32_t(program + program_size, value);
+        program_size += InstructionCompiler::push_u32(program + program_size, value);
         status = STATUS_SUCCESS;
         return status;
     }
 
-    // Push an int32_t value to the PLC Program
-    RuntimeError push_int32_t(int32_t value) {
+    // Push an i32 value to the PLC Program
+    RuntimeError push_i32(i32 value) {
         if (program_size + 5 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
-        program_size += InstructionCompiler::push_int32_t(program + program_size, value);
+        program_size += InstructionCompiler::push_i32(program + program_size, value);
         status = STATUS_SUCCESS;
         return status;
     }
 
 #ifdef USE_X64_OPS
-    // Push an uint64_t value to the PLC Program
-    RuntimeError push_uint64_t(uint64_t value) {
+    // Push an u64 value to the PLC Program
+    RuntimeError push_u64(u64 value) {
         if (program_size + 9 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
-        program_size += InstructionCompiler::push_uint64_t(program + program_size, value);
+        program_size += InstructionCompiler::push_u64(program + program_size, value);
         status = STATUS_SUCCESS;
         return status;
     }
 
-    // Push an int64_t value to the PLC Program
-    RuntimeError push_int64_t(int64_t value) {
+    // Push an i64 value to the PLC Program
+    RuntimeError push_i64(i64 value) {
         if (program_size + 9 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
-        program_size += InstructionCompiler::push_int64_t(program + program_size, value);
+        program_size += InstructionCompiler::push_i64(program + program_size, value);
         status = STATUS_SUCCESS;
         return status;
     }
 #endif // USE_X64_OPS
 
     // Push a float value to the PLC Program
-    RuntimeError push_float(float value) {
+    RuntimeError push_f32(float value) {
         if (program_size + 5 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
-        program_size += InstructionCompiler::push_float(program + program_size, value);
+        program_size += InstructionCompiler::push_f32(program + program_size, value);
         status = STATUS_SUCCESS;
         return status;
     }
 
 #ifdef USE_X64_OPS
     // Push a double value to the PLC Program
-    RuntimeError push_double(double value) {
+    RuntimeError push_f64(double value) {
         if (program_size + 9 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
-        program_size += InstructionCompiler::push_double(program + program_size, value);
+        program_size += InstructionCompiler::push_f64(program + program_size, value);
         status = STATUS_SUCCESS;
         return status;
     }
 #endif // USE_X64_OPS
 
     // Push flow control instructions to the PLC Program
-    RuntimeError pushJMP(uint32_t program_address) {
+    RuntimeError push_jmp(u32 program_address) {
         if (program_size + 3 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
-        program_size += InstructionCompiler::pushJMP(program + program_size, program_address);
+        program_size += InstructionCompiler::push_jmp(program + program_size, program_address);
         status = STATUS_SUCCESS;
         return status;
     }
-    RuntimeError pushJMP_IF(uint32_t program_address) {
+    RuntimeError push_jmp_if(u32 program_address) {
         if (program_size + 3 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
-        program_size += InstructionCompiler::pushJMP_IF(program + program_size, program_address);
+        program_size += InstructionCompiler::push_jmp_if(program + program_size, program_address);
         status = STATUS_SUCCESS;
         return status;
     }
-    RuntimeError pushJMP_IF_NOT(uint32_t program_address) {
+    RuntimeError push_jmp_if_not(u32 program_address) {
         if (program_size + 3 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
-        program_size += InstructionCompiler::pushJMP_IF_NOT(program + program_size, program_address);
+        program_size += InstructionCompiler::push_jmp_if_not(program + program_size, program_address);
         status = STATUS_SUCCESS;
         return status;
     }
 
     // Convert a data type to another data type
-    RuntimeError pushCVT(PLCRuntimeInstructionSet from, PLCRuntimeInstructionSet to) {
+    RuntimeError push_cvt(PLCRuntimeInstructionSet from, PLCRuntimeInstructionSet to) {
         if (program_size + 3 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             return status;
         }
-        program_size += InstructionCompiler::pushCVT(program + program_size, from, to);
+        program_size += InstructionCompiler::push_cvt(program + program_size, from, to);
         status = STATUS_SUCCESS;
         return status;
     }
 
-    // Pushes the byte at the given address of the memory into the stack
-    RuntimeError pushGET(uint32_t program_address, PLCRuntimeInstructionSet type = type_uint8_t) {
-        if (program_size + 4 > MAX_PROGRAM_SIZE) {
+    RuntimeError push_load(PLCRuntimeInstructionSet type = type_u8) {
+        if (program_size + 2 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
-        program_size += InstructionCompiler::pushGET(program + program_size, program_address, type);
+        program_size += InstructionCompiler::push_load(program + program_size, type);
         status = STATUS_SUCCESS;
         return status;
     }
-    // Stores the byte at the top of the stack into the given address in memory and pops the stack
-    RuntimeError pushPUT(uint32_t program_address, PLCRuntimeInstructionSet type = type_uint8_t) {
-        if (program_size + 4 > MAX_PROGRAM_SIZE) {
+
+    RuntimeError push_move(PLCRuntimeInstructionSet type = type_u8) {
+        if (program_size + 2 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
             return status;
         }
-        program_size += InstructionCompiler::pushPUT(program + program_size, program_address, type);
+        program_size += InstructionCompiler::push_move(program + program_size, type);
+        status = STATUS_SUCCESS;
+        return status;
+    }
+
+    RuntimeError push_move_copy(PLCRuntimeInstructionSet type = type_u8) {
+        if (program_size + 2 > MAX_PROGRAM_SIZE) {
+            status = PROGRAM_SIZE_EXCEEDED;
+            return status;
+        }
+        program_size += InstructionCompiler::push_move_copy(program + program_size, type);
         status = STATUS_SUCCESS;
         return status;
     }
 
     // Make a duplica of the top of the stack
-    RuntimeError pushCOPY(PLCRuntimeInstructionSet type = type_uint8_t) {
+    RuntimeError push_copy(PLCRuntimeInstructionSet type = type_u8) {
         if (program_size + 2 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             return status;
         }
-        program_size += InstructionCompiler::pushCOPY(program + program_size, type);
+        program_size += InstructionCompiler::push_copy(program + program_size, type);
         status = STATUS_SUCCESS;
         return status;
     }
     // Swap the top two values on the stack
-    RuntimeError pushSWAP(PLCRuntimeInstructionSet type = type_uint8_t) {
+    RuntimeError push_swap(PLCRuntimeInstructionSet type = type_u8) {
         if (program_size + 2 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             return status;
         }
-        program_size += InstructionCompiler::pushSWAP(program + program_size, type);
+        program_size += InstructionCompiler::push_swap(program + program_size, type);
         status = STATUS_SUCCESS;
         return status;
     }
     // Drop the top value from the stack
-    RuntimeError pushDROP(PLCRuntimeInstructionSet type = type_uint8_t) {
+    RuntimeError push_drop(PLCRuntimeInstructionSet type = type_u8) {
         if (program_size + 2 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             return status;
         }
-        program_size += InstructionCompiler::pushDROP(program + program_size, type);
+        program_size += InstructionCompiler::push_drop(program + program_size, type);
         status = STATUS_SUCCESS;
         return status;
     }

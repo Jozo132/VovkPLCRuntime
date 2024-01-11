@@ -24,30 +24,30 @@
 namespace PLCMethods {
 
     RuntimeError ADD_uint32_t(RuntimeStack* stack) {
-        uint32_t b = stack->pop_uint32_t();
-        uint32_t a = stack->pop_uint32_t();
-        stack->push_uint32_t(a + b);
+        u32 b = stack->pop_u32();
+        u32 a = stack->pop_u32();
+        stack->push_u32(a + b);
         return STATUS_SUCCESS;
     }
     
     RuntimeError SUB_uint32_t(RuntimeStack* stack) {
-        uint32_t b = stack->pop_uint32_t();
-        uint32_t a = stack->pop_uint32_t();
-        stack->push_uint32_t(a - b);
+        u32 b = stack->pop_u32();
+        u32 a = stack->pop_u32();
+        stack->push_u32(a - b);
         return STATUS_SUCCESS;
     }
 
     RuntimeError MUL_uint32_t(RuntimeStack* stack) {
-        uint32_t b = stack->pop_uint32_t();
-        uint32_t a = stack->pop_uint32_t();
-        stack->push_uint32_t(a * b);
+        u32 b = stack->pop_u32();
+        u32 a = stack->pop_u32();
+        stack->push_u32(a * b);
         return STATUS_SUCCESS;
     }
 
     RuntimeError DIV_uint32_t(RuntimeStack* stack) {
-        uint32_t b = stack->pop_uint32_t();
-        uint32_t a = stack->pop_uint32_t();
-        stack->push_uint32_t(a / b);
+        u32 b = stack->pop_u32();
+        u32 a = stack->pop_u32();
+        stack->push_u32(a / b);
         return STATUS_SUCCESS;
     }
     

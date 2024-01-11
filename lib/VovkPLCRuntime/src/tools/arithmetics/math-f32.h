@@ -24,30 +24,30 @@
 namespace PLCMethods {
 
     RuntimeError ADD_float(RuntimeStack* stack) {
-        float b = stack->pop_float();
-        float a = stack->pop_float();
-        stack->push_float(a + b);
+        f32 b = stack->pop_f32();
+        f32 a = stack->pop_f32();
+        stack->push_f32(a + b);
         return STATUS_SUCCESS;
     }
     
     RuntimeError SUB_float(RuntimeStack* stack) {
-        float b = stack->pop_float();
-        float a = stack->pop_float();
-        stack->push_float(a - b);
+        f32 b = stack->pop_f32();
+        f32 a = stack->pop_f32();
+        stack->push_f32(a - b);
         return STATUS_SUCCESS;
     }
 
     RuntimeError MUL_float(RuntimeStack* stack) {
-        float b = stack->pop_float();
-        float a = stack->pop_float();
-        stack->push_float(a * b);
+        f32 b = stack->pop_f32();
+        f32 a = stack->pop_f32();
+        stack->push_f32(a * b);
         return STATUS_SUCCESS;
     }
 
     RuntimeError DIV_float(RuntimeStack* stack) {
-        float b = stack->pop_float();
-        float a = stack->pop_float();
-        stack->push_float(a / b);
+        f32 b = stack->pop_f32();
+        f32 a = stack->pop_f32();
+        stack->push_f32(a / b);
         return STATUS_SUCCESS;
     }
     

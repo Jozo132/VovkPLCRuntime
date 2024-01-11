@@ -24,33 +24,33 @@
 #include "runtime-test.h"
 
 #ifdef USE_X64_OPS
-void print__uint64_t(uint64_t big_number) {
-    const uint16_t NUM_DIGITS = log10(big_number) + 1;
+void print__u64(u64 big_number) {
+    const u16 NUM_DIGITS = log10(big_number) + 1;
     char sz[NUM_DIGITS + 1];
     sz[NUM_DIGITS] = 0;
-    for (uint16_t i = NUM_DIGITS; i--; big_number /= 10)
+    for (u16 i = NUM_DIGITS; i--; big_number /= 10)
         sz[i] = '0' + (big_number % 10);
     Serial.print(sz);
 }
-void println__uint64_t(uint64_t big_number) {
-    print__uint64_t(big_number);
+void println__u64(u64 big_number) {
+    print__u64(big_number);
     Serial.println();
 }
 
-void print__int64_t(int64_t big_number) {
+void print__i64(i64 big_number) {
     if (big_number < 0) {
         Serial.print('-');
         big_number = -big_number;
     }
-    print__uint64_t(big_number);
+    print__u64(big_number);
 }
-void println__int64_t(int64_t big_number) {
-    print__int64_t(big_number);
+void println__i64(i64 big_number) {
+    print__u64(big_number);
     Serial.println();
 }
 #endif // USE_X64_OPS
 
-int print_hex(uint32_t value) {
+int print_hex(u32 value) {
     int length = 0;
     if (value < 0x10) length += Serial.print('0');
     if (value < 0x100) length += Serial.print('0');
@@ -62,7 +62,7 @@ int print_hex(uint32_t value) {
     length += Serial.print(value, HEX);
     return length;
 }
-int print_hex(uint16_t value) {
+int print_hex(u16 value) {
     int length = 0;
     if (value < 0x10) length += Serial.print('0');
     if (value < 0x100) length += Serial.print('0');
@@ -70,7 +70,7 @@ int print_hex(uint16_t value) {
     length += Serial.print(value, HEX);
     return length;
 }
-int print_hex(uint8_t value) {
+int print_hex(u8 value) {
     int length = 0;
     if (value < 0x10) length += Serial.print('0');
     length += Serial.print(value, HEX);
@@ -112,14 +112,14 @@ template <typename T> void UnitTest::run(const TestCase<T>& test) {
 template <typename T> void UnitTest::review(const TestCase<T>& test) {
     program->format();
     if (test.build) test.build(*program);
-    uint32_t offset = Serial.print(F("Test \""));
+    u32 offset = Serial.print(F("Test \""));
     offset += Serial.print(test.name);
     offset += Serial.print('"');
-    long t = micros();
+    u32 t = micros();
     runtime->cleanRun();
     T output = runtime->read<T>();
     t = micros() - t;
-    float ms = (float) t * 0.001;
+    f32 ms = (f32) t * 0.001;
     bool passed = test.expected_result == output;
     for (; offset < 40; offset++) Serial.print(' ');
     Serial.print(passed ? F("Passed") : F("FAILED !!!"));
@@ -140,23 +140,26 @@ RuntimeError UnitTest::fullProgramDebug(VovkPLCRuntime& runtime, RuntimeProgram&
 #ifdef __RUNTIME_DEBUG__
     program.explain();
     Serial.println(F("Starting detailed program debug..."));
-    uint32_t index = 0;
+    u32 cycle = 0;
+    u32 index = 0;
     bool finished = false;
     RuntimeError status = STATUS_SUCCESS;
     while (!finished) {
+        cycle++;
         index = program.getLine();
-        long t = micros();
+        u32 t = micros();
         status = runtime.step(program);
         t = micros() - t;
-        float ms = (float) t * 0.001;
+        f32 ms = (f32) t * 0.001;
+        if (cycle > MAX_PROGRAM_CYCLE_COUNT) status = PROGRAM_CYCLE_LIMIT_EXCEEDED;
         if (status == PROGRAM_EXITED) finished = true;
         bool problem = status != STATUS_SUCCESS && status != PROGRAM_EXITED;
         // Serial.printf("    Step %4d [%02X %02X]: ", index, index >> 8, index & 0xFF);
         Serial.print(F("    Step "));
         print_number_padStart(index, 4);
         Serial.print(F(" ["));
-        uint8_t hi = index >> 8;
-        uint8_t lo = index & 0xFF;
+        u8 hi = index >> 8;
+        u8 lo = index & 0xFF;
         print_number_padStart(hi, 2, '0', HEX);
         Serial.print(' ');
         print_number_padStart(lo, 2, '0', HEX);
@@ -182,15 +185,15 @@ RuntimeError UnitTest::fullProgramDebug(VovkPLCRuntime& runtime, RuntimeProgram&
         Serial.println();
         if (program.finished()) finished = true;
     }
-    long t = micros();
+    u32 t = micros();
     runtime.cleanRun(program);
     t = micros() - t;
 #else
-    long t = micros();
+    u32 t = micros();
     RuntimeError status = runtime.cleanRun(program);
     t = micros() - t;
 #endif
-    float ms = (float) t * 0.001;
+    f32 ms = (f32) t * 0.001;
     Serial.print(F("Leftover ")); runtime.printStack(); Serial.println();
     Serial.print(F("Time to execute program: ")); Serial.print(ms, 3); Serial.println(F(" ms"));
     if (status != STATUS_SUCCESS) { Serial.print(F("Debug failed with error: ")); Serial.println(RUNTIME_ERROR_NAME(status)); }
@@ -198,10 +201,12 @@ RuntimeError UnitTest::fullProgramDebug(VovkPLCRuntime& runtime, RuntimeProgram&
 }
 
 template <typename T> void UnitTest::println(T result) { Serial.println(result); }
-void UnitTest::println(uint64_t result) { println__uint64_t(result); }
-void UnitTest::println(int64_t result) { println__int64_t(result); }
+#ifdef USE_X64_OPS
+void UnitTest::println(u64 result) { println__u64(result); }
+void UnitTest::println(i64 result) { println__i64(result); }
+#endif // USE_X64_OPS
 #ifdef __WASM__
-void UnitTest::println(int8_t result) {
+void UnitTest::println(i8 result) {
     char buffer[4];
     sprintf(buffer, "%d", result);
     Serial.println(buffer);

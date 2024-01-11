@@ -1,6 +1,6 @@
-// crc8.h - 1.0.0 - 2023-08-03
+// runtime-types.h - 1.0.0 - 2024-01-11
 //
-// Copyright (c) 2023 J.Vovk
+// Copyright (c) 2024 J.Vovk
 //
 // This file is part of VovkPLCRuntime.
 //
@@ -21,24 +21,41 @@
 
 #pragma once
 
-#include "../runtime-tools.h"
 
-u8 crc8_simple(u8& crc, const u8* data, u32 size) {
-    if (data == nullptr) return 0xff;
-    while (size--) {
-        crc ^= *data++;
-        for (u8 k = 0; k < 8; k++)
-            crc = crc & 0x80 ? (crc << 1) ^ 0x31 : crc << 1;
-    }
-    crc &= 0xff;
-    return crc;
-}
+// Pointer type for the runtime memory
+typedef uint16_t  MY_PTR_t;
 
 
-u8 crc8_simple(u8& crc, u8 data) {
-    crc ^= data;
-    for (u8 k = 0; k < 8; k++)
-        crc = crc & 0x80 ? (crc << 1) ^ 0x31 : crc << 1;
-    crc &= 0xff;
-    return crc;
-}
+typedef uint8_t    u8;
+typedef uint16_t  u16;
+typedef uint32_t  u32;
+typedef uint64_t  u64;
+
+typedef int8_t     i8;
+typedef int16_t   i16;
+typedef int32_t   i32;
+typedef int64_t   i64;
+
+typedef float     f32;
+typedef double    f64;
+
+
+union Converter {
+#ifdef USE_X64_OPS
+    u8 data[8];
+#else
+    u8 data[4];
+#endif // USE_X64_OPS
+    u8 u8_value;
+    i8 i8_value;
+    u16 u16_value;
+    i16 i16_value;
+    u32 u32_value;
+    i32 i32_value;
+    float float_value;
+#ifdef USE_X64_OPS
+    u64 u64_value;
+    i64 i64_value;
+    double double_value;
+#endif // USE_X64_OPS
+};

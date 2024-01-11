@@ -58,36 +58,45 @@ const   index = 1   // set "i"   to memory index 1
 const   incr = 10
 
 ################# Set initial values
+ptr.const  sum
 u8.const  0
-u8.store  sum   // set u8 at address 0 to value 0
+u8.move
+ptr.const  index // set u8 at address 1 to value 0
 u8.const  0
-u8.store  index // set u8 at address 1 to value 0
+u8.move
 
 ################# Run test for loop
 loop:
     ################# jump to end if "i" >= 10
-    u8.load    index
+    ptr.const  index
+    u8.load
     u8.const   10
     u8.cmp_lt
     jmp_if_not end 
+    jmp end
 
     ################# sum += 10
-    u8.load    sum
+    ptr.const  sum
+    ptr.copy
+    u8.load
     u8.const   incr 
     u8.add
-    u8.store   sum 
+    u8.move
 
     ################# i++
-    u8.load    index
+    ptr.const  index
+    ptr.copy
+    u8.load
     u8.const   1
     u8.add
-    u8.store   index
+    u8.move
 
     jmp loop 
 
 ################# exit the program and return the remaining stack
 end:  
-    u8.load sum
+    ptr.const sum
+    u8.load
 // Should return 100 (0x64 in hex) 
 
 // Test type conversion and overflow handling
@@ -124,8 +133,11 @@ u8.drop
     u8.writeBit 20.0
 
 // Previous way of doing the same task
-    u8.load 20
-    u8.load 10
+    ptr.const 20
+    ptr.copy
+    u8.load
+    ptr.const 10
+    u8.load
     u8.get 0
     // u8.not
 
@@ -137,7 +149,7 @@ u8.drop
     u8.rset 0
 
     END:
-    u8.store 20
+    u8.move
 exit
 
 

@@ -21,40 +21,40 @@
 
 #pragma once
 
-RuntimeError MANIPULATE_GET_X8_MACRO(RuntimeStack* stack, uint8_t bit_index) { uint8_t a = stack->pop_uint8_t(); stack->push_uint8_t((a >> bit_index) & 1); return STATUS_SUCCESS; }
-RuntimeError MANIPULATE_SET_X8_MACRO(RuntimeStack* stack, uint8_t bit_index) { uint8_t a = stack->pop_uint8_t(); stack->push_uint8_t(a | 1 << bit_index); return STATUS_SUCCESS; }
-RuntimeError MANIPULATE_RSET_X8_MACRO(RuntimeStack* stack, uint8_t bit_index) { uint8_t a = stack->pop_uint8_t(); stack->push_uint8_t(a & ~(1 << bit_index)); return STATUS_SUCCESS; }
+RuntimeError MANIPULATE_GET_X8_MACRO(RuntimeStack* stack, u8 bit_index) { u8 a = stack->pop_u8(); stack->push_u8((a >> bit_index) & 1); return STATUS_SUCCESS; }
+RuntimeError MANIPULATE_SET_X8_MACRO(RuntimeStack* stack, u8 bit_index) { u8 a = stack->pop_u8(); stack->push_u8(a | 1 << bit_index); return STATUS_SUCCESS; }
+RuntimeError MANIPULATE_RSET_X8_MACRO(RuntimeStack* stack, u8 bit_index) { u8 a = stack->pop_u8(); stack->push_u8(a & ~(1 << bit_index)); return STATUS_SUCCESS; }
 
-RuntimeError READ_X8_MACRO(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index, uint8_t bit_index) {
-    IGNORE_UNUSED uint32_t index_start = index;
-    uint32_t size = 2;
+RuntimeError READ_X8_MACRO(RuntimeStack* stack, u8* program, u32 program_size, u32& index, u8 bit_index) {
+    IGNORE_UNUSED u32 index_start = index;
+    u32 size = 2;
     if (index + size > program_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, program_size, index, index_start);
     u8A_to_u16 cvt;
     cvt.u8A[1] = program[index];
     cvt.u8A[0] = program[index + 1];
-    uint16_t address = cvt.u16;
-    uint8_t x = 0;
+    u16 address = cvt._u16;
+    u8 x = 0;
     bool error = stack->memory->get(address, x);
     if (error) return INVALID_MEMORY_ADDRESS;
     x = (x >> bit_index) & 1;
-    stack->push_uint8_t(x);
+    stack->push_u8(x);
     index += size;
     if (index >= program_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, program_size, index, index_start);
     return STATUS_SUCCESS;
 }
 
-RuntimeError WRITE_X8_MACRO(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index, uint8_t bit_index) {
-    IGNORE_UNUSED uint32_t index_start = index;
-    uint32_t size = 2;
+RuntimeError WRITE_X8_MACRO(RuntimeStack* stack, u8* program, u32 program_size, u32& index, u8 bit_index) {
+    IGNORE_UNUSED u32 index_start = index;
+    u32 size = 2;
     if (index + size > program_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, program_size, index, index_start);
     u8A_to_u16 cvt;
     cvt.u8A[1] = program[index];
     cvt.u8A[0] = program[index + 1];
-    uint16_t address = cvt.u16;
-    uint8_t x = 0;
+    u16 address = cvt._u16;
+    u8 x = 0;
     bool error = stack->memory->get(address, x);
     if (error) return INVALID_MEMORY_ADDRESS;
-    uint8_t bit = stack->pop_uint8_t();
+    u8 bit = stack->pop_u8();
     x = bit ? x | 1 << bit_index : x & ~(1 << bit_index);
     error = stack->memory->set(address, x);
     if (error) return INVALID_MEMORY_ADDRESS;
@@ -63,15 +63,15 @@ RuntimeError WRITE_X8_MACRO(RuntimeStack* stack, uint8_t* program, uint32_t prog
     return STATUS_SUCCESS;
 }
 
-RuntimeError WRITE_S_X8_MACRO(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index, uint8_t bit_index) {
-    IGNORE_UNUSED uint32_t index_start = index;
-    uint32_t size = 2;
+RuntimeError WRITE_S_X8_MACRO(RuntimeStack* stack, u8* program, u32 program_size, u32& index, u8 bit_index) {
+    IGNORE_UNUSED u32 index_start = index;
+    u32 size = 2;
     if (index + size > program_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, program_size, index, index_start);
     u8A_to_u16 cvt;
     cvt.u8A[1] = program[index];
     cvt.u8A[0] = program[index + 1];
-    uint16_t address = cvt.u16;
-    uint8_t x = 0;
+    u16 address = cvt._u16;
+    u8 x = 0;
     bool error = stack->memory->get(address, x);
     if (error) return INVALID_MEMORY_ADDRESS;
     x = x | 1 << bit_index;
@@ -82,15 +82,15 @@ RuntimeError WRITE_S_X8_MACRO(RuntimeStack* stack, uint8_t* program, uint32_t pr
     return STATUS_SUCCESS;
 }
 
-RuntimeError WRITE_R_X8_MACRO(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index, uint8_t bit_index) {
-    IGNORE_UNUSED uint32_t index_start = index;
-    uint32_t size = 2;
+RuntimeError WRITE_R_X8_MACRO(RuntimeStack* stack, u8* program, u32 program_size, u32& index, u8 bit_index) {
+    IGNORE_UNUSED u32 index_start = index;
+    u32 size = 2;
     if (index + size > program_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, program_size, index, index_start);
     u8A_to_u16 cvt;
     cvt.u8A[1] = program[index];
     cvt.u8A[0] = program[index + 1];
-    uint16_t address = cvt.u16;
-    uint8_t x = 0;
+    u16 address = cvt._u16;
+    u8 x = 0;
     bool error = stack->memory->get(address, x);
     if (error) return INVALID_MEMORY_ADDRESS;
     x = x & ~(1 << bit_index);
@@ -101,15 +101,15 @@ RuntimeError WRITE_R_X8_MACRO(RuntimeStack* stack, uint8_t* program, uint32_t pr
     return STATUS_SUCCESS;
 }
 
-RuntimeError WRITE_INV_X8_MACRO(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index, uint8_t bit_index) {
-    IGNORE_UNUSED uint32_t index_start = index;
-    uint32_t size = 2;
+RuntimeError WRITE_INV_X8_MACRO(RuntimeStack* stack, u8* program, u32 program_size, u32& index, u8 bit_index) {
+    IGNORE_UNUSED u32 index_start = index;
+    u32 size = 2;
     if (index + size > program_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, program_size, index, index_start);
     u8A_to_u16 cvt;
     cvt.u8A[1] = program[index];
     cvt.u8A[0] = program[index + 1];
-    uint16_t address = cvt.u16;
-    uint8_t x = 0;
+    u16 address = cvt._u16;
+    u8 x = 0;
     bool error = stack->memory->get(address, x);
     if (error) return INVALID_MEMORY_ADDRESS;
     bool state = (x >> bit_index) & 1;
@@ -150,196 +150,196 @@ namespace PLCMethods {
     RuntimeError handle_RSET_X8_B7(RuntimeStack* stack) { return MANIPULATE_RSET_X8_MACRO(stack, 7); }
 
 
-    RuntimeError handle_READ_X8_B0(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return READ_X8_MACRO(stack, program, program_size, index, 0); }
-    RuntimeError handle_READ_X8_B1(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return READ_X8_MACRO(stack, program, program_size, index, 1); }
-    RuntimeError handle_READ_X8_B2(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return READ_X8_MACRO(stack, program, program_size, index, 2); }
-    RuntimeError handle_READ_X8_B3(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return READ_X8_MACRO(stack, program, program_size, index, 3); }
-    RuntimeError handle_READ_X8_B4(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return READ_X8_MACRO(stack, program, program_size, index, 4); }
-    RuntimeError handle_READ_X8_B5(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return READ_X8_MACRO(stack, program, program_size, index, 5); }
-    RuntimeError handle_READ_X8_B6(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return READ_X8_MACRO(stack, program, program_size, index, 6); }
-    RuntimeError handle_READ_X8_B7(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return READ_X8_MACRO(stack, program, program_size, index, 7); }
+    RuntimeError handle_READ_X8_B0(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return READ_X8_MACRO(stack, program, program_size, index, 0); }
+    RuntimeError handle_READ_X8_B1(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return READ_X8_MACRO(stack, program, program_size, index, 1); }
+    RuntimeError handle_READ_X8_B2(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return READ_X8_MACRO(stack, program, program_size, index, 2); }
+    RuntimeError handle_READ_X8_B3(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return READ_X8_MACRO(stack, program, program_size, index, 3); }
+    RuntimeError handle_READ_X8_B4(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return READ_X8_MACRO(stack, program, program_size, index, 4); }
+    RuntimeError handle_READ_X8_B5(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return READ_X8_MACRO(stack, program, program_size, index, 5); }
+    RuntimeError handle_READ_X8_B6(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return READ_X8_MACRO(stack, program, program_size, index, 6); }
+    RuntimeError handle_READ_X8_B7(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return READ_X8_MACRO(stack, program, program_size, index, 7); }
 
-    RuntimeError handle_WRITE_X8_B0(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_X8_MACRO(stack, program, program_size, index, 0); }
-    RuntimeError handle_WRITE_X8_B1(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_X8_MACRO(stack, program, program_size, index, 1); }
-    RuntimeError handle_WRITE_X8_B2(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_X8_MACRO(stack, program, program_size, index, 2); }
-    RuntimeError handle_WRITE_X8_B3(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_X8_MACRO(stack, program, program_size, index, 3); }
-    RuntimeError handle_WRITE_X8_B4(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_X8_MACRO(stack, program, program_size, index, 4); }
-    RuntimeError handle_WRITE_X8_B5(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_X8_MACRO(stack, program, program_size, index, 5); }
-    RuntimeError handle_WRITE_X8_B6(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_X8_MACRO(stack, program, program_size, index, 6); }
-    RuntimeError handle_WRITE_X8_B7(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_X8_MACRO(stack, program, program_size, index, 7); }
+    RuntimeError handle_WRITE_X8_B0(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return WRITE_X8_MACRO(stack, program, program_size, index, 0); }
+    RuntimeError handle_WRITE_X8_B1(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return WRITE_X8_MACRO(stack, program, program_size, index, 1); }
+    RuntimeError handle_WRITE_X8_B2(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return WRITE_X8_MACRO(stack, program, program_size, index, 2); }
+    RuntimeError handle_WRITE_X8_B3(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return WRITE_X8_MACRO(stack, program, program_size, index, 3); }
+    RuntimeError handle_WRITE_X8_B4(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return WRITE_X8_MACRO(stack, program, program_size, index, 4); }
+    RuntimeError handle_WRITE_X8_B5(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return WRITE_X8_MACRO(stack, program, program_size, index, 5); }
+    RuntimeError handle_WRITE_X8_B6(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return WRITE_X8_MACRO(stack, program, program_size, index, 6); }
+    RuntimeError handle_WRITE_X8_B7(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return WRITE_X8_MACRO(stack, program, program_size, index, 7); }
 
-    RuntimeError handle_WRITE_S_X8_B0(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_S_X8_MACRO(stack, program, program_size, index, 0); }
-    RuntimeError handle_WRITE_S_X8_B1(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_S_X8_MACRO(stack, program, program_size, index, 1); }
-    RuntimeError handle_WRITE_S_X8_B2(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_S_X8_MACRO(stack, program, program_size, index, 2); }
-    RuntimeError handle_WRITE_S_X8_B3(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_S_X8_MACRO(stack, program, program_size, index, 3); }
-    RuntimeError handle_WRITE_S_X8_B4(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_S_X8_MACRO(stack, program, program_size, index, 4); }
-    RuntimeError handle_WRITE_S_X8_B5(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_S_X8_MACRO(stack, program, program_size, index, 5); }
-    RuntimeError handle_WRITE_S_X8_B6(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_S_X8_MACRO(stack, program, program_size, index, 6); }
-    RuntimeError handle_WRITE_S_X8_B7(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_S_X8_MACRO(stack, program, program_size, index, 7); }
+    RuntimeError handle_WRITE_S_X8_B0(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return WRITE_S_X8_MACRO(stack, program, program_size, index, 0); }
+    RuntimeError handle_WRITE_S_X8_B1(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return WRITE_S_X8_MACRO(stack, program, program_size, index, 1); }
+    RuntimeError handle_WRITE_S_X8_B2(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return WRITE_S_X8_MACRO(stack, program, program_size, index, 2); }
+    RuntimeError handle_WRITE_S_X8_B3(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return WRITE_S_X8_MACRO(stack, program, program_size, index, 3); }
+    RuntimeError handle_WRITE_S_X8_B4(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return WRITE_S_X8_MACRO(stack, program, program_size, index, 4); }
+    RuntimeError handle_WRITE_S_X8_B5(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return WRITE_S_X8_MACRO(stack, program, program_size, index, 5); }
+    RuntimeError handle_WRITE_S_X8_B6(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return WRITE_S_X8_MACRO(stack, program, program_size, index, 6); }
+    RuntimeError handle_WRITE_S_X8_B7(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return WRITE_S_X8_MACRO(stack, program, program_size, index, 7); }
 
-    RuntimeError handle_WRITE_R_X8_B0(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_R_X8_MACRO(stack, program, program_size, index, 0); }
-    RuntimeError handle_WRITE_R_X8_B1(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_R_X8_MACRO(stack, program, program_size, index, 1); }
-    RuntimeError handle_WRITE_R_X8_B2(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_R_X8_MACRO(stack, program, program_size, index, 2); }
-    RuntimeError handle_WRITE_R_X8_B3(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_R_X8_MACRO(stack, program, program_size, index, 3); }
-    RuntimeError handle_WRITE_R_X8_B4(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_R_X8_MACRO(stack, program, program_size, index, 4); }
-    RuntimeError handle_WRITE_R_X8_B5(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_R_X8_MACRO(stack, program, program_size, index, 5); }
-    RuntimeError handle_WRITE_R_X8_B6(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_R_X8_MACRO(stack, program, program_size, index, 6); }
-    RuntimeError handle_WRITE_R_X8_B7(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_R_X8_MACRO(stack, program, program_size, index, 7); }
+    RuntimeError handle_WRITE_R_X8_B0(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return WRITE_R_X8_MACRO(stack, program, program_size, index, 0); }
+    RuntimeError handle_WRITE_R_X8_B1(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return WRITE_R_X8_MACRO(stack, program, program_size, index, 1); }
+    RuntimeError handle_WRITE_R_X8_B2(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return WRITE_R_X8_MACRO(stack, program, program_size, index, 2); }
+    RuntimeError handle_WRITE_R_X8_B3(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return WRITE_R_X8_MACRO(stack, program, program_size, index, 3); }
+    RuntimeError handle_WRITE_R_X8_B4(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return WRITE_R_X8_MACRO(stack, program, program_size, index, 4); }
+    RuntimeError handle_WRITE_R_X8_B5(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return WRITE_R_X8_MACRO(stack, program, program_size, index, 5); }
+    RuntimeError handle_WRITE_R_X8_B6(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return WRITE_R_X8_MACRO(stack, program, program_size, index, 6); }
+    RuntimeError handle_WRITE_R_X8_B7(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return WRITE_R_X8_MACRO(stack, program, program_size, index, 7); }
 
-    RuntimeError handle_WRITE_INV_X8_B0(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_INV_X8_MACRO(stack, program, program_size, index, 0); }
-    RuntimeError handle_WRITE_INV_X8_B1(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_INV_X8_MACRO(stack, program, program_size, index, 1); }
-    RuntimeError handle_WRITE_INV_X8_B2(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_INV_X8_MACRO(stack, program, program_size, index, 2); }
-    RuntimeError handle_WRITE_INV_X8_B3(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_INV_X8_MACRO(stack, program, program_size, index, 3); }
-    RuntimeError handle_WRITE_INV_X8_B4(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_INV_X8_MACRO(stack, program, program_size, index, 4); }
-    RuntimeError handle_WRITE_INV_X8_B5(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_INV_X8_MACRO(stack, program, program_size, index, 5); }
-    RuntimeError handle_WRITE_INV_X8_B6(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_INV_X8_MACRO(stack, program, program_size, index, 6); }
-    RuntimeError handle_WRITE_INV_X8_B7(RuntimeStack* stack, uint8_t* program, uint32_t program_size, uint32_t& index) { return WRITE_INV_X8_MACRO(stack, program, program_size, index, 7); }
+    RuntimeError handle_WRITE_INV_X8_B0(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return WRITE_INV_X8_MACRO(stack, program, program_size, index, 0); }
+    RuntimeError handle_WRITE_INV_X8_B1(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return WRITE_INV_X8_MACRO(stack, program, program_size, index, 1); }
+    RuntimeError handle_WRITE_INV_X8_B2(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return WRITE_INV_X8_MACRO(stack, program, program_size, index, 2); }
+    RuntimeError handle_WRITE_INV_X8_B3(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return WRITE_INV_X8_MACRO(stack, program, program_size, index, 3); }
+    RuntimeError handle_WRITE_INV_X8_B4(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return WRITE_INV_X8_MACRO(stack, program, program_size, index, 4); }
+    RuntimeError handle_WRITE_INV_X8_B5(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return WRITE_INV_X8_MACRO(stack, program, program_size, index, 5); }
+    RuntimeError handle_WRITE_INV_X8_B6(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return WRITE_INV_X8_MACRO(stack, program, program_size, index, 6); }
+    RuntimeError handle_WRITE_INV_X8_B7(RuntimeStack* stack, u8* program, u32 program_size, u32& index) { return WRITE_INV_X8_MACRO(stack, program, program_size, index, 7); }
 
     RuntimeError handle_BW_AND_X8(RuntimeStack* stack) {
-        uint8_t b = stack->pop_uint8_t();
-        uint8_t a = stack->pop_uint8_t();
-        stack->push_uint8_t(a & b);
+        u8 b = stack->pop_u8();
+        u8 a = stack->pop_u8();
+        stack->push_u8(a & b);
         return STATUS_SUCCESS;
     }
     RuntimeError handle_BW_AND_X16(RuntimeStack* stack) {
-        uint16_t b = stack->pop_uint16_t();
-        uint16_t a = stack->pop_uint16_t();
-        stack->push_uint16_t(a & b);
+        u16 b = stack->pop_u16();
+        u16 a = stack->pop_u16();
+        stack->push_u16(a & b);
         return STATUS_SUCCESS;
     }
     RuntimeError handle_BW_AND_X32(RuntimeStack* stack) {
-        uint32_t b = stack->pop_uint32_t();
-        uint32_t a = stack->pop_uint32_t();
-        stack->push_uint32_t(a & b);
+        u32 b = stack->pop_u32();
+        u32 a = stack->pop_u32();
+        stack->push_u32(a & b);
         return STATUS_SUCCESS;
     }
 
     RuntimeError handle_BW_OR_X8(RuntimeStack* stack) {
-        uint8_t b = stack->pop_uint8_t();
-        uint8_t a = stack->pop_uint8_t();
-        stack->push_uint8_t(a | b);
+        u8 b = stack->pop_u8();
+        u8 a = stack->pop_u8();
+        stack->push_u8(a | b);
         return STATUS_SUCCESS;
     }
     RuntimeError handle_BW_OR_X16(RuntimeStack* stack) {
-        uint16_t b = stack->pop_uint16_t();
-        uint16_t a = stack->pop_uint16_t();
-        stack->push_uint16_t(a | b);
+        u16 b = stack->pop_u16();
+        u16 a = stack->pop_u16();
+        stack->push_u16(a | b);
         return STATUS_SUCCESS;
     }
     RuntimeError handle_BW_OR_X32(RuntimeStack* stack) {
-        uint32_t b = stack->pop_uint32_t();
-        uint32_t a = stack->pop_uint32_t();
-        stack->push_uint32_t(a | b);
+        u32 b = stack->pop_u32();
+        u32 a = stack->pop_u32();
+        stack->push_u32(a | b);
         return STATUS_SUCCESS;
     }
 
     RuntimeError handle_BW_XOR_X8(RuntimeStack* stack) {
-        uint8_t b = stack->pop_uint8_t();
-        uint8_t a = stack->pop_uint8_t();
-        stack->push_uint8_t(a ^ b);
+        u8 b = stack->pop_u8();
+        u8 a = stack->pop_u8();
+        stack->push_u8(a ^ b);
         return STATUS_SUCCESS;
     }
     RuntimeError handle_BW_XOR_X16(RuntimeStack* stack) {
-        uint16_t b = stack->pop_uint16_t();
-        uint16_t a = stack->pop_uint16_t();
-        stack->push_uint16_t(a ^ b);
+        u16 b = stack->pop_u16();
+        u16 a = stack->pop_u16();
+        stack->push_u16(a ^ b);
         return STATUS_SUCCESS;
     }
     RuntimeError handle_BW_XOR_X32(RuntimeStack* stack) {
-        uint32_t b = stack->pop_uint32_t();
-        uint32_t a = stack->pop_uint32_t();
-        stack->push_uint32_t(a ^ b);
+        u32 b = stack->pop_u32();
+        u32 a = stack->pop_u32();
+        stack->push_u32(a ^ b);
         return STATUS_SUCCESS;
     }
 
     RuntimeError handle_BW_NOT_X8(RuntimeStack* stack) {
-        uint8_t a = stack->pop_uint8_t();
-        stack->push_uint8_t(~a);
+        u8 a = stack->pop_u8();
+        stack->push_u8(~a);
         return STATUS_SUCCESS;
     }
     RuntimeError handle_BW_NOT_X16(RuntimeStack* stack) {
-        uint16_t a = stack->pop_uint16_t();
-        stack->push_uint16_t(~a);
+        u16 a = stack->pop_u16();
+        stack->push_u16(~a);
         return STATUS_SUCCESS;
     }
     RuntimeError handle_BW_NOT_X32(RuntimeStack* stack) {
-        uint32_t a = stack->pop_uint32_t();
-        stack->push_uint32_t(~a);
+        u32 a = stack->pop_u32();
+        stack->push_u32(~a);
         return STATUS_SUCCESS;
     }
 
     RuntimeError handle_BW_LSHIFT_X8(RuntimeStack* stack) {
-        uint8_t b = stack->pop_uint8_t();
-        uint8_t a = stack->pop_uint8_t();
-        stack->push_uint8_t(a << b);
+        u8 b = stack->pop_u8();
+        u8 a = stack->pop_u8();
+        stack->push_u8(a << b);
         return STATUS_SUCCESS;
     }
     RuntimeError handle_BW_LSHIFT_X16(RuntimeStack* stack) {
-        uint16_t b = stack->pop_uint16_t();
-        uint16_t a = stack->pop_uint16_t();
-        stack->push_uint16_t(a << b);
+        u16 b = stack->pop_u16();
+        u16 a = stack->pop_u16();
+        stack->push_u16(a << b);
         return STATUS_SUCCESS;
     }
     RuntimeError handle_BW_LSHIFT_X32(RuntimeStack* stack) {
-        uint32_t b = stack->pop_uint32_t();
-        uint32_t a = stack->pop_uint32_t();
-        stack->push_uint32_t(a << b);
+        u32 b = stack->pop_u32();
+        u32 a = stack->pop_u32();
+        stack->push_u32(a << b);
         return STATUS_SUCCESS;
     }
 
     RuntimeError handle_BW_RSHIFT_X8(RuntimeStack* stack) {
-        uint8_t b = stack->pop_uint8_t();
-        uint8_t a = stack->pop_uint8_t();
-        stack->push_uint8_t(a >> b);
+        u8 b = stack->pop_u8();
+        u8 a = stack->pop_u8();
+        stack->push_u8(a >> b);
         return STATUS_SUCCESS;
     }
     RuntimeError handle_BW_RSHIFT_X16(RuntimeStack* stack) {
-        uint16_t b = stack->pop_uint16_t();
-        uint16_t a = stack->pop_uint16_t();
-        stack->push_uint16_t(a >> b);
+        u16 b = stack->pop_u16();
+        u16 a = stack->pop_u16();
+        stack->push_u16(a >> b);
         return STATUS_SUCCESS;
     }
     RuntimeError handle_BW_RSHIFT_X32(RuntimeStack* stack) {
-        uint32_t b = stack->pop_uint32_t();
-        uint32_t a = stack->pop_uint32_t();
-        stack->push_uint32_t(a >> b);
+        u32 b = stack->pop_u32();
+        u32 a = stack->pop_u32();
+        stack->push_u32(a >> b);
         return STATUS_SUCCESS;
     }
 
 #ifdef USE_X64_OPS
     RuntimeError handle_BW_AND_X64(RuntimeStack* stack) {
-        uint64_t b = stack->pop_uint64_t();
-        uint64_t a = stack->pop_uint64_t();
-        stack->push_uint64_t(a & b);
+        u64 b = stack->pop_u64();
+        u64 a = stack->pop_u64();
+        stack->push_u64(a & b);
         return STATUS_SUCCESS;
     }
     RuntimeError handle_BW_OR_X64(RuntimeStack* stack) {
-        uint64_t b = stack->pop_uint64_t();
-        uint64_t a = stack->pop_uint64_t();
-        stack->push_uint64_t(a | b);
+        u64 b = stack->pop_u64();
+        u64 a = stack->pop_u64();
+        stack->push_u64(a | b);
         return STATUS_SUCCESS;
     }
     RuntimeError handle_BW_XOR_X64(RuntimeStack* stack) {
-        uint64_t b = stack->pop_uint64_t();
-        uint64_t a = stack->pop_uint64_t();
-        stack->push_uint64_t(a ^ b);
+        u64 b = stack->pop_u64();
+        u64 a = stack->pop_u64();
+        stack->push_u64(a ^ b);
         return STATUS_SUCCESS;
     }
     RuntimeError handle_BW_NOT_X64(RuntimeStack* stack) {
-        uint64_t a = stack->pop_uint64_t();
-        stack->push_uint64_t(~a);
+        u64 a = stack->pop_u64();
+        stack->push_u64(~a);
         return STATUS_SUCCESS;
     }
     RuntimeError handle_BW_LSHIFT_X64(RuntimeStack* stack) {
-        uint64_t b = stack->pop_uint64_t();
-        uint64_t a = stack->pop_uint64_t();
-        stack->push_uint64_t(a << b);
+        u64 b = stack->pop_u64();
+        u64 a = stack->pop_u64();
+        stack->push_u64(a << b);
         return STATUS_SUCCESS;
     }
     RuntimeError handle_BW_RSHIFT_X64(RuntimeStack* stack) {
-        uint64_t b = stack->pop_uint64_t();
-        uint64_t a = stack->pop_uint64_t();
-        stack->push_uint64_t(a >> b);
+        u64 b = stack->pop_u64();
+        u64 a = stack->pop_u64();
+        stack->push_u64(a >> b);
         return STATUS_SUCCESS;
     }
 #endif // USE_X64_OPS

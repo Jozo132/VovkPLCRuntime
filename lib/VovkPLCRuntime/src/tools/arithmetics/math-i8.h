@@ -1,4 +1,4 @@
-// math-s16.h - 1.0.0 - 2022-12-11
+// math-i8.h - 1.0.0 - 2022-12-11
 //
 // Copyright (c) 2022 J.Vovk
 //
@@ -23,32 +23,32 @@
 
 namespace PLCMethods {
 
-    RuntimeError ADD_int16_t(RuntimeStack* stack) {
-        int16_t b = stack->pop_int16_t();
-        int16_t a = stack->pop_int16_t();
-        stack->push_int16_t(a + b);
-        return STATUS_SUCCESS;
-    }
-    
-    RuntimeError SUB_int16_t(RuntimeStack* stack) {
-        int16_t b = stack->pop_int16_t();
-        int16_t a = stack->pop_int16_t();
-        stack->push_int16_t(a - b);
+    RuntimeError ADD_int8_t(RuntimeStack* stack) {
+        i8 b = stack->pop_i8();
+        i8 a = stack->pop_i8();
+        stack->push_i8(a + b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError MUL_int16_t(RuntimeStack* stack) {
-        int16_t b = stack->pop_int16_t();
-        int16_t a = stack->pop_int16_t();
-        stack->push_int16_t(a * b);
+    RuntimeError SUB_int8_t(RuntimeStack* stack) {
+        i8 b = stack->pop_i8();
+        i8 a = stack->pop_i8();
+        stack->push_i8(a - b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError DIV_int16_t(RuntimeStack* stack) {
-        int16_t b = stack->pop_int16_t();
-        int16_t a = stack->pop_int16_t();
-        stack->push_int16_t(a / b);
+    RuntimeError MUL_int8_t(RuntimeStack* stack) {
+        i8 b = stack->pop_i8();
+        i8 a = stack->pop_i8();
+        stack->push_i8(a * b);
         return STATUS_SUCCESS;
     }
-    
+
+    RuntimeError DIV_int8_t(RuntimeStack* stack) {
+        i8 b = stack->pop_i8();
+        i8 a = stack->pop_i8();
+        stack->push_i8(a / b);
+        return STATUS_SUCCESS;
+    }
+
 }

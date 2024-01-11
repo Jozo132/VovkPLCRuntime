@@ -1,4 +1,4 @@
-// math-s64.h - 1.0.0 - 2022-12-11
+// math-i64.h - 1.0.0 - 2022-12-11
 //
 // Copyright (c) 2022 J.Vovk
 //
@@ -25,30 +25,30 @@
 namespace PLCMethods {
 
     RuntimeError ADD_int64_t(RuntimeStack* stack) {
-        int64_t b = stack->pop_int64_t();
-        int64_t a = stack->pop_int64_t();
-        stack->push_int64_t(a + b);
+        i64 b = stack->pop_i64();
+        i64 a = stack->pop_i64();
+        stack->push_i64(a + b);
         return STATUS_SUCCESS;
     }
 
     RuntimeError SUB_int64_t(RuntimeStack* stack) {
-        int64_t b = stack->pop_int64_t();
-        int64_t a = stack->pop_int64_t();
-        stack->push_int64_t(a - b);
+        i64 b = stack->pop_i64();
+        i64 a = stack->pop_i64();
+        stack->push_i64(a - b);
         return STATUS_SUCCESS;
     }
 
     RuntimeError MUL_int64_t(RuntimeStack* stack) {
-        int64_t b = stack->pop_int64_t();
-        int64_t a = stack->pop_int64_t();
-        stack->push_int64_t(a * b);
+        i64 b = stack->pop_i64();
+        i64 a = stack->pop_i64();
+        stack->push_i64(a * b);
         return STATUS_SUCCESS;
     }
 
     RuntimeError DIV_int64_t(RuntimeStack* stack) {
-        int64_t b = stack->pop_int64_t();
-        int64_t a = stack->pop_int64_t();
-        stack->push_int64_t(a / b);
+        i64 b = stack->pop_i64();
+        i64 a = stack->pop_i64();
+        stack->push_i64(a / b);
         return STATUS_SUCCESS;
     }
 

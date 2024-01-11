@@ -85,6 +85,8 @@ double log10(double x);
 #include <Arduino.h>
 #endif // __SIMULATOR__
 
+#include "runtime-types.h"
+
 
 #ifdef __arm__
 // should use uinstd.h to define sbrk but Due causes a conflict
@@ -101,7 +103,7 @@ void processExit();
 #define LOG_FREE_MEMORY() Serial.print(F("Free memory: ")); Serial.print(freeMemory()); Serial.println(F(" bytes"));
 
 void fstrcpy(char* buff, const char* fstr);
-void byteToHex(uint8_t byte, char& c1, char& c2);
+void byteToHex(u8 byte, char& c1, char& c2);
 
 // Define an empty F() macro if it isn't defined, so that the code can be compiled on non-Arduino platforms
 #ifndef F 
@@ -121,28 +123,93 @@ void byteToHex(uint8_t byte, char& c1, char& c2);
 
 #define STRINGIFY(X) #X
 
-#define CVT_8(type) union uint8_t_to_##type { uint8_t type_uint8_t; type type_##type; }
-#define CVT_16(type) union uint16_t_to_##type { uint16_t type_uint16_t; type type_##type; }
-#define CVT_32(type) union uint32_t_to_##type { uint32_t type_uint32_t; type type_##type; }
+#define CVT_8(type) union u8_to_##type { u8 type_u8; type type_##type; }
+#define CVT_16(type) union u16_to_##type { u16 type_u16; type type_##type; }
+#define CVT_32(type) union u32_to_##type { u32 type_u32; type type_##type; }
 
 #ifdef USE_X64_OPS
-#define CVT_64(type) union uint64_t_to_##type { uint64_t type_uint64_t; type type_##type; }
+#define CVT_64(type) union u64_to_##type { u64 type_u64; type type_##type; }
 #endif // USE_X64_OPS
 
-CVT_32(float);
+CVT_32(f32);
 
 #ifdef USE_X64_OPS
-CVT_64(double);
+CVT_64(f64);
 #endif // USE_X64_OPS
 
-union u8A_to_u16 { uint8_t u8A[2]; uint16_t u16; };
+union u8A_to_u16 { u8 u8A[2]; u16 _u16; };
+
 
 
 // BCD to DEC
-uint8_t bcd2dec(uint8_t bcd);
+u8 bcd2dec(u8 bcd);
 
 // DEC to BCD
-uint8_t dec2bcd(uint8_t dec);
+u8 dec2bcd(u8 dec);
+
+u8* ___reverse_byte_order_ptr = 0;
+u8* ___reverse_byte_order_res_ptr = 0;
+template <typename T> T reverse_byte_order(T value) {
+    u32 size = sizeof(T);
+    switch (size) {
+        case 1: return value;
+        case 2: {
+            u16 result = 0;
+            ___reverse_byte_order_ptr = (u8*) &value;
+            ___reverse_byte_order_res_ptr = (u8*) &result;
+            ___reverse_byte_order_res_ptr[0] = ___reverse_byte_order_ptr[1];
+            ___reverse_byte_order_res_ptr[1] = ___reverse_byte_order_ptr[0];
+            return (T) result;
+        }
+        case 4: {
+            u32 result = 0;
+            ___reverse_byte_order_ptr = (u8*) &value;
+            ___reverse_byte_order_res_ptr = (u8*) &result;
+            ___reverse_byte_order_res_ptr[0] = ___reverse_byte_order_ptr[3];
+            ___reverse_byte_order_res_ptr[1] = ___reverse_byte_order_ptr[2];
+            ___reverse_byte_order_res_ptr[2] = ___reverse_byte_order_ptr[1];
+            ___reverse_byte_order_res_ptr[3] = ___reverse_byte_order_ptr[0];
+            return (T) result;
+        }
+#ifdef USE_X64_OPS
+        case 8: {
+            u64 result = 0;
+            ___reverse_byte_order_ptr = (u8*) &value;
+            ___reverse_byte_order_res_ptr = (u8*) &result;
+            ___reverse_byte_order_res_ptr[0] = ___reverse_byte_order_ptr[7];
+            ___reverse_byte_order_res_ptr[1] = ___reverse_byte_order_ptr[6];
+            ___reverse_byte_order_res_ptr[2] = ___reverse_byte_order_ptr[5];
+            ___reverse_byte_order_res_ptr[3] = ___reverse_byte_order_ptr[4];
+            ___reverse_byte_order_res_ptr[4] = ___reverse_byte_order_ptr[3];
+            ___reverse_byte_order_res_ptr[5] = ___reverse_byte_order_ptr[2];
+            ___reverse_byte_order_res_ptr[6] = ___reverse_byte_order_ptr[1];
+            ___reverse_byte_order_res_ptr[7] = ___reverse_byte_order_ptr[0];
+            return (T) result;
+        }
+#endif // USE_X64_OPS
+        default: return value;
+    }
+}
+
+#ifndef MAX_PROGRAM_CYCLE_COUNT
+#define MAX_PROGRAM_CYCLE_COUNT 200
+#endif // MAX_PROGRAM_CYCLE_COUNT
+
+float reverse_byte_order(float value) {
+    u32_to_f32 converter;
+    converter.type_f32 = value;
+    converter.type_u32 = reverse_byte_order(converter.type_u32);
+    return converter.type_f32;
+}
+
+#ifdef USE_X64_OPS
+double reverse_byte_order(double value) {
+    u64_to_f64 converter;
+    converter.type_f64 = value;
+    converter.type_u64 = reverse_byte_order(converter.type_u64);
+    return converter.type_f64;
+}
+#endif // USE_X64_OPS
 
 const char PROGRAM_SIZE_EXCEEDED_MSG [] PROGMEM = "Program size exceeded: ";
 
@@ -226,15 +293,15 @@ Serial_t Stream(STREAM_TO_STREAMOUT);
 int get_used_memory();
 
 extern bool serial_timeout;
-char serialReadTimeout(unsigned long timeout = 100);
-uint8_t serialReadHexByteTimeout(unsigned long timeout = 100);
+char serialReadTimeout(u32 timeout = 100);
+u8 serialReadHexByteTimeout(u32 timeout = 100);
 
 #endif // __SIMULATOR__
 
 int print_number_padStart(int value, int pad, char padChar = ' ', int base = 10);
 int print_number_padEnd(int value, int pad, char padChar = ' ', int base = 10);
 
-#define REPRINT(count, str) for (uint8_t i = 0; i < count; i++) { Serial.print(str); }
+#define REPRINT(count, str) for (u8 i = 0; i < count; i++) { Serial.print(str); }
 #define REPRINTLN(count, str) REPRINT(count, str); Serial.println();
 
 #include "runtime-tools-impl.h"

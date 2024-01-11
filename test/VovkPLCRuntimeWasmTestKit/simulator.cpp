@@ -33,9 +33,11 @@
 
 VovkPLCRuntime runtime(64, 64, 60000); // Stack size, memory size, program size
 
+
 bool startup = true;
 
 void custom_test() {
+    global_runtime = &runtime;
     // Blink the LED to indicate that the tests are done
     digitalWrite(LED_BUILTIN, LOW);
     delay(2);
@@ -57,36 +59,36 @@ void custom_test() {
 
 
         // Hand-coded RPN instructions:
-        runtime.program->push_float(10);
-        runtime.program->push_float(1);
-        runtime.program->push_float(a);
-        runtime.program->push_float(b);
-        runtime.program->push_float(c);
-        runtime.program->push_float(c);
-        runtime.program->push_float(d);
-        runtime.program->push_float(d);
-        runtime.program->push_float(e);
-        runtime.program->push_float(e);
-        runtime.program->push_float(f);
-        runtime.program->push(SUB, type_float);
-        runtime.program->push(MUL, type_float);
-        runtime.program->push(SUB, type_float);
-        runtime.program->push(MUL, type_float);
-        runtime.program->push(ADD, type_float);
-        runtime.program->push(MUL, type_float);
-        runtime.program->push(ADD, type_float);
-        runtime.program->push_float(d);
-        runtime.program->push(DIV, type_float);
-        runtime.program->push(MUL, type_float);
-        runtime.program->push(SUB, type_float);
-        runtime.program->push(MUL, type_float);
+        runtime.program->push_f32(10);
+        runtime.program->push_f32(1);
+        runtime.program->push_f32(a);
+        runtime.program->push_f32(b);
+        runtime.program->push_f32(c);
+        runtime.program->push_f32(c);
+        runtime.program->push_f32(d);
+        runtime.program->push_f32(d);
+        runtime.program->push_f32(e);
+        runtime.program->push_f32(e);
+        runtime.program->push_f32(f);
+        runtime.program->push(SUB, type_f32);
+        runtime.program->push(MUL, type_f32);
+        runtime.program->push(SUB, type_f32);
+        runtime.program->push(MUL, type_f32);
+        runtime.program->push(ADD, type_f32);
+        runtime.program->push(MUL, type_f32);
+        runtime.program->push(ADD, type_f32);
+        runtime.program->push_f32(d);
+        runtime.program->push(DIV, type_f32);
+        runtime.program->push(MUL, type_f32);
+        runtime.program->push(SUB, type_f32);
+        runtime.program->push(MUL, type_f32);
 
 
         /*
           // Compiled RPN bytecode:
-          static const uint8_t bytecode [] = { 0x0A,0x41,0x20,0x00,0x00,0x0A,0x3F,0x80,0x00,0x00,0x0A,0x3F,0x80,0x00,0x00,0x0A,0x40,0x00,0x00,0x00,0x0A,0x40,0x40,0x00,0x00,0x0A,0x40,0x40,0x00,0x00,0x0A,0x40,0x80,0x00,0x00,0x0A,0x40,0x80,0x00,0x00,0x0A,0x40,0xA0,0x00,0x00,0x0A,0x40,0xA0,0x00,0x00,0x0A,0x40,0xC0,0x00,0x00,0x21,0x0A,0x22,0x0A,0x21,0x0A,0x22,0x0A,0x20,0x0A,0x22,0x0A,0x20,0x0A,0x0A,0x40,0x80,0x00,0x00,0x23,0x0A,0x22,0x0A,0x21,0x0A,0x22,0x0A };
-          static const uint16_t size = 82;
-          static const uint32_t checksum = 2677;
+          static const u8 bytecode [] = { 0x0A,0x41,0x20,0x00,0x00,0x0A,0x3F,0x80,0x00,0x00,0x0A,0x3F,0x80,0x00,0x00,0x0A,0x40,0x00,0x00,0x00,0x0A,0x40,0x40,0x00,0x00,0x0A,0x40,0x40,0x00,0x00,0x0A,0x40,0x80,0x00,0x00,0x0A,0x40,0x80,0x00,0x00,0x0A,0x40,0xA0,0x00,0x00,0x0A,0x40,0xA0,0x00,0x00,0x0A,0x40,0xC0,0x00,0x00,0x21,0x0A,0x22,0x0A,0x21,0x0A,0x22,0x0A,0x20,0x0A,0x22,0x0A,0x20,0x0A,0x0A,0x40,0x80,0x00,0x00,0x23,0x0A,0x22,0x0A,0x21,0x0A,0x22,0x0A };
+          static const u16 size = 82;
+          static const u32 checksum = 2677;
           program.load(bytecode, size, checksum);
           // program.loadUnsafe(bytecode, size);
         */
@@ -139,11 +141,11 @@ WASM_EXPORT void doSomething() {
 
 // template <typename T> struct OutputBuffer {
 //     T* data = nullptr;
-//     uint32_t type_size = sizeof(T);
-//     uint32_t length = 0;
-//     uint32_t max_size = 0;
-//     OutputBuffer(uint32_t size = 0) { init(size); }
-//     void init(uint32_t size = 0) {
+//     u32 type_size = sizeof(T);
+//     u32 length = 0;
+//     u32 max_size = 0;
+//     OutputBuffer(u32 size = 0) { init(size); }
+//     void init(u32 size = 0) {
 //         if (!size) return;
 //         if (data == nullptr) {
 //             data = new T[size];
@@ -165,7 +167,7 @@ WASM_EXPORT void doSomething() {
 //     T shift() {
 //         if (length > 0) {
 //             T value = data[0];
-//             for (uint32_t i = 1; i < length; i++) {
+//             for (u32 i = 1; i < length; i++) {
 //                 data[i - 1] = data[i];
 //             }
 //             length--;
@@ -174,13 +176,13 @@ WASM_EXPORT void doSomething() {
 //         return 0;
 //     }
 //     // Array operator getter
-//     T& operator[](uint32_t index) {
+//     T& operator[](u32 index) {
 //         if (index < length)
 //             return data[index];
 //         return data[0];
 //     }
 //     // Array operator setter (avoid overloaded 'operator[]' cannot have more than one parameter before C++2b)
-//     void set(uint32_t index, T value) {
+//     void set(u32 index, T value) {
 //         if (index < length)
 //             data[index] = value;
 //     }
@@ -197,7 +199,7 @@ WASM_EXPORT void doSomething() {
 //     myBuffer.push(export_request_count);
 //     //Print buffer contents
 //     Serial.print(F("Buffer <"));
-//     for (uint32_t i = 0; i < myBuffer.length; i++) {
+//     for (u32 i = 0; i < myBuffer.length; i++) {
 //         Serial.print(myBuffer[i], HEX);
 //         if (i < myBuffer.length - 1) Serial.print(F(", "));
 //     }

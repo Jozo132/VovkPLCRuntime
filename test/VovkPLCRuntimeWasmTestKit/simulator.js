@@ -107,6 +107,15 @@ class PLCRuntimeWasm_class {
         return { size, output }
     }
 
+    readMemoryArea = (address, size) => {
+        if (!this.wasm) throw new Error("WebAssembly module not initialized")
+        const { getMemoryArea } = this.wasm.exports
+        if (!getMemoryArea) throw new Error("'getMemoryArea' function not found")
+        getMemoryArea(address, size)
+        const output = this.readStream()
+        return output
+    }
+
     getExports = () => {
         if (!this.wasm) throw new Error("WebAssembly module not initialized")
         return Object.assign({}, this.wasm.exports, {
@@ -199,16 +208,16 @@ class PLCRuntimeWasm_class {
     /** @param { string } str * @returns { string } */
     stringToHex = str => str.split('').map(c => c.charCodeAt(0).toString(16).padStart(2, '0')).join('')
 
-    //  - PLC reset:        'RS<uint8_t>' (checksum)
-    //  - Program download: 'PD<uint32_t><uint8_t[]><uint8_t>' (size, data, checksum)
-    //  - Program upload:   'PU<uint8_t>' (checksum)
-    //  - Program run:      'PR<uint8_t>' (checksum)
-    //  - Program stop:     'PS<uint8_t>' (checksum)
-    //  - Memory read:      'MR<uint32_t><uint32_t><uint8_t>' (address, size, checksum)
-    //  - Memory write:     'MW<uint32_t><uint32_t><uint8_t[]><uint8_t>' (address, size, data, checksum)
-    //  - Memory format:    'MF<uint32_t><uint32_t><uint8_t><uint8_t>' (address, size, value, checksum)
-    //  - Source download:  'SD<uint32_t><uint8_t[]><uint8_t>' (size, data, checksum) // Only available if PLCRUNTIME_SOURCE_ENABLED is defined
-    //  - Source upload:    'SU<uint32_t><uint8_t>' (size, checksum) // Only available if PLCRUNTIME_SOURCE_ENABLED is defined
+    //  - PLC reset:        'RS<u8>' (checksum)
+    //  - Program download: 'PD<u32><u8[]><u8>' (size, data, checksum)
+    //  - Program upload:   'PU<u8>' (checksum)
+    //  - Program run:      'PR<u8>' (checksum)
+    //  - Program stop:     'PS<u8>' (checksum)
+    //  - Memory read:      'MR<u32><u32><u8>' (address, size, checksum)
+    //  - Memory write:     'MW<u32><u32><u8[]><u8>' (address, size, data, checksum)
+    //  - Memory format:    'MF<u32><u32><u8><u8>' (address, size, value, checksum)
+    //  - Source download:  'SD<u32><u8[]><u8>' (size, data, checksum) // Only available if PLCRUNTIME_SOURCE_ENABLED is defined
+    //  - Source upload:    'SU<u32><u8>' (size, checksum) // Only available if PLCRUNTIME_SOURCE_ENABLED is defined
     buildCommand = {
 
         /** @returns { string } */

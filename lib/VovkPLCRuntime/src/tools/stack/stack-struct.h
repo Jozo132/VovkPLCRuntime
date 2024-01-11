@@ -25,27 +25,27 @@
 
 template <typename T> struct Stack {
     T* _data = nullptr;
-    uint32_t MAX_STACK_SIZE = 0;
-    uint32_t _size = 0;
-    Stack(uint32_t max_size = 0);
+    u32 MAX_STACK_SIZE = 0;
+    u32 _size = 0;
+    Stack(u32 max_size = 0);
     ~Stack();
-    void format(uint32_t size);
+    void format(u32 size);
     // Pushes a value to the top of the stack
-    void push(T value);
+    bool push(T value);
     // Pops the top value from the stack
     T pop();
-    void pop(uint32_t size);
+    void pop(u32 size);
     // Returns the top value from the stack
-    T peek(uint32_t depth = 0);
+    T peek(u32 depth = 0);
     // Returns the value at the specified index like an array
     // T value = stack[0];
-    T operator [](uint32_t index);
-    bool set(uint32_t index, T value);
-    bool get(uint32_t index, T& value);
-    bool setBit(uint32_t index, uint8_t bit, bool value);
-    bool getBit(uint32_t index, uint8_t bit, bool& value);
+    T operator [](u32 index);
+    bool set(u32 index, T value);
+    bool get(u32 index, T& value);
+    bool setBit(u32 index, u8 bit, bool value);
+    bool getBit(u32 index, u8 bit, bool& value);
     // Returns the number of elements in the stack
-    uint32_t size();
+    u32 size();
     // Returns true if the stack is empty
     bool empty();
     // Removes all elements from the stack
@@ -53,6 +53,10 @@ template <typename T> struct Stack {
     // Prints the stack to the serial port, where the tail is on the left and the head is on the right.
     int print();
     void println();
+    
+    bool readArea(u32 offset, u8*& value, u32 size = 1);
+
+    bool writeArea(u32 offset, u8* value, u32 size = 1);
 };
 
 
@@ -63,15 +67,15 @@ template <typename T> struct LinkedList {
     };
     Node* head = nullptr;
     Node* tail = nullptr;
-    uint32_t _size = 0;
+    u32 _size = 0;
     // Pushes a value to the end of the list
     void push(T value);
     // Pops the first value from the list
     T pop();
     // Returns the first value from the list
-    T peek(uint32_t depth = 0);
+    T peek(u32 depth = 0);
     // Returns the number of elements in the list
-    uint32_t size();
+    u32 size();
     // Returns true if the list is empty
     bool empty();
     // Removes all elements from the list

@@ -35,7 +35,7 @@ const char* RUNTIME_ERROR_NAME(RuntimeError error) {
 
 void logRuntimeErrorList() {
     Serial.println(F("RuntimeError Status List:\n")); // "    %2d: %s"
-    for (uint32_t i = 0; i < SIZE_OF_ARRAY(RuntimeErrorNames); i++) {
+    for (u32 i = 0; i < SIZE_OF_ARRAY(RuntimeErrorNames); i++) {
         Serial.print(F("    "));
         if (i < 10) Serial.print(' ');
         Serial.print(i);
@@ -51,23 +51,24 @@ void logRuntimeErrorList() {
 bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
     switch (opcode) {
         case NOP:
+        case type_pointer:
         case type_bool:
-        case type_uint8_t:
-        case type_int8_t:
-        case type_uint16_t:
-        case type_int16_t:
-        case type_uint32_t:
-        case type_int32_t:
-        case type_float:
+        case type_u8:
+        case type_i8:
+        case type_u16:
+        case type_i16:
+        case type_u32:
+        case type_i32:
+        case type_f32:
 #ifdef USE_X64_OPS
-        case type_uint64_t:
-        case type_int64_t:
-        case type_double:
+        case type_u64:
+        case type_i64:
+        case type_f64:
 #endif
-        case MOV:
         case CVT:
-        case PUT:
-        case GET:
+        case LOAD:
+        case MOVE:
+        case MOVE_COPY:
         case COPY:
         case SWAP:
         case DROP:
@@ -225,23 +226,24 @@ bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
 const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
     switch (opcode) {
         case NOP: return F("NOP");
+        case type_pointer: return F("PUSH pointer");
         case type_bool: return F("PUSH boolean");
-        case type_uint8_t: return F("PUSH uint8_t");
-        case type_int8_t: return F("PUSH int8_t");
-        case type_uint16_t: return F("PUSH uint16_t");
-        case type_int16_t: return F("PUSH int16_t");
-        case type_uint32_t: return F("PUSH uint32_t");
-        case type_int32_t: return F("PUSH int32_t");
-        case type_float: return F("PUSH float");
+        case type_u8: return F("PUSH u8");
+        case type_i8: return F("PUSH i8");
+        case type_u16: return F("PUSH u16");
+        case type_i16: return F("PUSH i16");
+        case type_u32: return F("PUSH u32");
+        case type_i32: return F("PUSH i32");
+        case type_f32: return F("PUSH f32");
 #ifdef USE_X64_OPS
-        case type_uint64_t: return F("PUSH uint64_t");
-        case type_int64_t: return F("PUSH int64_t");
-        case type_double: return F("PUSH double");
+        case type_u64: return F("PUSH u64");
+        case type_i64: return F("PUSH i64");
+        case type_f64: return F("PUSH f64");
 #endif
-        case MOV: return F("MOV");
         case CVT: return F("CVT");
-        case PUT: return F("PUT");
-        case GET: return F("GET");
+        case LOAD: return F("LOAD");
+        case MOVE: return F("MOVE");
+        case MOVE_COPY: return F("MOVE_COPY");
         case COPY: return F("COPY");
         case SWAP: return F("SWAP");
         case DROP: return F("DROP");
@@ -402,26 +404,32 @@ const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
 }
 #endif
 
-uint8_t OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
+u8 OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
+    // size = 1 + arg_size
+    // Example: 
+    //    NOP       = 1 + 0 = 1
+    //    type_bool = 1 + 1 = 2
+    //    type_i32  = 1 + 4 = 5
     switch (opcode) {
         case NOP: return 1;
+        case type_pointer: return 1 + sizeof(MY_PTR_t);
         case type_bool: return 2;
-        case type_uint8_t: return 2;
-        case type_int8_t: return 2;
-        case type_uint16_t: return 3;
-        case type_int16_t: return 3;
-        case type_uint32_t: return 5;
-        case type_int32_t: return 5;
-        case type_float: return 5;
+        case type_u8: return 2;
+        case type_i8: return 2;
+        case type_u16: return 3;
+        case type_i16: return 3;
+        case type_u32: return 5;
+        case type_i32: return 5;
+        case type_f32: return 5;
 #ifdef USE_X64_OPS
-        case type_uint64_t: return 9;
-        case type_int64_t: return 9;
-        case type_double: return 9;
+        case type_u64: return 9;
+        case type_i64: return 9;
+        case type_f64: return 9;
 #endif
-        case MOV: return 8;
         case CVT: return 3;
-        case PUT: return 4;
-        case GET: return 4;
+        case LOAD: return 2;
+        case MOVE: return 2;
+        case MOVE_COPY: return 2;
         case COPY: return 2;
         case SWAP: return 2;
         case DROP: return 2;
@@ -581,7 +589,7 @@ uint8_t OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
 #ifdef __RUNTIME_DEBUG__
 void logRuntimeInstructionSet() {
     Serial.println(F("Bytecode Instruction Set:"));
-    uint32_t position = 0;
+    u32 position = 0;
     bool was_valid = true;
     for (int opcode = 0x00; opcode < 256; opcode++) {
         bool is_valid = OPCODE_EXISTS((PLCRuntimeInstructionSet) opcode);
@@ -593,7 +601,7 @@ void logRuntimeInstructionSet() {
             position += Serial.print(opcode, HEX);
             position += Serial.print(F(":  "));
             position += Serial.print(OPCODE_NAME((PLCRuntimeInstructionSet) opcode));
-            uint8_t size = OPCODE_SIZE((PLCRuntimeInstructionSet) opcode);
+            u8 size = OPCODE_SIZE((PLCRuntimeInstructionSet) opcode);
             if (size > 0) {
                 for (; position < 26; position++) Serial.print(' ');
                 Serial.print(F("("));

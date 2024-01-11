@@ -10,7 +10,7 @@ template <typename T> struct LinkedList {
 
     Node* head = nullptr;
     Node* tail = nullptr;
-    uint16_t _size = 0;
+    u16 _size = 0;
 
     // Pushes a value to the end of the list
     void push(T value) {
@@ -38,10 +38,10 @@ template <typename T> struct LinkedList {
     }
 
     // Returns the first value from the list
-    T peek(uint16_t depth = 0) {
+    T peek(u16 depth = 0) {
         if (head == nullptr) return T();
         Node* node = head;
-        for (uint16_t i = 0; i < depth; i++) {
+        for (u16 i = 0; i < depth; i++) {
             if (node->next == nullptr) return T();
             node = node->next;
         }
@@ -49,7 +49,7 @@ template <typename T> struct LinkedList {
     }
 
     // Returns the number of elements in the list
-    uint16_t size() { return _size; }
+    u16 size() { return _size; }
 };
 
 LinkedList<int> integers;

@@ -25,30 +25,30 @@
 namespace PLCMethods {
 
     RuntimeError ADD_uint64_t(RuntimeStack* stack) {
-        uint64_t b = stack->pop_uint64_t();
-        uint64_t a = stack->pop_uint64_t();
-        stack->push_uint64_t(a + b);
+        u64 b = stack->pop_u64();
+        u64 a = stack->pop_u64();
+        stack->push_u64(a + b);
         return STATUS_SUCCESS;
     }
     
     RuntimeError SUB_uint64_t(RuntimeStack* stack) {
-        uint64_t b = stack->pop_uint64_t();
-        uint64_t a = stack->pop_uint64_t();
-        stack->push_uint64_t(a - b);
+        u64 b = stack->pop_u64();
+        u64 a = stack->pop_u64();
+        stack->push_u64(a - b);
         return STATUS_SUCCESS;
     }
 
     RuntimeError MUL_uint64_t(RuntimeStack* stack) {
-        uint64_t b = stack->pop_uint64_t();
-        uint64_t a = stack->pop_uint64_t();
-        stack->push_uint64_t(a * b);
+        u64 b = stack->pop_u64();
+        u64 a = stack->pop_u64();
+        stack->push_u64(a * b);
         return STATUS_SUCCESS;
     }
 
     RuntimeError DIV_uint64_t(RuntimeStack* stack) {
-        uint64_t b = stack->pop_uint64_t();
-        uint64_t a = stack->pop_uint64_t();
-        stack->push_uint64_t(a / b);
+        u64 b = stack->pop_u64();
+        u64 a = stack->pop_u64();
+        stack->push_u64(a / b);
         return STATUS_SUCCESS;
     }
 

@@ -23,69 +23,70 @@
 
 #include "stack-struct.h"
 
-template <typename T> Stack<T>::Stack(uint32_t max_size) { format(max_size); }
+template <typename T> Stack<T>::Stack(u32 max_size) { format(max_size); }
 template <typename T> Stack<T>::~Stack() {
     if (_data != nullptr) delete [] _data;
     _data = nullptr;
 }
-template <typename T> void Stack<T>::format(uint32_t size) {
+template <typename T> void Stack<T>::format(u32 size) {
     if (_data != nullptr) delete [] _data;
     _data = new T[size];
     MAX_STACK_SIZE = size;
     _size = MAX_STACK_SIZE;
 }
-template <typename T> void Stack<T>::push(T value) {
+template <typename T> bool Stack<T>::push(T value) {
     if (_size >= MAX_STACK_SIZE) {
         Serial.println(F("Stack overflow!"));
         Serial.print(F("Trying to push ")); Serial.print(value, HEX); Serial.print(F(" to stack at index ")); Serial.println(_size);
         Serial.print(F("MAX_STACK_SIZE = ")); Serial.println(MAX_STACK_SIZE);
-        return;
+        return true;
     }
     _data[_size] = value;
     _size++;
+    return false;
 }
 template <typename T> T Stack<T>::pop() {
     if (_size == 0) return T();
     _size--;
     return _data[_size];
 }
-template <typename T> void Stack<T>::pop(uint32_t size) {
+template <typename T> void Stack<T>::pop(u32 size) {
     if (size > _size) size = _size;
     _size -= size;
 }
-template <typename T> T Stack<T>::peek(uint32_t depth) {
+template <typename T> T Stack<T>::peek(u32 depth) {
     if (_size == 0) return T();
     if (depth >= _size) return T();
     return _data[_size - depth - 1];
 }
-template <typename T> T Stack<T>::operator [](uint32_t index) {
+template <typename T> T Stack<T>::operator [](u32 index) {
     if (index >= _size) return T();
     return _data[index];
 }
-template <typename T> bool Stack<T>::set(uint32_t index, T value) {
+template <typename T> bool Stack<T>::set(u32 index, T value) {
     if (index >= _size) return true;
     _data[index] = value;
     return false;
 }
-template <typename T> bool Stack<T>::get(uint32_t index, T& value) {
+template <typename T> bool Stack<T>::get(u32 index, T& value) {
     if (index >= _size) return true;
     value = _data[index];
     return false;
 }
-template <typename T> bool Stack<T>::setBit(uint32_t index, uint8_t bit, bool value) {
+template <typename T> bool Stack<T>::setBit(u32 index, uint8_t bit, bool value) {
     if (index >= _size) return true;
     if (bit >= 8) return true;
     if (value) _data[index] |= 1 << bit;
     else _data[index] &= ~(1 << bit);
     return false;
 }
-template <typename T> bool Stack<T>::getBit(uint32_t index, uint8_t bit, bool& value) {
+template <typename T> bool Stack<T>::getBit(u32 index, uint8_t bit, bool& value) {
     if (index >= _size) return true;
     if (bit >= 8) return true;
     value = _data[index] & (1 << bit);
     return false;
 }
-template <typename T> uint32_t Stack<T>::size() { return _size; }
+template <typename T> u32 Stack<T>::size() { return _size; }
 template <typename T> bool Stack<T>::empty() { return _size == 0; }
 template <typename T> void Stack<T>::clear() { _size = 0; }
 template <typename T> int Stack<T>::print() {
@@ -94,12 +95,12 @@ template <typename T> int Stack<T>::print() {
     length += Serial.print(_size);
     length += Serial.print(F(") ["));
     if (_size > 16) {
-        uint32_t hidden = _size - 16;
+        u32 hidden = _size - 16;
         length += Serial.print(' ');
         if (hidden < 10) length += Serial.print(' ');
         length += Serial.print(hidden);
         length += Serial.print(F(" more bytes... "));
-        for (uint32_t i = 0; i < 16; i++) {
+        for (u32 i = 0; i < 16; i++) {
             T value = _data[hidden + i];
             if (value < 0x10) length += Serial.print('0');
             length += Serial.print(value, HEX);
@@ -108,7 +109,7 @@ template <typename T> int Stack<T>::print() {
         length += Serial.print(']');
         return length;
     }
-    for (uint32_t i = 0; i < _size; i++) {
+    for (u32 i = 0; i < _size; i++) {
         T value = _data[i];
         if (value < 0x10) length += Serial.print('0');
         length += Serial.print(value, HEX);
@@ -120,6 +121,26 @@ template <typename T> int Stack<T>::print() {
 template <typename T> void Stack<T>::println() {
     print();
     Serial.println();
+}
+
+template <typename T> bool Stack<T>::readArea(u32 offset, u8*& value, u32 size) {
+    bool error = false;
+    u8 temp = 0;
+    for (u32 i = 0; i < size; i++) {
+        error = get(offset + i, temp);
+        value[i] = temp;
+        if (error) return error;
+    }
+    return false;
+}
+
+template <typename T> bool Stack<T>::writeArea(u32 offset, u8* value, u32 size) {
+    bool error = false;
+    for (u32 i = 0; i < size; i++) {
+        error = set(offset + i, value[i]);
+        if (error) return error;
+    }
+    return false;
 }
 
 
@@ -147,16 +168,16 @@ template <typename T> T LinkedList<T>::pop() {
     _size--;
     return value;
 }
-template <typename T> T LinkedList<T>::peek(uint32_t depth) {
+template <typename T> T LinkedList<T>::peek(u32 depth) {
     if (head == nullptr) return T();
     Node* node = head;
-    for (uint32_t i = 0; i < depth; i++) {
+    for (u32 i = 0; i < depth; i++) {
         if (node->next == nullptr) return T();
         node = node->next;
     }
     return node->value;
 }
-template <typename T> uint32_t LinkedList<T>::size() { return _size; }
+template <typename T> u32 LinkedList<T>::size() { return _size; }
 template <typename T> bool LinkedList<T>::empty() { return _size == 0; }
 template <typename T> void LinkedList<T>::clear() {
     Node* node = head;
@@ -174,16 +195,16 @@ template <typename T> int LinkedList<T>::print() {
     length += Serial.print(_size);
     length += Serial.print(F(") ["));
     if (_size > 16) {
-        uint32_t hidden = _size - 16;
+        u32 hidden = _size - 16;
         length += Serial.print(' ');
         if (hidden < 10) length += Serial.print(' ');
         length += Serial.print(hidden);
         length += Serial.print(F(" more bytes... "));
         Node* node = head;
-        for (uint32_t i = 0; i < hidden; i++) {
+        for (u32 i = 0; i < hidden; i++) {
             node = node->next;
         }
-        for (uint32_t i = 0; i < 16; i++) {
+        for (u32 i = 0; i < 16; i++) {
             T value = node->value;
             if (value < 0x10) length += Serial.print('0');
             length += Serial.print(value, HEX);
@@ -194,7 +215,7 @@ template <typename T> int LinkedList<T>::print() {
         return length;
     }
     Node* node = head;
-    for (uint32_t i = 0; i < _size; i++) {
+    for (u32 i = 0; i < _size; i++) {
         T value = node->value;
         if (value < 0x10) length += Serial.print('0');
         length += Serial.print(value, HEX);

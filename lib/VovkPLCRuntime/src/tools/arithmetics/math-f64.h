@@ -25,30 +25,30 @@
 namespace PLCMethods {
 
     RuntimeError ADD_double(RuntimeStack* stack) {
-        double b = stack->pop_double();
-        double a = stack->pop_double();
-        stack->push_double(a + b);
+        f64 b = stack->pop_f64();
+        f64 a = stack->pop_f64();
+        stack->push_f64(a + b);
         return STATUS_SUCCESS;
     }
 
     RuntimeError SUB_double(RuntimeStack* stack) {
-        double b = stack->pop_double();
-        double a = stack->pop_double();
-        stack->push_double(a - b);
+        f64 b = stack->pop_f64();
+        f64 a = stack->pop_f64();
+        stack->push_f64(a - b);
         return STATUS_SUCCESS;
     }
 
     RuntimeError MUL_double(RuntimeStack* stack) {
-        double b = stack->pop_double();
-        double a = stack->pop_double();
-        stack->push_double(a * b);
+        f64 b = stack->pop_f64();
+        f64 a = stack->pop_f64();
+        stack->push_f64(a * b);
         return STATUS_SUCCESS;
     }
 
     RuntimeError DIV_double(RuntimeStack* stack) {
-        double b = stack->pop_double();
-        double a = stack->pop_double();
-        stack->push_double(a / b);
+        f64 b = stack->pop_f64();
+        f64 a = stack->pop_f64();
+        stack->push_f64(a / b);
         return STATUS_SUCCESS;
     }
 

@@ -47,6 +47,7 @@ enum RuntimeError {
     EXECUTION_ERROR,
     EXECUTION_TIMEOUT,
     MEMORY_ACCESS_ERROR,
+    PROGRAM_CYCLE_LIMIT_EXCEEDED,
 };
 
 #ifdef __RUNTIME_DEBUG__
@@ -74,6 +75,7 @@ const char* const RuntimeErrorNames [] PROGMEM = {
     STRINGIFY(EXECUTION_ERROR),
     STRINGIFY(EXECUTION_TIMEOUT),
     STRINGIFY(MEMORY_ACCESS_ERROR),
+    STRINGIFY(PROGRAM_CYCLE_LIMIT_EXCEEDED),
 };
 
 const char* RUNTIME_ERROR_NAME(RuntimeError error);
@@ -86,15 +88,15 @@ void logRuntimeErrorList();
 
 // Readable RPN code example:
 //                                              - stack: []
-//  (uint8_t 4)        - bytecode [ 02, 04 ]    - stack: [4]    
-//  (uint8_t 6)        - bytecode [ 02, 06 ]    - stack: [4, 6]
-//  (ADD uint8_t)      - bytecode [ A1, 02 ]    - stack: [10]
-//  (uint8_t 2)        - bytecode [ 02, 02 ]    - stack: [10, 2]
-//  (MUL uint8_t)      - bytecode [ A3, 02 ]    - stack: [20]
-//  (uint8_t 5)        - bytecode [ 02, 05 ]    - stack: [20, 5]
-//  (DIV uint8_t)      - bytecode [ A4, 02 ]    - stack: [4]
-//  (uint8_t 3)        - bytecode [ 02, 03 ]    - stack: [4, 3]
-//  (SUB uint8_t)      - bytecode [ A2, 02 ]    - stack: [1]
+//  (u8 4)             - bytecode [ 02, 04 ]    - stack: [4]    
+//  (u8 6)             - bytecode [ 02, 06 ]    - stack: [4, 6]
+//  (ADD u8)           - bytecode [ A1, 02 ]    - stack: [10]
+//  (u8 2)             - bytecode [ 02, 02 ]    - stack: [10, 2]
+//  (MUL u8)           - bytecode [ A3, 02 ]    - stack: [20]
+//  (u8 5)             - bytecode [ 02, 05 ]    - stack: [20, 5]
+//  (DIV u8)           - bytecode [ A4, 02 ]    - stack: [4]
+//  (u8 3)             - bytecode [ 02, 03 ]    - stack: [4, 3]
+//  (SUB u8)           - bytecode [ A2, 02 ]    - stack: [1]
 //                                              - stack: [1] - result
 
 // Bytecode buffer:
@@ -112,22 +114,23 @@ enum PLCRuntimeInstructionSet {
     NOP = 0x00,         // NOP - no operation
 
     // Data types
+    type_pointer,       // Pointer to a memory location
     type_bool,          // Constant boolean value
-    type_uint8_t,       // Constant uint8_t value
-    type_uint16_t,      // Constant int8_t value
-    type_uint32_t,      // Constant uint16_t integer value
-    type_uint64_t,      // Constant int16_t integer value
-    type_int8_t,        // Constant uint32_t integer value
-    type_int16_t,       // Constant int32_t integer value
-    type_int32_t,       // Constant uint64_t integer value
-    type_int64_t,       // Constant int64_t integer value
-    type_float,         // Constant float value
-    type_double,        // Constant double value
+    type_u8,            // Constant u8 value
+    type_u16,           // Constant i8 value
+    type_u32,           // Constant u16 integer value
+    type_u64,           // Constant i16 integer value
+    type_i8,            // Constant u32 integer value
+    type_i16,           // Constant i32 integer value
+    type_i32,           // Constant u64 integer value
+    type_i64,           // Constant i64 integer value
+    type_f32,           // Constant f32 value
+    type_f64,           // Constant f64 value
 
-    MOV = 0x10,         // Universal value move. Example: [ uint8_t MOV, uint8_t type, uint8_t source_location, uint16_t source_address, uint8_t destination_location, uint16_t destination_address ]     
-    CVT,                // Convert value from one type to another. Example: [ uint8_t CVT, uint8_t source_type, uint8_t destination_type ]
-    PUT,                // Put value from stack to memory. Example: [ uint8_t PUT, uint8_t type, uint16_t address ]
-    GET,                // Get value from memory to stack. Example: [ uint8_t GET, uint8_t type, uint16_t address ]
+    CVT = 0x10,         // Convert value from one type to another. Example: [ u8 CVT, u8 source_type, u8 destination_type ]
+    LOAD,               // Load value from memory to stack. Example: [ u8 LOAD, u8 type, u16 address ]
+    MOVE,               // Move value from stack to memory. Example: [ u8 MOVE, u8 type, u16 address ]
+    MOVE_COPY,          // Move value from stack to memory and keep the value on the stack. Example: [ u8 MOVE_COPY, u8 type, u16 address ]
 
     COPY,               // Make a duplicate of the top of the stack
     SWAP,               // Swap the top two values on the stack
@@ -142,11 +145,11 @@ enum PLCRuntimeInstructionSet {
 
     /* TODO: */
     // MOD,                // Modulo, requires data type as argument
-    // POW,                // Power for given type. Example: POW uint8_t
+    // POW,                // Power for given type. Example: POW u8
     // SQRT,               // Square root
     // MIN,                // Minimum 
     // MAX,                // Maximum 
-    // ABS,                // Absolute value for int8_t
+    // ABS,                // Absolute value for i8
     // MAP,                // Map  (x, in_min, in_max, out_min, out_max)
     // CON,                // Constrain  (x, min, max)
     // RAND,               // Random  (full range)
@@ -154,7 +157,7 @@ enum PLCRuntimeInstructionSet {
     // RAND2,              // Random  (min, max)
     // LN,                 // Natural logarithm
     // LOG10,              // Base 10 logarithm
-    // LOG2,               // Base 2 logarithm for float
+    // LOG2,               // Base 2 logarithm for f32
     // EXP,                // Exponential
     // SIN,                // Sine
     // COS,                // Cosine
@@ -289,23 +292,23 @@ enum PLCRuntimeInstructionSet {
     CMP_LTE,            // Compare  (x, y)
 
     // Control flow
-    JMP = 0xE0,         // Jump to the given address in the program bytecode (uint16_t)
-    JMP_IF,             // Jump to the given address in the program bytecode if the top of the stack is true (uint16_t)
-    JMP_IF_NOT,         // Jump to the given address in the program bytecode if the top of the stack is false (uint16_t)
-    CALL,               // Call a function (uint16_t)
-    CALL_IF,            // Call a function if the top of the stack is true (uint16_t)
-    CALL_IF_NOT,        // Call a function if the top of the stack is false (uint16_t)
+    JMP = 0xE0,         // Jump to the given address in the program bytecode (u16)
+    JMP_IF,             // Jump to the given address in the program bytecode if the top of the stack is true (u16)
+    JMP_IF_NOT,         // Jump to the given address in the program bytecode if the top of the stack is false (u16)
+    CALL,               // Call a function (u16)
+    CALL_IF,            // Call a function if the top of the stack is true (u16)
+    CALL_IF_NOT,        // Call a function if the top of the stack is false (u16)
     RET,                // Return from a function call
     RET_IF,             // Return from a function call if the top of the stack is true
     RET_IF_NOT,         // Return from a function call if the top of the stack is false
 
-    EXIT = 0xFF         // Exit the program. This will cease the execution of the program and return an optional exit error code (uint8_t)
+    EXIT = 0xFF         // Exit the program. This will cease the execution of the program and return an optional exit error code (u8)
 };
 
 
 bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode);
 const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode);
-uint8_t OPCODE_SIZE(PLCRuntimeInstructionSet opcode);
+u8 OPCODE_SIZE(PLCRuntimeInstructionSet opcode);
 void logRuntimeInstructionSet();
 
 

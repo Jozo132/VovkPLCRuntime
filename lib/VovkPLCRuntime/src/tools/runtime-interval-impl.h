@@ -47,7 +47,7 @@ void IntervalGlobalLoopCheck() {
     P_300ms = false;
     P_200ms = false;
     P_100ms = false;
-    uint32_t t = millis();
+    u32 t = millis();
     if (t == interval_millis_now) return; // No need to check if the time hasn't changed
     interval_millis_now = t;
 
@@ -56,7 +56,7 @@ void IntervalGlobalLoopCheck() {
         P_100ms = true;
         interval_counter_100ms++;
     }
-    uint32_t diff = t - interval_millis_last;
+    u32 diff = t - interval_millis_last;
     while (diff >= 100) {
         P_100ms = true;
         interval_counter_100ms++;

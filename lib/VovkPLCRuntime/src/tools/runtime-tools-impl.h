@@ -86,8 +86,8 @@ void processExit() {
 }
 
 void fstrcpy(char* buff, const char* fstr) {
-    uint8_t i = 0;
-    uint8_t c = 0;
+    u8 i = 0;
+    u8 c = 0;
     for (;;) {
         c = pgm_read_byte(fstr + i);
         buff[i++] = c;
@@ -99,7 +99,7 @@ void fstrcpy(char* buff, const char* fstr) {
     }
 }
 
-void byteToHex(uint8_t byte, char& c1, char& c2) {
+void byteToHex(u8 byte, char& c1, char& c2) {
     c1 = ((byte >> 4) & 0xF) + '0';
     c2 = ((byte) & 0xF) + '0';
     if (c1 > '9') c1 += 'A' - '9' - 1;
@@ -108,10 +108,10 @@ void byteToHex(uint8_t byte, char& c1, char& c2) {
 
 
 // BCD to DEC
-uint8_t bcd2dec(uint8_t bcd) { return ((bcd >> 4) * 10) + (bcd & 0xF); }
+u8 bcd2dec(u8 bcd) { return ((bcd >> 4) * 10) + (bcd & 0xF); }
 
 // DEC to BCD
-uint8_t dec2bcd(uint8_t dec) { return ((dec / 10) << 4) + (dec % 10); }
+u8 dec2bcd(u8 dec) { return ((dec / 10) << 4) + (dec % 10); }
 
 #ifdef __SIMULATOR__
 void pinMode(int pin, int mode) {}
@@ -326,8 +326,8 @@ char serialReadTimeout(unsigned long timeout) {
     return Serial.read();
 }
 
-uint8_t serialReadHexByteTimeout(unsigned long timeout) {
-    uint8_t b = 0;
+u8 serialReadHexByteTimeout(unsigned long timeout) {
+    u8 b = 0;
     char c = serialReadTimeout(timeout);
     if (c >= '0' && c <= '9') b = c - '0';
     else if (c >= 'A' && c <= 'F') b = c - 'A' + 10;

@@ -61,11 +61,11 @@ class VovkPLCRuntime {
 private:
     bool started_up = false;
 public:
-    const uint32_t input_offset = PLCRUNTIME_INPUT_OFFSET; // Output offset in memory
-    const uint32_t output_offset = PLCRUNTIME_OUTPUT_OFFSET + PLCRUNTIME_INPUT_OFFSET; // Output offset in memory
-    uint32_t max_stack_size = PLCRUNTIME_DEFAULT_STACK_SIZE; // Maximum stack size
-    uint32_t memory_size = PLCRUNTIME_DEFAULT_MEMORY_SIZE; // PLC memory size
-    uint32_t program_size = PLCRUNTIME_DEFAULT_PROGRAM_SIZE; // PLC program size
+    const u32 input_offset = PLCRUNTIME_INPUT_OFFSET; // Output offset in memory
+    const u32 output_offset = PLCRUNTIME_OUTPUT_OFFSET + PLCRUNTIME_INPUT_OFFSET; // Output offset in memory
+    u32 max_stack_size = PLCRUNTIME_DEFAULT_STACK_SIZE; // Maximum stack size
+    u32 memory_size = PLCRUNTIME_DEFAULT_MEMORY_SIZE; // PLC memory size
+    u32 program_size = PLCRUNTIME_DEFAULT_PROGRAM_SIZE; // PLC program size
 #ifdef __WASM__
     RuntimeStack* stack = nullptr; // Active memory stack for PLC execution
     RuntimeProgram* program = nullptr; // Active PLC program
@@ -93,33 +93,33 @@ public:
         formatMemory(memory_size);
     }
 
-    void formatMemory(uint32_t size, uint8_t* data = nullptr) {
+    void formatMemory(u32 size, u8* data = nullptr) {
         if (size == 0) return;
         if (stack == nullptr) stack = new RuntimeStack(max_stack_size, max_stack_size, memory_size);
         stack->memory->format(size);
         if (data == nullptr) {
-            for (uint32_t i = 0; i < size; i++)
+            for (u32 i = 0; i < size; i++)
                 stack->memory->set(i, 0);
         } else {
-            for (uint32_t i = 0; i < size; i++)
+            for (u32 i = 0; i < size; i++)
                 stack->memory->set(i, data[i]);
         }
     }
 
-    VovkPLCRuntime(uint32_t max_stack_size, uint32_t memory_size, uint32_t program_size) {
+    VovkPLCRuntime(u32 max_stack_size, u32 memory_size, u32 program_size) {
         this->max_stack_size = max_stack_size;
         this->memory_size = memory_size;
         this->program_size = program_size;
     }
-    VovkPLCRuntime(uint32_t max_stack_size, uint32_t memory_size) {
+    VovkPLCRuntime(u32 max_stack_size, u32 memory_size) {
         this->max_stack_size = max_stack_size;
         this->memory_size = memory_size;
     }
-    VovkPLCRuntime(uint32_t max_stack_size, RuntimeProgram& program) {
+    VovkPLCRuntime(u32 max_stack_size, RuntimeProgram& program) {
         this->max_stack_size = max_stack_size;
         this->program = &program;
     }
-    VovkPLCRuntime(uint32_t max_stack_size, uint32_t memory_size, RuntimeProgram& program) {
+    VovkPLCRuntime(u32 max_stack_size, u32 memory_size, RuntimeProgram& program) {
         this->max_stack_size = max_stack_size;
         this->program = &program;
         this->memory_size = memory_size;
@@ -133,12 +133,12 @@ public:
         this->program = &program;
     }
 
-    void loadProgramUnsafe(uint8_t* program, uint32_t program_size) {
+    void loadProgramUnsafe(u8* program, u32 program_size) {
         if (this->program == nullptr) this->program = new RuntimeProgram(program_size);
         this->program->loadUnsafe(program, program_size);
     }
 
-    void loadProgram(uint8_t* program, uint32_t program_size, uint8_t checksum) {
+    void loadProgram(u8* program, u32 program_size, u8 checksum) {
         if (this->program == nullptr) this->program = new RuntimeProgram(program_size);
         this->program->load(program, program_size, checksum);
     }
@@ -148,15 +148,15 @@ public:
     // Clear the stack and reset the program line
     void clear(RuntimeProgram& program);
     // Execute one PLC instruction at index, returns an error code (0 on success)
-    RuntimeError step(uint8_t* program, uint32_t program_size, uint32_t& index);
+    RuntimeError step(u8* program, u32 program_size, u32& index);
     // Execute the whole PLC program, returns an error code (0 on success)
-    RuntimeError run(uint8_t* program, uint32_t program_size);
+    RuntimeError run(u8* program, u32 program_size);
     // Execute one PLC instruction, returns an error code (0 on success)
     RuntimeError step(RuntimeProgram& program);
     // Run/Continue the whole PLC program from where it left off, returns an error code (0 on success)
     RuntimeError run(RuntimeProgram& program);
     // Execute one PLC instruction at index, returns an error code (0 on success)
-    RuntimeError step(uint32_t& index) {
+    RuntimeError step(u32& index) {
         if (program == nullptr) return NO_PROGRAM;
         return step(program->program, program->program_size, index);
     }
@@ -182,9 +182,9 @@ public:
     // Read a custom type T value from the stack. This will pop the stack by sizeof(T) bytes and return the value.
     template <typename T> T read() {
         if (!started_up) startup();
-        if (stack->size() < (uint32_t) sizeof(T)) return 0;
-        uint8_t temp[sizeof(T)];
-        for (uint32_t i = 0; i < (uint32_t) sizeof(T); i++)
+        if (stack->size() < (u32) sizeof(T)) return 0;
+        u8 temp[sizeof(T)];
+        for (u32 i = 0; i < (u32) sizeof(T); i++)
             temp[i] = stack->pop();
         T value = *(T*) temp;
         return value;
@@ -193,13 +193,13 @@ public:
     // Print the stack buffer to the serial port
     int printStack();
 
-    void setInput(uint32_t index, byte value) {
+    void setInput(u32 index, byte value) {
         if (stack == nullptr) return;
         if (stack->memory == nullptr) return;
         stack->memory->set(index + input_offset, value);
     }
 
-    void setInputBit(uint32_t index, uint8_t bit, bool value) {
+    void setInputBit(u32 index, u8 bit, bool value) {
         if (stack == nullptr) return;
         if (stack->memory == nullptr) return;
         byte temp = 0;
@@ -210,7 +210,7 @@ public:
         stack->memory->set(index + input_offset, temp);
     }
 
-    byte getOutput(uint32_t index) {
+    byte getOutput(u32 index) {
         if (stack == nullptr) return 0;
         if (stack->memory == nullptr) return 0;
         byte value;
@@ -218,7 +218,7 @@ public:
         return value;
     }
 
-    bool getOutputBit(uint32_t index, uint8_t bit) {
+    bool getOutputBit(u32 index, u8 bit) {
         if (stack == nullptr) return false;
         if (stack->memory == nullptr) return false;
         byte temp = 0;
@@ -227,17 +227,16 @@ public:
         return temp & (1 << bit);
     }
 
-    bool readMemory(uint32_t offset, uint8_t*& value, uint32_t size = 1) {
+    bool readMemory(u32 offset, u8*& value, u32 size = 1) {
         if (stack == nullptr) return false;
         if (stack->memory == nullptr) return false;
-        bool error = false;
-        uint8_t temp = 0;
-        for (uint32_t i = 0; i < size; i++) {
-            error = stack->memory->get(offset + i, temp);
-            value[i] = temp;
-            if (error) return error;
-        }
-        return false;
+        return stack->memory->readArea(offset, value, size);
+    }
+
+    bool writeMemory(u32 offset, u8* value, u32 size = 1) {
+        if (stack == nullptr) return false;
+        if (stack->memory == nullptr) return false;
+        return stack->memory->writeArea(offset, value, size);
     }
 
 public:
@@ -255,23 +254,23 @@ public:
             // <command>[<size>][<data>]<checksum>
             // Where the command is always 2 characters and the rest is %02x encoded
             // Possible commands:
-            //  - PLC reset:        'RS<uint8_t>' (checksum)
-            //  - Program download: 'PD<uint32_t><uint8_t[]><uint8_t>' (size, data, checksum)
-            //  - Program upload:   'PU<uint8_t>' (checksum)
-            //  - Program run:      'PR<uint8_t>' (checksum)
-            //  - Program stop:     'PS<uint8_t>' (checksum)
-            //  - Memory read:      'MR<uint32_t><uint32_t><uint8_t>' (address, size, checksum)
-            //  - Memory write:     'MW<uint32_t><uint32_t><uint8_t[]><uint8_t>' (address, size, data, checksum)
-            //  - Memory format:    'MF<uint32_t><uint32_t><uint8_t><uint8_t>' (address, size, value, checksum)
-            //  - Source download:  'SD<uint32_t><uint8_t[]><uint8_t>' (size, data, checksum) // Only available if PLCRUNTIME_SOURCE_ENABLED is defined
-            //  - Source upload:    'SU<uint32_t><uint8_t>' (size, checksum) // Only available if PLCRUNTIME_SOURCE_ENABLED is defined
+            //  - PLC reset:        'RS<u8>' (checksum)
+            //  - Program download: 'PD<u32><u8[]><u8>' (size, data, checksum)
+            //  - Program upload:   'PU<u8>' (checksum)
+            //  - Program run:      'PR<u8>' (checksum)
+            //  - Program stop:     'PS<u8>' (checksum)
+            //  - Memory read:      'MR<u32><u32><u8>' (address, size, checksum)
+            //  - Memory write:     'MW<u32><u32><u8[]><u8>' (address, size, data, checksum)
+            //  - Memory format:    'MF<u32><u32><u8><u8>' (address, size, value, checksum)
+            //  - Source download:  'SD<u32><u8[]><u8>' (size, data, checksum) // Only available if PLCRUNTIME_SOURCE_ENABLED is defined
+            //  - Source upload:    'SU<u32><u8>' (size, checksum) // Only available if PLCRUNTIME_SOURCE_ENABLED is defined
             // If the program is downloaded and the checksum is invalid, the runtime will restart
-            uint8_t cmd[2] = { 0, 0 };
-            uint32_t size = 0;
-            uint32_t address = 0;
-            uint8_t* data = nullptr;
-            uint8_t checksum = 0;
-            uint8_t checksum_calc = 0;
+            u8 cmd[2] = { 0, 0 };
+            u32 size = 0;
+            u32 address = 0;
+            u8* data = nullptr;
+            u8 checksum = 0;
+            u8 checksum_calc = 0;
 
             // Read the command
             cmd[0] = serialReadTimeout(); SERIAL_TIMEOUT_RETURN;
@@ -312,21 +311,21 @@ public:
             } else if (program_download) {
                 Serial.print(F("PROGRAM DOWNLOAD - "));
                 // Read the size
-                size = (uint32_t) serialReadHexByteTimeout();  SERIAL_TIMEOUT_RETURN;
+                size = (u32) serialReadHexByteTimeout();  SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, (size & 0xff));
-                size = size << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                size = size << 8 | (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, (size & 0xff));
-                size = size << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                size = size << 8 | (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, (size & 0xff));
-                size = size << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                size = size << 8 | (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, (size & 0xff));
 
 
                 // Read the data
                 program->format(size);
                 program->program_size = size;
-                uint8_t b = 0;
-                for (uint32_t i = 0; i < size; i++) {
+                u8 b = 0;
+                for (u32 i = 0; i < size; i++) {
                     b = serialReadHexByteTimeout(); SERIAL_TIMEOUT_JOB(processExit());
                     program->modify(i, b);
                     crc8_simple(checksum_calc, b);
@@ -395,23 +394,23 @@ public:
             } else if (memory_read) {
                 Serial.print(F("MEMORY READ - "));
                 // Read the address
-                address = (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                address = (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, (address & 0xff));
-                address = address << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                address = address << 8 | (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, (address & 0xff));
-                address = address << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                address = address << 8 | (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, (address & 0xff));
-                address = address << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                address = address << 8 | (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, (address & 0xff));
 
                 // Read the size
-                size = (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                size = (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, (size & 0xff));
-                size = size << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                size = size << 8 | (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, (size & 0xff));
-                size = size << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                size = size << 8 | (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, (size & 0xff));
-                size = size << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                size = size << 8 | (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, (size & 0xff));
 
                 // Read the checksum
@@ -425,8 +424,8 @@ public:
                 }
 
                 // Read the data
-                uint8_t value;
-                for (uint32_t i = 0; i < size; i++) {
+                u8 value;
+                for (u32 i = 0; i < size; i++) {
                     stack->memory->get(address + i, value);
                     char c1 = (value >> 4) & 0x0f;
                     char c2 = value & 0x0f;
@@ -448,28 +447,28 @@ public:
             } else if (memory_write) {
                 Serial.print(F("MEMORY WRITE - "));
                 // Read the address
-                address = (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                address = (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, (address & 0xff));
-                address = address << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                address = address << 8 | (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, (address & 0xff));
-                address = address << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                address = address << 8 | (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, (address & 0xff));
-                address = address << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                address = address << 8 | (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, (address & 0xff));
 
                 // Read the size
-                size = (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                size = (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, (size & 0xff));
-                size = size << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                size = size << 8 | (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, (size & 0xff));
-                size = size << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                size = size << 8 | (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, (size & 0xff));
-                size = size << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                size = size << 8 | (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, (size & 0xff));
 
                 // Read the data
-                data = new uint8_t[size];
-                for (uint32_t i = 0; i < size; i++) {
+                data = new u8[size];
+                for (u32 i = 0; i < size; i++) {
                     data[i] = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
                     crc8_simple(checksum_calc, data[i]);
                 }
@@ -485,7 +484,7 @@ public:
                 }
 
                 // Write the data
-                for (uint32_t i = 0; i < size; i++)
+                for (u32 i = 0; i < size; i++)
                     stack->memory->set(address + i, data[i]);
 
                 Serial.flush();
@@ -493,27 +492,27 @@ public:
             } else if (memory_format) {
                 Serial.print(F("MEMORY FORMAT - "));
                 // Read the address
-                address = (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                address = (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, (address & 0xff));
-                address = address << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                address = address << 8 | (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, (address & 0xff));
-                address = address << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                address = address << 8 | (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, (address & 0xff));
-                address = address << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                address = address << 8 | (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, (address & 0xff));
 
                 // Read the size
-                size = (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                size = (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, (size & 0xff));
-                size = size << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                size = size << 8 | (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, (size & 0xff));
-                size = size << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                size = size << 8 | (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, (size & 0xff));
-                size = size << 8 | (uint32_t) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                size = size << 8 | (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, (size & 0xff));
 
                 // Read the value
-                uint8_t value = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                u8 value = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, value);
 
                 // Read the checksum
@@ -527,7 +526,7 @@ public:
                 }
 
                 // Format the memory
-                for (uint32_t i = 0; i < size; i++)
+                for (u32 i = 0; i < size; i++)
                     stack->memory->set(address + i, value);
 
                 Serial.flush();
@@ -570,10 +569,10 @@ int VovkPLCRuntime::printStack() { return stack->print(); }
 RuntimeError VovkPLCRuntime::run(RuntimeProgram& program) { return run(program.program, program.program_size); }
 
 // Execute the whole PLC program, returns an erro code (0 on success)
-RuntimeError VovkPLCRuntime::run(uint8_t* program, uint32_t program_size) {
+RuntimeError VovkPLCRuntime::run(u8* program, u32 program_size) {
     if (!started_up) startup();
     IntervalGlobalLoopCheck();
-    uint8_t state = 0;
+    u8 state = 0;
     state = state << 1 | P_10s;
     state = state << 1 | P_5s;
     state = state << 1 | P_2s;
@@ -582,7 +581,7 @@ RuntimeError VovkPLCRuntime::run(uint8_t* program, uint32_t program_size) {
     state = state << 1 | P_300ms;
     state = state << 1 | P_200ms;
     state = state << 1 | P_100ms;
-    stack->memory->set(1, state); // uint8_t -> 1 byte
+    stack->memory->set(1, state); // u8 -> 1 byte
     state = 0;
     state = state << 1 | P_2hr;
     state = state << 1 | P_1hr;
@@ -592,7 +591,7 @@ RuntimeError VovkPLCRuntime::run(uint8_t* program, uint32_t program_size) {
     state = state << 1 | P_2min;
     state = state << 1 | P_1min;
     state = state << 1 | P_30s;
-    stack->memory->set(2, state); // uint8_t -> 1 byte
+    stack->memory->set(2, state); // u8 -> 1 byte
     state = 0;
     state = state << 1 | P_1day;
     state = state << 1 | P_12hr;
@@ -600,13 +599,13 @@ RuntimeError VovkPLCRuntime::run(uint8_t* program, uint32_t program_size) {
     state = state << 1 | P_5hr;
     state = state << 1 | P_4hr;
     state = state << 1 | P_3hr;
-    stack->memory->set(3, state); // uint8_t -> 1 byte
-    
+    stack->memory->set(3, state); // u8 -> 1 byte
+
     stack->memory->set(4, interval_time_days);
     stack->memory->set(5, interval_time_hours);
     stack->memory->set(6, interval_time_minutes);
     stack->memory->set(7, interval_time_seconds);
-    uint32_t index = 0;
+    u32 index = 0;
     while (index < program_size) {
         RuntimeError status = step(program, program_size, index);
         if (status != STATUS_SUCCESS) {
@@ -625,10 +624,10 @@ RuntimeError VovkPLCRuntime::run(uint8_t* program, uint32_t program_size) {
 RuntimeError VovkPLCRuntime::step(RuntimeProgram& program) { return step(program.program, program.program_size, program.program_line); }
 
 // Execute one PLC instruction at index, returns an error code (0 on success)
-RuntimeError VovkPLCRuntime::step(uint8_t* program, uint32_t program_size, uint32_t& index) {
+RuntimeError VovkPLCRuntime::step(u8* program, u32 program_size, u32& index) {
     if (program_size == 0) return EMPTY_PROGRAM;
     if (index >= program_size) return PROGRAM_SIZE_EXCEEDED;
-    uint8_t opcode = program[index];
+    u8 opcode = program[index];
     index++;
     switch (opcode) {
         case NOP: return STATUS_SUCCESS;
@@ -637,8 +636,9 @@ RuntimeError VovkPLCRuntime::step(uint8_t* program, uint32_t program_size, uint3
         case LOGIC_NOT: return PLCMethods::LOGIC_NOT(this->stack);
         case LOGIC_XOR: return PLCMethods::LOGIC_XOR(this->stack);
         case CVT: return PLCMethods::CVT(this->stack, program, program_size, index);
-        case PUT: return PLCMethods::PUT(this->stack, program, program_size, index);
-        case GET: return PLCMethods::GET(this->stack, program, program_size, index);
+        case LOAD: return PLCMethods::LOAD(this->stack, program, program_size, index);
+        case MOVE: return PLCMethods::MOVE(this->stack, program, program_size, index);
+        case MOVE_COPY: return PLCMethods::MOVE_COPY(this->stack, program, program_size, index);
         case COPY: return PLCMethods::COPY(this->stack, program, program_size, index);
         case SWAP: return PLCMethods::SWAP(this->stack, program, program_size, index);
         case DROP: return PLCMethods::DROP(this->stack, program, program_size, index);
@@ -652,18 +652,19 @@ RuntimeError VovkPLCRuntime::step(uint8_t* program, uint32_t program_size, uint3
         case RET: return PLCMethods::handle_RET(this->stack, program, program_size, index);
         case RET_IF: return PLCMethods::handle_RET_IF(this->stack, program, program_size, index);
         case RET_IF_NOT: return PLCMethods::handle_RET_IF_NOT(this->stack, program, program_size, index);
+        case type_pointer: return PLCMethods::PUSH_pointer(this->stack, program, program_size, index);
         case type_bool: return PLCMethods::PUSH_bool(this->stack, program, program_size, index);
-        case type_uint8_t: return PLCMethods::PUSH_uint8_t(this->stack, program, program_size, index);
-        case type_int8_t: return PLCMethods::PUSH_int8_t(this->stack, program, program_size, index);
-        case type_uint16_t: return PLCMethods::PUSH_uint16_t(this->stack, program, program_size, index);
-        case type_int16_t: return PLCMethods::PUSH_int16_t(this->stack, program, program_size, index);
-        case type_uint32_t: return PLCMethods::PUSH_uint32_t(this->stack, program, program_size, index);
-        case type_int32_t: return PLCMethods::PUSH_int32_t(this->stack, program, program_size, index);
-        case type_float: return PLCMethods::PUSH_float(this->stack, program, program_size, index);
+        case type_u8: return PLCMethods::push_u8(this->stack, program, program_size, index);
+        case type_i8: return PLCMethods::push_i8(this->stack, program, program_size, index);
+        case type_u16: return PLCMethods::push_u16(this->stack, program, program_size, index);
+        case type_i16: return PLCMethods::push_i16(this->stack, program, program_size, index);
+        case type_u32: return PLCMethods::push_u32(this->stack, program, program_size, index);
+        case type_i32: return PLCMethods::push_i32(this->stack, program, program_size, index);
+        case type_f32: return PLCMethods::push_f32(this->stack, program, program_size, index);
 #ifdef USE_X64_OPS
-        case type_uint64_t: return PLCMethods::PUSH_uint64_t(this->stack, program, program_size, index);
-        case type_int64_t: return PLCMethods::PUSH_int64_t(this->stack, program, program_size, index);
-        case type_double: return PLCMethods::PUSH_double(this->stack, program, program_size, index);
+        case type_u64: return PLCMethods::push_u64(this->stack, program, program_size, index);
+        case type_i64: return PLCMethods::push_i64(this->stack, program, program_size, index);
+        case type_f64: return PLCMethods::push_f64(this->stack, program, program_size, index);
 #endif // USE_X64_OPS
         case ADD: return PLCMethods::handle_ADD(this->stack, program, program_size, index);
         case SUB: return PLCMethods::handle_SUB(this->stack, program, program_size, index);

@@ -25,29 +25,29 @@ namespace PLCMethods {
 
     // Boolean operators
     RuntimeError LOGIC_AND(RuntimeStack* stack) {
-        uint8_t b = stack->pop_uint8_t() != 0;
-        uint8_t a = stack->pop_uint8_t() != 0;
-        stack->push_uint8_t(a && b);
+        u8 b = stack->pop_u8() != 0;
+        u8 a = stack->pop_u8() != 0;
+        stack->push_u8(a && b);
         return STATUS_SUCCESS;
     }
 
     RuntimeError LOGIC_OR(RuntimeStack* stack) {
-        uint8_t b = stack->pop_uint8_t() != 0;
-        uint8_t a = stack->pop_uint8_t() != 0;
-        stack->push_uint8_t(a || b);
+        u8 b = stack->pop_u8() != 0;
+        u8 a = stack->pop_u8() != 0;
+        stack->push_u8(a || b);
         return STATUS_SUCCESS;
     }
 
     RuntimeError LOGIC_XOR(RuntimeStack* stack) {
-        uint8_t b = stack->pop_uint8_t() != 0;
-        uint8_t a = stack->pop_uint8_t() != 0;
-        stack->push_uint8_t(a ^ b);
+        u8 b = stack->pop_u8() != 0;
+        u8 a = stack->pop_u8() != 0;
+        stack->push_u8(a ^ b);
         return STATUS_SUCCESS;
     }
 
     RuntimeError LOGIC_NOT(RuntimeStack* stack) {
-        uint8_t a = stack->pop_uint8_t() != 0;
-        stack->push_uint8_t(!a);
+        u8 a = stack->pop_u8() != 0;
+        stack->push_u8(!a);
         return STATUS_SUCCESS;
     }
 

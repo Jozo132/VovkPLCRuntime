@@ -25,14 +25,16 @@
 #include <Arduino.h>
 #endif // __WASM__
 
-uint32_t interval_millis_now = 0;
-uint32_t interval_millis_last = 0;
-uint32_t interval_counter_100ms = 0;
+#include "runtime-tools.h"
 
-uint8_t interval_time_seconds = 0;
-uint8_t interval_time_minutes = 0;
-uint8_t interval_time_hours = 0;
-uint8_t interval_time_days = 0;
+u32 interval_millis_now = 0;
+u32 interval_millis_last = 0;
+u32 interval_counter_100ms = 0;
+
+u8 interval_time_seconds = 0;
+u8 interval_time_minutes = 0;
+u8 interval_time_hours = 0;
+u8 interval_time_days = 0;
 
 bool P_100ms = false;
 bool P_200ms = false;
@@ -58,22 +60,22 @@ bool P_6hr = false;
 bool P_12hr = false;
 bool P_1day = false;
 
-uint32_t P_1day_hour_cnt = 0;
-uint32_t P_12hr_hour_cnt = 0;
-uint32_t P_6hr_hour_cnt = 0;
-uint32_t P_3hr_hour_cnt = 0;
-uint32_t P_2hr_hour_cnt = 0;
-uint32_t P_1hr_min_cnt = 0;
-uint32_t P_30min_min_cnt = 0;
-uint32_t P_15min_min_cnt = 0;
-uint32_t P_10min_min_cnt = 0;
-uint32_t P_5min_min_cnt = 0;
-uint32_t P_2min_sec_cnt = 0;
-uint32_t P_1min_sec_cnt = 0;
-uint32_t P_30s_sec_cnt = 0;
-uint32_t P_10s_sec_cnt = 0;
-uint32_t P_5s_sec_cnt = 0;
-uint32_t P_2s_sec_cnt = 0;
+u32 P_1day_hour_cnt = 0;
+u32 P_12hr_hour_cnt = 0;
+u32 P_6hr_hour_cnt = 0;
+u32 P_3hr_hour_cnt = 0;
+u32 P_2hr_hour_cnt = 0;
+u32 P_1hr_min_cnt = 0;
+u32 P_30min_min_cnt = 0;
+u32 P_15min_min_cnt = 0;
+u32 P_10min_min_cnt = 0;
+u32 P_5min_min_cnt = 0;
+u32 P_2min_sec_cnt = 0;
+u32 P_1min_sec_cnt = 0;
+u32 P_30s_sec_cnt = 0;
+u32 P_10s_sec_cnt = 0;
+u32 P_5s_sec_cnt = 0;
+u32 P_2s_sec_cnt = 0;
 
 void IntervalGlobalLoopCheck();
 

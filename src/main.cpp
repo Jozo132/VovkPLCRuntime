@@ -46,8 +46,8 @@ void setup() {
     u8.writeBit.0 20    // Set bit 10.0 to the resulting state
   */
   // Program[7] [58 00 0A 60 00 14 FF]
-  const uint8_t program [] = { 0x58, 0x00, 0x0A, 0x60, 0x00, 0x14, 0xFF };
-  const uint16_t size = sizeof(program);
+  const u8 program [] = { 0x58, 0x00, 0x0A, 0x60, 0x00, 0x14, 0xFF };
+  const u16 size = sizeof(program);
   runtime.program->loadUnsafe(program, size);
 #else // __RUNTIME_PRODUCTION__
   // Start the runtime unit test
@@ -96,7 +96,7 @@ void loop() {
     float duration_ms = cps > 0 ? 1000.0 / (float) cps : 0;
     // Serial.printf("Free mem: %6d bytes  CPS: %6d", mem, cps); // AVR doesn't support printf
     Serial.print(F("Free mem: ")); Serial.print(mem); Serial.print(F(" bytes  Cycle time: ")); Serial.print(duration_ms, 2); Serial.print(F(" ms"));
-    uint8_t* memory = new uint8_t[32];
+    u8* memory = new u8[32];
     runtime.readMemory(0, memory, 32);
     Serial.print(F("  Memory: "));
     for (int i = 0; i < 32; i++) {
@@ -130,36 +130,36 @@ void loop() {
 
 
     // Hand-coded RPN instructions:
-    runtime.program->push_float(10);
-    runtime.program->push_float(1);
-    runtime.program->push_float(a);
-    runtime.program->push_float(b);
-    runtime.program->push_float(c);
-    runtime.program->push_float(c);
-    runtime.program->push_float(d);
-    runtime.program->push_float(d);
-    runtime.program->push_float(e);
-    runtime.program->push_float(e);
-    runtime.program->push_float(f);
-    runtime.program->push(SUB, type_float);
-    runtime.program->push(MUL, type_float);
-    runtime.program->push(SUB, type_float);
-    runtime.program->push(MUL, type_float);
-    runtime.program->push(ADD, type_float);
-    runtime.program->push(MUL, type_float);
-    runtime.program->push(ADD, type_float);
-    runtime.program->push_float(d);
-    runtime.program->push(DIV, type_float);
-    runtime.program->push(MUL, type_float);
-    runtime.program->push(SUB, type_float);
-    runtime.program->push(MUL, type_float);
+    runtime.program->push_f32(10);
+    runtime.program->push_f32(1);
+    runtime.program->push_f32(a);
+    runtime.program->push_f32(b);
+    runtime.program->push_f32(c);
+    runtime.program->push_f32(c);
+    runtime.program->push_f32(d);
+    runtime.program->push_f32(d);
+    runtime.program->push_f32(e);
+    runtime.program->push_f32(e);
+    runtime.program->push_f32(f);
+    runtime.program->push(SUB, type_f32);
+    runtime.program->push(MUL, type_f32);
+    runtime.program->push(SUB, type_f32);
+    runtime.program->push(MUL, type_f32);
+    runtime.program->push(ADD, type_f32);
+    runtime.program->push(MUL, type_f32);
+    runtime.program->push(ADD, type_f32);
+    runtime.program->push_f32(d);
+    runtime.program->push(DIV, type_f32);
+    runtime.program->push(MUL, type_f32);
+    runtime.program->push(SUB, type_f32);
+    runtime.program->push(MUL, type_f32);
 
 
     /*
       // Compiled RPN bytecode:
-      static const uint8_t bytecode [] = { 0x0A,0x41,0x20,0x00,0x00,0x0A,0x3F,0x80,0x00,0x00,0x0A,0x3F,0x80,0x00,0x00,0x0A,0x40,0x00,0x00,0x00,0x0A,0x40,0x40,0x00,0x00,0x0A,0x40,0x40,0x00,0x00,0x0A,0x40,0x80,0x00,0x00,0x0A,0x40,0x80,0x00,0x00,0x0A,0x40,0xA0,0x00,0x00,0x0A,0x40,0xA0,0x00,0x00,0x0A,0x40,0xC0,0x00,0x00,0x21,0x0A,0x22,0x0A,0x21,0x0A,0x22,0x0A,0x20,0x0A,0x22,0x0A,0x20,0x0A,0x0A,0x40,0x80,0x00,0x00,0x23,0x0A,0x22,0x0A,0x21,0x0A,0x22,0x0A };
-      static const uint16_t size = 82;
-      static const uint32_t checksum = 2677;
+      static const u8 bytecode [] = { 0x0A,0x41,0x20,0x00,0x00,0x0A,0x3F,0x80,0x00,0x00,0x0A,0x3F,0x80,0x00,0x00,0x0A,0x40,0x00,0x00,0x00,0x0A,0x40,0x40,0x00,0x00,0x0A,0x40,0x40,0x00,0x00,0x0A,0x40,0x80,0x00,0x00,0x0A,0x40,0x80,0x00,0x00,0x0A,0x40,0xA0,0x00,0x00,0x0A,0x40,0xA0,0x00,0x00,0x0A,0x40,0xC0,0x00,0x00,0x21,0x0A,0x22,0x0A,0x21,0x0A,0x22,0x0A,0x20,0x0A,0x22,0x0A,0x20,0x0A,0x0A,0x40,0x80,0x00,0x00,0x23,0x0A,0x22,0x0A,0x21,0x0A,0x22,0x0A };
+      static const u16 size = 82;
+      static const u32 checksum = 2677;
       program.load(bytecode, size, checksum);
       // program.loadUnsafe(bytecode, size);
     */

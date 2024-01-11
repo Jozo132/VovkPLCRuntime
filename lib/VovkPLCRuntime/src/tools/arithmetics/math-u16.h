@@ -24,30 +24,30 @@
 namespace PLCMethods {
 
     RuntimeError ADD_uint16_t(RuntimeStack* stack) {
-        uint16_t b = stack->pop_uint16_t();
-        uint16_t a = stack->pop_uint16_t();
-        stack->push_uint16_t(a + b);
+        u16 b = stack->pop_u16();
+        u16 a = stack->pop_u16();
+        stack->push_u16(a + b);
         return STATUS_SUCCESS;
     }
     
     RuntimeError SUB_uint16_t(RuntimeStack* stack) {
-        uint16_t b = stack->pop_uint16_t();
-        uint16_t a = stack->pop_uint16_t();
-        stack->push_uint16_t(a - b);
+        u16 b = stack->pop_u16();
+        u16 a = stack->pop_u16();
+        stack->push_u16(a - b);
         return STATUS_SUCCESS;
     }
 
     RuntimeError MUL_uint16_t(RuntimeStack* stack) {
-        uint16_t b = stack->pop_uint16_t();
-        uint16_t a = stack->pop_uint16_t();
-        stack->push_uint16_t(a * b);
+        u16 b = stack->pop_u16();
+        u16 a = stack->pop_u16();
+        stack->push_u16(a * b);
         return STATUS_SUCCESS;
     }
 
     RuntimeError DIV_uint16_t(RuntimeStack* stack) {
-        uint16_t b = stack->pop_uint16_t();
-        uint16_t a = stack->pop_uint16_t();
-        stack->push_uint16_t(a / b);
+        u16 b = stack->pop_u16();
+        u16 a = stack->pop_u16();
+        stack->push_u16(a / b);
         return STATUS_SUCCESS;
     }
     
