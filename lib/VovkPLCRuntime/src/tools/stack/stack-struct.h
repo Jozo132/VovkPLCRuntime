@@ -54,7 +54,7 @@ template <typename T> struct Stack {
     int print();
     void println();
     
-    bool readArea(u32 offset, u8*& value, u32 size = 1);
+    bool readArea(u32 offset, u8* value, u32 size = 1);
 
     bool writeArea(u32 offset, u8* value, u32 size = 1);
 };

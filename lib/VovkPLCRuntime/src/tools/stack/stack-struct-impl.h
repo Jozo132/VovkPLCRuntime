@@ -123,7 +123,7 @@ template <typename T> void Stack<T>::println() {
     Serial.println();
 }
 
-template <typename T> bool Stack<T>::readArea(u32 offset, u8*& value, u32 size) {
+template <typename T> bool Stack<T>::readArea(u32 offset, u8* value, u32 size) {
     bool error = false;
     u8 temp = 0;
     for (u32 i = 0; i < size; i++) {
