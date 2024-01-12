@@ -55,16 +55,18 @@ const do_compile_test = async () => {
     const d = document.getElementById('assembly')
     if (!d) throw new Error("Assembly element not found") // @ts-ignore
     const assembly = d.value
-    const { downloadAssembly, compileTest, verifyCode, extractProgram } = wasm.getExports()
+    const { downloadAssembly, compileAssembly, loadCompiledProgram, runFullProgramDebug, extractProgram } = wasm.getExports()
     if (!downloadAssembly) throw new Error("'downloadAssembly' function not found")
-    if (!compileTest) throw new Error("'compileTest' function not found")
-    if (!verifyCode) throw new Error("'verifyCode' function not found")
+    if (!compileAssembly) throw new Error("'compileAssembly' function not found")
+    if (!loadCompiledProgram) throw new Error("'loadCompiledProgram' function not found")
+    if (!runFullProgramDebug) throw new Error("'runFullProgramDebug' function not found")
     if (!extractProgram) throw new Error("'extractProgram' function not found")
-    console.log("Running compileTest()...") // @ts-ignore
-    downloadAssembly(assembly)
-    if (compileTest()) return // Check for errors
-    verifyCode()
-    const { size, output } = extractProgram() // @ts-ignore
+    console.log("Running compileAssembly()...") // @ts-ignore
+    if (downloadAssembly(assembly)) return // Push the assembly code to the runtime
+    if (compileAssembly()) return // Compile the code and return if there is an error
+    if (loadCompiledProgram()) return // Load the compiled program into the runtime
+    if (runFullProgramDebug()) return // Verify the code by running it in the simulator
+    const { size, output } = extractProgram() // Extract the current program from the runtime
     const downloadString = PLCRuntimeWasm.buildCommand.programDownload(output)
     console.log(`Program download string for Serial/UART/RS232: ${downloadString}`)
 }

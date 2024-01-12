@@ -1176,7 +1176,7 @@ bool build(bool finalPass) {
                 if (data_type) {
                     PLCRuntimeInstructionSet type = (PLCRuntimeInstructionSet) data_type;
                     if (hasNext && token.endsWith(".const")) {
-                        if (type == type_pointer) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_pointer(bytecode, value_int); _line_push; } 
+                        if (type == type_pointer) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_pointer(bytecode, value_int); _line_push; }
                         if (type == type_bool) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_bool(bytecode, value_int != 0); _line_push; }
                         if (type == type_u8) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_u8(bytecode, value_int); _line_push; }
                         if (type == type_u16) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_u16(bytecode, value_int); _line_push; }
@@ -1271,16 +1271,17 @@ WASM_EXPORT void logBytecode() {
 }
 
 int num_of_compile_runs = 0;
-WASM_EXPORT bool compileTest() {
+WASM_EXPORT bool compileAssembly(bool debug = true) {
     num_of_compile_runs++;
+    if (num_of_compile_runs == 1) debug = true;
     long total = millis();
     if (num_of_compile_runs == 1) {
         VovkPLCRuntime::splash();
     }
-    Serial.println(F("VovkPLCRuntime - PLCASM Compiler v1.0"));
-    Serial.print(F("Compiling assembly to bytecode "));
+    if (debug) Serial.println(F("VovkPLCRuntime - PLCASM Compiler v1.0"));
+    if (debug) Serial.print(F("Compiling assembly to bytecode "));
     bool error = false;
-    Serial.print(F("."));
+    if (debug) Serial.print(F("."));
     long t1 = millis();
     error = tokenize();
     t1 = millis() - t1;
@@ -1302,71 +1303,89 @@ WASM_EXPORT bool compileTest() {
     //     }
     // } else Serial.println(F("No tokens"));
 
-    Serial.print(F("."));
+    if (debug) Serial.print(F("."));
     t1 = millis();
     error = build(false); // First pass
     t1 = millis() - t1;
     if (error) { Serial.println(F("Failed at building"));  return error; }
 
 
-    Serial.print(F("."));
+    if (debug) Serial.print(F("."));
     t1 = millis();
     error = build(true); // Second pass to link labels
     t1 = millis() - t1;
     if (error) { Serial.println(F("Failed at linking"));  return error; }
 
     total = millis() - total;
-    Serial.print(F(" finished in ")); Serial.print(total); Serial.println(F(" ms"));
+    if (debug) { Serial.print(F(" finished in ")); Serial.print(total); Serial.println(F(" ms")); }
 
-    if (LUT_label_count > 0) {
-        Serial.print(F("Labels ")); Serial.print(LUT_label_count); Serial.println(F(":"));
-        for (int i = 0; i < LUT_label_count; i++) {
-            LUT_label& label = LUT_labels[i];
-            Serial.print(F("    ")); label.string.print(); Serial.print(F(" = ")); Serial.println(label.address);
-        }
-    } else Serial.println(F("No labels"));
+    if (debug) {
+        if (LUT_label_count > 0) {
+            Serial.print(F("Labels ")); Serial.print(LUT_label_count); Serial.println(F(":"));
+            for (int i = 0; i < LUT_label_count; i++) {
+                LUT_label& label = LUT_labels[i];
+                Serial.print(F("    ")); label.string.print(); Serial.print(F(" = ")); Serial.println(label.address);
+            }
+        } else Serial.println(F("No labels"));
 
-    if (LUT_const_count > 0) {
-        Serial.print(F("Consts ")); Serial.print(LUT_const_count); Serial.println(F(":"));
-        for (int i = 0; i < LUT_const_count; i++) {
-            LUT_const& c = LUT_consts[i];
-            Serial.print(F("    ")); c.string.print(); Serial.print(F(" = "));
-            if (c.type == VAL_BOOLEAN) Serial.print(c.value_bool ? "true" : "false");
-            if (c.type == VAL_INTEGER) Serial.print(c.value_int);
-            if (c.type == VAL_REAL) Serial.print(c.value_float);
-            if (c.type == VAL_STRING) c.value_string.print();
-            Serial.println();
-        }
-    } else Serial.println(F("No consts"));
+        if (LUT_const_count > 0) {
+            Serial.print(F("Consts ")); Serial.print(LUT_const_count); Serial.println(F(":"));
+            for (int i = 0; i < LUT_const_count; i++) {
+                LUT_const& c = LUT_consts[i];
+                Serial.print(F("    ")); c.string.print(); Serial.print(F(" = "));
+                if (c.type == VAL_BOOLEAN) Serial.print(c.value_bool ? "true" : "false");
+                if (c.type == VAL_INTEGER) Serial.print(c.value_int);
+                if (c.type == VAL_REAL) Serial.print(c.value_float);
+                if (c.type == VAL_STRING) c.value_string.print();
+                Serial.println();
+            }
+        } else Serial.println(F("No consts"));
 
-    // if (token_count > 0) {
-    //     Serial.print(F("Tokens ")); Serial.print(token_count); Serial.println(F(":"));
-    //     for (int i = 0; i < token_count; i++) {
-    //         Token& token = tokens[i];
-    //         TokenType type = token.type;
-    //         Serial.print(F("    "));
-    //         fill(' ', 4 - Serial.print(i));
-    //         int s = Serial.print(F(" (")) + Serial.print(token.line) + Serial.print(F(":")) + Serial.print(token.column) + Serial.print(F(") "));
-    //         fill(' ', 10 - s);
-    //         Serial.print(F(" "));
-    //         fill(' ', 12 - printTokenType(type));
-    //         token.print();
-    //         Serial.println();
-    //     }
-    // } else Serial.println(F("No tokens"));
+        // if (token_count > 0) {
+        //     Serial.print(F("Tokens ")); Serial.print(token_count); Serial.println(F(":"));
+        //     for (int i = 0; i < token_count; i++) {
+        //         Token& token = tokens[i];
+        //         TokenType type = token.type;
+        //         Serial.print(F("    "));
+        //         fill(' ', 4 - Serial.print(i));
+        //         int s = Serial.print(F(" (")) + Serial.print(token.line) + Serial.print(F(":")) + Serial.print(token.column) + Serial.print(F(") "));
+        //         fill(' ', 10 - s);
+        //         Serial.print(F(" "));
+        //         fill(' ', 12 - printTokenType(type));
+        //         token.print();
+        //         Serial.println();
+        //     }
+        // } else Serial.println(F("No tokens"));
 
-    // Serial.print(F("Assembly: \"")); Serial.print(assembly_string); Serial.println(F("\""));
-    logBytecode();
+        // Serial.print(F("Assembly: \"")); Serial.print(assembly_string); Serial.println(F("\""));
+        logBytecode();
+    }
     return false;
 }
 
 VovkPLCRuntime* global_runtime = nullptr;
 
-WASM_EXPORT void verifyCode() {
+void linkRuntime() {
     if (global_runtime == nullptr) global_runtime = new VovkPLCRuntime(128, 128, 10000); // Stack size, memory size, program size
+}
+
+WASM_EXPORT bool loadCompiledProgram() {
+    linkRuntime();
     global_runtime->startup();
     global_runtime->loadProgram(built_bytecode, built_bytecode_length, built_bytecode_checksum);
+    return false;
+}
+
+WASM_EXPORT void runFullProgramDebug() {
+    linkRuntime();
     RuntimeError status = UnitTest::fullProgramDebug(*global_runtime);
+    const char* status_name = RUNTIME_ERROR_NAME(status);
+    Serial.print(F("Runtime status: ")); Serial.println(status_name);
+}
+
+WASM_EXPORT void runFullProgram() {
+    linkRuntime();
+    RuntimeError status = global_runtime->cleanRun();
     const char* status_name = RUNTIME_ERROR_NAME(status);
     Serial.print(F("Runtime status: ")); Serial.println(status_name);
 }
@@ -1389,7 +1408,7 @@ WASM_EXPORT u32 getMemoryArea(u32 address, u32 size) {
     u8 byte = 0;
     bool error = false;
     for (u32 i = address; i < end; i++) {
-        if (i > 0) streamOut(' ');
+        if (i > address) streamOut(' ');
         error = global_runtime->stack->memory->get(i, byte); // Format it as hex
         if (error) return 0;
         char c1, c2;
@@ -1400,6 +1419,13 @@ WASM_EXPORT u32 getMemoryArea(u32 address, u32 size) {
     return size;
 }
 
+WASM_EXPORT u32 writeMemoryByte(u32 address, u8 byte) {
+    if (global_runtime == nullptr) return 0;
+    bool error = global_runtime->stack->memory->set(address, byte);
+    if (error) return 0;
+    return 1;
+}
+
 WASM_EXPORT void external_print(const char* string) {
     Serial.print(string);
 }
@@ -1408,8 +1434,9 @@ WASM_EXPORT void external_print(const char* string) {
 
 void set_assembly_string(char* new_assembly_string) { }
 bool compileTest() { return false; }
-void verifyCode() { }
+void runFullProgramDebug() { }
 u32 uploadProgram() { return 0; }
 u32 getMemoryArea(u32 address, u32 size) { return 0; }
+u32 writeMemoryByte(u32 address, u8 byte) { return 0; }
 
 #endif // __WASM__

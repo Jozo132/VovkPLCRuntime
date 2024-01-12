@@ -96,6 +96,35 @@ class PLCRuntimeWasm_class {
         if (!ok) throw new Error("Failed to download assembly") // @ts-ignore
         loadAssembly()
     }
+    // downloadAssembly, compileAssembly, loadCompiledProgram, runFullProgramDebug, extractProgram
+    compile(assembly, run = false) {
+        if (!this.wasm) throw new Error("WebAssembly module not initialized")
+        if (assembly) this.downloadAssembly(assembly)
+        const { compileAssembly, loadCompiledProgram, runFullProgramDebug } = this.wasm.exports
+        if (!compileAssembly) throw new Error("'compileAssembly' function not found")
+        if (!loadCompiledProgram) throw new Error("'loadCompiledProgram' function not found")
+        if (!runFullProgramDebug) throw new Error("'runFullProgramDebug' function not found")
+        if (compileAssembly(false)) throw new Error("Failed to compile assembly")
+        if (run) {
+            loadCompiledProgram()
+            this.runDebug()
+        }
+        return this.extractProgram()
+    }
+
+    run = () => {
+        if (!this.wasm) throw new Error("WebAssembly module not initialized")
+        const { runFullProgram } = this.wasm.exports
+        if (!runFullProgram) throw new Error("'runFullProgram' function not found")
+        return runFullProgram()
+    }
+    runDebug = () => {
+        if (!this.wasm) throw new Error("WebAssembly module not initialized")
+        const { runFullProgramDebug } = this.wasm.exports
+        if (!runFullProgramDebug) throw new Error("'runFullProgramDebug' function not found")
+        return runFullProgramDebug()
+    }
+
 
     extractProgram = () => {
         if (!this.wasm) throw new Error("WebAssembly module not initialized")
@@ -107,11 +136,28 @@ class PLCRuntimeWasm_class {
         return { size, output }
     }
 
-    readMemoryArea = (address, size) => {
+
+
+    /** @type { (address: number, size?: number) => string } */
+    readMemoryArea = (address, size = 1) => {
         if (!this.wasm) throw new Error("WebAssembly module not initialized")
         const { getMemoryArea } = this.wasm.exports
         if (!getMemoryArea) throw new Error("'getMemoryArea' function not found")
         getMemoryArea(address, size)
+        const output = this.readStream()
+        return output
+    }
+
+    /** @type { (address: number, data: number[]) => string } */
+    writeMemoryArea = (address, data) => {
+        if (!this.wasm) throw new Error("WebAssembly module not initialized")
+        const { writeMemoryByte } = this.wasm.exports
+        if (!writeMemoryByte) throw new Error("'writeMemoryByte' function not found")
+        for (let i = 0; i < data.length; i++) {
+            const byte = data[i] & 0xFF
+            const success = writeMemoryByte(address + i, byte)
+            if (!success) throw new Error(`Failed to write byte ${byte} at address ${address + i}`)
+        }
         const output = this.readStream()
         return output
     }
@@ -336,12 +382,12 @@ class PLCRuntimeWasm_class {
 
 }
 
-const ________PLCRuntimeWasm_______ = new PLCRuntimeWasm_class()
+const PLCRuntimeWasm = new PLCRuntimeWasm_class()
 
 /** @typedef { PLCRuntimeWasm_class } PLCRuntimeWasm */
 
 // Export the module if we are in Node.js
-if (typeof module !== 'undefined') module.exports = ________PLCRuntimeWasm_______
+if (typeof module !== 'undefined') module.exports = PLCRuntimeWasm
 
 // Export the module if we are in a browser
-if (typeof window !== 'undefined') Object.assign(window, { PLCRuntimeWasm: ________PLCRuntimeWasm_______ })
+if (typeof window !== 'undefined') Object.assign(window, { PLCRuntimeWasm })
