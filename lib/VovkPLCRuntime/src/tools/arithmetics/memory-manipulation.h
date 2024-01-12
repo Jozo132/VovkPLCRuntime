@@ -360,6 +360,7 @@ namespace PLCMethods {
         if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         u8 data_type = 0;
         extract_status = ProgramExtract.type_u8(program, program_size, index, &data_type);
+        if (extract_status != STATUS_SUCCESS) return extract_status;
         RuntimeError status = stack->load_from_memory_to_stack(data_type);
         return status;
     }
