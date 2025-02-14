@@ -52,6 +52,20 @@ namespace PLCMethods {
         return STATUS_SUCCESS;
     }
 
+    RuntimeError MOD_uint64_t(RuntimeStack* stack) {
+        u64 b = stack->pop_u64();
+        u64 a = stack->pop_u64();
+        stack->push_u64(a % b);
+        return STATUS_SUCCESS;
+    }
+
+    RuntimeError POW_uint64_t(RuntimeStack* stack) {
+        u64 b = stack->pop_u64();
+        u64 a = stack->pop_u64();
+        stack->push_u64(pow(a, b));
+        return STATUS_SUCCESS;
+    }
+
 }
 
 #endif // USE_X64_OPS

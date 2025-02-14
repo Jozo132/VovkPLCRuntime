@@ -50,5 +50,19 @@ namespace PLCMethods {
         stack->push_u16(a / b);
         return STATUS_SUCCESS;
     }
+
+    RuntimeError MOD_uint16_t(RuntimeStack* stack) {
+        u16 b = stack->pop_u16();
+        u16 a = stack->pop_u16();
+        stack->push_u16(a % b);
+        return STATUS_SUCCESS;
+    }
+
+    RuntimeError POW_uint16_t(RuntimeStack* stack) {
+        u16 b = stack->pop_u16();
+        u16 a = stack->pop_u16();
+        stack->push_u16(pow(a, b));
+        return STATUS_SUCCESS;
+    }
     
 }

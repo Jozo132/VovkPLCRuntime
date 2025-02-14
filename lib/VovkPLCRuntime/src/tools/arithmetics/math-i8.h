@@ -51,4 +51,33 @@ namespace PLCMethods {
         return STATUS_SUCCESS;
     }
 
+    RuntimeError MOD_int8_t(RuntimeStack* stack) {
+        i8 b = stack->pop_i8();
+        i8 a = stack->pop_i8();
+        stack->push_i8(a % b);
+        return STATUS_SUCCESS;
+    }
+
+    RuntimeError POW_int8_t(RuntimeStack* stack) {
+        i8 b = stack->pop_i8();
+        i8 a = stack->pop_i8();
+        stack->push_i8(pow(a, b));
+        return STATUS_SUCCESS;
+    }
+
+    RuntimeError NEG_int8_t(RuntimeStack* stack) {
+        i8 a = stack->pop_i8();
+        stack->push_i8(-a);
+        return STATUS_SUCCESS;
+    }
+
+    RuntimeError ABS_int8_t(RuntimeStack* stack) {
+        i8 a = stack->pop_i8();
+        stack->push_i8(abs(a));
+        return STATUS_SUCCESS;
+    }
+
+
+
+
 }

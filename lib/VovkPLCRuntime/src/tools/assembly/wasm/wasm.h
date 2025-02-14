@@ -22,6 +22,7 @@
 #pragma once
 
 #include "jvint.h"
+#include "jvmath.h"
 #include "jvmalloc.h"
 
 #ifdef __WASM__

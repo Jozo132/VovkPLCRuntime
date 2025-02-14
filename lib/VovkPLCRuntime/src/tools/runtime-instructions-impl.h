@@ -77,6 +77,13 @@ bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
         case SUB:
         case MUL:
         case DIV:
+        case MOD:
+        case POW:
+        case SQRT:
+        case NEG:
+        case ABS:
+        case SIN:
+        case COS:
             /* TODO: */
             // case MOD:
             // case POW:
@@ -252,35 +259,36 @@ const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
         case SUB: return F("SUB");
         case MUL: return F("MUL");
         case DIV: return F("DIV");
-            /* TODO: */
-            // case MOD: return F("MOD");
-            // case POW: return F("POW");
-            // case SQRT: return F("SQRT");
-            // case MIN: return F("MIN");
-            // case MAX: return F("MAX");
-            // case ABS: return F("ABS");
-            // case MAP: return F("MAP");
-            // case CON: return F("CON");
-            // case RAND: return F("RAND");
-            // case RAND1: return F("RAND1");
-            // case RAND2: return F("RAND2");
-            // case LN: return F("LN");
-            // case LOG10: return F("LOG10");
-            // case LOG2: return F("LOG2");
-            // case EXP: return F("EXP");
-            // case SIN: return F("SIN");
-            // case COS: return F("COS");
-            // case TAN: return F("TAN");
-            // case ASIN: return F("ASIN");
-            // case ACOS: return F("ACOS");
-            // case ATAN: return F("ATAN");
-            // case ATAN2: return F("ATAN2");
-            // case SINH: return F("SINH");
-            // case COSH: return F("COSH");
-            // case TANH: return F("TANH");
-            // case ASINH: return F("ASINH");
-            // case ACOSH: return F("ACOSH");
-            // case ATANH: return F("ATANH");>
+        case MOD: return F("MOD");
+        case POW: return F("POW");
+        case SQRT: return F("SQRT");
+        case NEG: return F("NEG");
+        case ABS: return F("ABS");
+        case SIN: return F("SIN");
+        case COS: return F("COS");
+                /* TODO: */
+                // case MIN: return F("MIN");
+                // case MAX: return F("MAX");
+                // case MAP: return F("MAP");
+                // case CON: return F("CON");
+                // case RAND: return F("RAND");
+                // case RAND1: return F("RAND1");
+                // case RAND2: return F("RAND2");
+                // case LN: return F("LN");
+                // case LOG10: return F("LOG10");
+                // case LOG2: return F("LOG2");
+                // case EXP: return F("EXP");
+                // case TAN: return F("TAN");
+                // case ASIN: return F("ASIN");
+                // case ACOS: return F("ACOS");
+                // case ATAN: return F("ATAN");
+                // case ATAN2: return F("ATAN2");
+                // case SINH: return F("SINH");
+                // case COSH: return F("COSH");
+                // case TANH: return F("TANH");
+                // case ASINH: return F("ASINH");
+                // case ACOSH: return F("ACOSH");
+                // case ATANH: return F("ATANH");>
         case GET_X8_B0: return F("GET_X8_B0");
         case GET_X8_B1: return F("GET_X8_B1");
         case GET_X8_B2: return F("GET_X8_B2");
@@ -431,13 +439,20 @@ u8 OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
         case MOVE: return 2;
         case MOVE_COPY: return 2;
         case COPY: return 2;
-        case SWAP: return 2;
+        case SWAP: return 3;
         case DROP: return 2;
         case CLEAR: return 1;
         case ADD: return 2;
         case SUB: return 2;
         case MUL: return 2;
         case DIV: return 2;
+        case MOD: return 2;
+        case POW: return 2;
+        case SQRT: return 2;
+        case NEG: return 2;
+        case ABS: return 2;
+        case SIN: return 2;
+        case COS: return 2;
             // case MOD: return 2;
             // case POW: return 2;
             // case SQRT: return 2;

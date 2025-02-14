@@ -51,4 +51,17 @@ namespace PLCMethods {
         return STATUS_SUCCESS;
     }
     
+    RuntimeError MOD_uint32_t(RuntimeStack* stack) {
+        u32 b = stack->pop_u32();
+        u32 a = stack->pop_u32();
+        stack->push_u32(a % b);
+        return STATUS_SUCCESS;
+    }
+
+    RuntimeError POW_uint32_t(RuntimeStack* stack) {
+        u32 b = stack->pop_u32();
+        u32 a = stack->pop_u32();
+        stack->push_u32(pow(a, b));
+        return STATUS_SUCCESS;
+    }
 }

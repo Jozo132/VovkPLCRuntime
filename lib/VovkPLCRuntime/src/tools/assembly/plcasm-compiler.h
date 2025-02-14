@@ -1197,7 +1197,7 @@ bool build(bool finalPass) {
                     if (hasNext && token.endsWith(".move")) { line.size = InstructionCompiler::push_move(bytecode, type); _line_push; }
                     if (hasNext && token.endsWith(".move_copy")) { line.size = InstructionCompiler::push_move_copy(bytecode, type); _line_push; }
                     if (hasNext && token.endsWith(".copy")) { line.size = InstructionCompiler::push_copy(bytecode, type); _line_push; }
-                    if (hasNext && token.endsWith(".swap")) { line.size = InstructionCompiler::push_swap(bytecode, type); _line_push; }
+                    // if (hasNext && token.endsWith(".swap")) { line.size = InstructionCompiler::push_swap(bytecode, type); _line_push; }
                     if (hasNext && token.endsWith(".drop")) { line.size = InstructionCompiler::push_drop(bytecode, type); _line_push; }
                     if (token.endsWith(".cmp_lt")) { line.size = InstructionCompiler::push(bytecode, CMP_LT, type); _line_push; }
                     if (token.endsWith(".cmp_gt")) { line.size = InstructionCompiler::push(bytecode, CMP_GT, type); _line_push; }
@@ -1210,6 +1210,13 @@ bool build(bool finalPass) {
                     if (token.endsWith(".sub")) { line.size = InstructionCompiler::push(bytecode, SUB, type); _line_push; }
                     if (token.endsWith(".mul")) { line.size = InstructionCompiler::push(bytecode, MUL, type); _line_push; }
                     if (token.endsWith(".div")) { line.size = InstructionCompiler::push(bytecode, DIV, type); _line_push; }
+                    if (token.endsWith(".mod")) { line.size = InstructionCompiler::push(bytecode, MOD, type); _line_push; }
+                    if (token.endsWith(".pow")) { line.size = InstructionCompiler::push(bytecode, POW, type); _line_push; }
+                    if (token.endsWith(".sqrt")) { line.size = InstructionCompiler::push(bytecode, SQRT, type); _line_push; }
+                    if (token.endsWith(".neg")) { line.size = InstructionCompiler::push(bytecode, NEG, type); _line_push; }
+                    if (token.endsWith(".abs")) { line.size = InstructionCompiler::push(bytecode, ABS, type); _line_push; }
+                    if (token.endsWith(".sin")) { line.size = InstructionCompiler::push(bytecode, SIN, type); _line_push; }
+                    if (token.endsWith(".cos")) { line.size = InstructionCompiler::push(bytecode, COS, type); _line_push; }
                 }
             }
         }
@@ -1220,12 +1227,19 @@ bool build(bool finalPass) {
             u8 type_2;
             bool e_dataType1 = typeFromToken(token_p1, type_1);
             bool e_dataType2 = typeFromToken(token_p2, type_2);
-            if (token == "cvt") {
+            if (token == "cvt") { // Convert from one type to another
                 if (e_dataType1) return e_dataType1; i++;
                 if (e_dataType2) return e_dataType2; i++;
                 if (type_1 == type_2) continue; // No need to convert if types are the same
                 line.size = InstructionCompiler::push_cvt(bytecode, (PLCRuntimeInstructionSet) type_1, (PLCRuntimeInstructionSet) type_2);
                 _line_push;
+            }
+            if (token == "swap") { // Swap two values on the stack of any combination of types
+                if (e_dataType1) return e_dataType1; i++;
+                if (e_dataType2) return e_dataType2; i++;
+                line.size = InstructionCompiler::push_swap(bytecode, (PLCRuntimeInstructionSet) type_1, (PLCRuntimeInstructionSet) type_2);
+                _line_push;
+
             }
         }
 

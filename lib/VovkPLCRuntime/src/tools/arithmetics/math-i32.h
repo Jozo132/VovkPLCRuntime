@@ -51,4 +51,29 @@ namespace PLCMethods {
         return STATUS_SUCCESS;
     }
     
+    RuntimeError MOD_int32_t(RuntimeStack* stack) {
+        i32 b = stack->pop_i32();
+        i32 a = stack->pop_i32();
+        stack->push_i32(a % b);
+        return STATUS_SUCCESS;
+    }
+
+    RuntimeError POW_int32_t(RuntimeStack* stack) {
+        i32 b = stack->pop_i32();
+        i32 a = stack->pop_i32();
+        stack->push_i32(pow(a, b));
+        return STATUS_SUCCESS;
+    }
+
+    RuntimeError NEG_int32_t(RuntimeStack* stack) {
+        i32 a = stack->pop_i32();
+        stack->push_i32(-a);
+        return STATUS_SUCCESS;
+    }
+
+    RuntimeError ABS_int32_t(RuntimeStack* stack) {
+        i32 a = stack->pop_i32();
+        stack->push_i32(abs(a));
+        return STATUS_SUCCESS;
+    }
 }

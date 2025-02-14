@@ -246,10 +246,11 @@ public:
         return 2;
     }
     // Swap the top two values on the stack
-    static u8 push_swap(u8* location, PLCRuntimeInstructionSet type = type_u8) {
+    static u8 push_swap(u8* location, PLCRuntimeInstructionSet type_A = type_u8, PLCRuntimeInstructionSet type_B = type_u8) {
         location[0] = SWAP;
-        location[1] = type;
-        return 2;
+        location[1] = type_A;
+        location[2] = type_B;
+        return 3;
     }
     // Drop the top value from the stack
     static u8 push_drop(u8* location, PLCRuntimeInstructionSet type = type_u8) {

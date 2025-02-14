@@ -670,6 +670,13 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 program_size, u32& index) {
         case SUB: return PLCMethods::handle_SUB(this->stack, program, program_size, index);
         case MUL: return PLCMethods::handle_MUL(this->stack, program, program_size, index);
         case DIV: return PLCMethods::handle_DIV(this->stack, program, program_size, index);
+        case MOD: return PLCMethods::handle_MOD(this->stack, program, program_size, index);
+        case POW: return PLCMethods::handle_POW(this->stack, program, program_size, index);
+        case ABS: return PLCMethods::handle_ABS(this->stack, program, program_size, index);
+        case NEG: return PLCMethods::handle_NEG(this->stack, program, program_size, index);
+        case SQRT: return PLCMethods::handle_SQRT(this->stack, program, program_size, index);
+        case SIN: return PLCMethods::handle_SIN(this->stack, program, program_size, index);
+        case COS: return PLCMethods::handle_COS(this->stack, program, program_size, index);
 
         case GET_X8_B0: return PLCMethods::handle_GET_X8_B0(this->stack);
         case GET_X8_B1: return PLCMethods::handle_GET_X8_B1(this->stack);

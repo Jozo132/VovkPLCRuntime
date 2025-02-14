@@ -250,7 +250,6 @@ template <typename T> RuntimeError RuntimeStack::load_from_memory_to_stack() {
     if (stack->size() < sizeof(MY_PTR_t)) return  RuntimeError::STACK_UNDERFLOW;
     MY_PTR_t address = pop_pointer();
     if (address + sizeof(T) > memory->size()) return  RuntimeError::INVALID_MEMORY_ADDRESS;
-    // address = reverse_byte_order(address);
     T value = 0;
     bool error = memory->readArea(address, reinterpret_cast<u8*>(&value), sizeof(T));
     if (error) return RuntimeError::INVALID_MEMORY_ADDRESS;
@@ -264,7 +263,6 @@ template <typename T> RuntimeError RuntimeStack::store_from_stack_to_memory(bool
     T value = pop_custom<T>();
     MY_PTR_t address = pop_pointer();
     if ((address + sizeof(T)) > memory->size()) return  RuntimeError::INVALID_MEMORY_ADDRESS;
-    // address = reverse_byte_order(address);
     bool error = memory->writeArea(address, reinterpret_cast<u8*>(&value), sizeof(T));
     if (error) return  RuntimeError::INVALID_MEMORY_ADDRESS;
     if (copy) error = push_custom(value);

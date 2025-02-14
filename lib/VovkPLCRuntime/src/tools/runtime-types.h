@@ -40,6 +40,13 @@ typedef float     f32;
 typedef double    f64;
 
 
+constexpr int size_ptr = sizeof(MY_PTR_t);
+constexpr int size_bool = sizeof(MY_PTR_t);
+constexpr int size_u8 = sizeof(u8);
+constexpr int size_u16 = sizeof(u16);
+constexpr int size_u32 = sizeof(u32);
+constexpr int size_u64 = sizeof(u64);
+
 union Converter {
 #ifdef USE_X64_OPS
     u8 data[8];

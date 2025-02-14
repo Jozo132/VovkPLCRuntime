@@ -142,14 +142,15 @@ enum PLCRuntimeInstructionSet {
     SUB,                // Subtraction, requires data type as argument
     MUL,                // Multiplication, requires data type as argument
     DIV,                // Division, requires data type as argument
+    MOD,                // Modulo, requires data type as argument
+    POW,                // Power for given type. Example: POW u8
+    SQRT,               // Square root
+    NEG,                // Negate for signed types including f32 and f64
 
     /* TODO: */
-    // MOD,                // Modulo, requires data type as argument
-    // POW,                // Power for given type. Example: POW u8
-    // SQRT,               // Square root
     // MIN,                // Minimum 
     // MAX,                // Maximum 
-    // ABS,                // Absolute value for i8
+    ABS,                // Absolute value for i8
     // MAP,                // Map  (x, in_min, in_max, out_min, out_max)
     // CON,                // Constrain  (x, min, max)
     // RAND,               // Random  (full range)
@@ -159,8 +160,8 @@ enum PLCRuntimeInstructionSet {
     // LOG10,              // Base 10 logarithm
     // LOG2,               // Base 2 logarithm for f32
     // EXP,                // Exponential
-    // SIN,                // Sine
-    // COS,                // Cosine
+    SIN,                // Sine
+    COS,                // Cosine
     // TAN,                // Tangent
     // ASIN,               // Arc sine
     // ACOS,               // Arc cosine

@@ -50,5 +50,51 @@ namespace PLCMethods {
         stack->push_f32(a / b);
         return STATUS_SUCCESS;
     }
+
+    RuntimeError MOD_float(RuntimeStack* stack) {
+        f32 b = stack->pop_f32();
+        f32 a = stack->pop_f32();
+        stack->push_f32(fmod(a, b));
+        return STATUS_SUCCESS;
+    }
+
+    RuntimeError POW_float(RuntimeStack* stack) {
+        f32 b = stack->pop_f32();
+        f32 a = stack->pop_f32();
+        f32 result = 1;
+        for (u8 i = 0; i < b; i++) result *= a;
+        stack->push_f32(result);
+        return STATUS_SUCCESS;
+    }
+
+    RuntimeError NEG_float(RuntimeStack* stack) {
+        f32 a = stack->pop_f32();
+        stack->push_f32(-a);
+        return STATUS_SUCCESS;
+    }
+
+    RuntimeError ABS_float(RuntimeStack* stack) {
+        f32 a = stack->pop_f32();
+        stack->push_f32(a < 0 ? -a : a);
+        return STATUS_SUCCESS;
+    }
+
+    RuntimeError SQRT_float(RuntimeStack* stack) {
+        f32 a = stack->pop_f32();
+        stack->push_f32(sqrt(a));
+        return STATUS_SUCCESS;
+    }
+
+    RuntimeError SIN_float(RuntimeStack* stack) {
+        f32 a = stack->pop_f32();
+        stack->push_f32(sin(a));
+        return STATUS_SUCCESS;
+    }
+
+    RuntimeError COS_float(RuntimeStack* stack) {
+        f32 a = stack->pop_f32();
+        stack->push_f32(cos(a));
+        return STATUS_SUCCESS;
+    }
     
 }

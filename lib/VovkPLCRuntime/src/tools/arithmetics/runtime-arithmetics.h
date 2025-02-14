@@ -130,6 +130,122 @@ namespace PLCMethods {
         }
     }
 
+    RuntimeError handle_MOD(RuntimeStack* stack, u8* program, u32 program_size, u32& index) {
+        u32 size = 1;
+        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        u8 data_type = program[index++];
+        switch (data_type) {
+            case type_bool:
+            case type_u8: return MOD_uint8_t(stack);
+            case type_u16: return MOD_uint16_t(stack);
+            case type_u32: return MOD_uint32_t(stack);
+            case type_i8: return MOD_int8_t(stack);
+            case type_i16: return MOD_int16_t(stack);
+            case type_i32: return MOD_int32_t(stack);
+            case type_f32: return MOD_float(stack);
+#ifdef USE_X64_OPS
+            case type_u64: return MOD_uint64_t(stack);
+            case type_i64: return MOD_int64_t(stack);
+            case type_f64: return MOD_double(stack);
+#endif // USE_X64_OPS
+            default: return INVALID_DATA_TYPE;
+        }
+    }
+
+    RuntimeError handle_POW(RuntimeStack* stack, u8* program, u32 program_size, u32& index) {
+        u32 size = 1;
+        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        u8 data_type = program[index++];
+        switch (data_type) {
+            case type_bool:
+            case type_u8: return POW_uint8_t(stack);
+            case type_u16: return POW_uint16_t(stack);
+            case type_u32: return POW_uint32_t(stack);
+            case type_i8: return POW_int8_t(stack);
+            case type_i16: return POW_int16_t(stack);
+            case type_i32: return POW_int32_t(stack);
+            case type_f32: return POW_float(stack);
+#ifdef USE_X64_OPS
+            case type_u64: return POW_uint64_t(stack);
+            case type_i64: return POW_int64_t(stack);
+            case type_f64: return POW_double(stack);
+#endif // USE_X64_OPS
+            default: return INVALID_DATA_TYPE;
+        }
+    }
+
+    RuntimeError handle_NEG(RuntimeStack* stack, u8* program, u32 program_size, u32& index) {
+        u32 size = 0;
+        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        u8 data_type = program[index++];
+        switch (data_type) {
+            case type_i8: return NEG_int8_t(stack);
+            case type_i16: return NEG_int16_t(stack);
+            case type_i32: return NEG_int32_t(stack);
+            case type_f32: return NEG_float(stack);
+#ifdef USE_X64_OPS
+            case type_i64: return NEG_int64_t(stack);
+            case type_f64: return NEG_double(stack);
+#endif // USE_X64_OPS
+            default: return INVALID_DATA_TYPE;
+        }
+    }
+
+RuntimeError handle_ABS(RuntimeStack* stack, u8* program, u32 program_size, u32& index) {
+        u32 size = 0;
+        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        u8 data_type = program[index++];
+        switch (data_type) {
+            case type_i8: return ABS_int8_t(stack);
+            case type_i16: return ABS_int16_t(stack);
+            case type_i32: return ABS_int32_t(stack);
+            case type_f32: return ABS_float(stack);
+#ifdef USE_X64_OPS
+            case type_i64: return ABS_int64_t(stack);
+            case type_f64: return ABS_double(stack);
+#endif // USE_X64_OPS
+            default: return INVALID_DATA_TYPE;
+        }
+    }
+
+    RuntimeError handle_SQRT(RuntimeStack* stack, u8* program, u32 program_size, u32& index) {
+        u32 size = 0;
+        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        u8 data_type = program[index++];
+        switch (data_type) {
+            case type_f32: return SQRT_float(stack);
+#ifdef USE_X64_OPS
+            case type_f64: return SQRT_double(stack);
+#endif // USE_X64_OPS
+            default: return INVALID_DATA_TYPE;
+        }
+    }
+
+    RuntimeError handle_SIN(RuntimeStack* stack, u8* program, u32 program_size, u32& index) {
+        u32 size = 0;
+        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        u8 data_type = program[index++];
+        switch (data_type) {
+            case type_f32: return SIN_float(stack);
+#ifdef USE_X64_OPS
+            case type_f64: return SIN_double(stack);
+#endif // USE_X64_OPS
+            default: return INVALID_DATA_TYPE;
+        }
+    }
+
+    RuntimeError handle_COS(RuntimeStack* stack, u8* program, u32 program_size, u32& index) {
+        u32 size = 0;
+        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        u8 data_type = program[index++];
+        switch (data_type) {
+            case type_f32: return COS_float(stack);
+#ifdef USE_X64_OPS
+            case type_f64: return COS_double(stack);
+#endif // USE_X64_OPS
+            default: return INVALID_DATA_TYPE;
+        }
+    }
 
 
     // Comparison operators
