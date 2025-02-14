@@ -27,7 +27,9 @@ typedef uint16_t  MY_PTR_t;
 
 
 typedef uint8_t    u8;
+#ifndef __AVR__
 typedef uint16_t  u16;
+#endif // __AVR__
 typedef uint32_t  u32;
 typedef uint64_t  u64;
 
