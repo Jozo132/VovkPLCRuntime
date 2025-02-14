@@ -8,6 +8,7 @@ const port = 8080
 // Give access to the folder: '../' and './'
 app.use(express.static("../"))
 app.use(express.static("./"))
+app.use(express.static("./src"))
 
 app.get("/", (req, res) => {
     res.sendFile("index.html", { root: "../" })

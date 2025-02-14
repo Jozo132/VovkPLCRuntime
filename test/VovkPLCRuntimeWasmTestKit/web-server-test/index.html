@@ -6,9 +6,8 @@
         <meta http-equiv="X-UA-Compatible" content="IE=edge">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>WebAssembly Test</title>
-        <link rel="stylesheet" href="/style.css">
-        <script src="/../simulator.js" defer></script>
-        <script src="/client.js" defer></script>
+        <link rel="stylesheet" href="/src/style.css">
+        <script src="/src/client.js" type="module"></script>
     </head>
 
     <body>
@@ -24,13 +23,10 @@
         </div>
         <div class="row">
             <div class="col">
-                <button id="init">Initialize</button>
+                <button id="unit-test">Unit test</button>
             </div>
             <div class="col">
-                <button id="run">Run</button>
-            </div>
-            <div class="col">
-                <button id="compile-test">Compile Test</button>
+                <button id="compile-test">Compile assembly and Run</button>
             </div>
             <div class="col">
                 <button id="do-nothing">Call Empty Function</button>

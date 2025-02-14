@@ -1,9 +1,31 @@
 // @ts-check
 "use strict"
 
+/** 
+ * @typedef {{ 
+ *     streamIn: (char: number) => boolean
+ *     loadAssembly: () => void
+ *     compileAssembly: (debug?: boolean) => boolean
+ *     loadCompiledProgram: () => boolean
+ *     runFullProgram: () => void
+ *     runFullProgramDebug: () => void
+ *     uploadProgram: () => number
+ *     getMemoryArea: (address: number, size: number) => number
+ *     writeMemoryByte: (address: number, byte: number) => number
+ *     get_free_memory: () => number
+ *     doNothing: () => void
+ *     run_unit_test: () => void
+ *     run_custom_test: () => void
+ *     downloadAssembly: (assembly: string) => boolean
+ *     extractProgram: () => { size: number, output: string }
+ * }} PLCRUntimeWasmExportTypes
+*/
+
 class PLCRuntimeWasm_class {
     /** @type { WebAssembly.Instance | null } */
     wasm = null
+    /** @type { PLCRUntimeWasmExportTypes | null } */
+    wasm_exports
     running = false
     console_message = ''
     error_message = ''
@@ -12,6 +34,9 @@ class PLCRuntimeWasm_class {
     /** @type { Uint8Array } */
     crc8_table = new Uint8Array(256)
     crc8_table_loaded = false
+
+    stdout_callback = console.log
+    stderr_callback = console.error
 
     constructor() { }
 
@@ -24,16 +49,19 @@ class PLCRuntimeWasm_class {
         let wasmBuffer
         /** @type { Performance } */
         let perf
-        if (typeof module !== 'undefined') { // @ts-ignore
-            perf = require('perf_hooks').performance
-            const fs = require("fs")
-            const path = require("path")
-            wasmBuffer = fs.readFileSync(path.join(__dirname, wasm_path))
-        } else if (typeof window !== 'undefined') {
+        if (typeof window !== 'undefined') { // Browser
             perf = window.performance
             const wasmFile = await fetch(wasm_path)
             wasmBuffer = await wasmFile.arrayBuffer()
-        } else throw new Error("Unknown environment")
+        } else { // Node.js
+            // @ts-ignore
+            perf = (await import('perf_hooks')).performance
+            const fs = await import("fs")
+            const path = await import("path")
+            const __dirname = path.resolve(path.dirname(''), '../')
+            const wasm_path = path.join(__dirname, "simulator.wasm")
+            wasmBuffer = fs.readFileSync(wasm_path)
+        }
         const wasmImports = {
             env: {
                 stdout: this.console_print,
@@ -47,7 +75,16 @@ class PLCRuntimeWasm_class {
         const wasmInstance = await WebAssembly.instantiate(wasmModule, wasmImports)
         if (typeof window !== 'undefined') Object.assign(window, wasmInstance.exports) // Assign all exports to the global scope
         if (!wasmInstance) throw new Error("Failed to instantiate WebAssembly module")
-        this.wasm = wasmInstance
+        this.wasm = wasmInstance // @ts-ignore
+        this.wasm_exports = { ...wasmInstance.exports }
+        if (!this.wasm_exports) throw new Error("WebAssembly module exports not found")
+        this.wasm_exports.downloadAssembly = (assembly) => this.downloadAssembly(assembly)
+        this.wasm_exports.extractProgram = () => this.extractProgram()
+        const required_methods = ['run_unit_test', 'run_custom_test', 'get_free_memory', 'doNothing', 'compileAssembly', 'loadCompiledProgram', 'runFullProgramDebug', 'runFullProgram', 'uploadProgram', 'getMemoryArea', 'writeMemoryByte']
+        for (let i = 0; i < required_methods.length; i++) {
+            const method = required_methods[i]
+            if (!this.wasm_exports[method]) throw new Error(`${method} function not found`)
+        }
         return this
     }
 
@@ -55,8 +92,8 @@ class PLCRuntimeWasm_class {
     downloadAssembly = (assembly) => {
         // Use 'bool streamIn(char)' to download the assembly character by character
         // Use 'void loadAssembly()' to load the assembly into the PLC from the stream buffer
-        if (!this.wasm) throw new Error("WebAssembly module not initialized")
-        const { streamIn, loadAssembly } = this.wasm.exports
+        if (!this.wasm_exports) throw new Error("WebAssembly module not initialized")
+        const { streamIn, loadAssembly } = this.wasm_exports
         const translate = {
             P_On: "u8.const 1",
             P_Off: "u8.const 0",
@@ -90,17 +127,19 @@ class PLCRuntimeWasm_class {
         let ok = true
         for (let i = 0; i < assembly.length && ok; i++) {
             const char = assembly[i]
-            const c = char.charCodeAt(0) // @ts-ignore
+            const c = char.charCodeAt(0)
             ok = streamIn(c)
         }
-        if (!ok) throw new Error("Failed to download assembly") // @ts-ignore
+        if (!ok) throw new Error("Failed to download assembly")
         loadAssembly()
+        const error = !ok
+        return error
     }
-    // downloadAssembly, compileAssembly, loadCompiledProgram, runFullProgramDebug, extractProgram
+    /** @param { string } assembly */
     compile(assembly, run = false) {
-        if (!this.wasm) throw new Error("WebAssembly module not initialized")
+        if (!this.wasm_exports) throw new Error("WebAssembly module not initialized")
         if (assembly) this.downloadAssembly(assembly)
-        const { compileAssembly, loadCompiledProgram, runFullProgramDebug } = this.wasm.exports
+        const { compileAssembly, loadCompiledProgram, runFullProgramDebug } = this.wasm_exports
         if (!compileAssembly) throw new Error("'compileAssembly' function not found")
         if (!loadCompiledProgram) throw new Error("'loadCompiledProgram' function not found")
         if (!runFullProgramDebug) throw new Error("'runFullProgramDebug' function not found")
@@ -113,25 +152,24 @@ class PLCRuntimeWasm_class {
     }
 
     run = () => {
-        if (!this.wasm) throw new Error("WebAssembly module not initialized")
-        const { runFullProgram } = this.wasm.exports
+        if (!this.wasm_exports) throw new Error("WebAssembly module not initialized")
+        const { runFullProgram } = this.wasm_exports
         if (!runFullProgram) throw new Error("'runFullProgram' function not found")
         return runFullProgram()
     }
     runDebug = () => {
-        if (!this.wasm) throw new Error("WebAssembly module not initialized")
-        const { runFullProgramDebug } = this.wasm.exports
+        if (!this.wasm_exports) throw new Error("WebAssembly module not initialized")
+        const { runFullProgramDebug } = this.wasm_exports
         if (!runFullProgramDebug) throw new Error("'runFullProgramDebug' function not found")
         return runFullProgramDebug()
     }
 
 
     extractProgram = () => {
-        if (!this.wasm) throw new Error("WebAssembly module not initialized")
-        const { uploadProgram } = this.wasm.exports
-        if (!uploadProgram) throw new Error("'uploadProgram' function not found")
-        this.stream_message = '' // @ts-ignore
-        const size = uploadProgram()
+        if (!this.wasm_exports) throw new Error("WebAssembly module not initialized")
+        const { uploadProgram } = this.wasm_exports
+        this.stream_message = ''
+        const size = +uploadProgram()
         const output = this.readStream()
         return { size, output }
     }
@@ -140,8 +178,8 @@ class PLCRuntimeWasm_class {
 
     /** @type { (address: number, size?: number) => string } */
     readMemoryArea = (address, size = 1) => {
-        if (!this.wasm) throw new Error("WebAssembly module not initialized")
-        const { getMemoryArea } = this.wasm.exports
+        if (!this.wasm_exports) throw new Error("WebAssembly module not initialized")
+        const { getMemoryArea } = this.wasm_exports
         if (!getMemoryArea) throw new Error("'getMemoryArea' function not found")
         getMemoryArea(address, size)
         const output = this.readStream()
@@ -150,8 +188,8 @@ class PLCRuntimeWasm_class {
 
     /** @type { (address: number, data: number[]) => string } */
     writeMemoryArea = (address, data) => {
-        if (!this.wasm) throw new Error("WebAssembly module not initialized")
-        const { writeMemoryByte } = this.wasm.exports
+        if (!this.wasm_exports) throw new Error("WebAssembly module not initialized")
+        const { writeMemoryByte } = this.wasm_exports
         if (!writeMemoryByte) throw new Error("'writeMemoryByte' function not found")
         for (let i = 0; i < data.length; i++) {
             const byte = data[i] & 0xFF
@@ -163,17 +201,15 @@ class PLCRuntimeWasm_class {
     }
 
     getExports = () => {
-        if (!this.wasm) throw new Error("WebAssembly module not initialized")
-        return Object.assign({}, this.wasm.exports, {
-            downloadAssembly: this.downloadAssembly,
-            extractProgram: this.extractProgram,
-        })
+        if (!this.wasm_exports) throw new Error("WebAssembly module not initialized")
+        return this.wasm_exports
     }
 
     console_print = c => {
         const char = String.fromCharCode(c)
         if (char === '\n') {
-            console.log(this.console_message)
+            const callback = this.stdout_callback || console.log
+            callback(this.console_message)
             this.console_message = ''
         } else {
             this.console_message += char
@@ -190,10 +226,17 @@ class PLCRuntimeWasm_class {
         if (Array.isArray(charcode)) return charcode.forEach(this.console_error)
         const char = String.fromCharCode(charcode)
         if (char === '\0' || char === '\n') {
-            console.error(this.error_message)
+            // console.error(this.error_message)
+            const callback = this.stderr_callback || console.error
+            callback(this.error_message)
             this.error_message = ''
         } else this.error_message += char
     }
+
+    /** @param { (message: string) => void } callback */
+    onStdout = callback => { this.stdout_callback = callback }
+    /** @param { (message: string) => void } callback */
+    onStderr = callback => { this.stderr_callback = callback }
 
     /** @param { number | number[] | string } charcode */
     console_stream = charcode => {
@@ -384,10 +427,16 @@ class PLCRuntimeWasm_class {
 
 const PLCRuntimeWasm = new PLCRuntimeWasm_class()
 
-/** @typedef { PLCRuntimeWasm_class } PLCRuntimeWasm */
-
-// Export the module if we are in Node.js
-if (typeof module !== 'undefined') module.exports = PLCRuntimeWasm
-
 // Export the module if we are in a browser
-if (typeof window !== 'undefined') Object.assign(window, { PLCRuntimeWasm })
+if (typeof window !== 'undefined') {
+    console.log(`WASM exported as window object`)
+    Object.assign(window, { PLCRuntimeWasm })
+}
+
+// Export for CommonJS modules
+if (typeof module !== 'undefined') {
+    console.log(`WASM exported as module`)
+    module.exports = PLCRuntimeWasm
+}
+// Export for ES modules
+export default PLCRuntimeWasm;

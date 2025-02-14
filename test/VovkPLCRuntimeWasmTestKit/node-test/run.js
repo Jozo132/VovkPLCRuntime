@@ -4,12 +4,13 @@
 // This file is used to the WebAssembly module (which was compiled from C++ code) to run in Node.js.
 // It is used for testing purposes only.
 
-const simulator = require("../simulator")
+// const PLCRuntimeWasm = require("../simulator.js").default
+import PLCRuntimeWasm from "../simulator.js"
 
 const main = async () => {
-    await simulator.initialize()
+    await PLCRuntimeWasm.initialize()
     // Get the main functions
-    const { run_unit_test, run_custom_test } = simulator.getExports()
+    const { run_unit_test, run_custom_test } = PLCRuntimeWasm.getExports()
 
     if (!run_unit_test) throw new Error("'run_unit_test' function not found")
     if (!run_custom_test) throw new Error("'run_custom_test' function not found")
@@ -19,7 +20,7 @@ const main = async () => {
         console.log("Running VovkPLCRuntime WebAssembly simulation unit test...") // @ts-ignore
         run_unit_test() // @ts-ignore
         for (let i = 0; i < 10; i++) run_custom_test()
-        message = simulator.readStream()
+        message = PLCRuntimeWasm.readStream()
         console.log("Done.")
     } catch (error) {
         console.error(error)
