@@ -20,8 +20,6 @@ const {
 
 
 const unit_test = () => {
-
-
     try {
         console.log("Running VovkPLCRuntime WebAssembly simulation unit test...")
         run_unit_test()
@@ -58,10 +56,8 @@ const do_nothing_job = () => {
     doNothing()
 }
 
-const do_compile_test = async () => {
-    const d = document.getElementById('assembly')
-    if (!d) throw new Error("Assembly element not found") // @ts-ignore
-    const assembly = d.value
+const do_compile_test = async () => { // @ts-ignore
+    const assembly = assembly_element.value
     //  const bytecode = compile(assembly) // Compile the assembly code to the final runtime bytecode
     console.log("Running compileAssembly()...")
     if (downloadAssembly(assembly)) return // Push the assembly code to the runtime
@@ -93,3 +89,16 @@ do_nothing_element.addEventListener("click", do_nothing_job)
 leak_check_element.addEventListener("click", checkForMemoryLeak)
 
 
+const assembly_element = document.getElementById('assembly')
+if (!assembly_element) throw new Error("Assembly element not found")
+const assembly_template = await (await fetch('./sample.asm')).text() // @ts-ignore
+assembly_element.value = assembly_template
+
+
+
+const hmi_element = document.getElementById('hmi')
+
+
+const update_hmi = () => {
+    
+}
