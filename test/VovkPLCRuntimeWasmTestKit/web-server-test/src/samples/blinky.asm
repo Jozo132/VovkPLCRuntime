@@ -1,5 +1,6 @@
-const podatek = 10
 
-ptr.const podatek
-u8.writeBitInv 0
-ptr.drop
+// Named constant
+const marker = 10.0
+
+// Invert bit
+u8.writeBitInv marker
