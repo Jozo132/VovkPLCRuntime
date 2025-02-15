@@ -915,4 +915,9 @@ int fctprintf(void (*out)(char character, void* arg), void* arg, const char* for
 }
 
 
+int vsprintf(char* buffer, const char* format, va_list va)
+{
+  return vsnprintf_(buffer, (size_t)-1, format, va);
+}
+
 #endif // __WASM__
