@@ -80,27 +80,17 @@ int print_hex(u8 value) {
 
 
 #ifdef __RUNTIME_FULL_UNIT_TEST___
-UnitTest::UnitTest() { }
-UnitTest::~UnitTest() {
-    if (program != nullptr) delete program;
-    if (runtime != nullptr) delete runtime;
-}
-void UnitTest::begin() {
-    if (program == nullptr) program = new RuntimeProgram(program_size);
-    if (runtime == nullptr) runtime = new VovkPLCRuntime(stack_size, memory_size, *program);
-    program->begin();
-    program->format(program_size);
-    runtime->formatMemory(memory_size);
-}
+UnitTest::UnitTest() {}
 #ifdef __RUNTIME_DEBUG__
-template <typename T> void UnitTest::run(const TestCase<T>& test) {
+template <typename T> void UnitTest::run(VovkPLCRuntime& runtime, const TestCase<T>& test) {
     Serial.println();
     REPRINTLN(70, '#');
-    program->format();
-    if (test.build) test.build(*program);
+    runtime.program.format();
+    auto& program = runtime.program;
+    if (test.build) test.build(program);
     Serial.print(F("Running test: ")); Serial.println(test.name);
-    RuntimeError status = fullProgramDebug(*runtime, *program);
-    T output = runtime->read<T>();
+    RuntimeError status = fullProgramDebug(runtime);
+    T output = runtime.read<T>();
     bool passed = status == test.expected_error && test.expected_result == output;
     Serial.print(F("Program result: ")); println(output);
     Serial.print(F("Expected result: ")); println(test.expected_result);
@@ -109,15 +99,16 @@ template <typename T> void UnitTest::run(const TestCase<T>& test) {
 }
 #endif
 
-template <typename T> void UnitTest::review(const TestCase<T>& test) {
-    program->format();
-    if (test.build) test.build(*program);
+template <typename T> void UnitTest::review(VovkPLCRuntime& runtime, const TestCase<T>& test) {
+    auto& program = runtime.program;
+    program.format();
+    if (test.build) test.build(program);
     u32 offset = Serial.print(F("Test \""));
     offset += Serial.print(test.name);
     offset += Serial.print('"');
     u32 t = micros();
-    runtime->cleanRun();
-    T output = runtime->read<T>();
+    runtime.cleanRun();
+    T output = runtime.read<T>();
     t = micros() - t;
     f32 ms = (f32) t * 0.001;
     bool passed = test.expected_result == output;
@@ -127,15 +118,8 @@ template <typename T> void UnitTest::review(const TestCase<T>& test) {
 }
 
 RuntimeError UnitTest::fullProgramDebug(VovkPLCRuntime& runtime) {
-    if (runtime.program == nullptr) {
-        Serial.println(F("No program loaded in the runtime"));
-        return NO_PROGRAM;
-    }
-    return fullProgramDebug(runtime, *runtime.program);
-}
-
-RuntimeError UnitTest::fullProgramDebug(VovkPLCRuntime& runtime, RuntimeProgram& program) {
-    runtime.clear(program);
+    runtime.clear();
+    auto& program = runtime.program;
     program.println();
 #ifdef __RUNTIME_DEBUG__
     program.explain();
@@ -214,12 +198,8 @@ void UnitTest::println(i8 result) {
 #endif
 
 
-void runtime_unit_test() {
-#ifdef __WASM__
-    Tester = new UnitTest();
-#endif
-    TesterMethod begin();
-    TesterMethod runtime->startup();
+void runtime_unit_test(VovkPLCRuntime& runtime) {
+    runtime.startup();
     REPRINTLN(70, '-');
     Serial.println(F("Runtime Unit Test"));
     REPRINTLN(70, '-');
@@ -230,26 +210,26 @@ void runtime_unit_test() {
     REPRINTLN(70, '-');
     REPRINTLN(70, '#');
     Serial.println(F("Executing Runtime Unit Tests..."));
-    // Tester->run(case_demo_uint8_t);
-    TesterMethod run(case_demo_uint8_t);
-    TesterMethod run(case_demo_uint16_t);
-    TesterMethod run(case_demo_uint32_t);
+    // Tester.run(case_demo_uint8_t);
+    Tester.run(runtime, case_demo_uint8_t);
+    Tester.run(runtime, case_demo_uint16_t);
+    Tester.run(runtime, case_demo_uint32_t);
 #ifdef USE_X64_OPS
-    TesterMethod run(case_demo_uint64_t);
+    Tester.run(runtime, case_demo_uint64_t);
 #endif // USE_X64_OPS
-    TesterMethod run(case_demo_int8_t);
-    TesterMethod run(case_demo_float);
+    Tester.run(runtime, case_demo_int8_t);
+    Tester.run(runtime, case_demo_float);
 #ifdef USE_X64_OPS
-    TesterMethod run(case_demo_double);
+    Tester.run(runtime, case_demo_double);
 #endif // USE_X64_OPS
-    TesterMethod run(case_bitwise_and_X8);
-    TesterMethod run(case_bitwise_and_X16);
-    TesterMethod run(case_logic_and);
-    TesterMethod run(case_logic_or);
-    TesterMethod run(case_cmp_eq_1);
-    TesterMethod run(case_cmp_eq_2);
-    TesterMethod run(case_jump);
-    TesterMethod run(case_jump_if);
+    Tester.run(runtime, case_bitwise_and_X8);
+    Tester.run(runtime, case_bitwise_and_X16);
+    Tester.run(runtime, case_logic_and);
+    Tester.run(runtime, case_logic_or);
+    Tester.run(runtime, case_cmp_eq_1);
+    Tester.run(runtime, case_cmp_eq_2);
+    Tester.run(runtime, case_jump);
+    Tester.run(runtime, case_jump_if);
     REPRINTLN(70, '-');
     REPRINTLN(70, '#');
     Serial.println(F("Runtime Unit Tests Completed."));
@@ -258,37 +238,33 @@ void runtime_unit_test() {
     REPRINTLN(70, '#');
     Serial.println(F("Report:"));
     REPRINTLN(70, '#');
-    TesterMethod review(case_demo_uint8_t);
-    TesterMethod review(case_demo_uint16_t);
-    TesterMethod review(case_demo_uint32_t);
+    Tester.review(runtime, case_demo_uint8_t);
+    Tester.review(runtime, case_demo_uint16_t);
+    Tester.review(runtime, case_demo_uint32_t);
 #ifdef USE_X64_OPS
-    TesterMethod review(case_demo_uint64_t);
+    Tester.review(runtime, case_demo_uint64_t);
 #endif // USE_X64_OPS
-    TesterMethod review(case_demo_int8_t);
-    TesterMethod review(case_demo_float);
+    Tester.review(runtime, case_demo_int8_t);
+    Tester.review(runtime, case_demo_float);
 #ifdef USE_X64_OPS
-    TesterMethod review(case_demo_double);
+    Tester.review(runtime, case_demo_double);
 #endif // USE_X64_OPS
-    TesterMethod review(case_bitwise_and_X8);
-    TesterMethod review(case_bitwise_and_X16);
-    TesterMethod review(case_logic_and);
-    TesterMethod review(case_logic_or);
-    TesterMethod review(case_cmp_eq_1);
-    TesterMethod review(case_cmp_eq_2);
-    TesterMethod review(case_jump);
-    TesterMethod review(case_jump_if);
+    Tester.review(runtime, case_bitwise_and_X8);
+    Tester.review(runtime, case_bitwise_and_X16);
+    Tester.review(runtime, case_logic_and);
+    Tester.review(runtime, case_logic_or);
+    Tester.review(runtime, case_cmp_eq_1);
+    Tester.review(runtime, case_cmp_eq_2);
+    Tester.review(runtime, case_jump);
+    Tester.review(runtime, case_jump_if);
     REPRINTLN(70, '#');
     Serial.println(F("Runtime Unit Tests Report Completed."));
     REPRINTLN(70, '#');
-#ifdef __WASM__
-    delete Tester;
-    Tester = nullptr;
-#endif
 };
 
 #else // __RUNTIME_UNIT_TEST__
 
-void runtime_unit_test() {
+void runtime_unit_test(VovkPLCRuntime& runtime) {
     if (runtime_test_called) return;
     Serial.println(F("Unit tests are disabled."));
     Serial.println();

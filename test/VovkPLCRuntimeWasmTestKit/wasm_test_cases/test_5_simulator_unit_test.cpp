@@ -7,5 +7,5 @@
 #include "../../../lib/VovkPLCRuntime/src/VovkPLCRuntime.h"
 
 WASM_EXPORT void doSomething() {
-    runtime_unit_test();
+    runtime_unit_test(runtime);
 }

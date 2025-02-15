@@ -56,27 +56,14 @@ int print_hex(u8 value);
 
 #ifdef __RUNTIME_FULL_UNIT_TEST___
 struct UnitTest {
-    static const u32 memory_size = 16;
-    static const u32 stack_size = 32;
-    static const u32 program_size = 64;
-#ifdef __WASM__
-    RuntimeProgram* program = nullptr;
-    VovkPLCRuntime* runtime = nullptr;
-#else 
-    RuntimeProgram* program = new RuntimeProgram(program_size);
-    VovkPLCRuntime* runtime = new VovkPLCRuntime(stack_size, memory_size, *program);
-#endif
     UnitTest();
-    ~UnitTest();
-    void begin();
 #ifdef __RUNTIME_DEBUG__
-    template <typename T> void run(const TestCase<T>& test);
+    template <typename T> void run(VovkPLCRuntime& runtime, const TestCase<T>& test);
 #endif
 
-    template <typename T> void review(const TestCase<T>& test);
+    template <typename T> void review(VovkPLCRuntime& runtime, const TestCase<T>& test);
 
     static RuntimeError fullProgramDebug(VovkPLCRuntime& runtime);
-    static RuntimeError fullProgramDebug(VovkPLCRuntime& runtime, RuntimeProgram& program);
 
     template <typename T> void println(T result);
     void println(u64 result);
@@ -87,13 +74,9 @@ struct UnitTest {
 };
 
 
-#ifdef __WASM__
-UnitTest* Tester = nullptr;
-#define TesterMethod Tester->
-#else
 UnitTest Tester;
 #define TesterMethod Tester.
-#endif
+
 
 const TestCase<u8> case_demo_uint8_t({ "demo_uint8_t => (1 + 2) * 3", STATUS_SUCCESS, 9, [](RuntimeProgram& program) {
     program.push_u8(1);
@@ -248,12 +231,12 @@ const TestCase<u8> case_jump_if({ "jump_if => for loop sum", PROGRAM_EXITED, 100
     program.modifyValue(loop_jump + 1, end_destination); // Change the jump address to the exit address
 } });
 
-void runtime_unit_test();
+void runtime_unit_test(VovkPLCRuntime& runtime);
 
 #else // __RUNTIME_UNIT_TEST__
 
 bool runtime_test_called = false;
-void runtime_unit_test();
+void runtime_unit_test(VovkPLCRuntime& runtime);
 class UnitTest {
 public:
     static RuntimeError fullProgramDebug(VovkPLCRuntime& runtime, RuntimeProgram& program);

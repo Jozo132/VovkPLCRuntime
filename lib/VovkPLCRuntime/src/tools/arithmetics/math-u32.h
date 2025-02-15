@@ -23,45 +23,45 @@
 
 namespace PLCMethods {
 
-    RuntimeError ADD_uint32_t(RuntimeStack* stack) {
-        u32 b = stack->pop_u32();
-        u32 a = stack->pop_u32();
-        stack->push_u32(a + b);
+    RuntimeError ADD_uint32_t(RuntimeStack& stack) {
+        u32 b = stack.pop_u32();
+        u32 a = stack.pop_u32();
+        stack.push_u32(a + b);
         return STATUS_SUCCESS;
     }
     
-    RuntimeError SUB_uint32_t(RuntimeStack* stack) {
-        u32 b = stack->pop_u32();
-        u32 a = stack->pop_u32();
-        stack->push_u32(a - b);
+    RuntimeError SUB_uint32_t(RuntimeStack& stack) {
+        u32 b = stack.pop_u32();
+        u32 a = stack.pop_u32();
+        stack.push_u32(a - b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError MUL_uint32_t(RuntimeStack* stack) {
-        u32 b = stack->pop_u32();
-        u32 a = stack->pop_u32();
-        stack->push_u32(a * b);
+    RuntimeError MUL_uint32_t(RuntimeStack& stack) {
+        u32 b = stack.pop_u32();
+        u32 a = stack.pop_u32();
+        stack.push_u32(a * b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError DIV_uint32_t(RuntimeStack* stack) {
-        u32 b = stack->pop_u32();
-        u32 a = stack->pop_u32();
-        stack->push_u32(a / b);
+    RuntimeError DIV_uint32_t(RuntimeStack& stack) {
+        u32 b = stack.pop_u32();
+        u32 a = stack.pop_u32();
+        stack.push_u32(a / b);
         return STATUS_SUCCESS;
     }
     
-    RuntimeError MOD_uint32_t(RuntimeStack* stack) {
-        u32 b = stack->pop_u32();
-        u32 a = stack->pop_u32();
-        stack->push_u32(a % b);
+    RuntimeError MOD_uint32_t(RuntimeStack& stack) {
+        u32 b = stack.pop_u32();
+        u32 a = stack.pop_u32();
+        stack.push_u32(a % b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError POW_uint32_t(RuntimeStack* stack) {
-        u32 b = stack->pop_u32();
-        u32 a = stack->pop_u32();
-        stack->push_u32(pow(a, b));
+    RuntimeError POW_uint32_t(RuntimeStack& stack) {
+        u32 b = stack.pop_u32();
+        u32 a = stack.pop_u32();
+        stack.push_u32(pow(a, b));
         return STATUS_SUCCESS;
     }
 }

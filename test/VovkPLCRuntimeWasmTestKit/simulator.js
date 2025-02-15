@@ -10,14 +10,17 @@
  *     runFullProgram: () => void
  *     runFullProgramDebug: () => void
  *     uploadProgram: () => number
+ *     getMemoryLocation: () => number
  *     getMemoryArea: (address: number, size: number) => number
  *     writeMemoryByte: (address: number, byte: number) => number
  *     get_free_memory: () => number
  *     doNothing: () => void
+ *     cleanRun: () => number
  *     run_unit_test: () => void
  *     run_custom_test: () => void
  *     downloadAssembly: (assembly: string) => boolean
  *     extractProgram: () => { size: number, output: string }
+ *     memory: WebAssembly.Memory
  * }} PLCRUntimeWasmExportTypes
 */
 
@@ -97,28 +100,28 @@ class PLCRuntimeWasm_class {
         const translate = {
             P_On: "u8.const 1",
             P_Off: "u8.const 0",
-            P_100ms: "u8.readBit.0 1",
-            P_200ms: "u8.readBit.1 1",
-            P_300ms: "u8.readBit.2 1",
-            P_500ms: "u8.readBit.3 1",
-            P_1s: "u8.readBit.4 1",
-            P_2s: "u8.readBit.5 1",
-            P_5s: "u8.readBit.6 1",
-            P_10s: "u8.readBit.7 1",
-            P_30s: "u8.readBit.0 2",
-            P_1min: "u8.readBit.1 2",
-            P_2min: "u8.readBit.2 2",
-            P_5min: "u8.readBit.3 2",
-            P_10min: "u8.readBit.4 2",
-            P_30min: "u8.readBit.5 2",
-            P_1hr: "u8.readBit.6 2",
-            P_2hr: "u8.readBit.7 2",
-            P_3hr: "u8.readBit.0 3",
-            P_4hr: "u8.readBit.1 3",
-            P_5hr: "u8.readBit.2 3",
-            P_6hr: "u8.readBit.3 3",
-            P_12hr: "u8.readBit.4 3",
-            P_1day: "u8.readBit.5 3",
+            P_100ms: "u8.readBit 1.0",
+            P_200ms: "u8.readBit 1.1",
+            P_300ms: "u8.readBit 1.2",
+            P_500ms: "u8.readBit 1.3",
+            P_1s: "u8.readBit 1.4",
+            P_2s: "u8.readBit 1.5",
+            P_5s: "u8.readBit 1.6",
+            P_10s: "u8.readBit 1.7",
+            P_30s: "u8.readBit 2.0",
+            P_1min: "u8.readBit 2.1",
+            P_2min: "u8.readBit 2.2",
+            P_5min: "u8.readBit 2.3",
+            P_10min: "u8.readBit 2.4",
+            P_30min: "u8.readBit 2.5",
+            P_1hr: "u8.readBit 2.6",
+            P_2hr: "u8.readBit 2.7",
+            P_3hr: "u8.readBit 3.0",
+            P_4hr: "u8.readBit 3.1",
+            P_5hr: "u8.readBit 3.2",
+            P_6hr: "u8.readBit 3.3",
+            P_12hr: "u8.readBit 3.4",
+            P_1day: "u8.readBit 3.5",
         }
         for (const key in translate) {
             const value = translate[key]
@@ -176,14 +179,17 @@ class PLCRuntimeWasm_class {
 
 
 
-    /** @type { (address: number, size?: number) => string } */
+    /** @type { (address: number, size?: number) => Uint8Array } */
     readMemoryArea = (address, size = 1) => {
         if (!this.wasm_exports) throw new Error("WebAssembly module not initialized")
-        const { getMemoryArea } = this.wasm_exports
-        if (!getMemoryArea) throw new Error("'getMemoryArea' function not found")
-        getMemoryArea(address, size)
-        const output = this.readStream()
-        return output
+        // const { getMemoryArea } = this.wasm_exports
+        // if (!getMemoryArea) throw new Error("'getMemoryArea' function not found")
+        // getMemoryArea(address, size)
+        // const output = this.readStream()
+        const { memory, getMemoryLocation } = this.wasm_exports
+        const offset = getMemoryLocation()
+        const buffer = new Uint8Array(memory.buffer, offset + address, size)
+        return buffer
     }
 
     /** @type { (address: number, data: number[]) => string } */

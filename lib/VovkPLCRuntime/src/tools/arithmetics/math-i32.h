@@ -23,57 +23,57 @@
 
 namespace PLCMethods {
 
-    RuntimeError ADD_int32_t(RuntimeStack* stack) {
-        i32 b = stack->pop_i32();
-        i32 a = stack->pop_i32();
-        stack->push_i32(a + b);
+    RuntimeError ADD_int32_t(RuntimeStack& stack) {
+        i32 b = stack.pop_i32();
+        i32 a = stack.pop_i32();
+        stack.push_i32(a + b);
         return STATUS_SUCCESS;
     }
     
-    RuntimeError SUB_int32_t(RuntimeStack* stack) {
-        i32 b = stack->pop_i32();
-        i32 a = stack->pop_i32();
-        stack->push_i32(a - b);
+    RuntimeError SUB_int32_t(RuntimeStack& stack) {
+        i32 b = stack.pop_i32();
+        i32 a = stack.pop_i32();
+        stack.push_i32(a - b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError MUL_int32_t(RuntimeStack* stack) {
-        i32 b = stack->pop_i32();
-        i32 a = stack->pop_i32();
-        stack->push_i32(a * b);
+    RuntimeError MUL_int32_t(RuntimeStack& stack) {
+        i32 b = stack.pop_i32();
+        i32 a = stack.pop_i32();
+        stack.push_i32(a * b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError DIV_int32_t(RuntimeStack* stack) {
-        i32 b = stack->pop_i32();
-        i32 a = stack->pop_i32();
-        stack->push_i32(a / b);
+    RuntimeError DIV_int32_t(RuntimeStack& stack) {
+        i32 b = stack.pop_i32();
+        i32 a = stack.pop_i32();
+        stack.push_i32(a / b);
         return STATUS_SUCCESS;
     }
     
-    RuntimeError MOD_int32_t(RuntimeStack* stack) {
-        i32 b = stack->pop_i32();
-        i32 a = stack->pop_i32();
-        stack->push_i32(a % b);
+    RuntimeError MOD_int32_t(RuntimeStack& stack) {
+        i32 b = stack.pop_i32();
+        i32 a = stack.pop_i32();
+        stack.push_i32(a % b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError POW_int32_t(RuntimeStack* stack) {
-        i32 b = stack->pop_i32();
-        i32 a = stack->pop_i32();
-        stack->push_i32(pow(a, b));
+    RuntimeError POW_int32_t(RuntimeStack& stack) {
+        i32 b = stack.pop_i32();
+        i32 a = stack.pop_i32();
+        stack.push_i32(pow(a, b));
         return STATUS_SUCCESS;
     }
 
-    RuntimeError NEG_int32_t(RuntimeStack* stack) {
-        i32 a = stack->pop_i32();
-        stack->push_i32(-a);
+    RuntimeError NEG_int32_t(RuntimeStack& stack) {
+        i32 a = stack.pop_i32();
+        stack.push_i32(-a);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError ABS_int32_t(RuntimeStack* stack) {
-        i32 a = stack->pop_i32();
-        stack->push_i32(abs(a));
+    RuntimeError ABS_int32_t(RuntimeStack& stack) {
+        i32 a = stack.pop_i32();
+        stack.push_i32(abs(a));
         return STATUS_SUCCESS;
     }
 }

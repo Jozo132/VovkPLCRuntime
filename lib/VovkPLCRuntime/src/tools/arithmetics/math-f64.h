@@ -24,75 +24,75 @@
 #ifdef USE_X64_OPS
 namespace PLCMethods {
 
-    RuntimeError ADD_double(RuntimeStack* stack) {
-        f64 b = stack->pop_f64();
-        f64 a = stack->pop_f64();
-        stack->push_f64(a + b);
+    RuntimeError ADD_double(RuntimeStack& stack) {
+        f64 b = stack.pop_f64();
+        f64 a = stack.pop_f64();
+        stack.push_f64(a + b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError SUB_double(RuntimeStack* stack) {
-        f64 b = stack->pop_f64();
-        f64 a = stack->pop_f64();
-        stack->push_f64(a - b);
+    RuntimeError SUB_double(RuntimeStack& stack) {
+        f64 b = stack.pop_f64();
+        f64 a = stack.pop_f64();
+        stack.push_f64(a - b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError MUL_double(RuntimeStack* stack) {
-        f64 b = stack->pop_f64();
-        f64 a = stack->pop_f64();
-        stack->push_f64(a * b);
+    RuntimeError MUL_double(RuntimeStack& stack) {
+        f64 b = stack.pop_f64();
+        f64 a = stack.pop_f64();
+        stack.push_f64(a * b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError DIV_double(RuntimeStack* stack) {
-        f64 b = stack->pop_f64();
-        f64 a = stack->pop_f64();
-        stack->push_f64(a / b);
+    RuntimeError DIV_double(RuntimeStack& stack) {
+        f64 b = stack.pop_f64();
+        f64 a = stack.pop_f64();
+        stack.push_f64(a / b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError MOD_double(RuntimeStack* stack) {
-        f64 b = stack->pop_f64();
-        f64 a = stack->pop_f64();
-        stack->push_f64(fmod(a, b));
+    RuntimeError MOD_double(RuntimeStack& stack) {
+        f64 b = stack.pop_f64();
+        f64 a = stack.pop_f64();
+        stack.push_f64(fmod(a, b));
         return STATUS_SUCCESS;
     }
 
-    RuntimeError POW_double(RuntimeStack* stack) {
-        f64 b = stack->pop_f64();
-        f64 a = stack->pop_f64();
-        stack->push_f64(pow(a, b));
+    RuntimeError POW_double(RuntimeStack& stack) {
+        f64 b = stack.pop_f64();
+        f64 a = stack.pop_f64();
+        stack.push_f64(pow(a, b));
         return STATUS_SUCCESS;
     }
 
-    RuntimeError NEG_double(RuntimeStack* stack) {
-        f64 a = stack->pop_f64();
-        stack->push_f64(-a);
+    RuntimeError NEG_double(RuntimeStack& stack) {
+        f64 a = stack.pop_f64();
+        stack.push_f64(-a);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError ABS_double(RuntimeStack* stack) {
-        f64 a = stack->pop_f64();
-        stack->push_f64(fabs(a));
+    RuntimeError ABS_double(RuntimeStack& stack) {
+        f64 a = stack.pop_f64();
+        stack.push_f64(fabs(a));
         return STATUS_SUCCESS;
     }
 
-    RuntimeError SQRT_double(RuntimeStack* stack) {
-        f64 a = stack->pop_f64();
-        stack->push_f64(sqrt(a));
+    RuntimeError SQRT_double(RuntimeStack& stack) {
+        f64 a = stack.pop_f64();
+        stack.push_f64(sqrt(a));
         return STATUS_SUCCESS;
     }
 
-    RuntimeError SIN_double(RuntimeStack* stack) {
-        f64 a = stack->pop_f64();
-        stack->push_f64(sin(a));
+    RuntimeError SIN_double(RuntimeStack& stack) {
+        f64 a = stack.pop_f64();
+        stack.push_f64(sin(a));
         return STATUS_SUCCESS;
     }
 
-    RuntimeError COS_double(RuntimeStack* stack) {
-        f64 a = stack->pop_f64();
-        stack->push_f64(cos(a));
+    RuntimeError COS_double(RuntimeStack& stack) {
+        f64 a = stack.pop_f64();
+        stack.push_f64(cos(a));
         return STATUS_SUCCESS;
     }
 

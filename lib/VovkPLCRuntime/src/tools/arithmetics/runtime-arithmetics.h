@@ -42,9 +42,9 @@
 
 namespace PLCMethods {
 
-    RuntimeError handle_ADD(RuntimeStack* stack, u8* program, u32 program_size, u32& index) {
+    RuntimeError handle_ADD(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
         u32 size = 1;
-        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         u8 data_type = program[index++];
         switch (data_type) {
             case type_bool:
@@ -64,9 +64,9 @@ namespace PLCMethods {
         }
     }
 
-    RuntimeError handle_SUB(RuntimeStack* stack, u8* program, u32 program_size, u32& index) {
+    RuntimeError handle_SUB(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
         u32 size = 1;
-        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         u8 data_type = program[index++];
         switch (data_type) {
             case type_bool:
@@ -86,9 +86,9 @@ namespace PLCMethods {
         }
     }
 
-    RuntimeError handle_MUL(RuntimeStack* stack, u8* program, u32 program_size, u32& index) {
+    RuntimeError handle_MUL(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
         u32 size = 1;
-        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         u8 data_type = program[index++];
         switch (data_type) {
             case type_bool:
@@ -108,9 +108,9 @@ namespace PLCMethods {
         }
     }
 
-    RuntimeError handle_DIV(RuntimeStack* stack, u8* program, u32 program_size, u32& index) {
+    RuntimeError handle_DIV(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
         u32 size = 1;
-        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         u8 data_type = program[index++];
         switch (data_type) {
             case type_bool:
@@ -130,9 +130,9 @@ namespace PLCMethods {
         }
     }
 
-    RuntimeError handle_MOD(RuntimeStack* stack, u8* program, u32 program_size, u32& index) {
+    RuntimeError handle_MOD(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
         u32 size = 1;
-        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         u8 data_type = program[index++];
         switch (data_type) {
             case type_bool:
@@ -152,9 +152,9 @@ namespace PLCMethods {
         }
     }
 
-    RuntimeError handle_POW(RuntimeStack* stack, u8* program, u32 program_size, u32& index) {
+    RuntimeError handle_POW(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
         u32 size = 1;
-        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         u8 data_type = program[index++];
         switch (data_type) {
             case type_bool:
@@ -174,9 +174,9 @@ namespace PLCMethods {
         }
     }
 
-    RuntimeError handle_NEG(RuntimeStack* stack, u8* program, u32 program_size, u32& index) {
+    RuntimeError handle_NEG(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
         u32 size = 0;
-        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         u8 data_type = program[index++];
         switch (data_type) {
             case type_i8: return NEG_int8_t(stack);
@@ -191,9 +191,9 @@ namespace PLCMethods {
         }
     }
 
-RuntimeError handle_ABS(RuntimeStack* stack, u8* program, u32 program_size, u32& index) {
+RuntimeError handle_ABS(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
         u32 size = 0;
-        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         u8 data_type = program[index++];
         switch (data_type) {
             case type_i8: return ABS_int8_t(stack);
@@ -208,9 +208,9 @@ RuntimeError handle_ABS(RuntimeStack* stack, u8* program, u32 program_size, u32&
         }
     }
 
-    RuntimeError handle_SQRT(RuntimeStack* stack, u8* program, u32 program_size, u32& index) {
+    RuntimeError handle_SQRT(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
         u32 size = 0;
-        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         u8 data_type = program[index++];
         switch (data_type) {
             case type_f32: return SQRT_float(stack);
@@ -221,9 +221,9 @@ RuntimeError handle_ABS(RuntimeStack* stack, u8* program, u32 program_size, u32&
         }
     }
 
-    RuntimeError handle_SIN(RuntimeStack* stack, u8* program, u32 program_size, u32& index) {
+    RuntimeError handle_SIN(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
         u32 size = 0;
-        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         u8 data_type = program[index++];
         switch (data_type) {
             case type_f32: return SIN_float(stack);
@@ -234,9 +234,9 @@ RuntimeError handle_ABS(RuntimeStack* stack, u8* program, u32 program_size, u32&
         }
     }
 
-    RuntimeError handle_COS(RuntimeStack* stack, u8* program, u32 program_size, u32& index) {
+    RuntimeError handle_COS(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
         u32 size = 0;
-        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         u8 data_type = program[index++];
         switch (data_type) {
             case type_f32: return COS_float(stack);
@@ -249,9 +249,9 @@ RuntimeError handle_ABS(RuntimeStack* stack, u8* program, u32 program_size, u32&
 
 
     // Comparison operators
-    RuntimeError handle_CMP_EQ(RuntimeStack* stack, u8* program, u32 program_size, u32& index) {
+    RuntimeError handle_CMP_EQ(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
         u32 size = 1;
-        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         u8 data_type = program[index++];
         switch (data_type) {
             case type_bool:
@@ -270,9 +270,9 @@ RuntimeError handle_ABS(RuntimeStack* stack, u8* program, u32 program_size, u32&
             default: return INVALID_DATA_TYPE;
         }
     }
-    RuntimeError handle_CMP_NEQ(RuntimeStack* stack, u8* program, u32 program_size, u32& index) {
+    RuntimeError handle_CMP_NEQ(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
         u32 size = 1;
-        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         u8 data_type = program[index++];
         switch (data_type) {
             case type_bool:
@@ -291,9 +291,9 @@ RuntimeError handle_ABS(RuntimeStack* stack, u8* program, u32 program_size, u32&
             default: return INVALID_DATA_TYPE;
         }
     }
-    RuntimeError handle_CMP_GT(RuntimeStack* stack, u8* program, u32 program_size, u32& index) {
+    RuntimeError handle_CMP_GT(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
         u32 size = 1;
-        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         u8 data_type = program[index++];
         switch (data_type) {
             case type_bool:
@@ -312,9 +312,9 @@ RuntimeError handle_ABS(RuntimeStack* stack, u8* program, u32 program_size, u32&
             default: return INVALID_DATA_TYPE;
         }
     }
-    RuntimeError handle_CMP_GTE(RuntimeStack* stack, u8* program, u32 program_size, u32& index) {
+    RuntimeError handle_CMP_GTE(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
         u32 size = 1;
-        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         u8 data_type = program[index++];
         switch (data_type) {
             case type_bool:
@@ -333,9 +333,9 @@ RuntimeError handle_ABS(RuntimeStack* stack, u8* program, u32 program_size, u32&
             default: return INVALID_DATA_TYPE;
         }
     }
-    RuntimeError handle_CMP_LT(RuntimeStack* stack, u8* program, u32 program_size, u32& index) {
+    RuntimeError handle_CMP_LT(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
         u32 size = 1;
-        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         u8 data_type = program[index++];
         switch (data_type) {
             case type_bool:
@@ -354,9 +354,9 @@ RuntimeError handle_ABS(RuntimeStack* stack, u8* program, u32 program_size, u32&
             default: return INVALID_DATA_TYPE;
         }
     }
-    RuntimeError handle_CMP_LTE(RuntimeStack* stack, u8* program, u32 program_size, u32& index) {
+    RuntimeError handle_CMP_LTE(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
         u32 size = 1;
-        if (index + size > program_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         u8 data_type = program[index++];
         switch (data_type) {
             case type_bool:

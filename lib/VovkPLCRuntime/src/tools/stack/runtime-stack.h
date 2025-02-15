@@ -27,23 +27,14 @@
 
 class RuntimeStack {
 public:
-#ifdef __WASM__
-    Stack<u8>* stack = nullptr;
-    Stack<u16>* call_stack = nullptr;
-#else
-    Stack<u8>* stack = new Stack<u8>;
-    Stack<u16>* call_stack = new Stack<u16>;
-#endif // __WASM__
-    u32 max_size = 0;
-    u32 max_call_stack_size = 0;
-
-    Stack<u8>* memory = nullptr; // PLC memory to manipulate
+    Stack<u8> stack = Stack<u8>();
+    Stack<u16> call_stack = Stack<u16>();
+    u8* memory = nullptr;
 
     // Create a stack with a maximum size
-    RuntimeStack(u32 max_size = 0, u32 call_stack_size = 10, u32 memory_size = 4);
-    ~RuntimeStack();
+    RuntimeStack();
 
-    void format(u32 max_size = 0, u32 call_stack_size = 10, u32 memory_size = 4);
+    void format();
 
     int print();
     void println();
@@ -60,7 +51,7 @@ public:
     void pop(int size);
     // Peek the top u8 value from the stack
     u8 peek(int depth);
-    
+
     template <typename T> bool push_custom(T value);
     template <typename T> T pop_custom();
     template <typename T> T peek_custom();

@@ -146,13 +146,13 @@ RuntimeError printlnOpcodeAt(const u8* program, u32 size, u32 index) {
 }
 
 
-RuntimeError CHECK_PROGRAM_POINTER_BOUNDS_HEAD(u8* program, u32 program_size, u32& index, u32 index_start) {
+RuntimeError CHECK_PROGRAM_POINTER_BOUNDS_HEAD(u8* program, u32 prog_size, u32& index, u32 index_start) {
 #ifdef __RUNTIME_DEBUG__
     Serial.print(F("Program pointer points out of bounds: "));
     Serial.print(index);
     Serial.print(F(" > "));
-    Serial.println(program_size);
-    printOpcodeAt(program, program_size, index_start);
+    Serial.println(prog_size);
+    printOpcodeAt(program, prog_size, index_start);
     return PROGRAM_POINTER_OUT_OF_BOUNDS;
 #else                            
     return PROGRAM_POINTER_OUT_OF_BOUNDS;

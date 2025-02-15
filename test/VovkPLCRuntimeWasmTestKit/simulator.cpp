@@ -25,19 +25,17 @@
 #define __RUNTIME_FULL_UNIT_TEST___
 #define USE_X64_OPS
 
+
 #include "../../lib/VovkPLCRuntime/src/VovkPLCRuntime.h"
 
 #ifndef WASM_EXPORT
 #define WASM_EXPORT
 #endif // WASM_EXPORT
 
-VovkPLCRuntime runtime(64, 64, 60000); // Stack size, memory size, program size
-
-
 bool startup = true;
 
 void custom_test() {
-    global_runtime = &runtime;
+    initRuntime();
     // Blink the LED to indicate that the tests are done
     digitalWrite(LED_BUILTIN, LOW);
     delay(2);
@@ -59,29 +57,29 @@ void custom_test() {
 
 
         // Hand-coded RPN instructions:
-        runtime.program->push_f32(10);
-        runtime.program->push_f32(1);
-        runtime.program->push_f32(a);
-        runtime.program->push_f32(b);
-        runtime.program->push_f32(c);
-        runtime.program->push_f32(c);
-        runtime.program->push_f32(d);
-        runtime.program->push_f32(d);
-        runtime.program->push_f32(e);
-        runtime.program->push_f32(e);
-        runtime.program->push_f32(f);
-        runtime.program->push(SUB, type_f32);
-        runtime.program->push(MUL, type_f32);
-        runtime.program->push(SUB, type_f32);
-        runtime.program->push(MUL, type_f32);
-        runtime.program->push(ADD, type_f32);
-        runtime.program->push(MUL, type_f32);
-        runtime.program->push(ADD, type_f32);
-        runtime.program->push_f32(d);
-        runtime.program->push(DIV, type_f32);
-        runtime.program->push(MUL, type_f32);
-        runtime.program->push(SUB, type_f32);
-        runtime.program->push(MUL, type_f32);
+        runtime.program.push_f32(10);
+        runtime.program.push_f32(1);
+        runtime.program.push_f32(a);
+        runtime.program.push_f32(b);
+        runtime.program.push_f32(c);
+        runtime.program.push_f32(c);
+        runtime.program.push_f32(d);
+        runtime.program.push_f32(d);
+        runtime.program.push_f32(e);
+        runtime.program.push_f32(e);
+        runtime.program.push_f32(f);
+        runtime.program.push(SUB, type_f32);
+        runtime.program.push(MUL, type_f32);
+        runtime.program.push(SUB, type_f32);
+        runtime.program.push(MUL, type_f32);
+        runtime.program.push(ADD, type_f32);
+        runtime.program.push(MUL, type_f32);
+        runtime.program.push(ADD, type_f32);
+        runtime.program.push_f32(d);
+        runtime.program.push(DIV, type_f32);
+        runtime.program.push(MUL, type_f32);
+        runtime.program.push(SUB, type_f32);
+        runtime.program.push(MUL, type_f32);
 
 
         /*
@@ -120,9 +118,14 @@ void custom_test() {
     Serial.print(F("Program executed for ")); Serial.print(cycles); Serial.print(F(" cycles in ")); Serial.print(ms, 3); Serial.print(F(" ms. Result: ")); Serial.print(result); Serial.print(F("  Free memory: ")); Serial.print(mem); Serial.println(F(" bytes."));
 }
 
+WASM_EXPORT int cleanRun() {
+    initRuntime();
+    return runtime.cleanRun();
+}
 
 WASM_EXPORT void run_unit_test() {
-    runtime_unit_test();
+    initRuntime();
+    runtime_unit_test(runtime);
 }
 
 WASM_EXPORT void run_custom_test() {
@@ -134,8 +137,15 @@ WASM_EXPORT void doNothing() {
 }
 
 WASM_EXPORT void doSomething() {
-    runtime_unit_test();
+    initRuntime();
+    runtime_unit_test(runtime);
     custom_test();
+}
+
+
+WASM_EXPORT u32 getMemoryLocation() {
+    initRuntime();
+    return (u32) runtime.memory;
 }
 
 
@@ -211,17 +221,21 @@ WASM_EXPORT void doSomething() {
 
 // // Export program definition API
 // WASM_EXPORT int API_resizeProgram(int new_size) {
-//     runtime.program->format(new_size);
+//     initRuntime();
+//     runtime.program.format(new_size);
 //     return 0;
 // }
 // WASM_EXPORT int API_getProgramSize() {
-//     return runtime.program->size();
+//     initRuntime();
+//     return runtime.program.size();
 // }
 // WASM_EXPORT int API_getProgramSizeMax() {
-//     return runtime.program->MAX_PROGRAM_SIZE;
+//     initRuntime();
+//     return runtime.program.MAX_PROGRAM_SIZE;
 // }
 // WASM_EXPORT void API_printProgram() {
-//     runtime.program->println();
+//     initRuntime();
+//     runtime.program.println();
 // }
 
 // WASM_EXPORT void printErrorMessage() {

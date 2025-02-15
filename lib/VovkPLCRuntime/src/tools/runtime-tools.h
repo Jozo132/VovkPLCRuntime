@@ -147,6 +147,11 @@ u8 bcd2dec(u8 bcd);
 // DEC to BCD
 u8 dec2bcd(u8 dec);
 
+bool get_u8(u8* memory, u32 offset, u8& value);
+bool set_u8(u8* memory, u32 offset, u8 value);
+bool readArea_u8(u8* memory, u32 offset, u8* value, u32 size);
+bool writeArea_u8(u8* memory, u32 offset, u8* value, u32 size);
+
 u8* ___reverse_byte_order_ptr = 0;
 u8* ___reverse_byte_order_res_ptr = 0;
 template <typename T> T reverse_byte_order(T value) {
@@ -241,7 +246,6 @@ void __print(char c);
 void toUpper(char* buff);
 
 
-
 class Serial_t {
     char input[256];
     int input_len = 0;
@@ -261,6 +265,7 @@ public:
     int print(unsigned long i, int base = DEC);
     int print(float i, int decimals = -1);
     int print(double i, int decimals = -1);
+    int printf(const char* format, ...);
     int println(const char* str);
     int println(const char* str, int len);
     int println(char c);

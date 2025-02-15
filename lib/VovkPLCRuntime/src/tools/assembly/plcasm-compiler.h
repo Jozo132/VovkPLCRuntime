@@ -28,7 +28,7 @@
 
 #include "./../runtime-types.h"
 
-#define max_assembly_string_size 64535
+#define MAX_ASSEMBLY_STRING_SIZE 64535
 #define MAX_NUM_OF_TOKENS 10000
 
 // ################################################################################################
@@ -120,7 +120,7 @@ void fill(char c, int count) {
 }
 
 // Part 1: Reading the assembly
-char assembly_string[max_assembly_string_size] = R"(
+char assembly_string[MAX_ASSEMBLY_STRING_SIZE] = R"(
 # This is a comment
     f32.const 0.1
     f32.const 0.2
@@ -135,8 +135,8 @@ void set_assembly_string(char* new_assembly_string) {
         printf("Error: input assembly is empty.\n");
         return;
     }
-    if (size > max_assembly_string_size) {
-        printf("Error: input assembly is too long (%d characters). Max size is %d characters.\n", size, max_assembly_string_size);
+    if (size > MAX_ASSEMBLY_STRING_SIZE) {
+        printf("Error: input assembly is too long (%d characters). Max size is %d characters.\n", size, MAX_ASSEMBLY_STRING_SIZE);
         return;
     }
     string_copy(assembly_string, new_assembly_string);
@@ -256,6 +256,7 @@ struct Token {
     bool equals(const char* b);
     bool endsWith(const char* b);
     bool startsWith(const char* b);
+    bool includes(const char* b);
     // Equality operator
     bool operator==(const char* b) { return equals(b); }
 };
@@ -402,6 +403,7 @@ bool StringView::startsWith(const char* b) { return _startsWith(*this, b); }
 bool Token::equals(const char* b) { return str_cmp(*this, b); }
 bool Token::endsWith(const char* b) { return _endsWith(*this, b); }
 bool Token::startsWith(const char* b) { return _startsWith(*this, b); }
+bool Token::includes(const char* b) { return str_includes(*this, b); }
 
 
 bool isDigit(char c) {
@@ -590,6 +592,7 @@ bool add_const(Token& keyword, Token& value, int address) {
     }
     LUT_consts[LUT_const_count].string = keyword.string;
     LUT_consts[LUT_const_count].address = address;
+    LUT_consts[LUT_const_count].value_string = value.string;
     if (value.type == TOKEN_BOOLEAN) {
         LUT_consts[LUT_const_count].type = VAL_BOOLEAN;
         LUT_consts[LUT_const_count].value_bool = value.value_bool;
@@ -822,9 +825,8 @@ bool tokenize() {
 const char* data_type_keywords [] = { "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "string", "bit", "byte", "ptr", "pointer", "*" };
 const int data_type_keywords_count = sizeof(data_type_keywords) / sizeof(data_type_keywords[0]);
 
-#define __MAX_BUILT_BYTECODE_SIZE 1024
 
-u8 built_bytecode[__MAX_BUILT_BYTECODE_SIZE] = { };
+u8 built_bytecode[PLCRUNTIME_MAX_PROGRAM_SIZE] = { };
 int built_bytecode_length = 0;
 u8 built_bytecode_checksum = 0;
 
@@ -835,13 +837,13 @@ struct ProgramLine {
     Token* refToken;
 };
 
-ProgramLine programLines[__MAX_BUILT_BYTECODE_SIZE] = { };
+ProgramLine programLines[PLCRUNTIME_MAX_PROGRAM_SIZE] = { };
 int programLineCount = 0;
 
 int address_end = 0;
 #define _line_push \
     address_end = built_bytecode_length + line.size; \
-    if (address_end >= __MAX_BUILT_BYTECODE_SIZE) return buildErrorSizeLimit(token); \
+    if (address_end >= PLCRUNTIME_MAX_PROGRAM_SIZE) return buildErrorSizeLimit(token); \
     for (int j = 0; j < line.size; j++) { \
         built_bytecode[built_bytecode_length + j] = bytecode[j]; \
         crc8_simple(built_bytecode_checksum, bytecode[j]); \
@@ -1009,29 +1011,21 @@ bool memoryBitFromToken(Token& token, int& address, int& bit) {
         bit = 0;
         return false;
     }
-    float temp = 0;
-    bool e_real = realFromToken(token, temp);
+    float value = 0;
+    bool e_real = realFromToken(token, value);
     bool isReal = !e_real;
     if (isReal || token.type == TOKEN_REAL) { // Expect token "2.7" to be address 2 at the index 7
-        // Iterate over the token string directly
-        bool isBit = false;
-        StringView string = token.string;
-        address = 0;
-        bit = 0;
-        for (int i = 0; i < string.length; i++) {
-            char c = string[i];
-            if (c == '.') {
-                isBit = true;
-                continue;
-            }
-            if (isBit) {
-                bit *= 10;
-                bit += c - '0';
-            } else {
-                address *= 10;
-                address += c - '0';
-            }
-        }
+        // Iterate over the float value and separate the address and bit
+        float addr = (int) value;
+        address = (int) addr;
+        bit = (int) ((value - addr) * 100.0);
+        bit = bit > 65 ? 7 :
+            bit > 55 ? 6 :
+            bit > 45 ? 5 :
+            bit > 35 ? 4 :
+            bit > 25 ? 3 :
+            bit > 15 ? 2 :
+            bit > 5 ? 1 : 0;
         return false;
     }
     return true;
@@ -1154,11 +1148,11 @@ bool build(bool finalPass) {
 
                         // Direct memory read/write
                         PLCRuntimeInstructionSet mem_bit_task = (PLCRuntimeInstructionSet) 0;
-                        if (!mem_bit_task && token.endsWith(".readBit")) mem_bit_task = READ_X8_B0; // READ_X8
-                        if (!mem_bit_task && token.endsWith(".writeBit")) mem_bit_task = WRITE_X8_B0; // WRITE_X8
-                        if (!mem_bit_task && token.endsWith(".writeBitOn")) mem_bit_task = WRITE_S_X8_B0; // WRITE_S_X8 (SET)
-                        if (!mem_bit_task && token.endsWith(".writeBitOff")) mem_bit_task = WRITE_R_X8_B0; // WRITE_R_X8 (RESET)
-                        if (!mem_bit_task && token.endsWith(".writeBitInv")) mem_bit_task = WRITE_INV_X8_B0; // WRITE_INV_X8 (INVERT)
+                        if (!mem_bit_task && token.includes(".writeBitInv")) mem_bit_task = WRITE_INV_X8_B0; // WRITE_INV_X8 (INVERT)
+                        if (!mem_bit_task && token.includes(".writeBitOff")) mem_bit_task = WRITE_R_X8_B0; // WRITE_R_X8 (RESET)
+                        if (!mem_bit_task && token.includes(".writeBitOn")) mem_bit_task = WRITE_S_X8_B0; // WRITE_S_X8 (SET)
+                        if (!mem_bit_task && token.includes(".writeBit")) mem_bit_task = WRITE_X8_B0; // WRITE_X8
+                        if (!mem_bit_task && token.includes(".readBit")) mem_bit_task = READ_X8_B0; // READ_X8
                         if (mem_bit_task) {
                             if (e_int) return buildErrorExpectedInt(token_p1); i++;
                             int address, bit;
@@ -1269,7 +1263,7 @@ bool build(bool finalPass) {
 
 WASM_EXPORT void loadAssembly() {
     int size = 0;
-    streamRead(assembly_string, size, max_assembly_string_size);
+    streamRead(assembly_string, size, MAX_ASSEMBLY_STRING_SIZE);
 }
 
 
@@ -1346,7 +1340,17 @@ WASM_EXPORT bool compileAssembly(bool debug = true) {
             Serial.print(F("Consts ")); Serial.print(LUT_const_count); Serial.println(F(":"));
             for (int i = 0; i < LUT_const_count; i++) {
                 LUT_const& c = LUT_consts[i];
-                Serial.print(F("    ")); c.string.print(); Serial.print(F(" = "));
+                Serial.print(F("    ")); c.string.print(); Serial.print(F(" <"));
+                switch (c.type) {
+                    case VAL_BOOLEAN: Serial.print(F("bool")); break;
+                    case VAL_INTEGER: Serial.print(F("int")); break;
+                    case VAL_REAL: Serial.print(F("real")); break;
+                    case VAL_STRING: Serial.print(F("string")); break;
+                    default: Serial.print(F("unknown")); break;
+                }
+                Serial.print(F("> = "));
+                c.value_string.print();
+                Serial.print(F(" => "));
                 if (c.type == VAL_BOOLEAN) Serial.print(c.value_bool ? "true" : "false");
                 if (c.type == VAL_INTEGER) Serial.print(c.value_int);
                 if (c.type == VAL_REAL) Serial.print(c.value_float);
@@ -1378,28 +1382,36 @@ WASM_EXPORT bool compileAssembly(bool debug = true) {
 }
 
 VovkPLCRuntime* global_runtime = nullptr;
+#define runtime (*global_runtime)
+void initRuntime() {
+    if (global_runtime == nullptr) {
+        global_runtime = new VovkPLCRuntime();
+        global_runtime->startup();
+    }
+}
 
-void linkRuntime() {
-    if (global_runtime == nullptr) global_runtime = new VovkPLCRuntime(128, 128, 10000); // Stack size, memory size, program size
+WASM_EXPORT void printProperties() {
+    initRuntime();
+    runtime.printProperties();
 }
 
 WASM_EXPORT bool loadCompiledProgram() {
-    linkRuntime();
-    global_runtime->startup();
-    global_runtime->loadProgram(built_bytecode, built_bytecode_length, built_bytecode_checksum);
+    initRuntime();
+    Serial.printf("Loading program with %d bytes and checksum 0x%02X ...\n", built_bytecode_length, built_bytecode_checksum);
+    runtime.loadProgram(built_bytecode, built_bytecode_length, built_bytecode_checksum);
     return false;
 }
 
 WASM_EXPORT void runFullProgramDebug() {
-    linkRuntime();
-    RuntimeError status = UnitTest::fullProgramDebug(*global_runtime);
+    initRuntime();
+    RuntimeError status = UnitTest::fullProgramDebug(runtime);
     const char* status_name = RUNTIME_ERROR_NAME(status);
     Serial.print(F("Runtime status: ")); Serial.println(status_name);
 }
 
 WASM_EXPORT void runFullProgram() {
-    linkRuntime();
-    RuntimeError status = global_runtime->cleanRun();
+    initRuntime();
+    RuntimeError status = runtime.cleanRun();
     const char* status_name = RUNTIME_ERROR_NAME(status);
     Serial.print(F("Runtime status: ")); Serial.println(status_name);
 }
@@ -1416,14 +1428,15 @@ WASM_EXPORT u32 uploadProgram() {
 }
 
 WASM_EXPORT u32 getMemoryArea(u32 address, u32 size) {
-    if (global_runtime == nullptr) return 0;
+    initRuntime();
     u32 end = address + size;
-    if (end > global_runtime->stack->max_size) end = global_runtime->stack->max_size;
+    if (end > PLCRUNTIME_MAX_STACK_SIZE) end = PLCRUNTIME_MAX_STACK_SIZE;
     u8 byte = 0;
     bool error = false;
     for (u32 i = address; i < end; i++) {
         if (i > address) streamOut(' ');
-        error = global_runtime->stack->memory->get(i, byte); // Format it as hex
+        // error = runtime.memory->get(i, byte); // Format it as hex
+        error = get_u8(runtime.memory, i, byte);
         if (error) return 0;
         char c1, c2;
         byteToHex(byte, c1, c2);
@@ -1434,8 +1447,9 @@ WASM_EXPORT u32 getMemoryArea(u32 address, u32 size) {
 }
 
 WASM_EXPORT u32 writeMemoryByte(u32 address, u8 byte) {
-    if (global_runtime == nullptr) return 0;
-    bool error = global_runtime->stack->memory->set(address, byte);
+    initRuntime();
+    // bool error = runtime.memory->set(address, byte);
+    bool error = set_u8(runtime.memory, address, byte);
     if (error) return 0;
     return 1;
 }
@@ -1446,9 +1460,9 @@ WASM_EXPORT void external_print(const char* string) {
 
 #else
 
-void set_assembly_string(char* new_assembly_string) { }
+void set_assembly_string(char* new_assembly_string) {}
 bool compileTest() { return false; }
-void runFullProgramDebug() { }
+void runFullProgramDebug() {}
 u32 uploadProgram() { return 0; }
 u32 getMemoryArea(u32 address, u32 size) { return 0; }
 u32 writeMemoryByte(u32 address, u8 byte) { return 0; }

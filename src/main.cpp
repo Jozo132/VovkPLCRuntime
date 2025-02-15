@@ -15,13 +15,19 @@
 
 #define PLCRUNTIME_SERIAL_ENABLED
 
-#include <VovkPLCRuntime.h>
 
 #define stack_size 64
 #define memory_size 64
 #define program_size 1024
 
-VovkPLCRuntime runtime(stack_size, memory_size, program_size); // Stack size, memory size, program size
+#define PLCRUNTIME_NUM_OF_OUTPUTS 10
+#define PLCRUNTIME_INPUT_OFFSET 10
+#define PLCRUNTIME_MAX_STACK_SIZE stack_size
+#define PLCRUNTIME_MAX_MEMORY_SIZE memory_size
+#define PLCRUNTIME_MAX_PROGRAM_SIZE program_size
+
+#include <VovkPLCRuntime.h>
+VovkPLCRuntime runtime = VovkPLCRuntime(); // Stack size, memory size, program size
 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
@@ -48,15 +54,16 @@ void setup() {
   // Program[7] [58 00 0A 60 00 14 FF]
   const u8 program [] = { 0x58, 0x00, 0x0A, 0x60, 0x00, 0x14, 0xFF };
   const u16 size = sizeof(program);
-  runtime.program->loadUnsafe(program, size);
+  runtime.program.loadUnsafe(program, size);
 #else // __RUNTIME_PRODUCTION__
   // Start the runtime unit test
-  runtime_unit_test();
+  runtime_unit_test(runtime);
   runtime.startup();
 #endif // __RUNTIME_PRODUCTION__
 }
 
 bool startup = true;
+u8* temp_memory = new u8[32];
 
 long timer_temp = 0;
 int cycle = 0;
@@ -86,7 +93,7 @@ void loop() {
   long diff = t - timer_temp;
   // if (diff >= 200) {
   bool b = 0;
-  runtime.stack->memory->getBit(1, 1, b); // Get P_200ms pulse
+  runtime.getBit(1, 1, b); // Get P_200ms pulse
   if (b) {
     timer_temp = t;
     long mem = freeMemory();
@@ -96,16 +103,15 @@ void loop() {
     float duration_ms = cps > 0 ? 1000.0 / (float) cps : 0;
     // Serial.printf("Free mem: %6d bytes  CPS: %6d", mem, cps); // AVR doesn't support printf
     Serial.print(F("Free mem: ")); Serial.print(mem); Serial.print(F(" bytes  Cycle time: ")); Serial.print(duration_ms, 2); Serial.print(F(" ms"));
-    u8* memory = new u8[32];
-    runtime.readMemory(0, memory, 32);
+
+    runtime.readMemory(0, temp_memory, 32);
     Serial.print(F("  Memory: "));
     for (int i = 0; i < 32; i++) {
-      if (memory[i] < 0x10) Serial.print('0');
-      Serial.print(memory[i], HEX);
+      if (temp_memory[i] < 0x10) Serial.print('0');
+      Serial.print(temp_memory[i], HEX);
       Serial.print(' ');
       if (i % 10 == 9) Serial.print(' ');
     }
-    delete [] memory;
     Serial.println();
   }
 
@@ -130,29 +136,29 @@ void loop() {
 
 
     // Hand-coded RPN instructions:
-    runtime.program->push_f32(10);
-    runtime.program->push_f32(1);
-    runtime.program->push_f32(a);
-    runtime.program->push_f32(b);
-    runtime.program->push_f32(c);
-    runtime.program->push_f32(c);
-    runtime.program->push_f32(d);
-    runtime.program->push_f32(d);
-    runtime.program->push_f32(e);
-    runtime.program->push_f32(e);
-    runtime.program->push_f32(f);
-    runtime.program->push(SUB, type_f32);
-    runtime.program->push(MUL, type_f32);
-    runtime.program->push(SUB, type_f32);
-    runtime.program->push(MUL, type_f32);
-    runtime.program->push(ADD, type_f32);
-    runtime.program->push(MUL, type_f32);
-    runtime.program->push(ADD, type_f32);
-    runtime.program->push_f32(d);
-    runtime.program->push(DIV, type_f32);
-    runtime.program->push(MUL, type_f32);
-    runtime.program->push(SUB, type_f32);
-    runtime.program->push(MUL, type_f32);
+    runtime.program.push_f32(10);
+    runtime.program.push_f32(1);
+    runtime.program.push_f32(a);
+    runtime.program.push_f32(b);
+    runtime.program.push_f32(c);
+    runtime.program.push_f32(c);
+    runtime.program.push_f32(d);
+    runtime.program.push_f32(d);
+    runtime.program.push_f32(e);
+    runtime.program.push_f32(e);
+    runtime.program.push_f32(f);
+    runtime.program.push(SUB, type_f32);
+    runtime.program.push(MUL, type_f32);
+    runtime.program.push(SUB, type_f32);
+    runtime.program.push(MUL, type_f32);
+    runtime.program.push(ADD, type_f32);
+    runtime.program.push(MUL, type_f32);
+    runtime.program.push(ADD, type_f32);
+    runtime.program.push_f32(d);
+    runtime.program.push(DIV, type_f32);
+    runtime.program.push(MUL, type_f32);
+    runtime.program.push(SUB, type_f32);
+    runtime.program.push(MUL, type_f32);
 
 
     /*
@@ -169,7 +175,7 @@ void loop() {
     const char* status_name = RUNTIME_ERROR_NAME(status);
     Serial.print(F("Runtime status: ")); Serial.println(status_name);
 #else
-    Serial.print(F("Loaded bytecode: ")); runtime.program->println();
+    Serial.print(F("Loaded bytecode: ")); runtime.program.println();
     runtime.cleanRun();
 #endif
     float output = runtime.read<float>();
@@ -187,9 +193,9 @@ void loop() {
   long t = micros();
   for (int i = 0; i < cycles; i++) {
     bool input = digitalRead(10);
-    runtime.setInputBit(0, 0, input);
+    runtime.setInputBit(0.0, input);
     runtime.cleanRun();
-    bool output = runtime.getOutputBit(0, 0);
+    bool output = runtime.getOutputBit(0.0);
     digitalWrite(11, output);
     result = runtime.read<float>();
   }

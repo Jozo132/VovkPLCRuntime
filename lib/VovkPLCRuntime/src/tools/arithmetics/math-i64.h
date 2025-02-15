@@ -24,57 +24,57 @@
 #ifdef USE_X64_OPS
 namespace PLCMethods {
 
-    RuntimeError ADD_int64_t(RuntimeStack* stack) {
-        i64 b = stack->pop_i64();
-        i64 a = stack->pop_i64();
-        stack->push_i64(a + b);
+    RuntimeError ADD_int64_t(RuntimeStack& stack) {
+        i64 b = stack.pop_i64();
+        i64 a = stack.pop_i64();
+        stack.push_i64(a + b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError SUB_int64_t(RuntimeStack* stack) {
-        i64 b = stack->pop_i64();
-        i64 a = stack->pop_i64();
-        stack->push_i64(a - b);
+    RuntimeError SUB_int64_t(RuntimeStack& stack) {
+        i64 b = stack.pop_i64();
+        i64 a = stack.pop_i64();
+        stack.push_i64(a - b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError MUL_int64_t(RuntimeStack* stack) {
-        i64 b = stack->pop_i64();
-        i64 a = stack->pop_i64();
-        stack->push_i64(a * b);
+    RuntimeError MUL_int64_t(RuntimeStack& stack) {
+        i64 b = stack.pop_i64();
+        i64 a = stack.pop_i64();
+        stack.push_i64(a * b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError DIV_int64_t(RuntimeStack* stack) {
-        i64 b = stack->pop_i64();
-        i64 a = stack->pop_i64();
-        stack->push_i64(a / b);
+    RuntimeError DIV_int64_t(RuntimeStack& stack) {
+        i64 b = stack.pop_i64();
+        i64 a = stack.pop_i64();
+        stack.push_i64(a / b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError MOD_int64_t(RuntimeStack* stack) {
-        i64 b = stack->pop_i64();
-        i64 a = stack->pop_i64();
-        stack->push_i64(a % b);
+    RuntimeError MOD_int64_t(RuntimeStack& stack) {
+        i64 b = stack.pop_i64();
+        i64 a = stack.pop_i64();
+        stack.push_i64(a % b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError POW_int64_t(RuntimeStack* stack) {
-        i64 b = stack->pop_i64();
-        i64 a = stack->pop_i64();
-        stack->push_i64(pow(a, b));
+    RuntimeError POW_int64_t(RuntimeStack& stack) {
+        i64 b = stack.pop_i64();
+        i64 a = stack.pop_i64();
+        stack.push_i64(pow(a, b));
         return STATUS_SUCCESS;
     }
 
-    RuntimeError NEG_int64_t(RuntimeStack* stack) {
-        i64 a = stack->pop_i64();
-        stack->push_i64(-a);
+    RuntimeError NEG_int64_t(RuntimeStack& stack) {
+        i64 a = stack.pop_i64();
+        stack.push_i64(-a);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError ABS_int64_t(RuntimeStack* stack) {
-        i64 a = stack->pop_i64();
-        stack->push_i64(abs(a));
+    RuntimeError ABS_int64_t(RuntimeStack& stack) {
+        i64 a = stack.pop_i64();
+        stack.push_i64(abs(a));
         return STATUS_SUCCESS;
     }
 

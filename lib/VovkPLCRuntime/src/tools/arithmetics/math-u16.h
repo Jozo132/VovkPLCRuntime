@@ -23,45 +23,45 @@
 
 namespace PLCMethods {
 
-    RuntimeError ADD_uint16_t(RuntimeStack* stack) {
-        u16 b = stack->pop_u16();
-        u16 a = stack->pop_u16();
-        stack->push_u16(a + b);
+    RuntimeError ADD_uint16_t(RuntimeStack& stack) {
+        u16 b = stack.pop_u16();
+        u16 a = stack.pop_u16();
+        stack.push_u16(a + b);
         return STATUS_SUCCESS;
     }
     
-    RuntimeError SUB_uint16_t(RuntimeStack* stack) {
-        u16 b = stack->pop_u16();
-        u16 a = stack->pop_u16();
-        stack->push_u16(a - b);
+    RuntimeError SUB_uint16_t(RuntimeStack& stack) {
+        u16 b = stack.pop_u16();
+        u16 a = stack.pop_u16();
+        stack.push_u16(a - b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError MUL_uint16_t(RuntimeStack* stack) {
-        u16 b = stack->pop_u16();
-        u16 a = stack->pop_u16();
-        stack->push_u16(a * b);
+    RuntimeError MUL_uint16_t(RuntimeStack& stack) {
+        u16 b = stack.pop_u16();
+        u16 a = stack.pop_u16();
+        stack.push_u16(a * b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError DIV_uint16_t(RuntimeStack* stack) {
-        u16 b = stack->pop_u16();
-        u16 a = stack->pop_u16();
-        stack->push_u16(a / b);
+    RuntimeError DIV_uint16_t(RuntimeStack& stack) {
+        u16 b = stack.pop_u16();
+        u16 a = stack.pop_u16();
+        stack.push_u16(a / b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError MOD_uint16_t(RuntimeStack* stack) {
-        u16 b = stack->pop_u16();
-        u16 a = stack->pop_u16();
-        stack->push_u16(a % b);
+    RuntimeError MOD_uint16_t(RuntimeStack& stack) {
+        u16 b = stack.pop_u16();
+        u16 a = stack.pop_u16();
+        stack.push_u16(a % b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError POW_uint16_t(RuntimeStack* stack) {
-        u16 b = stack->pop_u16();
-        u16 a = stack->pop_u16();
-        stack->push_u16(pow(a, b));
+    RuntimeError POW_uint16_t(RuntimeStack& stack) {
+        u16 b = stack.pop_u16();
+        u16 a = stack.pop_u16();
+        stack.push_u16(pow(a, b));
         return STATUS_SUCCESS;
     }
     

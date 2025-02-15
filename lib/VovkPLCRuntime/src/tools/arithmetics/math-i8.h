@@ -23,57 +23,57 @@
 
 namespace PLCMethods {
 
-    RuntimeError ADD_int8_t(RuntimeStack* stack) {
-        i8 b = stack->pop_i8();
-        i8 a = stack->pop_i8();
-        stack->push_i8(a + b);
+    RuntimeError ADD_int8_t(RuntimeStack& stack) {
+        i8 b = stack.pop_i8();
+        i8 a = stack.pop_i8();
+        stack.push_i8(a + b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError SUB_int8_t(RuntimeStack* stack) {
-        i8 b = stack->pop_i8();
-        i8 a = stack->pop_i8();
-        stack->push_i8(a - b);
+    RuntimeError SUB_int8_t(RuntimeStack& stack) {
+        i8 b = stack.pop_i8();
+        i8 a = stack.pop_i8();
+        stack.push_i8(a - b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError MUL_int8_t(RuntimeStack* stack) {
-        i8 b = stack->pop_i8();
-        i8 a = stack->pop_i8();
-        stack->push_i8(a * b);
+    RuntimeError MUL_int8_t(RuntimeStack& stack) {
+        i8 b = stack.pop_i8();
+        i8 a = stack.pop_i8();
+        stack.push_i8(a * b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError DIV_int8_t(RuntimeStack* stack) {
-        i8 b = stack->pop_i8();
-        i8 a = stack->pop_i8();
-        stack->push_i8(a / b);
+    RuntimeError DIV_int8_t(RuntimeStack& stack) {
+        i8 b = stack.pop_i8();
+        i8 a = stack.pop_i8();
+        stack.push_i8(a / b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError MOD_int8_t(RuntimeStack* stack) {
-        i8 b = stack->pop_i8();
-        i8 a = stack->pop_i8();
-        stack->push_i8(a % b);
+    RuntimeError MOD_int8_t(RuntimeStack& stack) {
+        i8 b = stack.pop_i8();
+        i8 a = stack.pop_i8();
+        stack.push_i8(a % b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError POW_int8_t(RuntimeStack* stack) {
-        i8 b = stack->pop_i8();
-        i8 a = stack->pop_i8();
-        stack->push_i8(pow(a, b));
+    RuntimeError POW_int8_t(RuntimeStack& stack) {
+        i8 b = stack.pop_i8();
+        i8 a = stack.pop_i8();
+        stack.push_i8(pow(a, b));
         return STATUS_SUCCESS;
     }
 
-    RuntimeError NEG_int8_t(RuntimeStack* stack) {
-        i8 a = stack->pop_i8();
-        stack->push_i8(-a);
+    RuntimeError NEG_int8_t(RuntimeStack& stack) {
+        i8 a = stack.pop_i8();
+        stack.push_i8(-a);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError ABS_int8_t(RuntimeStack* stack) {
-        i8 a = stack->pop_i8();
-        stack->push_i8(abs(a));
+    RuntimeError ABS_int8_t(RuntimeStack& stack) {
+        i8 a = stack.pop_i8();
+        stack.push_i8(abs(a));
         return STATUS_SUCCESS;
     }
 

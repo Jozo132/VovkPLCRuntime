@@ -113,6 +113,39 @@ u8 bcd2dec(u8 bcd) { return ((bcd >> 4) * 10) + (bcd & 0xF); }
 // DEC to BCD
 u8 dec2bcd(u8 dec) { return ((dec / 10) << 4) + (dec % 10); }
 
+
+
+bool get_u8(u8* memory, u32 offset, u8& value) {
+    if (offset >= PLCRUNTIME_MAX_MEMORY_SIZE) return true;
+    value = memory[offset];
+    return false;
+}
+
+bool set_u8(u8* memory, u32 offset, u8 value) {
+    if (offset >= PLCRUNTIME_MAX_MEMORY_SIZE) return true;
+    memory[offset] = value;
+    return false;
+}
+
+
+bool readArea_u8(u8* memory, u32 offset, u8* value, u32 size) {
+    if (offset + size > PLCRUNTIME_MAX_MEMORY_SIZE) return true;
+    for (u32 i = 0; i < size; i++) {
+        value[i] = memory[offset + i];
+    }
+    return false;
+}
+
+bool writeArea_u8(u8* memory, u32 offset, u8* value, u32 size) {
+    if (offset + size > PLCRUNTIME_MAX_MEMORY_SIZE) return true;
+    for (u32 i = 0; i < size; i++) {
+        memory[offset + i] = value[i];
+    }
+    return false;
+}
+
+
+
 #ifdef __SIMULATOR__
 void pinMode(int pin, int mode) {}
 void digitalWrite(int pin, int value) {}
@@ -263,6 +296,14 @@ int Serial_t::print(double i, int decimals) {
     int size = 0;
     if (decimals < 0) sprintf(buff, "%f", i);
     else sprintf(buff, "%.*f", decimals, i);
+    size = print(buff);
+    return size;
+}
+int Serial_t::printf(const char* format, ...) {
+    va_list args;
+    va_start(args, format);
+    int size = vsprintf(buff, format, args);
+    va_end(args);
     size = print(buff);
     return size;
 }

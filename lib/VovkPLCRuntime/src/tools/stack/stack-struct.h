@@ -24,12 +24,11 @@
 #include "../runtime-tools.h"
 
 template <typename T> struct Stack {
-    T* _data = nullptr;
-    u32 MAX_STACK_SIZE = 0;
+    T _data[PLCRUNTIME_MAX_STACK_SIZE];
+    u32 MAX_STACK_SIZE = PLCRUNTIME_MAX_STACK_SIZE;
     u32 _size = 0;
     Stack(u32 max_size = 0);
-    ~Stack();
-    void format(u32 size);
+    void format(u32 fill_size = 0);
     // Pushes a value to the top of the stack
     bool push(T value);
     // Pops the top value from the stack

@@ -46,7 +46,7 @@ public:
         location[0] = type_pointer;
         // memcpy(location + 1, &pointer, sizeof(MY_PTR_t)); // Wrong endianess
         for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[i + 1] = (pointer >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
-        return 1 + sizeof(MY_PTR_t);        
+        return 1 + sizeof(MY_PTR_t);
     }
 
     // Push a boolean value to the PLC Program
@@ -262,92 +262,85 @@ public:
 
 class RuntimeProgram {
 private:
-    u32 MAX_PROGRAM_SIZE = PLCRUNTIME_DEFAULT_PROGRAM_SIZE; // Max program size in bytes
+    u32 MAX_PROGRAM_SIZE = PLCRUNTIME_MAX_PROGRAM_SIZE; // Max program size in bytes
 public:
-#ifdef __WASM__
-    u8* program = nullptr; // PLC program to execute
-#else
-    u8* program = new u8[PLCRUNTIME_DEFAULT_PROGRAM_SIZE]; // PLC program to execute
-#endif // __WASM__
-    u32 program_size = 0; // Current program size in bytes
+    u8 program[PLCRUNTIME_MAX_PROGRAM_SIZE]; // PLC program to execute
+    u32 prog_size = 0; // Current program size in bytes
     u32 program_line = 0; // Active program line
     RuntimeError status = UNDEFINED_STATE;
 
-    RuntimeProgram(u32 program_size) {
-        if (program_size > PLCRUNTIME_DEFAULT_PROGRAM_SIZE) {
-            if (program != nullptr) delete [] program;
-            program = new u8[program_size];
-            this->MAX_PROGRAM_SIZE = program_size;
-        }
+    RuntimeProgram(u32 prog_size) {
+        if (prog_size > PLCRUNTIME_MAX_PROGRAM_SIZE) prog_size = PLCRUNTIME_MAX_PROGRAM_SIZE;
+        this->MAX_PROGRAM_SIZE = prog_size;
     }
-    RuntimeProgram() { }
-    ~RuntimeProgram() {
-        if (program != nullptr) delete [] program;
+    RuntimeProgram() {}
+
+    void begin(const u8* program, u32 prog_size, u8 checksum) {
+        format();
+        load(program, prog_size, checksum);
     }
 
-    void begin(const u8* program, u32 program_size, u8 checksum) {
-        format(program_size);
-        load(program, program_size, checksum);
+    void beginUnsafe(const u8* program, u32 prog_size) {
+        format();
+        loadUnsafe(program, prog_size);
     }
 
-    void beginUnsafe(const u8* program, u32 program_size) {
-        format(program_size);
-        loadUnsafe(program, program_size);
+    void begin() {
+        format();
     }
 
-    void begin(u32 program_size = 0) {
-        format(program_size);
-    }
-
-    void format(u32 program_size = 0) {
-        if (program_size == 0) program_size = MAX_PROGRAM_SIZE;
-        if (program_size > MAX_PROGRAM_SIZE) program_size = MAX_PROGRAM_SIZE;
-        if (this->program == nullptr) this->program = new u8[MAX_PROGRAM_SIZE];
-        this->program_size = 0;
+    void format() {
+        this->prog_size = 0;
         this->program_line = 0;
         this->status = UNDEFINED_STATE;
     }
 
-    RuntimeError loadUnsafe(const u8* program, u32 program_size) {
-        if (program_size > MAX_PROGRAM_SIZE) status = PROGRAM_SIZE_EXCEEDED;
-        else if (program_size == 0) status = UNDEFINED_STATE;
-        else status = STATUS_SUCCESS;
-        format(program_size);
-        memcpy(this->program, program, program_size);
-        this->program_size = program_size;
+    RuntimeError loadUnsafe(const u8* program, u32 prog_size) {
+        if (prog_size > PLCRUNTIME_MAX_PROGRAM_SIZE) status = PROGRAM_SIZE_EXCEEDED;
+        if (prog_size > MAX_PROGRAM_SIZE) status = PROGRAM_SIZE_EXCEEDED;
+        else if (prog_size == 0) {
+            this->prog_size = 0;
+            status = UNDEFINED_STATE;
+        } else {
+            format();
+            // memcpy(this->program, program, prog_size);
+            for (u32 i = 0; i < prog_size; i++) this->program[i] = program[i];
+            this->prog_size = prog_size;
+            status = STATUS_SUCCESS;
+        }
         return status;
     }
 
-    RuntimeError load(const u8* program, u32 program_size, u8 checksum) {
+    RuntimeError load(const u8* program, u32 prog_size, u8 checksum) {
         u8 calculated_checksum = 0;
-        crc8_simple(calculated_checksum, program, program_size);
+        crc8_simple(calculated_checksum, program, prog_size);
         if (calculated_checksum != checksum) {
             status = INVALID_CHECKSUM;
             Serial.println(F("Failed to load program: CHECKSUM MISMATCH"));
             return status;
         }
-        return loadUnsafe(program, program_size);
+        return loadUnsafe(program, prog_size);
     }
 
     // Get the size of used program memory
-    u32 size() { return program_size; }
+    u32 size() { return prog_size; }
 
     // Hot update the running program. This is a very dangerous operation, so use it with caution!
     RuntimeError modify(u32 index, u8 value) {
-        if (index >= program_size) return INVALID_PROGRAM_INDEX;
+        if (index >= prog_size) return INVALID_PROGRAM_INDEX;
         program[index] = value;
         return STATUS_SUCCESS;
     }
 
     // Hot update the running program. This is a very dangerous operation, so use it with caution!
     RuntimeError modify(u32 index, u8* data, u32 size) {
-        if (index + size > program_size) return INVALID_PROGRAM_INDEX;
+        if (index + size > prog_size) return INVALID_PROGRAM_INDEX;
         for (u32 i = 0; i < size; i++) program[index + i] = data[i];
         return STATUS_SUCCESS;
     }
 
     RuntimeError modifyValue(u32 index, u32 value) {
-        if (index + sizeof(u32) > program_size) return INVALID_PROGRAM_INDEX;
+        if (index + sizeof(u32) > prog_size) return INVALID_PROGRAM_INDEX;
         program[index] = value >> 8;
         program[index + 1] = value & 0xFF;
         return STATUS_SUCCESS;
@@ -366,23 +359,23 @@ public:
     // Reset the active PLC Program line number to the beginning
     void resetLine() { program_line = 0; }
 
-    bool finished() { return program_line >= program_size; }
+    bool finished() { return program_line >= prog_size; }
 
-    u32 getProgramSize() { return program_size; }
+    u32 getProgramSize() { return prog_size; }
 
     int print() {
         int length = Serial.print(F("Program["));
-        length += Serial.print(program_size);
-        if (program_size == 0) {
+        length += Serial.print(prog_size);
+        if (prog_size == 0) {
             length += Serial.print(F("] []"));
             return length;
         }
         length += Serial.print(F("] ["));
-        for (u32 i = 0; i < program_size; i++) {
+        for (u32 i = 0; i < prog_size; i++) {
             u8 value = program[i];
             if (value < 0x10) length += Serial.print('0');
             length += Serial.print(value, HEX);
-            if (i < program_size - 1) length += Serial.print(' ');
+            if (i < prog_size - 1) length += Serial.print(' ');
         }
         length += Serial.print(']');
         return length;
@@ -392,7 +385,7 @@ public:
 
     void explain() {
         Serial.println(F("#### Program Explanation:"));
-        if (program_size == 0) {
+        if (prog_size == 0) {
             Serial.println(F("Program is empty."));
             return;
         }
@@ -434,7 +427,7 @@ public:
             Serial.print(F("] "));
             // Print instruction arguments
             for (u8 i = 0; i < instruction_size; i++) {
-                if ((i + index) >= program_size) {
+                if ((i + index) >= prog_size) {
                     Serial.println(F(" - OUT OF PROGRAM BOUNDS\n"));
                     return;
                 }
@@ -444,13 +437,13 @@ public:
             }
             Serial.println();
             index += instruction_size;
-            if (index >= program_size) done = true;
+            if (index >= prog_size) done = true;
         }
         Serial.println(F("#### End of program explanation."));
     }
 
     PLCRuntimeInstructionSet getCurrentBytecode() {
-        if (program_line >= program_size) return EXIT;
+        if (program_line >= prog_size) return EXIT;
         return (PLCRuntimeInstructionSet) program[program_line];
     }
 
@@ -458,7 +451,7 @@ public:
 
     int printOpcodeAt(u32 index) {
         int length = 0;
-        if (index >= program_size) return length;
+        if (index >= prog_size) return length;
         PLCRuntimeInstructionSet opcode = (PLCRuntimeInstructionSet) program[index];
         bool valid_opcode = OPCODE_EXISTS(opcode);
         if (!valid_opcode) {
@@ -495,47 +488,47 @@ public:
 
     // Push a new sequence of bytes to the PLC Program
     RuntimeError push(u8* code, u32 code_size) {
-        if (program_size + code_size > MAX_PROGRAM_SIZE) {
+        if (prog_size + code_size > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(prog_size);
             return status;
         }
-        program_size += InstructionCompiler::push(program + program_size, code, code_size);
+        prog_size += InstructionCompiler::push(program + prog_size, code, code_size);
         status = STATUS_SUCCESS;
         return status;
     }
 
     // Push a new instruction to the PLC Program
     RuntimeError push(u8 instruction) {
-        if (program_size + 1 > MAX_PROGRAM_SIZE) {
+        if (prog_size + 1 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(prog_size);
             return status;
         }
-        program_size += InstructionCompiler::push(program + program_size, instruction);
+        prog_size += InstructionCompiler::push(program + prog_size, instruction);
         status = STATUS_SUCCESS;
         return status;
     }
 
     // Push a new instruction to the PLC Program
     RuntimeError push(u8 instruction, u8 data_type) {
-        if (program_size + 2 > MAX_PROGRAM_SIZE) {
+        if (prog_size + 2 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(prog_size);
             return status;
         }
-        program_size += InstructionCompiler::push(program + program_size, instruction, data_type);
+        prog_size += InstructionCompiler::push(program + prog_size, instruction, data_type);
         status = STATUS_SUCCESS;
         return status;
     }
 
     // Push a pointer to the PLC Program
     RuntimeError push_pointer(MY_PTR_t pointer) {
-        if (program_size + sizeof(MY_PTR_t) > MAX_PROGRAM_SIZE) {
+        if (prog_size + sizeof(MY_PTR_t) > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             return status;
         }
-        program_size += InstructionCompiler::push_pointer(program + program_size, pointer);
+        prog_size += InstructionCompiler::push_pointer(program + prog_size, pointer);
         status = STATUS_SUCCESS;
         return status;
     }
@@ -547,72 +540,72 @@ public:
 
     // Push an u8 value to the PLC Program
     RuntimeError push_u8(u8 value) {
-        if (program_size + 2 > MAX_PROGRAM_SIZE) {
+        if (prog_size + 2 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(prog_size);
             return status;
         }
-        program_size += InstructionCompiler::push_u8(program + program_size, value);
+        prog_size += InstructionCompiler::push_u8(program + prog_size, value);
         status = STATUS_SUCCESS;
         return status;
     }
 
     // Push an i8 value to the PLC Program
     RuntimeError push_i8(i8 value) {
-        if (program_size + 2 > MAX_PROGRAM_SIZE) {
+        if (prog_size + 2 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(prog_size);
             return status;
         }
-        program_size += InstructionCompiler::push_i8(program + program_size, value);
+        prog_size += InstructionCompiler::push_i8(program + prog_size, value);
         status = STATUS_SUCCESS;
         return status;
     }
 
     // Push an u16 value to the PLC Program
     RuntimeError push_u16(u32 value) {
-        if (program_size + 3 > MAX_PROGRAM_SIZE) {
+        if (prog_size + 3 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(prog_size);
             return status;
         }
-        program_size += InstructionCompiler::push_u16(program + program_size, value);
+        prog_size += InstructionCompiler::push_u16(program + prog_size, value);
         status = STATUS_SUCCESS;
         return status;
     }
 
     // Push an i16 value to the PLC Program
     RuntimeError push_i16(i16 value) {
-        if (program_size + 3 > MAX_PROGRAM_SIZE) {
+        if (prog_size + 3 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(prog_size);
             return status;
         }
-        program_size += InstructionCompiler::push_i16(program + program_size, value);
+        prog_size += InstructionCompiler::push_i16(program + prog_size, value);
         status = STATUS_SUCCESS;
         return status;
     }
 
     // Push an u32 value to the PLC Program
     RuntimeError push_u32(u32 value) {
-        if (program_size + 5 > MAX_PROGRAM_SIZE) {
+        if (prog_size + 5 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(prog_size);
             return status;
         }
-        program_size += InstructionCompiler::push_u32(program + program_size, value);
+        prog_size += InstructionCompiler::push_u32(program + prog_size, value);
         status = STATUS_SUCCESS;
         return status;
     }
 
     // Push an i32 value to the PLC Program
     RuntimeError push_i32(i32 value) {
-        if (program_size + 5 > MAX_PROGRAM_SIZE) {
+        if (prog_size + 5 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(prog_size);
             return status;
         }
-        program_size += InstructionCompiler::push_i32(program + program_size, value);
+        prog_size += InstructionCompiler::push_i32(program + prog_size, value);
         status = STATUS_SUCCESS;
         return status;
     }
@@ -620,24 +613,24 @@ public:
 #ifdef USE_X64_OPS
     // Push an u64 value to the PLC Program
     RuntimeError push_u64(u64 value) {
-        if (program_size + 9 > MAX_PROGRAM_SIZE) {
+        if (prog_size + 9 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(prog_size);
             return status;
         }
-        program_size += InstructionCompiler::push_u64(program + program_size, value);
+        prog_size += InstructionCompiler::push_u64(program + prog_size, value);
         status = STATUS_SUCCESS;
         return status;
     }
 
     // Push an i64 value to the PLC Program
     RuntimeError push_i64(i64 value) {
-        if (program_size + 9 > MAX_PROGRAM_SIZE) {
+        if (prog_size + 9 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(prog_size);
             return status;
         }
-        program_size += InstructionCompiler::push_i64(program + program_size, value);
+        prog_size += InstructionCompiler::push_i64(program + prog_size, value);
         status = STATUS_SUCCESS;
         return status;
     }
@@ -645,12 +638,12 @@ public:
 
     // Push a float value to the PLC Program
     RuntimeError push_f32(float value) {
-        if (program_size + 5 > MAX_PROGRAM_SIZE) {
+        if (prog_size + 5 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(prog_size);
             return status;
         }
-        program_size += InstructionCompiler::push_f32(program + program_size, value);
+        prog_size += InstructionCompiler::push_f32(program + prog_size, value);
         status = STATUS_SUCCESS;
         return status;
     }
@@ -658,12 +651,12 @@ public:
 #ifdef USE_X64_OPS
     // Push a double value to the PLC Program
     RuntimeError push_f64(double value) {
-        if (program_size + 9 > MAX_PROGRAM_SIZE) {
+        if (prog_size + 9 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(prog_size);
             return status;
         }
-        program_size += InstructionCompiler::push_f64(program + program_size, value);
+        prog_size += InstructionCompiler::push_f64(program + prog_size, value);
         status = STATUS_SUCCESS;
         return status;
     }
@@ -671,104 +664,104 @@ public:
 
     // Push flow control instructions to the PLC Program
     RuntimeError push_jmp(u32 program_address) {
-        if (program_size + 3 > MAX_PROGRAM_SIZE) {
+        if (prog_size + 3 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(prog_size);
             return status;
         }
-        program_size += InstructionCompiler::push_jmp(program + program_size, program_address);
+        prog_size += InstructionCompiler::push_jmp(program + prog_size, program_address);
         status = STATUS_SUCCESS;
         return status;
     }
     RuntimeError push_jmp_if(u32 program_address) {
-        if (program_size + 3 > MAX_PROGRAM_SIZE) {
+        if (prog_size + 3 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(prog_size);
             return status;
         }
-        program_size += InstructionCompiler::push_jmp_if(program + program_size, program_address);
+        prog_size += InstructionCompiler::push_jmp_if(program + prog_size, program_address);
         status = STATUS_SUCCESS;
         return status;
     }
     RuntimeError push_jmp_if_not(u32 program_address) {
-        if (program_size + 3 > MAX_PROGRAM_SIZE) {
+        if (prog_size + 3 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
-            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(program_size);
+            Serial.print(PROGRAM_SIZE_EXCEEDED_MSG); Serial.println(prog_size);
             return status;
         }
-        program_size += InstructionCompiler::push_jmp_if_not(program + program_size, program_address);
+        prog_size += InstructionCompiler::push_jmp_if_not(program + prog_size, program_address);
         status = STATUS_SUCCESS;
         return status;
     }
 
     // Convert a data type to another data type
     RuntimeError push_cvt(PLCRuntimeInstructionSet from, PLCRuntimeInstructionSet to) {
-        if (program_size + 3 > MAX_PROGRAM_SIZE) {
+        if (prog_size + 3 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             return status;
         }
-        program_size += InstructionCompiler::push_cvt(program + program_size, from, to);
+        prog_size += InstructionCompiler::push_cvt(program + prog_size, from, to);
         status = STATUS_SUCCESS;
         return status;
     }
 
     RuntimeError push_load(PLCRuntimeInstructionSet type = type_u8) {
-        if (program_size + 2 > MAX_PROGRAM_SIZE) {
+        if (prog_size + 2 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             return status;
         }
-        program_size += InstructionCompiler::push_load(program + program_size, type);
+        prog_size += InstructionCompiler::push_load(program + prog_size, type);
         status = STATUS_SUCCESS;
         return status;
     }
 
     RuntimeError push_move(PLCRuntimeInstructionSet type = type_u8) {
-        if (program_size + 2 > MAX_PROGRAM_SIZE) {
+        if (prog_size + 2 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             return status;
         }
-        program_size += InstructionCompiler::push_move(program + program_size, type);
+        prog_size += InstructionCompiler::push_move(program + prog_size, type);
         status = STATUS_SUCCESS;
         return status;
     }
 
     RuntimeError push_move_copy(PLCRuntimeInstructionSet type = type_u8) {
-        if (program_size + 2 > MAX_PROGRAM_SIZE) {
+        if (prog_size + 2 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             return status;
         }
-        program_size += InstructionCompiler::push_move_copy(program + program_size, type);
+        prog_size += InstructionCompiler::push_move_copy(program + prog_size, type);
         status = STATUS_SUCCESS;
         return status;
     }
 
     // Make a duplica of the top of the stack
     RuntimeError push_copy(PLCRuntimeInstructionSet type = type_u8) {
-        if (program_size + 2 > MAX_PROGRAM_SIZE) {
+        if (prog_size + 2 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             return status;
         }
-        program_size += InstructionCompiler::push_copy(program + program_size, type);
+        prog_size += InstructionCompiler::push_copy(program + prog_size, type);
         status = STATUS_SUCCESS;
         return status;
     }
     // Swap the top two values on the stack
     RuntimeError push_swap(PLCRuntimeInstructionSet type = type_u8) {
-        if (program_size + 2 > MAX_PROGRAM_SIZE) {
+        if (prog_size + 2 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             return status;
         }
-        program_size += InstructionCompiler::push_swap(program + program_size, type);
+        prog_size += InstructionCompiler::push_swap(program + prog_size, type);
         status = STATUS_SUCCESS;
         return status;
     }
     // Drop the top value from the stack
     RuntimeError push_drop(PLCRuntimeInstructionSet type = type_u8) {
-        if (program_size + 2 > MAX_PROGRAM_SIZE) {
+        if (prog_size + 2 > MAX_PROGRAM_SIZE) {
             status = PROGRAM_SIZE_EXCEEDED;
             return status;
         }
-        program_size += InstructionCompiler::push_drop(program + program_size, type);
+        prog_size += InstructionCompiler::push_drop(program + prog_size, type);
         status = STATUS_SUCCESS;
         return status;
     }

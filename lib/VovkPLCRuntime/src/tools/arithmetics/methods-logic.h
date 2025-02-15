@@ -24,30 +24,30 @@
 namespace PLCMethods {
 
     // Boolean operators
-    RuntimeError LOGIC_AND(RuntimeStack* stack) {
-        u8 b = stack->pop_u8() != 0;
-        u8 a = stack->pop_u8() != 0;
-        stack->push_u8(a && b);
+    RuntimeError LOGIC_AND(RuntimeStack& stack) {
+        u8 b = stack.pop_u8() != 0;
+        u8 a = stack.pop_u8() != 0;
+        stack.push_u8(a && b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError LOGIC_OR(RuntimeStack* stack) {
-        u8 b = stack->pop_u8() != 0;
-        u8 a = stack->pop_u8() != 0;
-        stack->push_u8(a || b);
+    RuntimeError LOGIC_OR(RuntimeStack& stack) {
+        u8 b = stack.pop_u8() != 0;
+        u8 a = stack.pop_u8() != 0;
+        stack.push_u8(a || b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError LOGIC_XOR(RuntimeStack* stack) {
-        u8 b = stack->pop_u8() != 0;
-        u8 a = stack->pop_u8() != 0;
-        stack->push_u8(a ^ b);
+    RuntimeError LOGIC_XOR(RuntimeStack& stack) {
+        u8 b = stack.pop_u8() != 0;
+        u8 a = stack.pop_u8() != 0;
+        stack.push_u8(a ^ b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError LOGIC_NOT(RuntimeStack* stack) {
-        u8 a = stack->pop_u8() != 0;
-        stack->push_u8(!a);
+    RuntimeError LOGIC_NOT(RuntimeStack& stack) {
+        u8 a = stack.pop_u8() != 0;
+        stack.push_u8(!a);
         return STATUS_SUCCESS;
     }
 

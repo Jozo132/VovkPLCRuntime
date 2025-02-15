@@ -7,6 +7,7 @@ const wasm = await PLCRuntimeWasm.initialize("/simulator.wasm")
 const PLC = wasm.getExports()
 
 const {
+    cleanRun,
     run_unit_test,
     run_custom_test,
     get_free_memory,
@@ -61,7 +62,7 @@ const do_compile_test = async () => { // @ts-ignore
     //  const bytecode = compile(assembly) // Compile the assembly code to the final runtime bytecode
     console.log("Running compileAssembly()...")
     if (downloadAssembly(assembly)) return // Push the assembly code to the runtime
-    if (compileAssembly()) return // Compile the code and return if there is an error
+    if (compileAssembly(true)) return // Compile the code and return if there is an error
     if (loadCompiledProgram()) return // Load the compiled program into the runtime
     runFullProgramDebug() // Verify the code by running it in the simulator
     const { size, output } = extractProgram() // Extract the current program from the runtime
@@ -72,12 +73,14 @@ const do_compile_test = async () => { // @ts-ignore
 
 const unit_test_element = document.getElementById("unit-test")
 const compile_test_element = document.getElementById("compile-test")
+const run_cycle_element = document.getElementById("run-cycle")
 const do_nothing_element = document.getElementById("do-nothing")
 const leak_check_element = document.getElementById("leak-check")
 const output_element = document.getElementById("output")
 
 if (!unit_test_element) throw new Error("unit_test_element not found")
 if (!compile_test_element) throw new Error("compile_test_element not found")
+if (!run_cycle_element) throw new Error("run_cycle_element not found")
 if (!do_nothing_element) throw new Error("do_nothing_element not found")
 if (!leak_check_element) throw new Error("leak_check_element not found")
 if (!output_element) throw new Error("output_element not found")
@@ -85,20 +88,50 @@ if (!output_element) throw new Error("output_element not found")
 
 unit_test_element.addEventListener("click", unit_test)
 compile_test_element.addEventListener("click", do_compile_test)
+run_cycle_element.addEventListener("click", cleanRun)
 do_nothing_element.addEventListener("click", do_nothing_job)
 leak_check_element.addEventListener("click", checkForMemoryLeak)
 
 
 const assembly_element = document.getElementById('assembly')
 if (!assembly_element) throw new Error("Assembly element not found")
-const assembly_template = await (await fetch('./sample.asm')).text() // @ts-ignore
+const assembly_template = await (await fetch('./samples/blinky.asm')).text() // @ts-ignore
 assembly_element.value = assembly_template
 
 
 
 const hmi_element = document.getElementById('hmi')
+if (!hmi_element) throw new Error("HMI element not found")
 
-
-const update_hmi = () => {
-    
+const readBit = offset => {
+    const index = Math.floor(offset)
+    const bit = Math.min(10 * (offset - index), 7)
+    // console.log(`Reading bit ${bit} from memory area ${index}`)
+    const memory = PLCRuntimeWasm.readMemoryArea(index, 1)
+    return (memory[0] & (1 << bit)) !== 0
 }
+let hmi_data_state = {}
+const update_hmi = () => {
+    // const state = readBit(10.0)
+    // hmi_element.innerHTML = state ? "ON" : "OFF"
+    cleanRun()
+    const memory = [...PLCRuntimeWasm.readMemoryArea(0, 20)].map(x => x.toString(16).padStart(2, '0')).join(' ').toUpperCase()
+    const addresses = memory.split(' ').map((_, i) => i.toString().padStart(2, '0')).join(' ').toUpperCase()
+    if (hmi_data_state.memory === memory && hmi_data_state.addresses === addresses) return
+    hmi_data_state = { memory, addresses }
+    hmi_element.innerHTML = `
+        <span style="font-family: monospace; font-size: 1.4em;">
+            <span style="color: #888">${addresses}</span>
+        <br>
+            ${memory}
+        </span>
+    `
+}
+
+
+setInterval(update_hmi, 100)
+
+Object.assign(window, {
+    readBit,
+    update_hmi
+})

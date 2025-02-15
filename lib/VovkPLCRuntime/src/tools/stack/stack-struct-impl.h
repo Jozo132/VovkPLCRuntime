@@ -23,16 +23,11 @@
 
 #include "stack-struct.h"
 
-template <typename T> Stack<T>::Stack(u32 max_size) { format(max_size); }
-template <typename T> Stack<T>::~Stack() {
-    if (_data != nullptr) delete [] _data;
-    _data = nullptr;
-}
-template <typename T> void Stack<T>::format(u32 size) {
-    if (_data != nullptr) delete [] _data;
-    _data = new T[size];
-    MAX_STACK_SIZE = size;
-    _size = MAX_STACK_SIZE;
+template <typename T> Stack<T>::Stack(u32 max_size) { format(); }
+
+template <typename T> void Stack<T>::format(u32 fill_size) {
+    _size = fill_size;
+    for (u32 i = 0; i < _size; i++) _data[i] = 0;
 }
 template <typename T> bool Stack<T>::push(T value) {
     if (_size >= MAX_STACK_SIZE) {

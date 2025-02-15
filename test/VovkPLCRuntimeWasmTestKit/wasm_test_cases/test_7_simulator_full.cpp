@@ -10,15 +10,15 @@ void custom_test();
 
 bool startup = true;
 
+RuntimeProgram program(86); // Program size
+VovkPLCRuntime runtime(64, program); // Stack size
+
 WASM_EXPORT void doSomething() {
-    if (startup) runtime_unit_test();
+    if (startup) runtime_unit_test(runtime);
     custom_test();
 }
 
 
-
-RuntimeProgram program(86); // Program size
-VovkPLCRuntime runtime(64, program); // Stack size
 
 
 void custom_test() {

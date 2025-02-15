@@ -23,47 +23,47 @@
 
 namespace PLCMethods {
 
-    RuntimeError ADD_uint8_t(RuntimeStack* stack) {
-        u8 b = stack->pop_u8();
-        u8 a = stack->pop_u8();
-        stack->push_u8(a + b);
+    RuntimeError ADD_uint8_t(RuntimeStack& stack) {
+        u8 b = stack.pop_u8();
+        u8 a = stack.pop_u8();
+        stack.push_u8(a + b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError SUB_uint8_t(RuntimeStack* stack) {
-        u8 b = stack->pop_u8();
-        u8 a = stack->pop_u8();
-        stack->push_u8(a - b);
+    RuntimeError SUB_uint8_t(RuntimeStack& stack) {
+        u8 b = stack.pop_u8();
+        u8 a = stack.pop_u8();
+        stack.push_u8(a - b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError MUL_uint8_t(RuntimeStack* stack) {
-        u8 b = stack->pop_u8();
-        u8 a = stack->pop_u8();
-        stack->push_u8(a * b);
+    RuntimeError MUL_uint8_t(RuntimeStack& stack) {
+        u8 b = stack.pop_u8();
+        u8 a = stack.pop_u8();
+        stack.push_u8(a * b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError DIV_uint8_t(RuntimeStack* stack) {
-        u8 b = stack->pop_u8();
-        u8 a = stack->pop_u8();
-        stack->push_u8(a / b);
+    RuntimeError DIV_uint8_t(RuntimeStack& stack) {
+        u8 b = stack.pop_u8();
+        u8 a = stack.pop_u8();
+        stack.push_u8(a / b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError MOD_uint8_t(RuntimeStack* stack) {
-        u8 b = stack->pop_u8();
-        u8 a = stack->pop_u8();
-        stack->push_u8(a % b);
+    RuntimeError MOD_uint8_t(RuntimeStack& stack) {
+        u8 b = stack.pop_u8();
+        u8 a = stack.pop_u8();
+        stack.push_u8(a % b);
         return STATUS_SUCCESS;
     }
 
-    RuntimeError POW_uint8_t(RuntimeStack* stack) {
-        u8 b = stack->pop_u8();
-        u8 a = stack->pop_u8();
+    RuntimeError POW_uint8_t(RuntimeStack& stack) {
+        u8 b = stack.pop_u8();
+        u8 a = stack.pop_u8();
         u8 result = 1;
         for (u8 i = 0; i < b; i++) result *= a;
-        stack->push_u8(result);
+        stack.push_u8(result);
         return STATUS_SUCCESS;
     }
 
