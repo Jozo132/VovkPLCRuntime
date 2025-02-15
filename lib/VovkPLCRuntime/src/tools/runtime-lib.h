@@ -89,7 +89,6 @@ public:
         if (started_up) return;
         started_up = true;
         splash();
-        stack.memory = memory; // Give the stack access to the memory
         stack.format();
         program.format();
         program.begin();
@@ -246,7 +245,7 @@ public:
 
 
 
-    bool readMemory(u32 offset, u8*& value, u32 size = 1) {
+    bool readMemory(u32 offset, u8* value, u32 size = 1) {
         return readArea_u8(memory, offset, value, size);
     }
 
@@ -658,9 +657,9 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
         case LOGIC_NOT: return PLCMethods::LOGIC_NOT(this->stack);
         case LOGIC_XOR: return PLCMethods::LOGIC_XOR(this->stack);
         case CVT: return PLCMethods::CVT(this->stack, program, prog_size, index);
-        case LOAD: return PLCMethods::LOAD(this->stack, program, prog_size, index);
-        case MOVE: return PLCMethods::MOVE(this->stack, program, prog_size, index);
-        case MOVE_COPY: return PLCMethods::MOVE_COPY(this->stack, program, prog_size, index);
+        case LOAD: return PLCMethods::LOAD(this->stack, this->memory, program, prog_size, index);
+        case MOVE: return PLCMethods::MOVE(this->stack, this->memory, program, prog_size, index);
+        case MOVE_COPY: return PLCMethods::MOVE_COPY(this->stack, this->memory, program, prog_size, index);
         case COPY: return PLCMethods::COPY(this->stack, program, prog_size, index);
         case SWAP: return PLCMethods::SWAP(this->stack, program, prog_size, index);
         case DROP: return PLCMethods::DROP(this->stack, program, prog_size, index);
@@ -724,46 +723,46 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
         case RSET_X8_B5: return PLCMethods::handle_RSET_X8_B5(this->stack);
         case RSET_X8_B6: return PLCMethods::handle_RSET_X8_B6(this->stack);
         case RSET_X8_B7: return PLCMethods::handle_RSET_X8_B7(this->stack);
-        case READ_X8_B0: return PLCMethods::handle_READ_X8_B0(this->stack, program, prog_size, index);
-        case READ_X8_B1: return PLCMethods::handle_READ_X8_B1(this->stack, program, prog_size, index);
-        case READ_X8_B2: return PLCMethods::handle_READ_X8_B2(this->stack, program, prog_size, index);
-        case READ_X8_B3: return PLCMethods::handle_READ_X8_B3(this->stack, program, prog_size, index);
-        case READ_X8_B4: return PLCMethods::handle_READ_X8_B4(this->stack, program, prog_size, index);
-        case READ_X8_B5: return PLCMethods::handle_READ_X8_B5(this->stack, program, prog_size, index);
-        case READ_X8_B6: return PLCMethods::handle_READ_X8_B6(this->stack, program, prog_size, index);
-        case READ_X8_B7: return PLCMethods::handle_READ_X8_B7(this->stack, program, prog_size, index);
-        case WRITE_X8_B0: return PLCMethods::handle_WRITE_X8_B0(this->stack, program, prog_size, index);
-        case WRITE_X8_B1: return PLCMethods::handle_WRITE_X8_B1(this->stack, program, prog_size, index);
-        case WRITE_X8_B2: return PLCMethods::handle_WRITE_X8_B2(this->stack, program, prog_size, index);
-        case WRITE_X8_B3: return PLCMethods::handle_WRITE_X8_B3(this->stack, program, prog_size, index);
-        case WRITE_X8_B4: return PLCMethods::handle_WRITE_X8_B4(this->stack, program, prog_size, index);
-        case WRITE_X8_B5: return PLCMethods::handle_WRITE_X8_B5(this->stack, program, prog_size, index);
-        case WRITE_X8_B6: return PLCMethods::handle_WRITE_X8_B6(this->stack, program, prog_size, index);
-        case WRITE_X8_B7: return PLCMethods::handle_WRITE_X8_B7(this->stack, program, prog_size, index);
-        case WRITE_S_X8_B0: return PLCMethods::handle_WRITE_S_X8_B0(this->stack, program, prog_size, index);
-        case WRITE_S_X8_B1: return PLCMethods::handle_WRITE_S_X8_B1(this->stack, program, prog_size, index);
-        case WRITE_S_X8_B2: return PLCMethods::handle_WRITE_S_X8_B2(this->stack, program, prog_size, index);
-        case WRITE_S_X8_B3: return PLCMethods::handle_WRITE_S_X8_B3(this->stack, program, prog_size, index);
-        case WRITE_S_X8_B4: return PLCMethods::handle_WRITE_S_X8_B4(this->stack, program, prog_size, index);
-        case WRITE_S_X8_B5: return PLCMethods::handle_WRITE_S_X8_B5(this->stack, program, prog_size, index);
-        case WRITE_S_X8_B6: return PLCMethods::handle_WRITE_S_X8_B6(this->stack, program, prog_size, index);
-        case WRITE_S_X8_B7: return PLCMethods::handle_WRITE_S_X8_B7(this->stack, program, prog_size, index);
-        case WRITE_R_X8_B0: return PLCMethods::handle_WRITE_R_X8_B0(this->stack, program, prog_size, index);
-        case WRITE_R_X8_B1: return PLCMethods::handle_WRITE_R_X8_B1(this->stack, program, prog_size, index);
-        case WRITE_R_X8_B2: return PLCMethods::handle_WRITE_R_X8_B2(this->stack, program, prog_size, index);
-        case WRITE_R_X8_B3: return PLCMethods::handle_WRITE_R_X8_B3(this->stack, program, prog_size, index);
-        case WRITE_R_X8_B4: return PLCMethods::handle_WRITE_R_X8_B4(this->stack, program, prog_size, index);
-        case WRITE_R_X8_B5: return PLCMethods::handle_WRITE_R_X8_B5(this->stack, program, prog_size, index);
-        case WRITE_R_X8_B6: return PLCMethods::handle_WRITE_R_X8_B6(this->stack, program, prog_size, index);
-        case WRITE_R_X8_B7: return PLCMethods::handle_WRITE_R_X8_B7(this->stack, program, prog_size, index);
-        case WRITE_INV_X8_B0: return PLCMethods::handle_WRITE_INV_X8_B0(this->stack, program, prog_size, index);
-        case WRITE_INV_X8_B1: return PLCMethods::handle_WRITE_INV_X8_B1(this->stack, program, prog_size, index);
-        case WRITE_INV_X8_B2: return PLCMethods::handle_WRITE_INV_X8_B2(this->stack, program, prog_size, index);
-        case WRITE_INV_X8_B3: return PLCMethods::handle_WRITE_INV_X8_B3(this->stack, program, prog_size, index);
-        case WRITE_INV_X8_B4: return PLCMethods::handle_WRITE_INV_X8_B4(this->stack, program, prog_size, index);
-        case WRITE_INV_X8_B5: return PLCMethods::handle_WRITE_INV_X8_B5(this->stack, program, prog_size, index);
-        case WRITE_INV_X8_B6: return PLCMethods::handle_WRITE_INV_X8_B6(this->stack, program, prog_size, index);
-        case WRITE_INV_X8_B7: return PLCMethods::handle_WRITE_INV_X8_B7(this->stack, program, prog_size, index);
+        case READ_X8_B0: return PLCMethods::handle_READ_X8_B0(this->stack, this->memory, program, prog_size, index);
+        case READ_X8_B1: return PLCMethods::handle_READ_X8_B1(this->stack, this->memory, program, prog_size, index);
+        case READ_X8_B2: return PLCMethods::handle_READ_X8_B2(this->stack, this->memory, program, prog_size, index);
+        case READ_X8_B3: return PLCMethods::handle_READ_X8_B3(this->stack, this->memory, program, prog_size, index);
+        case READ_X8_B4: return PLCMethods::handle_READ_X8_B4(this->stack, this->memory, program, prog_size, index);
+        case READ_X8_B5: return PLCMethods::handle_READ_X8_B5(this->stack, this->memory, program, prog_size, index);
+        case READ_X8_B6: return PLCMethods::handle_READ_X8_B6(this->stack, this->memory, program, prog_size, index);
+        case READ_X8_B7: return PLCMethods::handle_READ_X8_B7(this->stack, this->memory, program, prog_size, index);
+        case WRITE_X8_B0: return PLCMethods::handle_WRITE_X8_B0(this->stack, this->memory, program, prog_size, index);
+        case WRITE_X8_B1: return PLCMethods::handle_WRITE_X8_B1(this->stack, this->memory, program, prog_size, index);
+        case WRITE_X8_B2: return PLCMethods::handle_WRITE_X8_B2(this->stack, this->memory, program, prog_size, index);
+        case WRITE_X8_B3: return PLCMethods::handle_WRITE_X8_B3(this->stack, this->memory, program, prog_size, index);
+        case WRITE_X8_B4: return PLCMethods::handle_WRITE_X8_B4(this->stack, this->memory, program, prog_size, index);
+        case WRITE_X8_B5: return PLCMethods::handle_WRITE_X8_B5(this->stack, this->memory, program, prog_size, index);
+        case WRITE_X8_B6: return PLCMethods::handle_WRITE_X8_B6(this->stack, this->memory, program, prog_size, index);
+        case WRITE_X8_B7: return PLCMethods::handle_WRITE_X8_B7(this->stack, this->memory, program, prog_size, index);
+        case WRITE_S_X8_B0: return PLCMethods::handle_WRITE_S_X8_B0(this->stack, this->memory, program, prog_size, index);
+        case WRITE_S_X8_B1: return PLCMethods::handle_WRITE_S_X8_B1(this->stack, this->memory, program, prog_size, index);
+        case WRITE_S_X8_B2: return PLCMethods::handle_WRITE_S_X8_B2(this->stack, this->memory, program, prog_size, index);
+        case WRITE_S_X8_B3: return PLCMethods::handle_WRITE_S_X8_B3(this->stack, this->memory, program, prog_size, index);
+        case WRITE_S_X8_B4: return PLCMethods::handle_WRITE_S_X8_B4(this->stack, this->memory, program, prog_size, index);
+        case WRITE_S_X8_B5: return PLCMethods::handle_WRITE_S_X8_B5(this->stack, this->memory, program, prog_size, index);
+        case WRITE_S_X8_B6: return PLCMethods::handle_WRITE_S_X8_B6(this->stack, this->memory, program, prog_size, index);
+        case WRITE_S_X8_B7: return PLCMethods::handle_WRITE_S_X8_B7(this->stack, this->memory, program, prog_size, index);
+        case WRITE_R_X8_B0: return PLCMethods::handle_WRITE_R_X8_B0(this->stack, this->memory, program, prog_size, index);
+        case WRITE_R_X8_B1: return PLCMethods::handle_WRITE_R_X8_B1(this->stack, this->memory, program, prog_size, index);
+        case WRITE_R_X8_B2: return PLCMethods::handle_WRITE_R_X8_B2(this->stack, this->memory, program, prog_size, index);
+        case WRITE_R_X8_B3: return PLCMethods::handle_WRITE_R_X8_B3(this->stack, this->memory, program, prog_size, index);
+        case WRITE_R_X8_B4: return PLCMethods::handle_WRITE_R_X8_B4(this->stack, this->memory, program, prog_size, index);
+        case WRITE_R_X8_B5: return PLCMethods::handle_WRITE_R_X8_B5(this->stack, this->memory, program, prog_size, index);
+        case WRITE_R_X8_B6: return PLCMethods::handle_WRITE_R_X8_B6(this->stack, this->memory, program, prog_size, index);
+        case WRITE_R_X8_B7: return PLCMethods::handle_WRITE_R_X8_B7(this->stack, this->memory, program, prog_size, index);
+        case WRITE_INV_X8_B0: return PLCMethods::handle_WRITE_INV_X8_B0(this->stack, this->memory, program, prog_size, index);
+        case WRITE_INV_X8_B1: return PLCMethods::handle_WRITE_INV_X8_B1(this->stack, this->memory, program, prog_size, index);
+        case WRITE_INV_X8_B2: return PLCMethods::handle_WRITE_INV_X8_B2(this->stack, this->memory, program, prog_size, index);
+        case WRITE_INV_X8_B3: return PLCMethods::handle_WRITE_INV_X8_B3(this->stack, this->memory, program, prog_size, index);
+        case WRITE_INV_X8_B4: return PLCMethods::handle_WRITE_INV_X8_B4(this->stack, this->memory, program, prog_size, index);
+        case WRITE_INV_X8_B5: return PLCMethods::handle_WRITE_INV_X8_B5(this->stack, this->memory, program, prog_size, index);
+        case WRITE_INV_X8_B6: return PLCMethods::handle_WRITE_INV_X8_B6(this->stack, this->memory, program, prog_size, index);
+        case WRITE_INV_X8_B7: return PLCMethods::handle_WRITE_INV_X8_B7(this->stack, this->memory, program, prog_size, index);
 
         case BW_AND_X8: return PLCMethods::handle_BW_AND_X8(this->stack);
         case BW_AND_X16: return PLCMethods::handle_BW_AND_X16(this->stack);

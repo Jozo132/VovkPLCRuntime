@@ -29,9 +29,6 @@ RuntimeStack::RuntimeStack() {
 void RuntimeStack::format() {
     stack.format();
     call_stack.format();
-    if (memory != nullptr) {
-        for (u32 i = 0; i < PLCRUNTIME_MAX_MEMORY_SIZE; i++) memory[i] = 0;
-    }
 }
 int RuntimeStack::print() { return stack.print(); }
 void RuntimeStack::println() { stack.println(); }
@@ -235,12 +232,11 @@ void RuntimeStack::clear() { while (!stack.empty()) stack.pop(); while (!call_st
 
 
 
-template <typename T> RuntimeError RuntimeStack::load_from_memory_to_stack() {
+template <typename T> RuntimeError RuntimeStack::load_from_memory_to_stack(u8* memory) {
     if (stack.size() < sizeof(MY_PTR_t)) return  RuntimeError::STACK_UNDERFLOW;
     MY_PTR_t address = pop_pointer();
     if (address + sizeof(T) > PLCRUNTIME_MAX_MEMORY_SIZE) return  RuntimeError::INVALID_MEMORY_ADDRESS;
     T value = 0;
-    // bool error = memory->readArea(address, reinterpret_cast<u8*>(&value), sizeof(T));
     bool error = readArea_u8(memory, address, reinterpret_cast<u8*>(&value), sizeof(T));
     if (error) return RuntimeError::INVALID_MEMORY_ADDRESS;
     error = push_custom(value);
@@ -248,54 +244,53 @@ template <typename T> RuntimeError RuntimeStack::load_from_memory_to_stack() {
     return  RuntimeError::STATUS_SUCCESS;
 }
 
-template <typename T> RuntimeError RuntimeStack::store_from_stack_to_memory(bool copy) {
+template <typename T> RuntimeError RuntimeStack::store_from_stack_to_memory(u8* memory, bool copy) {
     if (stack.size() < (sizeof(T) + sizeof(MY_PTR_t))) return  RuntimeError::STACK_UNDERFLOW;
     T value = pop_custom<T>();
     MY_PTR_t address = pop_pointer();
     if ((address + sizeof(T)) > PLCRUNTIME_MAX_MEMORY_SIZE) return  RuntimeError::INVALID_MEMORY_ADDRESS;
-    // bool error = memory->writeArea(address, reinterpret_cast<u8*>(&value), sizeof(T));
     bool error = writeArea_u8(memory, address, reinterpret_cast<u8*>(&value), sizeof(T));
     if (error) return  RuntimeError::INVALID_MEMORY_ADDRESS;
     if (copy) error = push_custom(value);
     return error ? RuntimeError::STACK_OVERFLOW : RuntimeError::STATUS_SUCCESS;
 }
 
-RuntimeError RuntimeStack::load_from_memory_to_stack(u8 data_type) {
+RuntimeError RuntimeStack::load_from_memory_to_stack(u8* memory, u8 data_type) {
     switch (data_type) {
-        case type_pointer: return load_from_memory_to_stack<MY_PTR_t>();
+        case type_pointer: return load_from_memory_to_stack<MY_PTR_t>(memory);
         case type_bool:
         case type_u8:
-        case type_i8: return load_from_memory_to_stack<u8>();
+        case type_i8: return load_from_memory_to_stack<u8>(memory);
         case type_u16:
-        case type_i16: return load_from_memory_to_stack<u16>();
+        case type_i16: return load_from_memory_to_stack<u16>(memory);
         case type_u32:
         case type_i32:
-        case type_f32: return load_from_memory_to_stack<u32>();
+        case type_f32: return load_from_memory_to_stack<u32>(memory);
 #ifdef USE_X64_OPS
         case type_u64:
         case type_i64:
-        case type_f64: return load_from_memory_to_stack<u64>();
+        case type_f64: return load_from_memory_to_stack<u64>(memory);
 #endif // USE_X64_OPS
         default: return  RuntimeError::INVALID_DATA_TYPE;
     }
     return RuntimeError::INVALID_DATA_TYPE;
 }
 
-RuntimeError RuntimeStack::store_from_stack_to_memory(u8 data_type, bool copy) {
+RuntimeError RuntimeStack::store_from_stack_to_memory(u8* memory, u8 data_type, bool copy) {
     switch (data_type) {
-        case type_pointer: return store_from_stack_to_memory<MY_PTR_t>(copy);
+        case type_pointer: return store_from_stack_to_memory<MY_PTR_t>(memory, copy);
         case type_bool:
         case type_u8:
-        case type_i8: return store_from_stack_to_memory<u8>(copy);
+        case type_i8: return store_from_stack_to_memory<u8>(memory, copy);
         case type_u16:
-        case type_i16: return store_from_stack_to_memory<u16>(copy);
+        case type_i16: return store_from_stack_to_memory<u16>(memory, copy);
         case type_u32:
         case type_i32:
-        case type_f32: return store_from_stack_to_memory<u32>(copy);
+        case type_f32: return store_from_stack_to_memory<u32>(memory, copy);
 #ifdef USE_X64_OPS
         case type_u64:
         case type_i64:
-        case type_f64: return store_from_stack_to_memory<u64>(copy);
+        case type_f64: return store_from_stack_to_memory<u64>(memory, copy);
 #endif // USE_X64_OPS
         default: return RuntimeError::INVALID_DATA_TYPE;
     }

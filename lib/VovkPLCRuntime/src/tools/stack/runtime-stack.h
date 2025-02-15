@@ -29,7 +29,6 @@ class RuntimeStack {
 public:
     Stack<u8> stack = Stack<u8>();
     Stack<u16> call_stack = Stack<u16>();
-    u8* memory = nullptr;
 
     // Create a stack with a maximum size
     RuntimeStack();
@@ -129,10 +128,10 @@ public:
     f64 peek_f64();
 #endif // USE_X64_OPS
 
-    RuntimeError load_from_memory_to_stack(u8 data_type);
-    RuntimeError store_from_stack_to_memory(u8 data_type, bool copy = false);
-    template <typename T> RuntimeError load_from_memory_to_stack();
-    template <typename T> RuntimeError store_from_stack_to_memory(bool copy = false);
+    RuntimeError load_from_memory_to_stack(u8* memory, u8 data_type);
+    RuntimeError store_from_stack_to_memory(u8* memory, u8 data_type, bool copy = false);
+    template <typename T> RuntimeError load_from_memory_to_stack(u8* memory);
+    template <typename T> RuntimeError store_from_stack_to_memory(u8* memory, bool copy = false);
 
     u32 size();
     void clear();

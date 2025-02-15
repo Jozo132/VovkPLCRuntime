@@ -356,35 +356,35 @@ namespace PLCMethods {
 
 
     // Pop the pointer from the stack and push the value from the memory to the stack
-    RuntimeError LOAD(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
+    RuntimeError LOAD(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
         u32 size = 1;
         if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         u8 data_type = 0;
         extract_status = ProgramExtract.type_u8(program, prog_size, index, &data_type);
         if (extract_status != STATUS_SUCCESS) return extract_status;
-        RuntimeError status = stack.load_from_memory_to_stack(data_type);
+        RuntimeError status = stack.load_from_memory_to_stack(memory, data_type);
         return status;
     }
 
     // (1.) Pop the value from the stack, (2.) pop the pointer from the stack, (3.) put the value to the memory
-    RuntimeError MOVE(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
+    RuntimeError MOVE(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
         u32 size = 1;
         if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         u8 data_type = 0;
         extract_status = ProgramExtract.type_u8(program, prog_size, index, &data_type);
         if (extract_status != STATUS_SUCCESS) return extract_status;
-        RuntimeError status = stack.store_from_stack_to_memory(data_type);
+        RuntimeError status = stack.store_from_stack_to_memory(memory, data_type);
         return status;
     }
 
     // (1.) Pop the value from the stack, (2.) pop the pointer from the stack, (3.) put the value to the memory, (4.) push the value back to the stack
-    RuntimeError MOVE_COPY(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
+    RuntimeError MOVE_COPY(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
         u32 size = 1;
         if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
         u8 data_type = 0;
         extract_status = ProgramExtract.type_u8(program, prog_size, index, &data_type);
         if (extract_status != STATUS_SUCCESS) return extract_status;
-        RuntimeError status = stack.store_from_stack_to_memory(data_type, true);
+        RuntimeError status = stack.store_from_stack_to_memory(memory, data_type, true);
         return status;
     }
 
