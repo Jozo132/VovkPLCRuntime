@@ -213,9 +213,11 @@ void loop() {
             long t = micros();
             for (int i = 0; i < cycles; i++) {
                 bool input = digitalRead(10);
-                runtime.setInputBit(0.0, input);
+                // runtime.setInputBit(0.0, input);
+                runtime.setInputBit(0, 0, input);
                 runtime.cleanRun();
-                bool output = runtime.getOutputBit(0.0);
+                // bool output = runtime.getOutputBit(0.0);
+                bool output = runtime.getOutputBit(0, 0);
                 digitalWrite(11, output);
                 result = runtime.read<float>();
             }
