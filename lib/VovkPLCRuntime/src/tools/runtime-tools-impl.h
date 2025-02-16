@@ -50,13 +50,25 @@ double ln(double x) {
 double log10(double x) { return ln(x) / LN10; }
 #endif // __SIMULATOR__
 
-
+#ifdef ARDUINO_ARCH_RP2040
+#include <malloc.h>
+uint32_t getTotalHeap(void) {
+    extern char __StackLimit, __bss_end__;
+    return &__StackLimit - &__bss_end__;
+}
+uint32_t getFreeHeap(void) {
+    struct mallinfo m = mallinfo();
+    return getTotalHeap() - m.uordblks;
+}
+#endif // ARDUINO_ARCH_RP2040
 
 int freeMemory() {
 #ifdef __WASM__
     return heap_size - heap_used;
 #elif defined(ESP8266) || defined(ESP32)
     return ESP.getFreeHeap();
+#elif defined(ARDUINO_ARCH_RP2040)
+    return getFreeHeap();
 #elif defined(__SIMULATOR__)
     return 9000;
 #else
