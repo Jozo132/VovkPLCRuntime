@@ -203,7 +203,7 @@ void loop() {
 
                 Serial.print(F("Result: ")); Serial.println(output);
                 Serial.print(F("Expected result: ")); Serial.println(expected);
-                Serial.print(F("Test passed: ")); Serial.println(expected == output ? F("YES") : F("NO - TEST DID NOT PASS !!!"));
+                Serial.print(F("Test passed: ")); Serial.println(expected == output ? F("YES") : F("DID NOT PASS !!!"));
                 Serial.println();
                 startup = false;
             }
