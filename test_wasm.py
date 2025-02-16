@@ -4,7 +4,7 @@ import platform
 
 is_windows = platform.system() == "Windows"
 
-BUILD_PATH = "./test/VovkPLCRuntimeWasmTestKit/"
+BUILD_PATH = "./wasm/"
 BUILD_FILE = "test.bat" if is_windows else "test.sh"
 TARGET_RELATIVE = BUILD_PATH + BUILD_FILE
 TARGET = abspath(TARGET_RELATIVE)

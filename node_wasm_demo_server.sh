@@ -1,2 +1,2 @@
-cd test/VovkPLCRuntimeWasmTestKit/web-server-test
+cd wasm/web-server-test
 node server.js

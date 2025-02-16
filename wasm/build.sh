@@ -21,11 +21,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 set -e
 
-# Set variable 'target' relative path to './test/VovkPLCRuntimeWasmTestKit'
+# Set variable 'target' relative path to './wasm'
 
-echo "Starting WASM tests..."
+echo "Compiling..."
 # try to cd, if failed do nothing
-cd test/VovkPLCRuntimeWasmTestKit/wasm_test_cases 2>/dev/null || true 
-cd wasm_test_cases 2>/dev/null || true
-node compile_tests.js
+cd wasm 2>/dev/null || true 
+mkdir -p build
+clang++ --target=wasm32-undefined-undefined-wasm -Wall -std=c++11 -nostdlib -O3 -D __WASM__ -c simulator.cpp -o build/simulator.o
+echo "Building..."
+wasm-ld --no-entry --export-dynamic --allow-undefined --lto-O3 build/simulator.o -o simulator.wasm
 echo "Done."
