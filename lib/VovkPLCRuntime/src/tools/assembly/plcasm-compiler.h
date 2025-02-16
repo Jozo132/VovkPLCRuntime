@@ -1004,7 +1004,7 @@ bool realFromToken(Token& token, float& output) {
     return true;
 }
 
-// Parse "2.7" into address and bit, where we separate the two with a dot. The bits range from 0 to 63 for the longest 64 bit types
+// Parse "2.7" into address and bit, where we separate the two with a dot. The bits range from 0 to 7
 bool memoryBitFromToken(Token& token, int& address, int& bit) {
     if (token.type == TOKEN_INTEGER) { // Expect token "2" to be address 2 at the index 0 by default 
         address = token.value_int;
@@ -1121,6 +1121,33 @@ bool build(bool finalPass) {
 
             { // Stack operations
                 if (token == "clear") { line.size = InstructionCompiler::push(bytecode, CLEAR); _line_push; }
+            }
+
+            { // Mapped instructions
+                if (token.equals("P_On")) { line.size = InstructionCompiler::push_u8(bytecode, 1); _line_push; } // P_On: "u8.const 1",
+                if (token.equals("P_Off")) { line.size = InstructionCompiler::push_u8(bytecode, 0); _line_push; } // P_Off: "u8.const 0",
+                if (token.equals("P_100ms")) { line.size = InstructionCompiler::push_InstructionWithU32(bytecode, READ_X8_B0, 1); _line_push; } // P_100ms: "u8.readBit 1.0",
+                if (token.equals("P_200ms")) { line.size = InstructionCompiler::push_InstructionWithU32(bytecode, READ_X8_B1, 1); _line_push; } // P_200ms: "u8.readBit 1.1",
+                if (token.equals("P_300ms")) { line.size = InstructionCompiler::push_InstructionWithU32(bytecode, READ_X8_B2, 1); _line_push; } // P_300ms: "u8.readBit 1.2",
+                if (token.equals("P_500ms")) { line.size = InstructionCompiler::push_InstructionWithU32(bytecode, READ_X8_B3, 1); _line_push; } // P_500ms: "u8.readBit 1.3",
+                if (token.equals("P_1s")) { line.size = InstructionCompiler::push_InstructionWithU32(bytecode, READ_X8_B4, 1); _line_push; } // P_1s: "u8.readBit 1.4",
+                if (token.equals("P_2s")) { line.size = InstructionCompiler::push_InstructionWithU32(bytecode, READ_X8_B5, 1); _line_push; } // P_2s: "u8.readBit 1.5",
+                if (token.equals("P_5s")) { line.size = InstructionCompiler::push_InstructionWithU32(bytecode, READ_X8_B6, 1); _line_push; } // P_5s: "u8.readBit 1.6",
+                if (token.equals("P_10s")) { line.size = InstructionCompiler::push_InstructionWithU32(bytecode, READ_X8_B7, 1); _line_push; } // P_10s: "u8.readBit 1.7",
+                if (token.equals("P_30s")) { line.size = InstructionCompiler::push_InstructionWithU32(bytecode, READ_X8_B0, 2); _line_push; } // P_30s: "u8.readBit 2.0",
+                if (token.equals("P_1min")) { line.size = InstructionCompiler::push_InstructionWithU32(bytecode, READ_X8_B1, 2); _line_push; } // P_1min: "u8.readBit 2.1",
+                if (token.equals("P_2min")) { line.size = InstructionCompiler::push_InstructionWithU32(bytecode, READ_X8_B2, 2); _line_push; } // P_2min: "u8.readBit 2.2",
+                if (token.equals("P_5min")) { line.size = InstructionCompiler::push_InstructionWithU32(bytecode, READ_X8_B3, 2); _line_push; } // P_5min: "u8.readBit 2.3",
+                if (token.equals("P_10min")) { line.size = InstructionCompiler::push_InstructionWithU32(bytecode, READ_X8_B4, 2); _line_push; } // P_10min: "u8.readBit 2.4",
+                if (token.equals("P_30min")) { line.size = InstructionCompiler::push_InstructionWithU32(bytecode, READ_X8_B5, 2); _line_push; } // P_30min: "u8.readBit 2.5",
+                if (token.equals("P_1hr")) { line.size = InstructionCompiler::push_InstructionWithU32(bytecode, READ_X8_B6, 2); _line_push; } // P_1hr: "u8.readBit 2.6",
+                if (token.equals("P_2hr")) { line.size = InstructionCompiler::push_InstructionWithU32(bytecode, READ_X8_B7, 2); _line_push; } // P_2hr: "u8.readBit 2.7",
+                if (token.equals("P_3hr")) { line.size = InstructionCompiler::push_InstructionWithU32(bytecode, READ_X8_B0, 3); _line_push; } // P_3hr: "u8.readBit 3.0",
+                if (token.equals("P_4hr")) { line.size = InstructionCompiler::push_InstructionWithU32(bytecode, READ_X8_B1, 3); _line_push; } // P_4hr: "u8.readBit 3.1",
+                if (token.equals("P_5hr")) { line.size = InstructionCompiler::push_InstructionWithU32(bytecode, READ_X8_B2, 3); _line_push; } // P_5hr: "u8.readBit 3.2",
+                if (token.equals("P_6hr")) { line.size = InstructionCompiler::push_InstructionWithU32(bytecode, READ_X8_B3, 3); _line_push; } // P_6hr: "u8.readBit 3.3",
+                if (token.equals("P_12hr")) { line.size = InstructionCompiler::push_InstructionWithU32(bytecode, READ_X8_B4, 3); _line_push; } // P_12hr: "u8.readBit 3.4",
+                if (token.equals("P_1day")) { line.size = InstructionCompiler::push_InstructionWithU32(bytecode, READ_X8_B5, 3); _line_push; } // P_1day: "u8.readBit 3.5",
             }
 
             { // Handle Bit operations (PLC specific)
