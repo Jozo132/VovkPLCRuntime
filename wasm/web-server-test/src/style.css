@@ -18,3 +18,27 @@ div.col {
     margin-left: 5px;
     margin-right: 5px;
 }
+
+
+
+div.button {
+    background-color: #0078d4;
+    color: #fff;
+    width: 120px;
+    padding: 10px;
+    margin: 5px;
+    border: none;
+    border-radius: 5px;
+    text-align: center;
+    content: "center";
+    cursor: pointer;
+    /* text select disable */
+    user-select: none;
+}
+
+
+div.controls {
+    display: flex;
+    flex-direction: row;
+    margin: 10px;
+}
