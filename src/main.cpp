@@ -29,7 +29,6 @@
 #include <VovkPLCRuntime.h>
 VovkPLCRuntime runtime = VovkPLCRuntime(); // Stack size, memory size, program size
 
-u8 temp_memory[32];
 
 
 #ifdef __RUNTIME_PRODUCTION__
@@ -52,7 +51,7 @@ void load_plc_blinky() {
     const u16 size = sizeof(program);
     Serial.println(F("Loading program..."));
     Serial.flush();
-    runtime.program.loadUnsafe(program, size);
+    runtime.loadProgramUnsafe(program, size);
 }
 
 void setup() {
@@ -68,7 +67,7 @@ void setup() {
         delay(100);
     }
 
-    runtime.startup();
+    runtime.initialize();
 
     if (production) {
         load_plc_blinky();
@@ -100,7 +99,7 @@ void loop() {
 
         runtime.listen(); // Listen for remote commands
         runtime.setInputBit(0, 0, input);
-        runtime.cleanRun();
+        runtime.run();
         bool output = runtime.getOutputBit(0, 0);
         digitalWrite(LED_BUILTIN, !output);
 
@@ -124,6 +123,7 @@ void loop() {
             // Serial.printf("Free mem: %6d bytes  CPS: %6d", mem, cps); // AVR doesn't support printf
             Serial.print(F("Free mem: ")); Serial.print(mem); Serial.print(F(" bytes  Cycle time: ")); Serial.print(duration_ms, 2); Serial.print(F(" ms"));
 
+            u8 temp_memory[32];
             runtime.readMemory(0, temp_memory, 32);
             Serial.print(F("  Memory: "));
             for (int i = 0; i < 32; i++) {
@@ -186,8 +186,8 @@ void loop() {
                   static const u8 bytecode [] = { 0x0A,0x41,0x20,0x00,0x00,0x0A,0x3F,0x80,0x00,0x00,0x0A,0x3F,0x80,0x00,0x00,0x0A,0x40,0x00,0x00,0x00,0x0A,0x40,0x40,0x00,0x00,0x0A,0x40,0x40,0x00,0x00,0x0A,0x40,0x80,0x00,0x00,0x0A,0x40,0x80,0x00,0x00,0x0A,0x40,0xA0,0x00,0x00,0x0A,0x40,0xA0,0x00,0x00,0x0A,0x40,0xC0,0x00,0x00,0x21,0x0A,0x22,0x0A,0x21,0x0A,0x22,0x0A,0x20,0x0A,0x22,0x0A,0x20,0x0A,0x0A,0x40,0x80,0x00,0x00,0x23,0x0A,0x22,0x0A,0x21,0x0A,0x22,0x0A };
                   static const u16 size = 82;
                   static const u32 checksum = 2677;
-                  program.load(bytecode, size, checksum);
-                  // program.loadUnsafe(bytecode, size);
+                  runtime.loadProgram(bytecode, size, checksum);
+                  // runtime.loadProgramUnsafe(bytecode, size);
                 */
 
 #ifdef __RUNTIME_DEBUG__
@@ -196,7 +196,7 @@ void loop() {
                 Serial.print(F("Runtime status: ")); Serial.println(status_name);
 #else
                 Serial.print(F("Loaded bytecode: ")); runtime.program.println();
-                runtime.cleanRun();
+                runtime.run();
 #endif
                 float output = runtime.read<float>();
 
@@ -215,7 +215,7 @@ void loop() {
                 bool input = digitalRead(10);
                 // runtime.setInputBit(0.0, input);
                 runtime.setInputBit(0, 0, input);
-                runtime.cleanRun();
+                runtime.run();
                 // bool output = runtime.getOutputBit(0.0);
                 bool output = runtime.getOutputBit(0, 0);
                 digitalWrite(11, output);

@@ -88,6 +88,30 @@ double log10(double x);
 #include "runtime-types.h"
 
 
+/* ##################### DEVICE NAME ###################### */
+#ifndef device_name
+#ifdef __WASM__
+const char* device_name = "WASM Emulator";
+#elif defined(ESP8266)
+const char* device_name = "ESP8266";
+#elif defined(ESP32)
+const char* device_name = "ESP32";
+#elif defined(ARDUINO_ARCH_RP2040)
+const char* device_name = "Raspberry Pi Pico";
+#elif defined(STM32F1)
+const char* device_name = "STM32F1";
+#elif defined(STM32F4)
+const char* device_name = "STM32F4";
+#elif defined(__SIMULATOR__)
+const char* device_name = "Simulator";
+#else
+const char* device_name = "Unknown";
+#endif
+#endif // device_name
+
+
+
+
 #ifdef __arm__
 // should use uinstd.h to define sbrk but Due causes a conflict
 extern "C" char* sbrk(int incr);

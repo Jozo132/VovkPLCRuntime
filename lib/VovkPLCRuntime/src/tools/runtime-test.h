@@ -239,7 +239,7 @@ bool runtime_test_called = false;
 void runtime_unit_test(VovkPLCRuntime& runtime);
 class UnitTest {
 public:
-    static RuntimeError fullProgramDebug(VovkPLCRuntime& runtime, RuntimeProgram& program);
+    static RuntimeError fullProgramDebug(VovkPLCRuntime& runtime);
 };
 
 #endif // __RUNTIME_UNIT_TEST__

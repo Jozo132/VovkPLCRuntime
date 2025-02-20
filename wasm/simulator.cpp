@@ -35,7 +35,6 @@
 bool startup = true;
 
 void custom_test() {
-    initRuntime();
     // Blink the LED to indicate that the tests are done
     digitalWrite(LED_BUILTIN, LOW);
     delay(2);
@@ -44,7 +43,7 @@ void custom_test() {
 
     // Custom program test
     if (startup) {
-        runtime.startup();
+        runtime.initialize();
         Serial.println(F("Custom program test"));
         Serial.println(F("Variables  = { a: 1, b: 2, c: 3, d: 4, e: 5, f: 6 }"));
         Serial.println(F("Function   = 10 * (1 - 'a' * ('b' + 'c' * ('c' + 'd' * ('d'-'e' *('e'-'f')))) / 'd')"));
@@ -87,8 +86,8 @@ void custom_test() {
           static const u8 bytecode [] = { 0x0A,0x41,0x20,0x00,0x00,0x0A,0x3F,0x80,0x00,0x00,0x0A,0x3F,0x80,0x00,0x00,0x0A,0x40,0x00,0x00,0x00,0x0A,0x40,0x40,0x00,0x00,0x0A,0x40,0x40,0x00,0x00,0x0A,0x40,0x80,0x00,0x00,0x0A,0x40,0x80,0x00,0x00,0x0A,0x40,0xA0,0x00,0x00,0x0A,0x40,0xA0,0x00,0x00,0x0A,0x40,0xC0,0x00,0x00,0x21,0x0A,0x22,0x0A,0x21,0x0A,0x22,0x0A,0x20,0x0A,0x22,0x0A,0x20,0x0A,0x0A,0x40,0x80,0x00,0x00,0x23,0x0A,0x22,0x0A,0x21,0x0A,0x22,0x0A };
           static const u16 size = 82;
           static const u32 checksum = 2677;
-          program.load(bytecode, size, checksum);
-          // program.loadUnsafe(bytecode, size);
+          runtime.loadProgram(bytecode, size, checksum);
+          // runtime.loadProgramUnsafe(bytecode, size);
         */
 
         RuntimeError status = UnitTest::fullProgramDebug(runtime);
@@ -109,7 +108,7 @@ void custom_test() {
     float result = -1;
     long t = micros();
     for (int i = 0; i < cycles; i++) {
-        runtime.cleanRun();
+        runtime.run();
         result = runtime.read<float>();
     }
     t = micros() - t;
@@ -118,13 +117,15 @@ void custom_test() {
     Serial.print(F("Program executed for ")); Serial.print(cycles); Serial.print(F(" cycles in ")); Serial.print(ms, 3); Serial.print(F(" ms. Result: ")); Serial.print(result); Serial.print(F("  Free memory: ")); Serial.print(mem); Serial.println(F(" bytes."));
 }
 
-WASM_EXPORT int cleanRun() {
-    initRuntime();
-    return runtime.cleanRun();
+WASM_EXPORT int run() {
+    return runtime.run();
+}
+
+WASM_EXPORT int runDirty() {
+    return runtime.runDirty();
 }
 
 WASM_EXPORT void run_unit_test() {
-    initRuntime();
     runtime_unit_test(runtime);
 }
 
@@ -137,14 +138,12 @@ WASM_EXPORT void doNothing() {
 }
 
 WASM_EXPORT void doSomething() {
-    initRuntime();
     runtime_unit_test(runtime);
     custom_test();
 }
 
 
 WASM_EXPORT u32 getMemoryLocation() {
-    initRuntime();
     return (u32) runtime.memory;
 }
 

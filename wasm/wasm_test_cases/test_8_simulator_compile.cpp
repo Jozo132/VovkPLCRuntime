@@ -4,7 +4,7 @@
 
 #include "common.h"
 
-#include "../../../lib/VovkPLCRuntime/src/VovkPLCRuntime.h"
+#include "../../lib/VovkPLCRuntime/src/VovkPLCRuntime.h"
 
 void custom_test();
 
@@ -103,6 +103,5 @@ FunctionTest:
 
 void custom_test() {
     set_assembly_string((char*) testAssembly);
-    if (compileTest()) return;
-    verifyCode();
+    if (compileAssembly()) return;
 }

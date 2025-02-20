@@ -1408,37 +1408,26 @@ WASM_EXPORT bool compileAssembly(bool debug = true) {
     return false;
 }
 
-VovkPLCRuntime* global_runtime = nullptr;
-#define runtime (*global_runtime)
-void initRuntime() {
-    if (global_runtime == nullptr) {
-        global_runtime = new VovkPLCRuntime();
-        global_runtime->startup();
-    }
-}
+VovkPLCRuntime runtime;
 
 WASM_EXPORT void printProperties() {
-    initRuntime();
     runtime.printProperties();
 }
 
 WASM_EXPORT bool loadCompiledProgram() {
-    initRuntime();
     Serial.printf("Loading program with %d bytes and checksum 0x%02X ...\n", built_bytecode_length, built_bytecode_checksum);
     runtime.loadProgram(built_bytecode, built_bytecode_length, built_bytecode_checksum);
     return false;
 }
 
 WASM_EXPORT void runFullProgramDebug() {
-    initRuntime();
     RuntimeError status = UnitTest::fullProgramDebug(runtime);
     const char* status_name = RUNTIME_ERROR_NAME(status);
     Serial.print(F("Runtime status: ")); Serial.println(status_name);
 }
 
 WASM_EXPORT void runFullProgram() {
-    initRuntime();
-    RuntimeError status = runtime.cleanRun();
+    RuntimeError status = runtime.run();
     const char* status_name = RUNTIME_ERROR_NAME(status);
     Serial.print(F("Runtime status: ")); Serial.println(status_name);
 }
@@ -1455,7 +1444,6 @@ WASM_EXPORT u32 uploadProgram() {
 }
 
 WASM_EXPORT u32 getMemoryArea(u32 address, u32 size) {
-    initRuntime();
     u32 end = address + size;
     if (end > PLCRUNTIME_MAX_STACK_SIZE) end = PLCRUNTIME_MAX_STACK_SIZE;
     u8 byte = 0;
@@ -1474,7 +1462,6 @@ WASM_EXPORT u32 getMemoryArea(u32 address, u32 size) {
 }
 
 WASM_EXPORT u32 writeMemoryByte(u32 address, u8 byte) {
-    initRuntime();
     // bool error = runtime.memory->set(address, byte);
     bool error = set_u8(runtime.memory, address, byte);
     if (error) return 0;
@@ -1488,7 +1475,7 @@ WASM_EXPORT void external_print(const char* string) {
 #else
 
 void set_assembly_string(char* new_assembly_string) {}
-bool compileTest() { return false; }
+bool compileAssembly() { return false; }
 void runFullProgramDebug() {}
 u32 uploadProgram() { return 0; }
 u32 getMemoryArea(u32 address, u32 size) { return 0; }

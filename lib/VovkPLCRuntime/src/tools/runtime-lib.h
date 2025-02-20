@@ -86,7 +86,7 @@ public:
         Serial.flush();
     }
 
-    void startup() {
+    void initialize() {
         if (started_up) return;
         started_up = true;
         splash();
@@ -98,7 +98,7 @@ public:
 
 
     void printProperties() {
-        if (!started_up) startup();
+        if (!started_up) initialize();
 #ifdef __WASM__
         Serial.printf("Inputs [%d] at offset %d\n", PLCRUNTIME_NUM_OF_INPUTS, input_offset);
         Serial.printf("Outputs [%d] at offset %d\n", PLCRUNTIME_NUM_OF_OUTPUTS, output_offset);
@@ -114,13 +114,13 @@ public:
 
     VovkPLCRuntime() {}
 
-    void loadProgramUnsafe(u8* program, u32 prog_size) {
-        if (!started_up) startup();
+    void loadProgramUnsafe(const u8* program, u32 prog_size) {
+        if (!started_up) initialize();
         this->program.loadUnsafe(program, prog_size);
     }
 
-    void loadProgram(u8* program, u32 prog_size, u8 checksum) {
-        if (!started_up) startup();
+    void loadProgram(const u8* program, u32 prog_size, u8 checksum) {
+        if (!started_up) initialize();
         this->program.load(program, prog_size, checksum);
     }
 
@@ -141,25 +141,19 @@ public:
         return step(program.program, program.prog_size, index);
     }
     // Execute the whole PLC program, returns an error code (0 on success)
-    RuntimeError run() {
-        if (!started_up) startup();
+    RuntimeError runDirty() {
+        if (!started_up) initialize();
         return run(program.program, program.prog_size);
     }
     // Run the whole PLC program from the beginning, returns an error code (0 on success)
-    RuntimeError cleanRun(RuntimeProgram& program) {
-        if (!started_up) startup();
-        clear(program);
-        return run(program);
-    }
-    // Run the whole PLC program from the beginning, returns an error code (0 on success)
-    RuntimeError cleanRun() {
-        if (!started_up) startup();
+    RuntimeError run() {
+        if (!started_up) initialize();
         clear();
         return run(program.program, program.prog_size);
     }
     // Read a custom type T value from the stack. This will pop the stack by sizeof(T) bytes and return the value.
     template <typename T> T read() {
-        if (!started_up) startup();
+        if (!started_up) initialize();
         if (stack.size() < (u32) sizeof(T)) return 0;
         u8 temp[sizeof(T)];
         for (u32 i = 0; i < (u32) sizeof(T); i++)
@@ -585,7 +579,7 @@ RuntimeError VovkPLCRuntime::run(RuntimeProgram& program) { return run(program.p
 
 // Execute the whole PLC program, returns an erro code (0 on success)
 RuntimeError VovkPLCRuntime::run(u8* program, u32 prog_size) {
-    if (!started_up) startup();
+    if (!started_up) initialize();
     IntervalGlobalLoopCheck();
     u8 state = 0;
     state = state << 1 | P_10s;

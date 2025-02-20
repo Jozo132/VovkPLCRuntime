@@ -15,7 +15,8 @@
  *     writeMemoryByte: (address: number, byte: number) => number
  *     get_free_memory: () => number
  *     doNothing: () => void
- *     cleanRun: () => number
+ *     run: () => number
+ *     runDirty: () => number
  *     run_unit_test: () => void
  *     run_custom_test: () => void
  *     downloadAssembly: (assembly: string) => boolean

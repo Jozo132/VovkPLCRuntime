@@ -7,7 +7,8 @@ const wasm = await PLCRuntimeWasm.initialize("/simulator.wasm")
 const PLC = wasm.getExports()
 
 const {
-    cleanRun,
+    run,
+    runDirty,
     run_unit_test,
     run_custom_test,
     get_free_memory,
@@ -30,11 +31,9 @@ const unit_test = () => {
     }
 }
 
-const run = () => {
+const run_cycle = () => {
     try {
-        console.log("Running custom code...")
-        run_custom_test()
-        console.log("Done.")
+        run()
     } catch (error) {
         console.error(error)
     }
@@ -88,7 +87,7 @@ if (!output_element) throw new Error("output_element not found")
 
 unit_test_element.addEventListener("click", unit_test)
 compile_test_element.addEventListener("click", do_compile_test)
-run_cycle_element.addEventListener("click", cleanRun)
+run_cycle_element.addEventListener("click", run_cycle)
 do_nothing_element.addEventListener("click", do_nothing_job)
 leak_check_element.addEventListener("click", checkForMemoryLeak)
 
@@ -114,18 +113,9 @@ let hmi_data_state = {}
 const update_hmi = () => {
     // const state = readBit(10.0)
     // hmi_element.innerHTML = state ? "ON" : "OFF"
-    cleanRun()
-    const memory = [...PLCRuntimeWasm.readMemoryArea(0, 20)].map(x => x.toString(16).padStart(2, '0')).join(' ').toUpperCase()
-    const addresses = memory.split(' ').map((_, i) => i.toString().padStart(2, '0')).join(' ').toUpperCase()
-    if (hmi_data_state.memory === memory && hmi_data_state.addresses === addresses) return
-    hmi_data_state = { memory, addresses }
-    hmi_element.innerHTML = `
-        <span style="font-family: monospace; font-size: 1.4em;">
-            <span style="color: #888">${addresses}</span>
-        <br>
-            ${memory}
-        </span>
-    `
+    run_cycle()
+    const memory = [...PLCRuntimeWasm.readMemoryArea(0, 40)].map(x => x.toString(16).padStart(2, '0'))
+    const addresses = memory.map((_, i) => i.toString().padStart(2, '0'))
 }
 
 

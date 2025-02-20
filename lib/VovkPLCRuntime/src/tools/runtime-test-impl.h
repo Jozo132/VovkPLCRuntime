@@ -107,7 +107,7 @@ template <typename T> void UnitTest::review(VovkPLCRuntime& runtime, const TestC
     offset += Serial.print(test.name);
     offset += Serial.print('"');
     u32 t = micros();
-    runtime.cleanRun();
+    runtime.run();
     T output = runtime.read<T>();
     t = micros() - t;
     f32 ms = (f32) t * 0.001;
@@ -170,11 +170,11 @@ RuntimeError UnitTest::fullProgramDebug(VovkPLCRuntime& runtime) {
         if (program.finished()) finished = true;
     }
     u32 t = micros();
-    runtime.cleanRun(program);
+    runtime.run(program);
     t = micros() - t;
 #else
     u32 t = micros();
-    RuntimeError status = runtime.cleanRun(program);
+    RuntimeError status = runtime.run(program);
     t = micros() - t;
 #endif
     f32 ms = (f32) t * 0.001;
@@ -199,7 +199,7 @@ void UnitTest::println(i8 result) {
 
 
 void runtime_unit_test(VovkPLCRuntime& runtime) {
-    runtime.startup();
+    runtime.initialize();
     REPRINTLN(70, '-');
     Serial.println(F("Runtime Unit Test"));
     REPRINTLN(70, '-');
@@ -272,12 +272,12 @@ void runtime_unit_test(VovkPLCRuntime& runtime) {
     runtime_test_called = true;
 };
 
-RuntimeError UnitTest::fullProgramDebug(VovkPLCRuntime& runtime, RuntimeProgram& program) {
-    program.print();
+RuntimeError UnitTest::fullProgramDebug(VovkPLCRuntime& runtime) {
+    runtime.program.print();
     Serial.println(F("Runtime working in production mode. Full program debugging is disabled."));
     Serial.println();
-    runtime.clear(program);
-    runtime.cleanRun(program);
+    runtime.clear();
+    runtime.run();
     return program.status;
 }
 

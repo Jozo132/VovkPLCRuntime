@@ -4,7 +4,7 @@
 
 #include "common.h"
 
-#include "../../../lib/VovkPLCRuntime/src/VovkPLCRuntime.h"
+#include "../../lib/VovkPLCRuntime/src/VovkPLCRuntime.h"
 
 void custom_test();
 
@@ -16,8 +16,6 @@ WASM_EXPORT void doSomething() {
 
 
 
-RuntimeProgram program(86); // Program size
-VovkPLCRuntime runtime(64, program); // Stack size
 
 
 void custom_test() {
@@ -29,7 +27,7 @@ void custom_test() {
 
     // Custom program test
     if (startup) {
-        runtime.startup();
+        runtime.initialize();
         Serial.println(F("Custom program test"));
         Serial.println(F("Variables  = { a: 1, b: 2, c: 3, d: 4, e: 5, f: 6 }"));
         Serial.println(F("Function   = 10 * (1 - 'a' * ('b' + 'c' * ('c' + 'd' * ('d'-'e' *('e'-'f')))) / 'd')"));
@@ -42,29 +40,29 @@ void custom_test() {
 
 
         // Hand-coded RPN instructions:
-        runtime.program->push_f32(10);
-        runtime.program->push_f32(1);
-        runtime.program->push_f32(a);
-        runtime.program->push_f32(b);
-        runtime.program->push_f32(c);
-        runtime.program->push_f32(c);
-        runtime.program->push_f32(d);
-        runtime.program->push_f32(d);
-        runtime.program->push_f32(e);
-        runtime.program->push_f32(e);
-        runtime.program->push_f32(f);
-        runtime.program->push(SUB, type_f32);
-        runtime.program->push(MUL, type_f32);
-        runtime.program->push(SUB, type_f32);
-        runtime.program->push(MUL, type_f32);
-        runtime.program->push(ADD, type_f32);
-        runtime.program->push(MUL, type_f32);
-        runtime.program->push(ADD, type_f32);
-        runtime.program->push_f32(d);
-        runtime.program->push(DIV, type_f32);
-        runtime.program->push(MUL, type_f32);
-        runtime.program->push(SUB, type_f32);
-        runtime.program->push(MUL, type_f32);
+        runtime.program.push_f32(10);
+        runtime.program.push_f32(1);
+        runtime.program.push_f32(a);
+        runtime.program.push_f32(b);
+        runtime.program.push_f32(c);
+        runtime.program.push_f32(c);
+        runtime.program.push_f32(d);
+        runtime.program.push_f32(d);
+        runtime.program.push_f32(e);
+        runtime.program.push_f32(e);
+        runtime.program.push_f32(f);
+        runtime.program.push(SUB, type_f32);
+        runtime.program.push(MUL, type_f32);
+        runtime.program.push(SUB, type_f32);
+        runtime.program.push(MUL, type_f32);
+        runtime.program.push(ADD, type_f32);
+        runtime.program.push(MUL, type_f32);
+        runtime.program.push(ADD, type_f32);
+        runtime.program.push_f32(d);
+        runtime.program.push(DIV, type_f32);
+        runtime.program.push(MUL, type_f32);
+        runtime.program.push(SUB, type_f32);
+        runtime.program.push(MUL, type_f32);
 
 
         /*
@@ -72,8 +70,8 @@ void custom_test() {
           static const u8 bytecode [] = { 0x0A,0x41,0x20,0x00,0x00,0x0A,0x3F,0x80,0x00,0x00,0x0A,0x3F,0x80,0x00,0x00,0x0A,0x40,0x00,0x00,0x00,0x0A,0x40,0x40,0x00,0x00,0x0A,0x40,0x40,0x00,0x00,0x0A,0x40,0x80,0x00,0x00,0x0A,0x40,0x80,0x00,0x00,0x0A,0x40,0xA0,0x00,0x00,0x0A,0x40,0xA0,0x00,0x00,0x0A,0x40,0xC0,0x00,0x00,0x21,0x0A,0x22,0x0A,0x21,0x0A,0x22,0x0A,0x20,0x0A,0x22,0x0A,0x20,0x0A,0x0A,0x40,0x80,0x00,0x00,0x23,0x0A,0x22,0x0A,0x21,0x0A,0x22,0x0A };
           static const u16 size = 82;
           static const u32 checksum = 2677;
-          program.load(bytecode, size, checksum);
-          // program.loadUnsafe(bytecode, size);
+          runtime.loadProgram(bytecode, size, checksum);
+          // runtime.loadProgramUnsafe(bytecode, size);
         */
 
         RuntimeError status = UnitTest::fullProgramDebug(runtime);
@@ -94,7 +92,7 @@ void custom_test() {
     float result = -1;
     long t = micros();
     for (int i = 0; i < cycles; i++) {
-        runtime.cleanRun();
+        runtime.run();
         result = runtime.read<float>();
     }
     t = micros() - t;
