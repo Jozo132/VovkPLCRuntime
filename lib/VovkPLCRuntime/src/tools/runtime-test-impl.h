@@ -278,7 +278,7 @@ RuntimeError UnitTest::fullProgramDebug(VovkPLCRuntime& runtime) {
     Serial.println();
     runtime.clear();
     runtime.run();
-    return program.status;
+    return runtime.program.status;
 }
 
 #endif // __RUNTIME_UNIT_TEST__
