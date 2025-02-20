@@ -38,16 +38,37 @@ const bool production = false;
 #endif // __RUNTIME_PRODUCTION__
 
 void load_plc_blinky() {
-    // input  = I0.0  (10.0 absolute position)
-    // output = Q0.0  (20.0 absolute position)
-    // The PLCASM:
+    // input  = I0.0  (location 10.0 in the memory map)
+    // output = Q0.0  (location 20.0 in the memory map)
+    //
+    // LADDER diagram:
     /*
-      u8.readBit 10.0     // Read bit 10.0
-      u8.writeBit 20.0    // Set bit 20.0 to the resulting state
-    */
-    // Program[7] [58 00 0A 60 00 14 FF]
-    Serial.println(F("Production program test"));
-    const u8 program [] = { 0x58, 0x00, 0x0A, 0x60, 0x00, 0x14, 0xFF };
+     *     P_1s     output
+     *   ---| |------(  )---
+     *      1.4      Q0.0
+    **/
+    // PLCASM code:
+    /* 
+     *       u8.readBit     1.4    // Read bit 1.4 which is 1s pulse
+     *       jump_if_not    end    // Jump to the label 'end' if the bit is OFF
+     *       u8.writeBitInv 20.0   // Invert bit 20.0
+     *   end:                      // Label to jump to
+    **/
+    // Compiled bytecode:
+    // Program[10] [5C 00 01 E2 00 09 78 00 14 FF]
+    // Explanation:
+    /*
+     *  5C 00 01  ->  read u8 bit 4 at address 0x0001 and put it on the stack
+     *  E2 00 09  ->  jump to address 0x0009 if the value from the stack is OFF
+     *  78 00 14  ->  toggle u8 bit 0 at address 0x0014
+     *  FF        ->  end of program, which is also the address 0x0009 to jump to
+    **/
+    const u8 program [] = {
+        0x5C, 0x00, 0x01,
+        0xE2, 0x00, 0x09,
+        0x78, 0x00, 0x14,
+        0xFF,
+    };
     const u16 size = sizeof(program);
     Serial.println(F("Loading program..."));
     Serial.flush();

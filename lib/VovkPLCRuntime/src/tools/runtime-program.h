@@ -285,10 +285,6 @@ public:
         loadUnsafe(program, prog_size);
     }
 
-    void begin() {
-        format();
-    }
-
     void format() {
         this->prog_size = 0;
         this->program_line = 0;

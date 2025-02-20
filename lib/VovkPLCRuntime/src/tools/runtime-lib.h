@@ -92,7 +92,6 @@ public:
         splash();
         stack.format();
         program.format();
-        program.begin();
         formatMemory();
     }
 
