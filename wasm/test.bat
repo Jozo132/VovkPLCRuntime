@@ -31,6 +31,7 @@ cd wasm_test_cases 2>nul
 
 node compile_tests.js      || goto :error
 
+cd ..
 @echo on
 @echo Done.
 @echo off
@@ -41,4 +42,6 @@ goto :EOF
 @REM clang++ -Wall -std=c++11 simulator.cpp -o simulator.exe
 
 :error
+
+cd ..
 echo Failed with error %errorlevel%
