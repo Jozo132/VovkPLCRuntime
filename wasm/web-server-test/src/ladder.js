@@ -15,9 +15,10 @@
  * 
  * @typedef {{ 
  *     offsets: {
- *         input: number,
- *         output: number,
- *         memory: number,
+ *         input: { offset: number, size: number },
+ *         output: { offset: number, size: number },
+ *         memory: { offset: number, size: number },
+ *         system: { offset: number, size: number },
  *     }
  *     memory: number[],
  *     symbols: PLC_Symbol[],
@@ -32,9 +33,10 @@ let _con = 0
 /** @type {PLC_Structure} */
 const plc_structure = {
     offsets: {
-        input: 10,
-        output: 20,
-        memory: 30,
+        input: { offset: 10, size: 10 },
+        output: { offset: 20, size: 10 },
+        memory: { offset: 30, size: 10 },
+        system: { offset: 40, size: 10 },
     },
     memory: [
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //  0 to  9
@@ -140,7 +142,9 @@ const get_symbol_value = (symbol) => {
     const location = plc_structure.offsets[symbol.location]
     const address = Math.floor(symbol.address)
     const bit = Math.min((symbol.address % 1) * 10, 7)
-    const address_value = plc_structure.memory[address + location]
+    const offset = location.offset + address
+    if (address >= location.size) throw new Error(`Symbol '${symbol.name}': ${address} is out of bounds for ${symbol.location} that has a size of ${location.size}`)
+    const address_value = plc_structure.memory[offset]
     if (symbol.type === 'bit') {
         return (address_value >> bit) & 1
     }
