@@ -116,6 +116,32 @@ const update_hmi = () => {
     run_cycle()
     const memory = [...PLCRuntimeWasm.readMemoryArea(0, 40)].map(x => x.toString(16).padStart(2, '0'))
     const addresses = memory.map((_, i) => i.toString().padStart(2, '0'))
+    const columns = 10
+    const rows = []
+
+    rows.push(`
+        <span style="font-family: monospace; font-size: 2em;">
+            &nbsp;&nbsp;
+            <span style="color: #888">${addresses.slice(0, columns).join(' ')}</span>
+        </span>
+    `)
+
+    let row = 0
+    for (let i = 0; i < memory.length; i += columns) {
+        const memory_str = memory.slice(i, i + columns).join(' ')
+        const content = `
+            <span style="font-family: monospace; font-size: 2em;">
+                <span style="color: #888">${(columns * row).toString().padStart(2, '0')}&nbsp;</span>${memory_str}
+            </span>
+        `
+        rows.push(content)
+        row++
+    }
+    const content = rows.join('<br>')
+    if (hmi_data_state.content !== content) {
+        hmi_element.innerHTML = content
+        hmi_data_state.content = content
+    }
 }
 
 
