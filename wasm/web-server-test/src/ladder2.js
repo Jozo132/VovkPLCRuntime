@@ -1,35 +1,18 @@
 // @ts-check
 "use strict"
 
-
-
-
-
-/**
- * @typedef { import('./VovkPLCEditor.js').PLC_Symbol } PLC_Symbol
- * @typedef { import('./VovkPLCEditor.js').PLC_LadderBlock } PLC_LadderBlock
- * @typedef { import('./VovkPLCEditor.js').PLC_LadderConnection } PLC_LadderConnection
- * @typedef { import('./VovkPLCEditor.js').PLC_Ladder } PLC_Ladder
- * @typedef { import('./VovkPLCEditor.js').PLC_Program } PLC_Program
- * @typedef { import('./VovkPLCEditor.js').PLC_Folder } PLC_Folder
- * @typedef { import('./VovkPLCEditor.js').PLC_Project } PLC_Project
- */
-
-import { VovkPLCEditor, generateID } from './VovkPLCEditor.js'
+/** @typedef { import('./VovkPLCEditor.js').PLC_Project } PLC_Project */
+import { VovkPLCEditor, ElementSynthesis } from './VovkPLCEditor.js'
 
 /** @type {PLC_Project} */
 const plc_project = {
     offsets: {
+        control: { offset: 0, size: 10 },
         input: { offset: 10, size: 10 },
         output: { offset: 20, size: 10 },
         memory: { offset: 30, size: 10 },
         system: { offset: 40, size: 10 },
     },
-    memory: [
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //  0 to  9
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 10 to 19
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 20 to 29        
-    ],
     symbols: [
         { name: 'button1', location: 'input', type: 'bit', address: 0.0, initial_value: 0, comment: 'Test input' },
         { name: 'button2', location: 'input', type: 'bit', address: 0.1, initial_value: 0, comment: 'Test input' },
@@ -40,24 +23,23 @@ const plc_project = {
     ],
     project: [
         {
-            id: 'folder1',
             type: 'folder',
             name: 'Programs',
-            comment: '',
+            comment: 'This is the main folder where all programs are stored',
             children: [
                 {
-                    id: 'program1',
                     type: 'program',
                     name: 'Main',
-                    comment: '',
+                    comment: 'This is the main program',
                     blocks: [
                         {
                             type: 'ladder',
-                            comment: '',
+                            name: 'Test 1',
+                            comment: 'Trying to get this to work',
                             // Test
                             blocks: [
-                                { id: `0`, x: 0, y: 1, type: 'contact', inverted: false, trigger: 'normal', symbol: 'button1' },
-                                { id: `3`, x: 0, y: 0, type: 'contact', inverted: false, trigger: 'normal', symbol: 'button2' },
+                                { id: `0`, x: 0, y: 0, type: 'contact', inverted: false, trigger: 'normal', symbol: 'P_200ms' },
+                                { id: `3`, x: 0, y: 1, type: 'contact', inverted: false, trigger: 'normal', symbol: 'button2' },
                                 { id: `4`, x: 1, y: 0, type: 'contact', inverted: false, trigger: 'normal', symbol: 'button3' },
                                 { id: `5`, x: 0, y: 2, type: 'contact', inverted: false, trigger: 'normal', symbol: 'light1' },
                                 { id: `6`, x: 2, y: 0, type: 'contact', inverted: true, trigger: 'normal', symbol: 'button4' },
@@ -73,18 +55,19 @@ const plc_project = {
                                 { id: `994`, x: 1, y: 6, type: 'coil', inverted: false, trigger: 'normal', symbol: 'button1' },
                             ],
                             connections: [
-                                { id: generateID(), from: { id: `0` }, to: { id: `4` } },
-                                { id: generateID(), from: { id: `3` }, to: { id: `4` } },
-                                { id: generateID(), from: { id: `4` }, to: { id: `6` } },
-                                { id: generateID(), from: { id: `6` }, to: { id: `2` } },
-                                { id: generateID(), from: { id: `5` }, to: { id: `6` } },
-                                { id: generateID(), from: { id: `6` }, to: { id: `1` } },
+                                { from: { id: `0` }, to: { id: `4` } },
+                                { from: { id: `3` }, to: { id: `4` } },
+                                { from: { id: `4` }, to: { id: `6` } },
+                                { from: { id: `6` }, to: { id: `2` } },
+                                { from: { id: `5` }, to: { id: `6` } },
+                                { from: { id: `6` }, to: { id: `1` } },
 
-                                { id: generateID(), from: { id: `990` }, to: { id: `991` } },
-                                { id: generateID(), from: { id: `992` }, to: { id: `993` } },
+                                { from: { id: `990` }, to: { id: `991` } },
+                                { from: { id: `992` }, to: { id: `993` } },
                             ]
                         }, {
                             type: 'ladder',
+                            name: 'Test 2',
                             comment: '',
                             // Toggle switch
                             blocks: [
@@ -110,10 +93,9 @@ const plc_project = {
 
 
 
-const PLCEditor = new VovkPLCEditor('PLCEditor')
+const PLCEditor = new VovkPLCEditor({ workspace: 'PLCEditor', debug_css: true })
 
 PLCEditor.open(plc_project)
-PLCEditor.active_tab = 'program1'
 
 
 const toggle_input = (offset) => {
@@ -163,4 +145,4 @@ draw()
 setInterval(draw, 20)
 
 
-Object.assign(window, { PLCEditor, draw, plc_project, toggle_input, toggle_output })
+Object.assign(window, { PLCEditor, ElementSynthesis, draw, plc_project, toggle_input, toggle_output })

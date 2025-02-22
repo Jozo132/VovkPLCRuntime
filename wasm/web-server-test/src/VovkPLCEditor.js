@@ -3,31 +3,106 @@
 
 /**
  * @typedef { 'locked' | 'unlocked' | 'editing' | 'live'  | 'editing_live' } PLC_ContextState
- * @typedef { 'input' | 'output' | 'memory' } PLC_Symbol_Location
+ * @typedef { 'control' | 'input' | 'output' | 'memory' } PLC_Symbol_Location
  * @typedef { 'bit' | 'byte' | 'int' | 'dint' | 'real' } PLC_Symbol_Type
- * @typedef {{ name: string, location: PLC_Symbol_Location, type: PLC_Symbol_Type, address: number, initial_value: number, comment: string }} PLC_Symbol
+ * @typedef {{ 
+ *      name: string, 
+ *      location: PLC_Symbol_Location, 
+ *      type: PLC_Symbol_Type, 
+ *      address: number, 
+ *      initial_value: number, 
+ *      comment: string }} PLC_Symbol
  * @typedef { 'contact' | 'coil' | 'coil_set' | 'coil_rset' } PLC_Ladder_Block_Type
  * @typedef { 'normal' | 'rising' | 'falling' | 'change' } PLC_Trigger_Type
- * @typedef {{ id: string, x: number, y: number, type: PLC_Ladder_Block_Type, inverted: boolean, trigger: PLC_Trigger_Type, symbol: string, state?: { active: boolean, powered: boolean, terminated_input: boolean, terminated_output: boolean, evaluated: boolean, symbol: PLC_Symbol } }} PLC_LadderBlock
- * @typedef {{ id: string, from: { id: string, offset?: number }, to: { id: string, offset?: number }, state?: { powered: boolean, evaluated: boolean } }} PLC_LadderConnection 
- * @typedef {{ type: 'ladder', comment: string, blocks: PLC_LadderBlock[], connections: PLC_LadderConnection[], canvas?: HTMLCanvasElement, ctx?: CanvasRenderingContext2D, mode?: PLC_ContextState }} PLC_Ladder
+ * @typedef {{ 
+ *      id: string, 
+ *      x: number, 
+ *      y: number, 
+ *      type: PLC_Ladder_Block_Type, 
+ *      inverted: boolean, 
+ *      trigger: PLC_Trigger_Type, 
+ *      symbol: string, 
+ *      state?: { active: boolean, powered: boolean, terminated_input: boolean, terminated_output: boolean, evaluated: boolean, symbol: PLC_Symbol } 
+ * }} PLC_LadderBlock
+ * @typedef {{ 
+ *      id?: string, 
+ *      from: { id: string, offset?: number }, 
+ *      to: { id: string, offset?: number }, 
+ *      state?: { powered: boolean, evaluated: boolean } 
+ * }} PLC_LadderConnection 
+ * @typedef {{ 
+ *      id?: string, 
+ *      type: 'ladder', 
+ *      name: string, 
+ *      comment: string, 
+ *      blocks: PLC_LadderBlock[], 
+ *      connections: PLC_LadderConnection[], 
+ *      div?: Element, 
+ *      ctx?: CanvasRenderingContext2D, 
+ *      mode?: PLC_ContextState
+ * }} PLC_Ladder
  * @typedef { PLC_Ladder } PLC_ProgramBlock
- * @typedef {{ id: string, type: 'program', name: string, comment: string, blocks: PLC_ProgramBlock[], div?: HTMLDivElement }} PLC_Program
- * @typedef {{ id: string, type: 'folder', name: string, comment: string, children: (PLC_Folder | PLC_Program)[], nav?: HTMLDivElement }} PLC_Folder
+ * @typedef {{ id?: string, type: 'program', name: string, comment: string, blocks: PLC_ProgramBlock[], div?: Element }} PLC_Program
+ * @typedef {{ id?: string, type: 'folder', name: string, comment: string, children: (PLC_Folder | PLC_Program)[], nav?: Element }} PLC_Folder
  * 
  * @typedef {{ 
  *     offsets: {
+ *         control: { offset: number, size: number }
  *         input: { offset: number, size: number }
  *         output: { offset: number, size: number }
  *         memory: { offset: number, size: number }
  *         system: { offset: number, size: number }
  *     }
- *     memory: number[]
  *     symbols: PLC_Symbol[]
  *     project: (PLC_Folder | PLC_Program)[]
  * }} PLC_Project
  * 
+ * @typedef {{
+ *     id: number
+ *     where: 'project' | 'symbol' | 'program' | 'program_block' 
+ *     what: 'insert' | 'delete' | 'paste' | 'cut' | 'move' | 'modify'
+ *     target: string
+ *     index: number
+ *     before: any // What to do to undo this action
+ *     after: any // What to do to redo this action
+ * }} TimelineEntry
+ * 
 **/
+
+
+// Import style from path './VovkPLCEditor.css'
+const style = document.createElement('link')
+style.rel = 'stylesheet'
+style.href = './VovkPLCEditor.css'
+const styleLoadPromise = new Promise((resolve, reject) => {
+    style.onload = () => resolve(1);
+    style.onerror = () => reject(new Error('Failed to load stylesheet'));
+});
+document.head.appendChild(style)
+await styleLoadPromise
+
+
+
+const locations = [
+    { short: 'C', name: 'control', label: 'Control' },
+    { short: 'I', name: 'input', label: 'Input' },
+    { short: 'Q', name: 'output', label: 'Output' },
+    { short: 'M', name: 'memory', label: 'Memory' },
+]
+
+
+
+
+/** @type { (html_code: string) => Element[] }  */
+export const ElementSynthesis = (html_code) => {
+    if (typeof html_code !== 'string') throw new Error(`Invalid HTML code: ${html_code}`)
+    html_code = html_code.split('\n').map(line => line.trim()).filter(Boolean).join('')
+    if (!html_code) return []
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(html_code, 'text/html')
+    return Array.from(doc.body.children)
+}
+
 
 class Menu {
     /**
@@ -36,9 +111,10 @@ class Menu {
      *  @typedef { MenuItem | MenuSeparator } MenuElement
      *  @typedef { (event: MouseEvent) => MenuElement[] | undefined } MenuOnOpen 
      *  @typedef { (selected: string) => void } MenuOnClose  
+     *  @typedef { { target: HTMLElement | Element, onOpen: MenuOnOpen, onClose: MenuOnClose } } MenuListener  
      * 
     */
-    /** @type { { target: HTMLElement, onOpen: MenuOnOpen, onClose: MenuOnClose }[] } */ #listeners = []
+    /** @type { MenuListener[] } */ #listeners = []
     /** @type { MenuElement[] } */ #items = [{ type: 'item', name: 'test', label: '' }]
     /** @type { MenuOnOpen } */ #onOpen = (event) => undefined
     /** @type { MenuOnClose } */ #onClose = (selected) => undefined
@@ -79,6 +155,20 @@ class Menu {
         this.#drawList()
         this.menu.classList.add('hidden')
 
+        const findListener = (event) => {
+            let target = event.target
+            let found = false
+            let listener = this.#listeners.find(listener => listener.target === target)
+            found = !!listener
+
+            while (target && !found) {
+                target = target.parentElement
+                listener = this.#listeners.find(listener => listener.target === target)
+                found = !!listener
+            }
+            return found ? listener : null
+        }
+
         const handle_click_event = (event) => {
             // Get mouse X and Y from the event
             const mouseX = event.clientX
@@ -90,8 +180,10 @@ class Menu {
                 this.open = false
             } else if (rmb) {
                 // Check if the click was on one of the targets
-                const listener = this.#listeners.find(listener => listener.target === event.target)
+                const listener = findListener(event)
                 if (listener) {
+                    // console.log(`Listeners:`, this.#listeners)
+                    // console.log(`Found listener for target:`, listener)
                     const items = listener.onOpen(event)
                     this.#onClose = listener.onClose
                     if (items) {
@@ -122,9 +214,12 @@ class Menu {
         window.addEventListener('click', handle_click_event)
     }
 
-    /** @type { (listener: { target: HTMLElement, onOpen: MenuOnOpen, onClose: MenuOnClose }) => void } */
-    addListener(listener) { this.#listeners.push(listener) }
-    /** @type { (target: HTMLElement) => void } */
+    /** @type { (listeners: MenuListener | MenuListener[]) => void } */
+    addListener(listeners) {
+        if (Array.isArray(listeners)) this.#listeners.push(...listeners)
+        else this.#listeners.push(listeners)
+    }
+    /** @type { (target: HTMLElement | Element) => void } */
     removeListener(target) { this.#listeners = this.#listeners.filter(listener => listener.target !== target) }
     removeAllListeners() { this.#listeners = [] }
 }
@@ -147,23 +242,154 @@ const default_properties = {
     }
 }
 
-export const generateID = () => {
-    const characters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-    const letters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
-    let id = letters.charAt(Math.floor(Math.random() * letters.length))
-    for (let i = 0; i < 7; i++) {
-        const index = Math.floor(Math.random() * characters.length)
-        id += characters[index]
-    }
-    return id
+
+const middle_mouse_drag = () => {
+    let isDragging = false;
+    let startX, startY, scrollLeft, scrollTop;
+    let target = null;
+    let prev_pointer = ''
+    document.addEventListener("mousedown", function (e) {
+        if (e.button !== 1) return; // Only trigger on middle mouse button
+        // @ts-ignore
+        target = e.target.closest(".plc-editor-body");
+        if (!target) return
+
+        e.preventDefault();
+        isDragging = true;
+        startX = e.pageX;
+        startY = e.pageY;
+        scrollLeft = target.scrollLeft;
+        scrollTop = target.scrollTop;
+
+        prev_pointer = target.style.cursor || ''
+        target.style.cursor = "grabbing";
+    });
+
+    document.addEventListener("mousemove", function (e) {
+        if (!isDragging) return;
+        if (!target) return;
+        e.preventDefault();
+        const diff_x = e.pageX - startX;
+        const diff_y = e.pageY - startY;
+        // console.log('panning', { diff_x, diff_y })
+        target.scrollLeft = scrollLeft - diff_x;
+        target.scrollTop = scrollTop - diff_y;
+    });
+
+    document.addEventListener("mouseup", function (e) {
+        if (!target) return;
+        if (e.button !== 1) return;
+        isDragging = false;
+        target.style.cursor = prev_pointer
+        target = null;
+    });
 }
+// Enable middle-mouse drag support
+middle_mouse_drag()
 
 
+// Resizable borders
+document.addEventListener("mousedown", (event) => { // @ts-ignore
+    if (!event || !event.target || !event.target.classList.contains("resizer")) return;
+
+    const resizer = event.target; // @ts-ignore
+    // const target = resizer.parentElement;
+    // Find the closest parent with the class 'resizable'
+    const target = resizer.closest('.resizable')
+    if (!target) return console.error("No resizable parent found for resizer: ", resizer)
+    event.preventDefault();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const startWidth = target.offsetWidth;
+    const startHeight = target.offsetHeight;
+
+    const previous_pointer = target.style.cursor || '' // @ts-ignore
+    target.style.cursor = resizer.classList.contains("right") || resizer.classList.contains("left") ? "col-resize" : "row-resize";
+
+    const constrain = value => {
+        return Math.min(Math.max(value, 200), 1000)
+    }
+
+    function onMouseMove(event) { // @ts-ignore
+        if (resizer.classList.contains("right")) {
+            const newWidth = constrain(startWidth + (event.clientX - startX));
+            target.style.width = newWidth + "px"; // @ts-ignore
+        } else if (resizer.classList.contains("left")) {
+            const newWidth = constrain(startWidth - (event.clientX - startX));
+            target.style.width = newWidth + "px"; // @ts-ignore
+        } else if (resizer.classList.contains("bottom")) {
+            const newHeight = constrain(startHeight + (event.clientY - startY));
+            target.style.height = newHeight + "px"; // @ts-ignore
+        } else if (resizer.classList.contains("top")) {
+            const newHeight = constrain(startHeight - (event.clientY - startY));
+            target.style.height = newHeight + "px";
+        } else { // @ts-ignore
+            console.error("Invalid resizer class: ", resizer.classList)
+        }
+    }
+
+    function onMouseUp() {
+        target.style.cursor = previous_pointer
+        document.removeEventListener("mousemove", onMouseMove);
+        document.removeEventListener("mouseup", onMouseUp);
+    }
+
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+});
+
+/** @type { PLC_Symbol[] } */
+const system_symbols = [
+    // P_100ms: "u8.readBit 1.0",
+    // P_200ms: "u8.readBit 1.1",
+    // P_300ms: "u8.readBit 1.2",
+    // P_500ms: "u8.readBit 1.3",
+    // P_1s: "u8.readBit 1.4",
+    // P_2s: "u8.readBit 1.5",
+    // P_5s: "u8.readBit 1.6",
+    // P_10s: "u8.readBit 1.7",
+    // P_30s: "u8.readBit 2.0",
+    // P_1min: "u8.readBit 2.1",
+    // P_2min: "u8.readBit 2.2",
+    // P_5min: "u8.readBit 2.3",
+    // P_10min: "u8.readBit 2.4",
+    // P_30min: "u8.readBit 2.5",
+    // P_1hr: "u8.readBit 2.6",
+    // P_2hr: "u8.readBit 2.7",
+    // P_3hr: "u8.readBit 3.0",
+    // P_4hr: "u8.readBit 3.1",
+    // P_5hr: "u8.readBit 3.2",
+    // P_6hr: "u8.readBit 3.3",
+    // P_12hr: "u8.readBit 3.4",
+    // P_1day: "u8.readBit 3.5",
+    { name: 'P_100ms', location: 'control', type: 'bit', address: 1.0, initial_value: 0, comment: '100ms pulse' },
+    { name: 'P_200ms', location: 'control', type: 'bit', address: 1.1, initial_value: 0, comment: '200ms pulse' },
+    { name: 'P_300ms', location: 'control', type: 'bit', address: 1.2, initial_value: 0, comment: '300ms pulse' },
+    { name: 'P_500ms', location: 'control', type: 'bit', address: 1.3, initial_value: 0, comment: '500ms pulse' },
+    { name: 'P_1s', location: 'control', type: 'bit', address: 1.4, initial_value: 0, comment: '1 second pulse' },
+    { name: 'P_2s', location: 'control', type: 'bit', address: 1.5, initial_value: 0, comment: '2 second pulse' },
+    { name: 'P_5s', location: 'control', type: 'bit', address: 1.6, initial_value: 0, comment: '5 second pulse' },
+    { name: 'P_10s', location: 'control', type: 'bit', address: 1.7, initial_value: 0, comment: '10 second pulse' },
+    { name: 'P_30s', location: 'control', type: 'bit', address: 2.0, initial_value: 0, comment: '30 second pulse' },
+    { name: 'P_1min', location: 'control', type: 'bit', address: 2.1, initial_value: 0, comment: '1 minute pulse' },
+    { name: 'P_2min', location: 'control', type: 'bit', address: 2.2, initial_value: 0, comment: '2 minute pulse' },
+    { name: 'P_5min', location: 'control', type: 'bit', address: 2.3, initial_value: 0, comment: '5 minute pulse' },
+    { name: 'P_10min', location: 'control', type: 'bit', address: 2.4, initial_value: 0, comment: '10 minute pulse' },
+    { name: 'P_30min', location: 'control', type: 'bit', address: 2.5, initial_value: 0, comment: '30 minute pulse' },
+    { name: 'P_1hr', location: 'control', type: 'bit', address: 2.6, initial_value: 0, comment: '1 hour pulse' },
+    { name: 'P_2hr', location: 'control', type: 'bit', address: 2.7, initial_value: 0, comment: '2 hour pulse' },
+    { name: 'P_3hr', location: 'control', type: 'bit', address: 3.0, initial_value: 0, comment: '3 hour pulse' },
+    { name: 'P_4hr', location: 'control', type: 'bit', address: 3.1, initial_value: 0, comment: '4 hour pulse' },
+    { name: 'P_5hr', location: 'control', type: 'bit', address: 3.2, initial_value: 0, comment: '5 hour pulse' },
+    { name: 'P_6hr', location: 'control', type: 'bit', address: 3.3, initial_value: 0, comment: '6 hour pulse' },
+    { name: 'P_12hr', location: 'control', type: 'bit', address: 3.4, initial_value: 0, comment: '12 hour pulse' },
+    { name: 'P_1day', location: 'control', type: 'bit', address: 3.5, initial_value: 0, comment: '1 day pulse' },
+]
 
 /** @type {(editor: VovkPLCEditor, symbol: string | PLC_Symbol | undefined) => number | boolean} */
 const get_symbol_value = (editor, symbol) => {
     if (typeof symbol === 'string') {
-        symbol = editor.project.symbols.find(s => s.name === symbol)
+        symbol = system_symbols.find(s => s.name === symbol) || editor.project.symbols.find(s => s.name === symbol)
     }
     if (!symbol) throw new Error(`Symbol not found: ${symbol}`)
     const location = editor ? editor.project.offsets[symbol.location] : { offset: 0, size: 9999 }
@@ -172,7 +398,7 @@ const get_symbol_value = (editor, symbol) => {
     const bit = Math.min((symbol.address % 1) * 10, 7)
     const offset = location.offset + address
     if (address >= location.size) throw new Error(`Symbol '${symbol.name}': ${address} is out of bounds for ${symbol.location} that has a size of ${location.size}`)
-    const address_value = editor ? editor.project.memory[offset] : 0
+    const address_value = editor ? editor.memory[offset] : 0
     if (symbol.type === 'bit') {
         return (address_value >> bit) & 1
     }
@@ -182,7 +408,7 @@ const get_symbol_value = (editor, symbol) => {
 /** @type {(editor: VovkPLCEditor, block: PLC_LadderBlock) => PLC_LadderBlock } */
 const getBlockState = (editor, block) => {
     if (!block.state) {
-        const symbol = editor.project.symbols.find(symbol => symbol.name === block.symbol)
+        const symbol = system_symbols.find(symbol => symbol.name === block.symbol) || editor.project.symbols.find(symbol => symbol.name === block.symbol)
         if (!symbol) throw new Error(`Symbol not found: ${block.symbol}`)
         block.state = { active: false, powered: false, evaluated: false, symbol, terminated_input: false, terminated_output: false }
     }
@@ -295,7 +521,7 @@ const draw_contact = (editor, style, ctx, block) => {
         }
         ctx.stroke()
 
-        const short_location = symbol.location === 'input' ? 'I' : symbol.location === 'output' ? 'Q' : 'M'
+        const short_location = locations.find(loc => loc.name === symbol.location)?.short || '?'
 
         // Draw the symbol name
         ctx.fillStyle = '#421'
@@ -397,7 +623,7 @@ const draw_coil = (editor, style, ctx, block) => {
         ctx.stroke()
 
 
-        const short_location = symbol.location === 'input' ? 'I' : symbol.location === 'output' ? 'Q' : 'M'
+        const short_location = locations.find(loc => loc.name === symbol.location)?.short || '?'
 
         // Draw the symbol name
         ctx.fillStyle = '#421'
@@ -541,17 +767,48 @@ const evaluate_ladder = (editor, ladder) => {
 
 /** @type {(editor: VovkPLCEditor, program: PLC_Program, ladder: PLC_Ladder) => void} */
 const draw_ladder = (editor, program, ladder) => {
+    ladder.id = editor.generateID(ladder.id)
+    const { id, name, comment } = ladder
     // Generate the canvas and context if not already present
     const { ladder_block_width, ladder_block_height, ladder_blocks_per_row, style } = editor.properties
     const { background_color, grid_color } = style
-    const canvas = ladder.canvas || document.createElement('canvas')
+    const div_exists = !!ladder.div
+    const div = ladder.div || ElementSynthesis(`<div class="plc-ladder"></div>`)[0]
+    if (!div) throw new Error('Div not found')
+    const initialize = div && !div_exists
+    if (initialize) {
+        const children = Array.from(div.children)
+        for (const child of children) div.removeChild(child)
+        const [header, canvas] = ElementSynthesis(`
+            <div class="plc-ladder-header"></div>
+            <canvas class="plc-ladder" id="${id}"></canvas>
+        `)
+        div.appendChild(header)
+        div.appendChild(canvas)
+        ladder.div = div
+    }
+    /** @type { [HTMLElement, HTMLCanvasElement] } *///@ts-ignore
+    const [header, canvas] = Array.from(ladder.div?.children || [])
+    if (!header) throw new Error('Header not found')
     if (!canvas) throw new Error('Canvas not found')
-    if (!ladder.canvas) {
-        ladder.canvas = canvas
-        editor.menu.addListener({
+    if (initialize) {
+        if (!ladder.div) throw new Error('Div not found')
+        canvas.setAttribute('id', id)
+        header.innerHTML = `
+            <div class="plc-program-block-header-content">
+                <h3 style="margin-top: 3px; margin-bottom: 1px">Ladder: ${name}</h3>
+                <div class="plc-program-block-header-buttons">
+                    <div class="menu-button">x</div>
+                    <div class="menu-button">-</div>
+                    <div class="menu-button">^</div>
+                </div>
+            </div>
+            <p>${comment}</p>
+        `
+        editor.workspace_context_menu.addListener({
             target: canvas,
             onOpen: (event) => {
-                console.log(`Ladder context menu open`)
+                console.log(`Ladder canvas "#${id}" context menu open`)
                 return [
                     { type: 'item', name: 'edit', label: 'Edit' },
                     { type: 'item', name: 'delete', label: 'Delete' },
@@ -564,7 +821,9 @@ const draw_ladder = (editor, program, ladder) => {
                 console.log(`Ladder selected: ${selected}`)
             }
         })
-        program.div?.appendChild(canvas)
+        const container = document.createElement('div')
+        container.classList.add('plc-ladder-container')
+        program.div?.appendChild(ladder.div)
     }
     const ctx = ladder.ctx || canvas.getContext('2d')
     if (!ctx) throw new Error('Context not found')
@@ -608,6 +867,7 @@ const draw_ladder = (editor, program, ladder) => {
     /** @type { LadderLink[] } */
     const links = []
     ladder.connections.forEach(con => {
+        con.id = editor.generateID(con.id)
         const from = ladder.blocks.find(block => block.id === con.from.id)
         const to = ladder.blocks.find(block => block.id === con.to.id)
         if (!from || !to) throw new Error(`Connection block not found`)
@@ -625,26 +885,20 @@ const draw_ladder = (editor, program, ladder) => {
     links.forEach(link => {
         draw_connection(editor, 'symbol', ctx, link)
     })
-
-    // plc_project.project.forEach(folder => {
-    //     if (folder.type === 'folder') {
-    //         folder.children.forEach(child => {
-    //             if (child.type === 'program') {
-    //                 child.blocks.forEach(ladder => {
-    //                 })
-    //             }
-    //         })
-    //     }
-    // })
-
 }
 
 /** @type { (editor: VovkPLCEditor, offset: number, bit: number) => boolean } */
-const getMemoryBit = (editor, offset, bit) => !!((editor.project.memory[offset] >> bit) & 1)
+const getMemoryBit = (editor, offset, bit) => !!((editor.memory[offset] >> bit) & 1)
 /** @type { (editor: VovkPLCEditor, offset: number, bit: number, value: boolean) => void } */
 const setMemoryBit = (editor, offset, bit, value) => {
-    const byte = editor.project.memory[offset]
-    editor.project.memory[offset] = byte & ~(1 << bit) | (+value << bit)
+    if (editor.runtime_ready) {
+        let byte = editor.memory[offset]
+        byte = byte & ~(1 << bit) | (+value << bit)
+        editor.runtime.writeMemoryArea(offset, [byte])
+    } else {
+        const byte = editor.memory[offset]
+        editor.memory[offset] = byte & ~(1 << bit) | (+value << bit)
+    }
 }
 
 
@@ -657,18 +911,19 @@ const draw_program_block = (editor, program, program_block) => {
 
 
 
-/** @type {(editor: VovkPLCEditor, program: PLC_Program) => void} */
-const draw_program = (editor, program) => {
-    const div = program.div || document.createElement('div')
-    if (!div) throw new Error('Div not found')
-    if (!program.div) {
-        div.classList.add('program')
-        program.div = div
-        editor.container.appendChild(div)
-        editor.menu.addListener({
-            target: div,
+/** @type {(editor: VovkPLCEditor, body: Element, program: PLC_Program) => void} */
+const draw_program = (editor, body, program) => {
+    program.id = editor.generateID(program.id)
+    const { id } = program
+    const exists = !!program.div
+    program.div = program.div || body
+    if (!exists) {
+        program.div.setAttribute('id', id)
+        program.div = program.div
+        editor.workspace_context_menu.addListener({
+            target: program.div,
             onOpen: (event) => {
-                console.log(`Program context menu open`)
+                console.log(`Program "#${id}" context menu open`)
                 return [
                     { type: 'item', name: 'edit', label: 'Edit' },
                     { type: 'item', name: 'delete', label: 'Delete' },
@@ -682,7 +937,9 @@ const draw_program = (editor, program) => {
             }
         })
     }
-    program.blocks.forEach(block => draw_program_block(editor, program, block))
+    program.blocks.forEach(block => {
+        draw_program_block(editor, program, block)
+    })
 }
 
 /** @type { (offset: number) => { address: number, bit: number } } */
@@ -692,25 +949,97 @@ const offsetToAddressAndBit = (offset) => {
     return { address, bit }
 }
 
-export class VovkPLCEditor {
-    /** @type { HTMLElement } */ container
-    /** @type { PLC_Project } */ project
+/** @type { (list: string[], id: string) => void */
+const addIdToList = (list, id) => {
+    if (!list.includes(id)) list.push(id)
+}
 
-    active_tab = ''
 
-    menu = new Menu
-    properties = default_properties
 
-    /** @param { HTMLElement | string | null } container */
-    constructor(container) {
-        if (typeof container === 'string') container = document.getElementById(container)
-        if (!container) throw new Error('Container not found')
-        this.container = container
-        container.classList.add('plc-editor')
-        this.menu.addListener({
-            target: container,
+const generateID = () => {
+    const characters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    const letters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    let id = letters.charAt(Math.floor(Math.random() * letters.length))
+    for (let i = 0; i < 7; i++) {
+        const index = Math.floor(Math.random() * characters.length)
+        id += characters[index]
+    }
+    return id
+}
+
+
+/** @type { (editor: VovkPLCEditor, folder: PLC_Folder) => PLC_Program | null } */
+const searchForProgramInFolder = (editor, folder) => { // @ts-ignore
+    return folder.children.find(child => {
+        if (child.type === 'folder') return searchForProgramInFolder(editor, child)
+        if (child.type === 'program') return searchForProgram(editor, child) // @ts-ignore
+        throw new Error(`Invalid child type: ${child.type}`)
+    }) || null
+}
+/** @type { (editor: VovkPLCEditor, program: PLC_Program) => PLC_Program | null } */
+const searchForProgram = (editor, program) => {
+    if (!program.id) throw new Error('Program ID not found')
+    if (!editor.active_tab) editor.active_tab = program.id // TODO: remove this and actually open the selected program from navigation
+    if (program.id === editor.active_tab) return program
+    return null
+}
+
+
+import PLCRuntimeWasm from "../../simulator.js"
+
+/** @type { (editor: VovkPLCEditor, id: string) => PLC_Program | null } */
+const findProgram = (editor, id) => {
+    if (!editor) throw new Error('Editor not found')
+    if (!editor.project) return null
+    if (!editor.project.project) return null
+    const project = editor.project.project
+    for (let i = 0; i < project.length; i++) {
+        const folder = project[i]
+        let program
+        if (folder.type === 'folder') program = searchForProgramInFolder(editor, folder)
+        if (folder.type === 'program') program = searchForProgram(editor, folder)
+        if (id && program && program.id === id) return program
+        if (program) return program
+    }
+    return null
+}
+
+class PLCEditor {
+    id
+    name = ''
+    comment = ''
+    div
+    header
+    body
+    /** @type { HTMLCanvasElement } */ canvas
+    editor
+    /** @type { PLC_Program | null } */ program = null
+    /** @param { VovkPLCEditor } editor */
+    constructor(editor) {
+        if (!editor) throw new Error('Editor not found')
+        this.editor = editor
+        const div = editor.workspace.querySelector('.plc-editor')
+        if (!div) throw new Error('Editor not found')
+        this.div = div
+        this.id = editor.generateID(div.getAttribute('id'))
+        div.setAttribute('id', this.id)
+        const content = ElementSynthesis(/*HTML*/`
+            <div class="plc-editor-top">
+                <div class="plc-editor-header"></div>
+            </div>
+            <div class="plc-editor-body"></div>
+        `)
+        const header = content[0].querySelector('.plc-editor-header')
+        const body = content[1]
+        if (!header) throw new Error('Header not found')
+        if (!body) throw new Error('Body not found')
+        this.header = header
+        this.body = body
+        content.forEach(c => div.appendChild(c))
+        this.editor.workspace_context_menu.addListener({
+            target: this.div,
             onOpen: (event) => {
-                console.log(`PLCEditor context menu open`)
+                console.log(`VovkPLC Editor "#${this.id}" context menu open`)
                 return [
                     { type: 'item', name: 'edit', label: 'Edit' },
                     { type: 'item', name: 'delete', label: 'Delete' },
@@ -720,7 +1049,171 @@ export class VovkPLCEditor {
                 ]
             },
             onClose: (selected) => {
-                console.log(`PLCEditor selected: ${selected}`)
+                console.log(`Editor selected: ${selected}`)
+            }
+        })
+        this.reloadProgram()
+    }
+
+    appendChild(child) {
+        this.body.appendChild(child)
+    }
+
+    reloadProgram() {
+        this.program = findProgram(this.editor, this.id)
+    }
+
+    draw() {
+        this.program = this.program || findProgram(this.editor, this.id)
+        if (!this.program) throw new Error('Program not found')
+
+        const { id, name, comment } = this.program
+        if (this.name !== name || this.comment !== comment) {
+            this.name = name
+            this.comment = comment
+            this.header.innerHTML = `
+                <h2 style="margin-top: 3px; margin-bottom: 1px;">Program: ${name || ''}</h2>
+                <h3>${comment || ''}</h3>
+            `
+        }
+        draw_program(this.editor, this.body, this.program)
+    }
+}
+
+
+export class VovkPLCEditor {
+    /** @type { PLC_Project } */ project
+    /** @type { HTMLElement } */ workspace
+
+
+    workspace_context_menu = new Menu
+
+    /** @type { number[] } */ memory = new Array(100).fill(0)
+    runtime = new PLCRuntimeWasm()
+    runtime_ready = false
+
+    active_tab = ''
+
+    /** @type { TimelineEntry[] } */ timeline = []
+    /** @type { String[] } */ reserved_ids = []
+
+    properties = default_properties
+
+    /** 
+     * @param {{ 
+     *      workspace?: HTMLElement | string | null
+     *      debug_css?: boolean
+     * }} options 
+    */
+    constructor({ workspace, debug_css }) {
+        this.runtime.initialize('/simulator.wasm').then(() => {
+            console.log('PLC Runtime initialized')
+            this.runtime_ready = true
+        })
+        workspace = workspace || this.workspace
+        if (typeof workspace === 'string') workspace = document.getElementById(workspace)
+        if (workspace !== null) {
+            const container_id = workspace.getAttribute('id')
+            if (container_id) addIdToList(this.reserved_ids, container_id)
+        }
+        if (!workspace) throw new Error('Container not found')
+        const id = workspace.getAttribute('id')
+        if (!id) throw new Error('Container ID not found')
+        this.workspace = workspace
+        this.workspace.classList.add('plc-workspace')
+        if (debug_css) this.workspace.classList.add('debug')
+
+        /** @type { Element[] } */
+        const workspace_body = ElementSynthesis(/*HTML*/`
+            <div class="plc-workspace-header">
+                <h2>Header</h2>
+            </div>
+            <div class="plc-workspace-body">
+                <div class="plc-navigation resizable" style="width: 200px">
+                    <div class="plc-navigation-container">
+                        <h3>Navigation</h3>
+                    </div>
+                    <div class="resizer right"></div>
+                    <div class="plc-navigation-bar">
+                        <div class="menu-button">-</div>
+                    </div>
+                </div>
+                <div class="plc-window">
+                    <div class="plc-editor"></div>
+                </div>
+                <div class="plc-tools resizable minimized" style="width: 200px">
+                    <div class="plc-tools-bar">
+                        <div class="menu-button">+</div>
+                    </div>
+                    <div class="resizer left"></div>
+                    <div class="plc-tools-container">
+                        <h3>Tools</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="plc-workspace-footer">
+                <h3>Footer</h3>
+            </div>
+        `)
+        workspace_body.forEach(element => workspace.appendChild(element))
+        const [header, body, footer] = workspace_body
+
+        const navigation_minimize_button = workspace.querySelector('.plc-navigation-bar .menu-button')
+        const tools_minimize_button = workspace.querySelector('.plc-tools-bar .menu-button')
+        if (!navigation_minimize_button) throw new Error('Navigation minimize button not found')
+        if (!tools_minimize_button) throw new Error('Tools minimize button not found')
+        navigation_minimize_button.addEventListener('click', () => {
+            const navigation = workspace.querySelector('.plc-navigation')
+            if (!navigation) throw new Error('Navigation not found')
+            const [container] = Array.from(navigation.children)
+            if (!container) throw new Error('Navigation container not found')
+            const bar = navigation.querySelector('.plc-navigation-bar .menu-button')
+            if (!bar) throw new Error('Navigation bar not found')
+            // If the navigation doesn't have class 'minimized', we add it to the navigation and change the button text to '+'
+            // Otherwise we remove the class and change the button text to '-'
+            const is_minimized = navigation.classList.contains('minimized')
+            if (is_minimized) {
+                navigation.classList.remove('minimized')
+                bar.innerHTML = '-'
+            } else {
+                navigation.classList.add('minimized')
+                bar.innerHTML = '+'
+            }
+        })
+        tools_minimize_button.addEventListener('click', () => {
+            const tools = workspace.querySelector('.plc-tools')
+            if (!tools) throw new Error('Tools not found')
+            const [container] = Array.from(tools.children)
+            if (!container) throw new Error('Tools container not found')
+            const bar = tools.querySelector('.plc-tools-bar .menu-button')
+            if (!bar) throw new Error('Tools bar not found')
+            // If the tools doesn't have class 'minimized', we add it to the tools and change the button text to '+'
+            // Otherwise we remove the class and change the button text to '-'
+            const is_minimized = tools.classList.contains('minimized')
+            if (is_minimized) {
+                tools.classList.remove('minimized')
+                bar.innerHTML = '-'
+            } else {
+                tools.classList.add('minimized')
+                bar.innerHTML = '+'
+            }
+        })
+
+        this.editor = new PLCEditor(this)
+        this.workspace_context_menu.addListener({
+            target: workspace,
+            onOpen: (event) => {
+                console.log(`VovkPLC Workspace "#${id}" context menu open`)
+                return [
+                    { type: 'item', name: 'edit', label: 'Edit' },
+                    { type: 'item', name: 'delete', label: 'Delete' },
+                    { type: 'separator' },
+                    { type: 'item', name: 'copy', label: 'Copy' },
+                    { type: 'item', name: 'paste', label: 'Paste' },
+                ]
+            },
+            onClose: (selected) => {
+                console.log(`Workspace selected: ${selected}`)
             }
         })
 
@@ -738,6 +1231,38 @@ export class VovkPLCEditor {
     open(project) {
         this.project = project
 
+        /** @type { (folder: PLC_Folder) => void } */
+        const reserveFolder = (folder) => {
+            folder.id = this.generateID(folder.id)
+            /** @type { (program: PLC_Program) => void } */
+            folder.children.forEach(child => {
+                if (child.type === 'folder') return reserveFolder(child)
+                if (child.type === 'program') return reserveProgram(child) // @ts-ignore
+                throw new Error(`Invalid child type: ${child.type}`)
+            })
+        }
+        /** @param { PLC_Program } program */
+        const reserveProgram = (program) => {
+            program.id = this.generateID(program.id)
+            if (!this.active_tab) this.active_tab = program.id
+            if (program.id === this.active_tab) {
+                program.blocks.forEach(block => {
+                    block.id = this.generateID(block.id)
+                    block.blocks.forEach(ladder => {
+                        ladder.id = this.generateID(ladder.id)
+                    })
+                    block.connections.forEach(con => {
+                        con.id = this.generateID(con.id)
+                    })
+                })
+            }
+        }
+        this.project.project.forEach(child => {
+            if (child.type === 'folder') return reserveFolder(child)
+            if (child.type === 'program') return reserveProgram(child) // @ts-ignore
+            throw new Error(`Invalid child type: ${child.type}`)
+        })
+        this.draw()
     }
 
     /** @param { number } offset */
@@ -777,29 +1302,34 @@ export class VovkPLCEditor {
         setMemoryBit(this, offset_address, bit, value)
     }
 
+    /** @param { string | undefined | null } [existing] */
+    generateID = (existing) => {
+        if (existing) { this.reserveID(existing); return existing }
+        while (true) { const id = generateID(); if (this.reserveID(id)) return id }
+    }
 
+    /** @param { string | undefined } id */
+    reserveID = (id) => {
+        if (!id) return false
+        const exists = this.reserved_ids.some(reserved => reserved === id)
+        if (!exists) {
+            this.reserved_ids.push(id)
+            return true
+        }
+        return false
+    }
 
     draw() {
-        /** @type { (folder: PLC_Folder) => void } */
-        const drawFolder = (folder) => {
-            /** @type { (program: PLC_Program) => void } */
-            folder.children.forEach(child => {
-                child.id = child.id || generateID()
-                if (child.type === 'folder') drawFolder(child)
-                if (child.type === 'program') drawProgram(child)
-            })
+        if (this.runtime_ready && this.runtime.wasm_exports) {
+            this.runtime.wasm_exports.run()
+            const u8array = this.runtime.readMemoryArea(0, 50)
+            this.memory = [...u8array]
         }
-        const drawProgram = (program) => {
-            if (program.id === this.active_tab) draw_program(this, program)
-        }
-        this.project.project.forEach(child => {
-            if (child.type === 'folder') drawFolder(child)
-            if (child.type === 'program') drawProgram(child)
-        })
+        this.editor.draw()
     }
 }
 
 export default {
-    VovkPLCEditor,
-    generateID,
+    ElementSynthesis,
+    VovkPLCEditor
 }

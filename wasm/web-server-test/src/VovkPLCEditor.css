@@ -1,0 +1,294 @@
+
+.hidden {
+    display: none !important;
+}
+
+
+/* Custom context menu style */
+
+ol,
+ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.items-with-context-menu 
+{
+    display: flex;
+}
+
+.items-with-context-menu .item
+{
+    background: #fff;
+    width: 10em;
+    height: 1.5em;
+}
+
+.menu {
+    background: white;
+    color: black;
+    border: #ccc solid 1px;
+    border-radius: .2em;
+    box-shadow: .1em .1em .2em gray;
+    position: absolute;
+    user-select: none;
+    flex-direction: column;
+}
+
+.menu .item {
+    cursor: default;
+    padding: .5em 1em;
+}
+
+.menu .item:first-child {
+    border-top-left-radius: .2em;
+    border-top-right-radius: .2em;
+}
+.menu .item:last-child {
+    border-bottom-left-radius: .2em;
+    border-bottom-right-radius: .2em;
+}
+
+.menu .item:hover {
+    border-radius: .2em;
+    background: #f1f1f1;
+    color: black;
+    cursor: pointer;
+}
+
+.menu hr {
+    margin: 0;
+    border: none;
+    border-top: 1px solid #ccc;
+}
+
+
+/* VovkPLCEditor style */
+.plc-workspace.debug div {
+    border: 1px solid #abe;
+}
+
+.plc-workspace h1 { margin: 15px; margin-left: 7px; }
+.plc-workspace h2 { margin: 12px; margin-left: 7px; }
+.plc-workspace h3 { margin: 8px; margin-left: 7px; } 
+.plc-workspace h4 { margin: 5px; margin-left: 7px; }
+.plc-workspace p { margin: 5px; margin-left: 7px; }
+
+.plc-workspace {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 0px;
+    width: 100%;
+    height: 100%;
+}
+/* .plc-workspace-header, .plc-workspace-body, .plc-workspace-footer */
+.plc-workspace-header {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 0px;
+    width: 100%;
+    min-width: 400px;
+}
+
+/* Ensure the workspace body takes full available height but doesn't push elements out */
+.plc-workspace-body {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    padding: 0;
+    width: 100%;
+    height: calc(100vh - 200px); /* Adjust based on header/footer size */
+    overflow: hidden;
+}
+
+/* Ensure the navigation and tools don't shrink */
+.plc-navigation, .plc-tools {
+    display: flex;
+    flex-direction: row;
+    align-items: top;
+    min-height: 200px;
+    flex-shrink: 0; /* Prevents these from shrinking */
+}
+
+.plc-navigation-container, .plc-tools-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+}
+.plc-navigation.minimized, .plc-tools.minimized {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 20px !important;
+}
+.plc-navigation.minimized > .plc-navigation-container, 
+.plc-navigation.minimized > .resizer, 
+.plc-tools.minimized > .plc-tools-container,
+.plc-tools.minimized > .resizer
+ {
+    display: none;
+}
+.plc-navigation-bar, .plc-tools-bar {
+    display: flex;
+    flex-direction: column;
+    align-items: top;
+    padding: 0px;
+    width: 20px;
+}
+
+.resizable {
+    position: relative;
+}
+.resizer {
+    position: relative;
+    background: gray;
+    z-index: 10;
+}
+.resizer.right {
+    width: 5px;
+    height: 100%;
+    top: 0;
+    cursor: ew-resize;
+}
+.resizer.left {
+    width: 5px;
+    height: 100%;
+    top: 0;
+    cursor: ew-resize;
+}
+.resizer.top {
+    height: 5px;
+    width: 100%;
+    left: 0;
+    cursor: ns-resize;
+}
+.resizer.bottom {
+    height: 5px;
+    width: 100%;
+    left: 0;
+    cursor: ns-resize;
+}
+
+.plc-workspace .menu-button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 0px;
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+}
+
+/* Make the inner window scrollable instead of pushing other elements */
+.plc-window {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    min-height: 200px;
+    min-width: 500px;
+    overflow: auto;
+}
+
+/* Ensure the editor takes full space inside the window */
+.plc-editor {
+    display: flex;
+    flex-direction: column;
+    align-items: left;
+    width: 100%;
+    height: 100%;
+}
+
+/* hide plc-editor scrollbars */
+.plc-window::-webkit-scrollbar { display: none; }
+.plc-editor::-webkit-scrollbar { display: none; }
+
+.plc-workspace-footer {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 0px;
+    width: 100%;
+}
+
+.plc-editor-top {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0px;
+    width: 100%;
+}
+
+.plc-editor-header {
+    display: flex;
+    flex-direction: column;
+    align-items: left;
+    padding: 0px;
+    width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.plc-editor-body {
+    display: block;
+    flex-direction: column;
+    align-items: center;
+    padding: 0px;
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: auto;
+}
+
+/** plc-program-block-header-content contains two elements, align the first to the top left and the other to the top right */
+.plc-program-block-header-content {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+.plc-program-block-header-content .menu-button {
+    margin: 3px;
+}
+
+.plc-program-block-header-buttons {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-end;
+    align-items: center;
+    margin: 0px;
+}
+.plc-program-block-header-buttons .menu-button {
+    margin-left: 0px;
+}
+
+.plc-workspace canvas {
+    margin: 3px
+}
+
+/* Custom scrollbar style for all scrollable children of .plc-workspace */
+.plc-workspace *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.plc-workspace *::-webkit-scrollbar-track {
+    background: #f0f0f0;
+}
+
+.plc-workspace *::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 1px;
+}
+
+.plc-workspace *::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}

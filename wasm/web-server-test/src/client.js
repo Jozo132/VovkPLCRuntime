@@ -3,8 +3,9 @@
 
 import PLCRuntimeWasm from "../../simulator.js"
 
-const wasm = await PLCRuntimeWasm.initialize("/simulator.wasm")
-const PLC = wasm.getExports()
+const runtime = new PLCRuntimeWasm("/simulator.wasm")
+await runtime.initialize()
+const PLC = runtime.getExports()
 
 const {
     run,
@@ -65,7 +66,7 @@ const do_compile_test = async () => { // @ts-ignore
     if (loadCompiledProgram()) return // Load the compiled program into the runtime
     runFullProgramDebug() // Verify the code by running it in the simulator
     const { size, output } = extractProgram() // Extract the current program from the runtime
-    const downloadString = PLCRuntimeWasm.buildCommand.programDownload(output)
+    const downloadString = runtime.buildCommand.programDownload(output)
     console.log(`Program download string for Serial/UART/RS232: ${downloadString}`)
 }
 
@@ -106,7 +107,7 @@ const readBit = offset => {
     const index = Math.floor(offset)
     const bit = Math.min(10 * (offset - index), 7)
     // console.log(`Reading bit ${bit} from memory area ${index}`)
-    const memory = PLCRuntimeWasm.readMemoryArea(index, 1)
+    const memory = runtime.readMemoryArea(index, 1)
     return (memory[0] & (1 << bit)) !== 0
 }
 let hmi_data_state = {}
@@ -114,7 +115,7 @@ const update_hmi = () => {
     // const state = readBit(10.0)
     // hmi_element.innerHTML = state ? "ON" : "OFF"
     run_cycle()
-    const memory = [...PLCRuntimeWasm.readMemoryArea(0, 40)].map(x => x.toString(16).padStart(2, '0'))
+    const memory = [...runtime.readMemoryArea(0, 40)].map(x => x.toString(16).padStart(2, '0'))
     const addresses = memory.map((_, i) => i.toString().padStart(2, '0'))
     const columns = 10
     const rows = []
