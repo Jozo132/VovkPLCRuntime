@@ -345,7 +345,7 @@ class PLCRuntimeWasm_class {
             checksum = this.crc8(data, checksum)
             const checksum_hex = checksum.toString(16).padStart(2, '0');
             const command = cmd + size_hex_u32 + data_hex.join('') + checksum_hex;
-            return command;
+            return command.toUpperCase();
         },
 
         /** @returns { string } */
