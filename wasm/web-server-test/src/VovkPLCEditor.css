@@ -26,11 +26,12 @@ ul {
 }
 
 .menu {
+    font-family: Arial, sans-serif;
     background: white;
     color: black;
     border: #ccc solid 1px;
     border-radius: .2em;
-    box-shadow: .1em .1em .2em gray;
+    box-shadow: .3em .3em .6em #0007;
     position: absolute;
     user-select: none;
     flex-direction: column;
@@ -63,6 +64,20 @@ ul {
     border-top: 1px solid #ccc;
 }
 
+.thick {
+    font-family: Arial Black, Gadget, sans-serif;
+    color: #ccc;
+}
+
+.text-rotate {
+    writing-mode: vertical-rl;
+    text-orientation: upright;
+    text-align: center;
+}
+
+.no-select {
+    user-select: none;
+}
 
 /* VovkPLCEditor style */
 .plc-workspace.debug div {
@@ -82,6 +97,11 @@ ul {
     margin: 0px;
     width: 100%;
     height: 100%;
+    background-color: #343434;
+    color: #fff;
+    font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    justify-content: center;
+    padding: 0px;
 }
 /* .plc-workspace-header, .plc-workspace-body, .plc-workspace-footer */
 .plc-workspace-header {
@@ -102,6 +122,7 @@ ul {
     width: 100%;
     height: calc(100vh - 200px); /* Adjust based on header/footer size */
     overflow: hidden;
+    background: repeating-linear-gradient( -60deg, #121212d6, #313a4a 24px,#28283e 24px, #252526 36px);
 }
 
 /* Ensure the navigation and tools don't shrink */
@@ -110,7 +131,9 @@ ul {
     flex-direction: row;
     align-items: top;
     min-height: 200px;
+    height: 100%;
     flex-shrink: 0; /* Prevents these from shrinking */
+    background: #2A2A2A;
 }
 
 .plc-navigation-container, .plc-tools-container {
@@ -118,6 +141,7 @@ ul {
     flex-direction: column;
     align-items: center;
     width: 100%;
+    background: #444;
 }
 .plc-navigation.minimized, .plc-tools.minimized {
     display: flex;
@@ -125,17 +149,26 @@ ul {
     align-items: center;
     width: 20px !important;
 }
-.plc-navigation.minimized > .plc-navigation-container, 
-.plc-navigation.minimized > .resizer, 
-.plc-tools.minimized > .plc-tools-container,
-.plc-tools.minimized > .resizer
+.plc-navigation.minimized .plc-navigation-container, 
+.plc-navigation.minimized .resizer, 
+.plc-tools.minimized .plc-tools-container,
+.plc-tools.minimized .resizer
  {
     display: none;
 }
+
+.plc-navigation .text-rotate, .plc-tools .text-rotate {
+    display: none;
+}
+.plc-navigation.minimized .text-rotate, .plc-tools.minimized .text-rotate {
+    display: block;
+}
+
 .plc-navigation-bar, .plc-tools-bar {
     display: flex;
     flex-direction: column;
     align-items: top;
+    text-align: center;
     padding: 0px;
     width: 20px;
 }
@@ -145,29 +178,33 @@ ul {
 }
 .resizer {
     position: relative;
-    background: gray;
+    background: none;
+    border: none;
     z-index: 10;
 }
+.resizer.active , .resizer:hover {
+    background: #007ad7;
+}
 .resizer.right {
-    width: 5px;
+    width: 2px;
     height: 100%;
     top: 0;
     cursor: ew-resize;
 }
 .resizer.left {
-    width: 5px;
+    width: 2px;
     height: 100%;
     top: 0;
     cursor: ew-resize;
 }
 .resizer.top {
-    height: 5px;
+    height: 2px;
     width: 100%;
     left: 0;
     cursor: ns-resize;
 }
 .resizer.bottom {
-    height: 5px;
+    height: 2px;
     width: 100%;
     left: 0;
     cursor: ns-resize;
@@ -182,18 +219,70 @@ ul {
     width: 20px;
     height: 20px;
     cursor: pointer;
+    user-select: none;
 }
 
 /* Make the inner window scrollable instead of pushing other elements */
-.plc-window {
+.plc-window, .plc-window-frame {
     display: flex;
     flex-direction: column;
     align-items: center;
     width: 100%;
     height: 100%;
     min-height: 200px;
-    min-width: 500px;
-    overflow: auto;
+    min-width: 200px;
+    overflow: hidden;
+}
+.plc-window-frame {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    min-height: 200px;
+    min-width: 200px;
+    overflow: hidden;
+    background: #444C;
+    border: 1px solid #ccc;
+    border-radius: 2px;
+    padding: 5px;
+    margin-top: 0px;
+    box-sizing: border-box;
+}
+
+.plc-window-bar {
+    display: flex;
+    flex-direction: row;
+    align-items: bottom;
+    padding: 0px;
+    width: 100%;
+    min-height: 32px;
+}
+.plc-window-bar .plc-tab:first-child {
+    margin-left: 8px;
+}
+.plc-tab {
+    margin: 3px 3px 0px 3px;
+    padding: 2px;
+    padding-left: 5px;
+    padding-right: 5px;
+    border-bottom: 0px;
+    cursor: pointer;
+    user-select: none;
+    background: #6789;
+}
+.plc-tab:hover {
+    background: #dedede;
+    color: black;
+}
+
+.plc-tab.active {
+    background: #ccc;
+    color: black;
+    font-weight: bold;
+}
+.plc-tab.active:hover {
+    background: #FFF;
 }
 
 /* Ensure the editor takes full space inside the window */
@@ -204,9 +293,20 @@ ul {
     width: 100%;
     height: 100%;
 }
+.plc-editor-body {
+    background-color: #2A2A2A;
+}
 
+.plc-editor-body > div {
+    border-bottom: 1px solid #ccc;
+}
+.plc-editor-body > div:first-child {
+    border-top: 1px solid #ccc;
+}
 /* hide plc-editor scrollbars */
+
 .plc-window::-webkit-scrollbar { display: none; }
+.plc-window-frame::-webkit-scrollbar { display: none; }
 .plc-editor::-webkit-scrollbar { display: none; }
 
 .plc-workspace-footer {
@@ -243,7 +343,15 @@ ul {
     padding: 0px;
     width: 100%;
     overflow-x: auto;
-    overflow-y: auto;
+    overflow-y: scroll;
+}
+
+.plc-program-block {
+    /* padding-bottom: 5px; */
+}
+
+.plc-program-block.minimized .plc-program-block-header {
+    height: 32px;
 }
 
 /** plc-program-block-header-content contains two elements, align the first to the top left and the other to the top right */
@@ -253,6 +361,29 @@ ul {
     justify-content: space-between;
     align-items: center;
     width: 100%;
+}
+
+.plc-program-block-header-title {
+    display: flex;
+    flex-direction: row;
+    align-items: bottom;
+    text-align: left;
+    text-wrap: nowrap;
+    overflow: hidden;
+    margin: 0px;
+}
+
+.plc-program-block .plc-comment-simple { display: none; }
+.plc-program-block.minimized .plc-comment-simple { display: block; }
+
+.plc-program-block.minimized .plc-comment-detailed { display: none; }
+.plc-program-block .plc-comment-detailed { display: block; }
+
+
+.minimized .plc-program-block-container { display: none; }
+
+.plc-program-block-container {
+    background: #444;
 }
 
 .plc-program-block-header-content .menu-button {
@@ -271,7 +402,7 @@ ul {
 }
 
 .plc-workspace canvas {
-    margin: 3px
+    margin-left: 5px
 }
 
 /* Custom scrollbar style for all scrollable children of .plc-workspace */
@@ -281,14 +412,16 @@ ul {
 }
 
 .plc-workspace *::-webkit-scrollbar-track {
-    background: #f0f0f0;
+    background: #FFF2;
 }
-
 .plc-workspace *::-webkit-scrollbar-thumb {
-    background: #888;
+    background: #8883;
     border-radius: 1px;
 }
 
+.plc-workspace *::-webkit-scrollbar-track:hover {
+    background: #FFF5;
+}
 .plc-workspace *::-webkit-scrollbar-thumb:hover {
-    background: #555;
+    background: #CCC;
 }

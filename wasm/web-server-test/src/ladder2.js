@@ -93,7 +93,10 @@ const plc_project = {
 
 
 
-const PLCEditor = new VovkPLCEditor({ workspace: 'PLCEditor', debug_css: true })
+const PLCEditor = new VovkPLCEditor({
+    workspace: 'PLCEditor',
+    // debug_css: true,
+})
 
 PLCEditor.open(plc_project)
 

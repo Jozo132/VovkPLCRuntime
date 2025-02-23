@@ -776,38 +776,56 @@ const draw_ladder = (editor, program, ladder) => {
     const { ladder_block_width, ladder_block_height, ladder_blocks_per_row, style } = editor.properties
     const { background_color, grid_color } = style
     const div_exists = !!ladder.div
-    const div = ladder.div || ElementSynthesis(`<div class="plc-ladder"></div>`)[0]
+    const div = ladder.div || ElementSynthesis(`<div class="plc-program-block"></div>`)[0]
     if (!div) throw new Error('Div not found')
     const initialize = div && !div_exists
     if (initialize) {
         const children = Array.from(div.children)
         for (const child of children) div.removeChild(child)
         const [header, canvas] = ElementSynthesis(`
-            <div class="plc-ladder-header"></div>
-            <canvas class="plc-ladder" id="${id}"></canvas>
+            <div class="plc-program-block-header"></div>
+            <div class="plc-program-block-container">
+                <canvas class="plc-program-block" id="${id}"></canvas>
+            </div>
         `)
         div.appendChild(header)
         div.appendChild(canvas)
         ladder.div = div
     }
     /** @type { [HTMLElement, HTMLCanvasElement] } *///@ts-ignore
-    const [header, canvas] = Array.from(ladder.div?.children || [])
+    const [header, container] = Array.from(ladder.div?.children || [])
+
     if (!header) throw new Error('Header not found')
+    if (!container) throw new Error('Container not found')
+    const canvas = container.querySelector('canvas')
     if (!canvas) throw new Error('Canvas not found')
+
     if (initialize) {
         if (!ladder.div) throw new Error('Div not found')
         canvas.setAttribute('id', id)
-        header.innerHTML = `
+        const header_children = ElementSynthesis(`
             <div class="plc-program-block-header-content">
-                <h3 style="margin-top: 3px; margin-bottom: 1px">Ladder: ${name}</h3>
+                <div class="plc-program-block-header-title">
+                    <h3 style="margin-top: 3px; margin-bottom: 1px">Ladder: ${name}</h3>
+                    <p class="plc-comment-simple" style="text-overflow: ellipsis;">${comment}</p>
+                </div>
                 <div class="plc-program-block-header-buttons">
-                    <div class="menu-button">x</div>
-                    <div class="menu-button">-</div>
-                    <div class="menu-button">^</div>
+                    <!--div class="menu-button delete">x</div-->
+                    <!--div class="menu-button edit">/</div-->
+                    <div class="menu-button minimize">-</div>
                 </div>
             </div>
-            <p>${comment}</p>
-        `
+            <p class="plc-comment-detailed">${comment}</p>
+        `)
+        for (const child of header_children) header.appendChild(child)
+        const minimize_button = header.querySelector('.minimize')
+        if (!minimize_button) throw new Error('Minimize button not found')
+        minimize_button.addEventListener('click', () => {
+            // div.classList.toggle('minimized')
+            const is_minimized = div.classList.contains('minimized')
+            div.classList.toggle('minimized') // @ts-ignore
+            minimize_button.innerText = is_minimized ? '-' : '+'
+        })
         editor.workspace_context_menu.addListener({
             target: canvas,
             onOpen: (event) => {
@@ -824,8 +842,6 @@ const draw_ladder = (editor, program, ladder) => {
                 console.log(`Ladder selected: ${selected}`)
             }
         })
-        const container = document.createElement('div')
-        container.classList.add('plc-ladder-container')
         program.div?.appendChild(ladder.div)
     }
     const ctx = ladder.ctx || canvas.getContext('2d')
@@ -1132,21 +1148,29 @@ export class VovkPLCEditor {
                 <h2>Header</h2>
             </div>
             <div class="plc-workspace-body">
-                <div class="plc-navigation resizable" style="width: 200px">
+                <div class="plc-navigation no-select resizable" style="width: 200px">
                     <div class="plc-navigation-container">
                         <h3>Navigation</h3>
                     </div>
                     <div class="resizer right"></div>
                     <div class="plc-navigation-bar">
                         <div class="menu-button">-</div>
+                        <span class="thick text-rotate" style="margin: auto auto; margin-top: 5px; font-size: 0.6em;">Navigation</span>
                     </div>
                 </div>
                 <div class="plc-window">
-                    <div class="plc-editor"></div>
+                    <div class="plc-window-bar">
+                        <div class="plc-tab active">Main</div>
+                        <div class="plc-tab">Test</div>
+                    </div>
+                    <div class="plc-window-frame">
+                        <div class="plc-editor"></div>
+                    </div>
                 </div>
-                <div class="plc-tools resizable minimized" style="width: 200px">
+                <div class="plc-tools no-select resizable minimized" style="width: 200px">
                     <div class="plc-tools-bar">
                         <div class="menu-button">+</div>
+                        <span class="thick text-rotate" style="margin: auto auto; margin-top: 5px; font-size: 0.6em;">Tools</span>
                     </div>
                     <div class="resizer left"></div>
                     <div class="plc-tools-container">
