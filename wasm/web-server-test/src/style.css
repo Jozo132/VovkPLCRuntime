@@ -63,6 +63,7 @@ div.console {
 }
 
 div.console p {
+    white-space: pre-line;
     margin: 0px;
     padding: 0px;
     font-size: 12px;
