@@ -101,7 +101,18 @@ let update_timeout = null
 
 const print_console = (text) => {
     const p = document.createElement("p")
-    p.textContent = text
+    const replace_map = [
+        ['&', '&amp;'],
+        ['\t', '    '],
+        ['\n', '<br>'],
+        [' ', '&nbsp;'],
+        ['<', '&lt;'],
+        ['>', '&gt;'],
+    ]
+    for (const [from, to] of replace_map) {
+        text = text.replace(new RegExp(from, 'g'), to)
+    }
+    p.innerHTML = text
     console_element.appendChild(p)
     if (update_timeout) clearTimeout(update_timeout)
     update_timeout = setTimeout(() => {
