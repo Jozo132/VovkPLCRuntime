@@ -1091,8 +1091,8 @@ class PLCEditor {
             this.name = name
             this.comment = comment
             this.header.innerHTML = `
-                <h2 style="margin-top: 3px; margin-bottom: 1px;">Program: ${name || ''}</h2>
-                <h3>${comment || ''}</h3>
+                <h2 style="margin-top: 0px; margin-bottom: 3px;">Program: ${name || ''}</h2>
+                <p>${comment || ''}</p>
             `
         }
         draw_program(this.editor, this.body, this.program)
