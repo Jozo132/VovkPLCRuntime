@@ -46,7 +46,7 @@ div.button {
 div.controls {
     display: flex;
     flex-direction: row;
-    margin: 10px;
+    margin: 8px;
 }
 
 
@@ -66,5 +66,5 @@ div.console p {
     white-space: pre-line;
     margin: 0px;
     padding: 0px;
-    font-size: 12px;
+    font-size: 10px;
 }
