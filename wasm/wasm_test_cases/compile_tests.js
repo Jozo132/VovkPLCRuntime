@@ -35,7 +35,7 @@ const exec_async = (command, options) => new Promise((resolve, reject) => {
 })
 
 /** @param { string } input * @param { string } output */
-const CC = (input, output) => `clang++ --target=wasm32 -Wall -std=c++11 -nostdlib -D __WASM__ -D __WASM_TIME__ -O3 -c "${input}" -o "${output}"`
+const CC = (input, output) => `clang++ --target=wasm32 -Wall -Wvla-cxx-extension -std=c++11 -nostdlib -D __WASM__ -D __WASM_TIME__ -O3 -c "${input}" -o "${output}"`
 
 /** @param { string } input * @param { string } output */
 const LD = (input, output) => `wasm-ld --no-entry --export-dynamic --allow-undefined --lto-O3 "${input}" -o "${output}"`

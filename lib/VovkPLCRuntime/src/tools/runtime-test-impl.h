@@ -24,13 +24,15 @@
 #include "runtime-test.h"
 
 #ifdef USE_X64_OPS
+#define MAX_NUM_OF_DIGITS_FOR_BIGNUMBER 64
+char szu64[MAX_NUM_OF_DIGITS_FOR_BIGNUMBER];
 void print__u64(u64 big_number) {
-    const u16 NUM_DIGITS = log10(big_number) + 1;
-    char sz[NUM_DIGITS + 1];
-    sz[NUM_DIGITS] = 0;
-    for (u16 i = NUM_DIGITS; i--; big_number /= 10)
-        sz[i] = '0' + (big_number % 10);
-    Serial.print(sz);
+    u16 num_digits = log10(big_number) + 1;
+    num_digits = num_digits > MAX_NUM_OF_DIGITS_FOR_BIGNUMBER ? MAX_NUM_OF_DIGITS_FOR_BIGNUMBER : num_digits;
+    szu64[num_digits] = 0;
+    for (u16 i = num_digits; i--; big_number /= 10)
+        szu64[i] = '0' + (big_number % 10);
+    Serial.print(szu64);
 }
 void println__u64(u64 big_number) {
     print__u64(big_number);
