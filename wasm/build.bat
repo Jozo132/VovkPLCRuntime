@@ -29,7 +29,7 @@ rem try to execute 'cd wasm', if failed do nothing
 cd wasm 2>nul
 
 IF not exist build (mkdir build)
-clang++ --target=wasm32-undefined-undefined-wasm -Wall -Wvla-cxx-extension -std=c++11 -nostdlib -O3 -D __WASM__ -c simulator.cpp -o build/simulator.o        || goto :error
+clang++ --target=wasm32-undefined-undefined-wasm -Wall -std=c++11 -nostdlib -O3 -D __WASM__ -c simulator.cpp -o build/simulator.o        || goto :error
 
 @echo on
 @echo Building...
