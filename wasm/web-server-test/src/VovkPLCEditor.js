@@ -282,14 +282,28 @@ const default_properties = {
     ladder_blocks_per_row: 7,
     style: {
         background_color_alt: '#333',
-        background_color: '#aaa',
+        background_color: '#444',
         color: '#000',
-        highlight_color: '#0f0',
-        grid_color: '#337',
+        highlight_color: '#4D4',
+        grid_color: '#FFF4',
         select_color: '#0af',
         hover_color: '#0cf',
         font: '16px Arial',
+        font_color: '#DDD',
+        line_width: 3,
+        highlight_width: 8,
     }
+    // style: {
+    //     background_color_alt: '#333',
+    //     background_color: '#aaa',
+    //     color: '#000',
+    //     highlight_color: '#0f0',
+    //     grid_color: '#337',
+    //     select_color: '#0af',
+    //     hover_color: '#0cf',
+    //     font: '16px Arial',
+    //     font_color: '#421',
+    // }
 }
 
 
@@ -430,12 +444,13 @@ const getBlockState = (editor, block) => {
     return block
 }
 
-/** @type {(editor: VovkPLCEditor, style: 'symbol' | 'highlight', ctx: CanvasRenderingContext2D , block: PLC_LadderBlock) => void} */
-const draw_contact = (editor, style, ctx, block) => {
+/** @type {(editor: VovkPLCEditor, like: 'symbol' | 'highlight', ctx: CanvasRenderingContext2D , block: PLC_LadderBlock) => void} */
+const draw_contact = (editor, like, ctx, block) => {
     // input state: the left side of the contact (green when true)
     // output state: the right side of the contact (green when true)
     // value: the inner state of the contact (green when true)
-    const { ladder_block_width, ladder_block_height } = editor.properties
+    const { ladder_block_width, ladder_block_height, style } = editor.properties
+    const { line_width, highlight_width, color, highlight_color, font, font_color } = style
     block = getBlockState(editor, block)
     if (!block.state) throw new Error(`Block state not found: ${block.symbol}`)
     const { x, y, type, inverted, trigger, state } = block
@@ -465,9 +480,9 @@ const draw_contact = (editor, style, ctx, block) => {
 
 
     // Draw thick green line for the contact to symbolize the input state if true for the left and the right side of the contact
-    if (style === 'highlight') {
-        ctx.strokeStyle = '#0f0'
-        ctx.lineWidth = 8
+    if (like === 'highlight') {
+        ctx.strokeStyle = highlight_color
+        ctx.lineWidth = highlight_width
         ctx.beginPath()
         if (state.powered) {
             if (state.terminated_input) {
@@ -493,9 +508,9 @@ const draw_contact = (editor, style, ctx, block) => {
         return
     }
 
-    if (style === 'symbol') {
-        ctx.strokeStyle = '#000'
-        ctx.lineWidth = 2
+    if (like === 'symbol') {
+        ctx.strokeStyle = color
+        ctx.lineWidth = line_width
 
         // Draw horizontal line from the left side of the contact
         ctx.beginPath()
@@ -539,8 +554,8 @@ const draw_contact = (editor, style, ctx, block) => {
         const short_location = memory_locations.find(loc => loc.name === symbol.location)?.short || '?'
 
         // Draw the symbol name
-        ctx.fillStyle = '#421'
-        ctx.font = '16px Arial'
+        ctx.fillStyle = font_color
+        ctx.font = font
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
         ctx.fillText(symbol.name, x_mid, ct - 13)
@@ -552,12 +567,13 @@ const draw_contact = (editor, style, ctx, block) => {
 }
 
 
-/** @type {(editor: VovkPLCEditor, style: 'symbol' | 'highlight', ctx: CanvasRenderingContext2D, block: PLC_LadderBlock) => void} */
-const draw_coil = (editor, style, ctx, block) => {
+/** @type {(editor: VovkPLCEditor, like: 'symbol' | 'highlight', ctx: CanvasRenderingContext2D, block: PLC_LadderBlock) => void} */
+const draw_coil = (editor, like, ctx, block) => {
     // input state: the left side of the contact (green when true)
     // output state: the right side of the contact is equal to the input state
     // value: the inner state of the contact (green when true)
-    const { ladder_block_width, ladder_block_height } = editor.properties
+    const { ladder_block_width, ladder_block_height, style } = editor.properties
+    const { line_width, highlight_width, color, highlight_color, font, font_color } = style
     block = getBlockState(editor, block)
     if (!block.state) throw new Error(`Block state not found: ${block.symbol}`)
     const { x, y, type, inverted, trigger, state } = block
@@ -588,9 +604,9 @@ const draw_coil = (editor, style, ctx, block) => {
     // The coil is a circle 
 
     // Draw thick green line for the contact to symbolize the input state if true for the left and the right side of the contact
-    if (style === 'highlight') {
-        ctx.strokeStyle = '#0f0'
-        ctx.lineWidth = 8
+    if (like === 'highlight') {
+        ctx.strokeStyle = highlight_color
+        ctx.lineWidth = highlight_width
         ctx.beginPath()
         if (state.powered) {
             ctx.moveTo(x0, y_mid)
@@ -614,9 +630,9 @@ const draw_coil = (editor, style, ctx, block) => {
         return
     }
 
-    if (style === 'symbol') {
-        ctx.strokeStyle = '#000'
-        ctx.lineWidth = 2
+    if (like === 'symbol') {
+        ctx.strokeStyle = color
+        ctx.lineWidth = line_width
 
         // Draw horizontal line from the left side of the contact
         ctx.beginPath()
@@ -641,13 +657,14 @@ const draw_coil = (editor, style, ctx, block) => {
         const short_location = memory_locations.find(loc => loc.name === symbol.location)?.short || '?'
 
         // Draw the symbol name
-        ctx.fillStyle = '#421'
-        ctx.font = '16px Arial'
+        ctx.fillStyle = font_color
+        ctx.font = font
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
         ctx.fillText(symbol.name, x_mid, ct - 13)
         ctx.fillText(`${short_location}: ${symbol.address.toFixed(1)}`, x_mid, cb + 13)
 
+        ctx.fillStyle = color
         ctx.font = '18px Arial Black'
         if (type === 'coil_set') ctx.fillText('S', x_mid, y_mid + 1)
         if (type === 'coil_rset') ctx.fillText('R', x_mid, y_mid + 1)
@@ -661,13 +678,14 @@ const draw_coil = (editor, style, ctx, block) => {
 // Draw links between blocks
 
 /** @typedef {{ from: PLC_LadderBlock , to: PLC_LadderBlock, powered: boolean }} LadderLink */
-/** @type {(editor: VovkPLCEditor, style: 'symbol' | 'highlight', ctx: CanvasRenderingContext2D , link: LadderLink) => void} */
-const draw_connection = (editor, style, ctx, link) => {
+/** @type {(editor: VovkPLCEditor, like: 'symbol' | 'highlight', ctx: CanvasRenderingContext2D , link: LadderLink) => void} */
+const draw_connection = (editor, like, ctx, link) => {
     // Draw a connection line from the output of the from block to the input of the to block
     // If the target block is bellow the source block, draw the vertical line first
     // If the target block is above the source block, draw the horizontal line first
     // If the target block is to the right, just draw a straight line
-    const { ladder_block_width, ladder_block_height } = editor.properties
+    const { ladder_block_width, ladder_block_height, style } = editor.properties
+    const { line_width, highlight_width, highlight_color, color } = style
     const { from, to, powered } = link
     const x0 = from.x * ladder_block_width + ladder_block_width
     const y0 = from.y * ladder_block_height + ladder_block_height / 2
@@ -677,10 +695,10 @@ const draw_connection = (editor, style, ctx, link) => {
     const x_direction = x0 < x1 ? 1 : x0 > x1 ? -1 : 0
     const y_direction = y0 < y1 ? 1 : y0 > y1 ? -1 : 0
     if (x_direction === 0 && y_direction === 0) return // elements are touching, no need to draw a connection
-    if (style === 'highlight') {
+    if (like === 'highlight') {
         if (powered) {
-            ctx.strokeStyle = '#0f0'
-            ctx.lineWidth = 8
+            ctx.strokeStyle = highlight_color
+            ctx.lineWidth = highlight_width
             ctx.beginPath()
             if (x_direction === 0) {
                 if (y_direction > 0) ctx.moveTo(x0, y0 - 4)
@@ -696,9 +714,9 @@ const draw_connection = (editor, style, ctx, link) => {
         return
     }
 
-    if (style === 'symbol') {
-        ctx.strokeStyle = '#000'
-        ctx.lineWidth = 2
+    if (like === 'symbol') {
+        ctx.strokeStyle = color
+        ctx.lineWidth = line_width
         ctx.beginPath()
         ctx.moveTo(x0, y0)
         // if (y0 < y1) ctx.lineTo(x0, y1)
@@ -784,9 +802,12 @@ const evaluate_ladder = (editor, ladder) => {
 const draw_ladder = (editor, program, ladder) => {
     ladder.id = editor.generateID(ladder.id)
     const { id, name, comment } = ladder
+    const scale = 1.5
     // Generate the canvas and context if not already present
-    const { ladder_block_width, ladder_block_height, ladder_blocks_per_row, style } = editor.properties
-    const { background_color, grid_color } = style
+    let ladder_block_height = editor.properties.ladder_block_height
+    let ladder_block_width = editor.properties.ladder_block_width
+    const { ladder_blocks_per_row, style } = editor.properties
+    const { background_color, grid_color, color } = style
     const div_exists = !!ladder.div
     const div = ladder.div || ElementSynthesis(`<div class="plc-program-block"></div>`)[0]
     if (!div) throw new Error('Div not found')
@@ -862,8 +883,12 @@ const draw_ladder = (editor, program, ladder) => {
 
     const max_x = ladder.blocks.reduce((max, block) => Math.max(max, block.x), 0)
     const max_y = ladder.blocks.reduce((max, block) => Math.max(max, block.y), 0)
-    canvas.width = Math.max(max_x + 1, ladder_blocks_per_row) * ladder_block_width
-    canvas.height = (max_y + 1) * ladder_block_height
+    const width = Math.max(max_x + 1, ladder_blocks_per_row) * ladder_block_width
+    const height = (max_y + 1) * ladder_block_height
+    canvas.style.width = (width / scale) + 'px';
+    canvas.style.height = (height / scale) + 'px';
+    canvas.width = width
+    canvas.height = height
 
     // Canvas fill background
     ctx.fillStyle = background_color
