@@ -42,6 +42,12 @@ const run_cycle = () => {
     }
 }
 
+const toggle_run = () => {
+    simulation_active = !simulation_active
+    const text = simulation_active ? "Stop" : "Start"
+    if (toggle_run_element) toggle_run_element.innerText = text
+}
+
 let old_memory = 0
 const checkForMemoryLeak = () => {
     const now = get_free_memory()
@@ -83,6 +89,7 @@ const do_compile_test = async () => { // @ts-ignore
 const unit_test_element = document.getElementById("unit-test")
 const compile_test_element = document.getElementById("compile-test")
 const run_cycle_element = document.getElementById("run-cycle")
+const toggle_run_element = document.getElementById("toggle-run")
 const do_nothing_element = document.getElementById("do-nothing")
 const leak_check_element = document.getElementById("leak-check")
 const output_element = document.getElementById("output")
@@ -91,6 +98,7 @@ const console_element = document.getElementById("console")
 if (!unit_test_element) throw new Error("unit_test_element not found")
 if (!compile_test_element) throw new Error("compile_test_element not found")
 if (!run_cycle_element) throw new Error("run_cycle_element not found")
+if (!toggle_run_element) throw new Error("toggle_run_element not found")
 if (!do_nothing_element) throw new Error("do_nothing_element not found")
 if (!leak_check_element) throw new Error("leak_check_element not found")
 if (!output_element) throw new Error("output_element not found")
@@ -132,6 +140,7 @@ runtime.onStdout(msg => print_console(msg))
 unit_test_element.addEventListener("click", unit_test)
 compile_test_element.addEventListener("click", do_compile_test)
 run_cycle_element.addEventListener("click", run_cycle)
+toggle_run_element.addEventListener("click", toggle_run)
 do_nothing_element.addEventListener("click", do_nothing_job)
 leak_check_element.addEventListener("click", checkForMemoryLeak)
 
@@ -153,15 +162,17 @@ const readBit = offset => {
     const memory = runtime.readMemoryArea(index, 1)
     return (memory[0] & (1 << bit)) !== 0
 }
+
+let simulation_active = true
 let hmi_data_state = {}
 const update_hmi = () => {
     // const state = readBit(10.0)
     // hmi_element.innerHTML = state ? "ON" : "OFF"
-    run_cycle()
+    if (simulation_active) run_cycle()
     const columns = 16
     const rows = 4
-    const memory = [...runtime.readMemoryArea(0, columns * rows)].map(x => x.toString(16).padStart(2, '0'))
-    const addresses = memory.map((_, i) => i.toString().padStart(2, '0'))
+    const memory = [...runtime.readMemoryArea(0, columns * rows)].map(x => [x, x.toString(16).padStart(2, '0').toUpperCase()]).map(([x, hex]) => `<span style="color: #${+x > 0 ? 'DDD' : '000'}">${hex}</span>`)
+    const addresses = memory.map((_, i) => i.toString().padStart(2, '0').toUpperCase())
     const output = []
 
     output.push(`
@@ -176,7 +187,7 @@ const update_hmi = () => {
         const memory_str = memory.slice(i, i + columns).join(' ')
         const content = `
             <span>
-                <span style="color: #888">${(columns * row).toString().padStart(2, '0')}&nbsp;</span>${memory_str}
+                <span style="color: #888">${(columns * row).toString().padStart(2, '0').toUpperCase()}&nbsp;</span>${memory_str}
             </span>
         `
         output.push(content)

@@ -13,35 +13,26 @@
     <body>
         <div class="row">
             <div class="col">
-                <h1>VovkPLCRuntime WebAssembly Test</h1>
+                <h1 style="margin: 0px;">VovkPLCRuntime WebAssembly Test</h1>
             </div>
         </div>
         <div class="row">
             <div class="col" style="align-items: start !important; margin-left: 15px;">
-                <div id="hmi"></div>
-                <p>
-                    Click the button to run the WebAssembly code.
+                <p style="margin: 15px;">
+                    Click on the buttons bellow to run the WebAssembly code.
                     <br>
                     Open the development tools F12 to see runtime output.
                 </p>
+                <div id="hmi"></div>
             </div>
         </div>
         <div class="row" style="margin: 10px;">
-            <div class="col">
-                <button id="unit-test">Unit test</button>
-            </div>
-            <div class="col">
-                <button id="compile-test">Compile assembly and Run</button>
-            </div>
-            <div class="col">
-                <button id="run-cycle">Run cycle</button>
-            </div>
-            <div class="col">
-                <button id="do-nothing">Call Empty Function</button>
-            </div>
-            <div class="col">
-                <button id="leak-check">Leak-check</button>
-            </div>
+            <div class="col"><button id="toggle-run">Stop</button></div>
+            <div class="col"><button id="run-cycle">Run cycle</button></div>
+            <div class="col"><button id="compile-test">Compile assembly and Run</button></div>
+            <div class="col"><button id="do-nothing">Call Empty WASM Function</button></div>
+            <div class="col"><button id="unit-test">Unit test</button></div>
+            <div class="col"><button id="leak-check">Leak-check</button></div>
         </div>
         <textarea id="assembly" spellcheck="false" rows="12" cols="80" style="background-color: #222; color: #fff; font-family: monospace; font-size: 12px; margin: 5px"></textarea>
         <div id="output"></div>
