@@ -120,7 +120,7 @@ ul {
     align-items: stretch;
     padding: 0;
     width: 100%;
-    height: calc(100vh - 200px); /* Adjust based on header/footer size */
+    height: 100%;
     overflow: hidden;
     background: repeating-linear-gradient( -60deg, #121212d6, #313a4a 24px,#28283e 24px, #252526 36px);
 }
