@@ -51,10 +51,25 @@ div.controls {
 
 
 
+
+#hmi {
+    font-family: monospace; font-size: 1em;
+}
+#hmi span {
+    margin: 0px;
+    padding: 0px;
+}
+p {
+    margin: 0px;
+    padding: 0px;
+    font-size: 12px;
+}
+
 div.console {
     font-family: "Courier New", Courier, monospace;
-    background-color: #000;
-    color: #fff;
+    background-color: #222;
+    color: #CCC;
+    border: 1px solid #444;
     width: 95%;
     height: 200px;
     overflow-y: auto;
@@ -66,5 +81,5 @@ div.console p {
     white-space: pre-line;
     margin: 0px;
     padding: 0px;
-    font-size: 10px;
+    font-size: 8px;
 }

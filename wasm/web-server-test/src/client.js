@@ -158,13 +158,14 @@ const update_hmi = () => {
     // const state = readBit(10.0)
     // hmi_element.innerHTML = state ? "ON" : "OFF"
     run_cycle()
-    const memory = [...runtime.readMemoryArea(0, 40)].map(x => x.toString(16).padStart(2, '0'))
+    const columns = 16
+    const rows = 4
+    const memory = [...runtime.readMemoryArea(0, columns * rows)].map(x => x.toString(16).padStart(2, '0'))
     const addresses = memory.map((_, i) => i.toString().padStart(2, '0'))
-    const columns = 10
-    const rows = []
+    const output = []
 
-    rows.push(`
-        <span style="font-family: monospace; font-size: 2em;">
+    output.push(`
+        <span>
             &nbsp;&nbsp;
             <span style="color: #888">${addresses.slice(0, columns).join(' ')}</span>
         </span>
@@ -174,14 +175,14 @@ const update_hmi = () => {
     for (let i = 0; i < memory.length; i += columns) {
         const memory_str = memory.slice(i, i + columns).join(' ')
         const content = `
-            <span style="font-family: monospace; font-size: 2em;">
+            <span>
                 <span style="color: #888">${(columns * row).toString().padStart(2, '0')}&nbsp;</span>${memory_str}
             </span>
         `
-        rows.push(content)
+        output.push(content)
         row++
     }
-    const content = rows.join('<br>')
+    const content = output.join('<br>')
     if (hmi_data_state.content !== content) {
         hmi_element.innerHTML = content
         hmi_data_state.content = content
