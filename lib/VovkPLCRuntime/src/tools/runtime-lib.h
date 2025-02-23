@@ -585,8 +585,8 @@ void VovkPLCRuntime::updateGlobals() {
     state = state << 1 | P_300ms;
     state = state << 1 | P_200ms;
     state = state << 1 | P_100ms;
-    // memory.set(2, state); // u8 -> 1 byte
     memory[2] = state;
+
     state = 0;
     state = state << 1 | P_1hr;
     state = state << 1 | P_30min;
@@ -596,8 +596,8 @@ void VovkPLCRuntime::updateGlobals() {
     state = state << 1 | P_2min;
     state = state << 1 | P_1min;
     state = state << 1 | P_30s;
-    // memory.set(3, state); // u8 -> 1 byte
     memory[3] = state;
+
     state = 0;
     state = state << 1 | P_1day;
     state = state << 1 | P_12hr;
@@ -606,8 +606,8 @@ void VovkPLCRuntime::updateGlobals() {
     state = state << 1 | P_4hr;
     state = state << 1 | P_3hr;
     state = state << 1 | P_2hr;
-    // memory.set(4, state); // u8 -> 1 byte
     memory[4] = state;
+
     state = 0;
     state = state << 1 | S_10s;
     state = state << 1 | S_5s;
@@ -617,8 +617,8 @@ void VovkPLCRuntime::updateGlobals() {
     state = state << 1 | S_300ms;
     state = state << 1 | S_200ms;
     state = state << 1 | S_100ms;
-    // memory.set(5, state); // u8 -> 1 byte
     memory[5] = state;
+    
     state = 0;
     state = state << 1 | S_1hr;
     state = state << 1 | S_30min;
@@ -628,17 +628,12 @@ void VovkPLCRuntime::updateGlobals() {
     state = state << 1 | S_2min;
     state = state << 1 | S_1min;
     state = state << 1 | S_30s;
-    // memory.set(6, state); // u8 -> 1 byte
     memory[6] = state;
 
-    // memory.set(8, interval_time_days);
-    // memory.set(9, interval_time_hours);
-    // memory.set(10, interval_time_minutes);
-    // memory.set(11, interval_time_seconds);
-    memory[8] = interval_time_days;
-    memory[9] = interval_time_hours;
-    memory[10] = interval_time_minutes;
-    memory[11] = interval_time_seconds;
+    memory[8] = interval_time_seconds;
+    memory[9] = interval_time_minutes;
+    memory[10] = interval_time_hours;
+    memory[11] = interval_time_days;
 
     writeMemory(12, (u8*) &uptime_seconds, sizeof(u32));
 }
