@@ -60,14 +60,18 @@ const do_nothing_job = () => {
 const do_compile_test = async () => { // @ts-ignore
     const assembly = assembly_element.value
     //  const bytecode = compile(assembly) // Compile the assembly code to the final runtime bytecode
-    console.log("Running compileAssembly()...")
+    const message = "Compiling the assembly code..."
+    console.log(message)
+    print_console(message)
     if (downloadAssembly(assembly)) return // Push the assembly code to the runtime
     if (compileAssembly(true)) return // Compile the code and return if there is an error
     if (loadCompiledProgram()) return // Load the compiled program into the runtime
     runFullProgramDebug() // Verify the code by running it in the simulator
     const { size, output } = extractProgram() // Extract the current program from the runtime
     const downloadString = runtime.buildCommand.programDownload(output)
-    console.log(`Program download string for Serial/UART/RS232: ${downloadString}`)
+    const download_command = `Program download string for Serial/UART/RS232: ${downloadString}`
+    console.log(download_command)
+    print_console(download_command)
 }
 
 
@@ -77,6 +81,7 @@ const run_cycle_element = document.getElementById("run-cycle")
 const do_nothing_element = document.getElementById("do-nothing")
 const leak_check_element = document.getElementById("leak-check")
 const output_element = document.getElementById("output")
+const console_element = document.getElementById("console")
 
 if (!unit_test_element) throw new Error("unit_test_element not found")
 if (!compile_test_element) throw new Error("compile_test_element not found")
@@ -84,7 +89,15 @@ if (!run_cycle_element) throw new Error("run_cycle_element not found")
 if (!do_nothing_element) throw new Error("do_nothing_element not found")
 if (!leak_check_element) throw new Error("leak_check_element not found")
 if (!output_element) throw new Error("output_element not found")
+if (!console_element) throw new Error("console_element not found")
 
+const print_console = (text) => {
+    const p = document.createElement("p")
+    p.textContent = text
+    console_element.appendChild(p)
+}
+
+runtime.onStdout(msg => print_console(msg))
 
 unit_test_element.addEventListener("click", unit_test)
 compile_test_element.addEventListener("click", do_compile_test)
