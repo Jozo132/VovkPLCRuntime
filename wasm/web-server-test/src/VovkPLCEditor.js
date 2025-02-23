@@ -339,7 +339,7 @@ middle_mouse_drag()
 
 
 // Resizable borders
-document.addEventListener("mousedown", (event) => { // @ts-ignore
+const handle_resizer_drag = (event) => { // @ts-ignore
     if (!event || !event.target || !event.target.classList.contains("resizer")) return;
 
     const resizer = event.target; // @ts-ignore
@@ -348,8 +348,8 @@ document.addEventListener("mousedown", (event) => { // @ts-ignore
     const target = resizer.closest('.resizable')
     if (!target) return console.error("No resizable parent found for resizer: ", resizer)
     event.preventDefault();
-    const startX = event.clientX;
-    const startY = event.clientY;
+    const startX = event.clientX || event.touches[0].clientX;
+    const startY = event.clientY || event.touches[0].clientY;
     const startWidth = target.offsetWidth;
     const startHeight = target.offsetHeight;
 
@@ -360,18 +360,20 @@ document.addEventListener("mousedown", (event) => { // @ts-ignore
         return Math.min(Math.max(value, 200), 1000)
     }
 
-    function onMouseMove(event) { // @ts-ignore
+    function onMouseMove(event) {
+        const endX = event.clientX || event.touches[0].clientX
+        const endY = event.clientY || event.touches[0].clientY// @ts-ignore
         if (resizer.classList.contains("right")) {
-            const newWidth = constrain(startWidth + (event.clientX - startX));
+            const newWidth = constrain(startWidth + (endX - startX));
             target.style.width = newWidth + "px"; // @ts-ignore
         } else if (resizer.classList.contains("left")) {
-            const newWidth = constrain(startWidth - (event.clientX - startX));
+            const newWidth = constrain(startWidth - (endX - startX));
             target.style.width = newWidth + "px"; // @ts-ignore
         } else if (resizer.classList.contains("bottom")) {
-            const newHeight = constrain(startHeight + (event.clientY - startY));
+            const newHeight = constrain(startHeight + (endY - startY));
             target.style.height = newHeight + "px"; // @ts-ignore
         } else if (resizer.classList.contains("top")) {
-            const newHeight = constrain(startHeight - (event.clientY - startY));
+            const newHeight = constrain(startHeight - (endY - startY));
             target.style.height = newHeight + "px";
         } else { // @ts-ignore
             console.error("Invalid resizer class: ", resizer.classList)
@@ -382,12 +384,22 @@ document.addEventListener("mousedown", (event) => { // @ts-ignore
         target.style.cursor = previous_pointer
         document.removeEventListener("mousemove", onMouseMove);
         document.removeEventListener("mouseup", onMouseUp);
+        // Handle touch
+        document.removeEventListener("touchmove", onMouseMove);
+        document.removeEventListener("touchend", onMouseUp);
+        document.removeEventListener("touchcancel", onMouseUp);
     }
 
     document.addEventListener("mousemove", onMouseMove);
     document.addEventListener("mouseup", onMouseUp);
-});
+    // Handle touch
+    document.addEventListener("touchmove", onMouseMove, { passive: false });
+    document.addEventListener("touchend", onMouseUp);
+    document.addEventListener("touchcancel", onMouseUp);
+}
 
+document.addEventListener("mousedown", handle_resizer_drag);
+document.addEventListener("touchstart", handle_resizer_drag, { passive: false });
 
 /** @type {(editor: VovkPLCEditor, symbol: string | PLC_Symbol | undefined) => number | boolean} */
 const get_symbol_value = (editor, symbol) => {
