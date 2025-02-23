@@ -48,3 +48,22 @@ div.controls {
     flex-direction: row;
     margin: 10px;
 }
+
+
+
+div.console {
+    font-family: "Courier New", Courier, monospace;
+    background-color: #000;
+    color: #fff;
+    width: 95%;
+    height: 200px;
+    overflow-y: auto;
+    margin: 10px;
+    padding: 5px;
+}
+
+div.console p {
+    margin: 0px;
+    padding: 0px;
+    font-size: 12px;
+}

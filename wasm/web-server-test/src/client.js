@@ -25,8 +25,10 @@ const {
 const unit_test = () => {
     try {
         console.log("Running VovkPLCRuntime WebAssembly simulation unit test...")
+        print_console("Running VovkPLCRuntime WebAssembly simulation unit test...")
         run_unit_test()
         console.log("Done.")
+        print_console("Done.")
     } catch (error) {
         console.error(error)
     }
@@ -46,14 +48,17 @@ const checkForMemoryLeak = () => {
     const diff_in_bytes = old_memory - now
     if (diff_in_bytes > 0) {
         console.error(`Memory leak detected: ${diff_in_bytes} bytes`)
+        print_console(`Memory leak detected: ${diff_in_bytes} bytes`)
     } else {
         console.log("No memory leak detected.")
+        print_console("No memory leak detected.")
     }
     old_memory = now
 }
 
 const do_nothing_job = () => {
     console.log("Running doNothing()...")
+    print_console("Running doNothing()...")
     doNothing()
 }
 
@@ -91,10 +96,24 @@ if (!leak_check_element) throw new Error("leak_check_element not found")
 if (!output_element) throw new Error("output_element not found")
 if (!console_element) throw new Error("console_element not found")
 
+
+let update_timeout = null
+
 const print_console = (text) => {
     const p = document.createElement("p")
     p.textContent = text
     console_element.appendChild(p)
+    if (update_timeout) clearTimeout(update_timeout)
+    update_timeout = setTimeout(() => {
+        console_element.scrollTop = console_element.scrollHeight
+        // Keep <p> count to a reasonable number and remove the oldest ones
+        while (console_element.children.length > 1000) {
+            const child = console_element.children.item(0)
+            if (!child) break
+            console_element.removeChild(child)
+        }
+        update_timeout = null
+    }, 100)
 }
 
 runtime.onStdout(msg => print_console(msg))
