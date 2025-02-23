@@ -545,7 +545,7 @@ u8 OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
         case WRITE_INV_X8_B4:
         case WRITE_INV_X8_B5:
         case WRITE_INV_X8_B6:
-        case WRITE_INV_X8_B7: return 3;
+        case WRITE_INV_X8_B7: return 1 + MY_PTR_SIZE_BYTES;
 
         case BW_AND_X8:
         case BW_AND_X16:
@@ -589,7 +589,7 @@ u8 OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
         case JMP_IF_NOT:
         case CALL:
         case CALL_IF:
-        case CALL_IF_NOT: return 3;
+        case CALL_IF_NOT: return 1 + MY_PTR_SIZE_BYTES;
 
         case RET:
         case RET_IF:

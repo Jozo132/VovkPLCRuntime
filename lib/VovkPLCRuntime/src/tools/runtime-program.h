@@ -185,6 +185,24 @@ public:
         return 5;
     }
 
+    // check sizeof MY_PTR_t to decide which instruction size is needed
+#if MY_PTR_SIZE == 8
+    static u8 push_InstructionWithPointer(u8* location, PLCRuntimeInstructionSet instruction, MY_PTR_t value) {
+        return push_InstructionWithU8(location, instruction, value);
+    }
+#elif MY_PTR_SIZE == 32
+    static u8 push_InstructionWithPointer(u8* location, PLCRuntimeInstructionSet instruction, MY_PTR_t value) {
+        return push_InstructionWithU32(location, instruction, value);
+    }
+#else // Default to 16 bit pointers
+    static u8 push_InstructionWithPointer(u8* location, PLCRuntimeInstructionSet instruction, MY_PTR_t value) {
+        return push_InstructionWithU16(location, instruction, value);
+    }
+#endif
+
+
+
+
     // Push flow control instructions to the PLC Program
     static u8 push_jmp(u8* location, u32 location_address) {
         location[0] = JMP;

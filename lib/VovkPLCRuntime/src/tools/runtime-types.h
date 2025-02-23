@@ -24,7 +24,8 @@
 
 // Pointer type for the runtime memory
 typedef uint16_t  MY_PTR_t;
-
+#define MY_PTR_SIZE 16
+#define MY_PTR_SIZE_BYTES 2
 
 typedef uint8_t    u8;
 #ifndef __AVR__
@@ -43,7 +44,7 @@ typedef double    f64;
 
 
 constexpr int size_ptr = sizeof(MY_PTR_t);
-constexpr int size_bool = sizeof(MY_PTR_t);
+constexpr int size_bool = sizeof(u8);
 constexpr int size_u8 = sizeof(u8);
 constexpr int size_u16 = sizeof(u16);
 constexpr int size_u32 = sizeof(u32);
