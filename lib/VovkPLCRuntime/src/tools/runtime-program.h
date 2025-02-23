@@ -162,12 +162,27 @@ public:
     }
 #endif // USE_X64_OPS
 
+    // Push instruction + u8 value to the PLC Program
+    static u8 push_InstructionWithU8(u8* location, PLCRuntimeInstructionSet instruction, u8 value) {
+        location[0] = instruction;
+        location[1] = value;
+        return 2;
+    }
     // Push instruction + u16 value to the PLC Program
-    static u8 push_InstructionWithU32(u8* location, PLCRuntimeInstructionSet instruction, u16 value) {
+    static u8 push_InstructionWithU16(u8* location, PLCRuntimeInstructionSet instruction, u16 value) {
         location[0] = instruction;
         location[1] = value >> 8;
         location[2] = value & 0xFF;
         return 3;
+    }
+    // Push instruction + u32 value to the PLC Program
+    static u8 push_InstructionWithU32(u8* location, PLCRuntimeInstructionSet instruction, u32 value) {
+        location[0] = instruction;
+        location[1] = value >> 24;
+        location[2] = (value >> 16) & 0xFF;
+        location[3] = (value >> 8) & 0xFF;
+        location[4] = value & 0xFF;
+        return 5;
     }
 
     // Push flow control instructions to the PLC Program

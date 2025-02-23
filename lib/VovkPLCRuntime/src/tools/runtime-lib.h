@@ -27,11 +27,11 @@
 #define PLCRUNTIME_MAX_PROGRAM_SIZE 104857
 #endif // __WASM__
 
-#define PLCRUNTIME_NUM_OF_INPUTS 10
-#define PLCRUNTIME_NUM_OF_OUTPUTS 10
+#define PLCRUNTIME_NUM_OF_INPUTS 16
+#define PLCRUNTIME_NUM_OF_OUTPUTS 16
 
 #ifndef PLCRUNTIME_INPUT_OFFSET 
-#define PLCRUNTIME_INPUT_OFFSET 10
+#define PLCRUNTIME_INPUT_OFFSET 16
 #endif // PLCRUNTIME_INPUT_OFFSET
 
 #ifndef PLCRUNTIME_OUTPUT_OFFSET
@@ -122,6 +122,8 @@ public:
         if (!started_up) initialize();
         this->program.load(program, prog_size, checksum);
     }
+
+    void updateGlobals();
 
     // Clear the stack
     void clear();
@@ -572,13 +574,7 @@ void VovkPLCRuntime::clear(RuntimeProgram& program) {
 // Print the stack
 int VovkPLCRuntime::printStack() { return stack.print(); }
 
-
-// Execute the whole PLC program, returns an erro code (0 on success)
-RuntimeError VovkPLCRuntime::run(RuntimeProgram& program) { return run(program.program, program.prog_size); }
-
-// Execute the whole PLC program, returns an erro code (0 on success)
-RuntimeError VovkPLCRuntime::run(u8* program, u32 prog_size) {
-    if (!started_up) initialize();
+void VovkPLCRuntime::updateGlobals() {
     IntervalGlobalLoopCheck();
     u8 state = 0;
     state = state << 1 | P_10s;
@@ -589,19 +585,19 @@ RuntimeError VovkPLCRuntime::run(u8* program, u32 prog_size) {
     state = state << 1 | P_300ms;
     state = state << 1 | P_200ms;
     state = state << 1 | P_100ms;
-    // memory.set(1, state); // u8 -> 1 byte
-    memory[1] = state;
+    // memory.set(2, state); // u8 -> 1 byte
+    memory[2] = state;
     state = 0;
-    state = state << 1 | P_2hr;
     state = state << 1 | P_1hr;
     state = state << 1 | P_30min;
+    state = state << 1 | P_15min;
     state = state << 1 | P_10min;
     state = state << 1 | P_5min;
     state = state << 1 | P_2min;
     state = state << 1 | P_1min;
     state = state << 1 | P_30s;
-    // memory.set(2, state); // u8 -> 1 byte
-    memory[2] = state;
+    // memory.set(3, state); // u8 -> 1 byte
+    memory[3] = state;
     state = 0;
     state = state << 1 | P_1day;
     state = state << 1 | P_12hr;
@@ -609,17 +605,51 @@ RuntimeError VovkPLCRuntime::run(u8* program, u32 prog_size) {
     state = state << 1 | P_5hr;
     state = state << 1 | P_4hr;
     state = state << 1 | P_3hr;
-    // memory.set(3, state); // u8 -> 1 byte
-    memory[3] = state;
+    state = state << 1 | P_2hr;
+    // memory.set(4, state); // u8 -> 1 byte
+    memory[4] = state;
+    state = 0;
+    state = state << 1 | S_10s;
+    state = state << 1 | S_5s;
+    state = state << 1 | S_2s;
+    state = state << 1 | S_1s;
+    state = state << 1 | S_500ms;
+    state = state << 1 | S_300ms;
+    state = state << 1 | S_200ms;
+    state = state << 1 | S_100ms;
+    // memory.set(5, state); // u8 -> 1 byte
+    memory[5] = state;
+    state = 0;
+    state = state << 1 | S_1hr;
+    state = state << 1 | S_30min;
+    state = state << 1 | S_15min;
+    state = state << 1 | S_10min;
+    state = state << 1 | S_5min;
+    state = state << 1 | S_2min;
+    state = state << 1 | S_1min;
+    state = state << 1 | S_30s;
+    // memory.set(6, state); // u8 -> 1 byte
+    memory[6] = state;
 
-    // memory.set(4, interval_time_days);
-    // memory.set(5, interval_time_hours);
-    // memory.set(6, interval_time_minutes);
-    // memory.set(7, interval_time_seconds);
-    memory[4] = interval_time_days;
-    memory[5] = interval_time_hours;
-    memory[6] = interval_time_minutes;
-    memory[7] = interval_time_seconds;
+    // memory.set(8, interval_time_days);
+    // memory.set(9, interval_time_hours);
+    // memory.set(10, interval_time_minutes);
+    // memory.set(11, interval_time_seconds);
+    memory[8] = interval_time_days;
+    memory[9] = interval_time_hours;
+    memory[10] = interval_time_minutes;
+    memory[11] = interval_time_seconds;
+
+    writeMemory(12, (u8*) &uptime_seconds, sizeof(u32));
+}
+
+// Execute the whole PLC program, returns an erro code (0 on success)
+RuntimeError VovkPLCRuntime::run(RuntimeProgram& program) { return run(program.program, program.prog_size); }
+
+// Execute the whole PLC program, returns an erro code (0 on success)
+RuntimeError VovkPLCRuntime::run(u8* program, u32 prog_size) {
+    if (!started_up) initialize();
+    updateGlobals();
     u32 index = 0;
     while (index < prog_size) {
         RuntimeError status = step(program, prog_size, index);

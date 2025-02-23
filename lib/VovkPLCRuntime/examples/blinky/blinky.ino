@@ -1,8 +1,8 @@
 #define __RUNTIME_PRODUCTION__
 #define PLCRUNTIME_SERIAL_ENABLED
 
-#define PLCRUNTIME_NUM_OF_OUTPUTS   10
-#define PLCRUNTIME_INPUT_OFFSET     10
+#define PLCRUNTIME_NUM_OF_OUTPUTS   16
+#define PLCRUNTIME_INPUT_OFFSET     16
 #define PLCRUNTIME_MAX_STACK_SIZE   64
 #define PLCRUNTIME_MAX_MEMORY_SIZE  64
 #define PLCRUNTIME_MAX_PROGRAM_SIZE 1024
@@ -29,7 +29,7 @@ void setup() {
      *      1.4      Q0.0
     **/
     // PLCASM code:
-    /* 
+    /*
      *       u8.readBit     1.4    // Read bit 1.4 which is 1s pulse
      *       jump_if_not    end    // Jump to the label 'end' if the bit is OFF
      *       u8.writeBitInv 20.0   // Invert bit 20.0
@@ -39,13 +39,13 @@ void setup() {
     // Program[10] [5C 00 01 E2 00 09 78 00 14 FF]
     // Explanation:
     /*
-     *  5C 00 01  ->  read u8 bit 4 at address 0x0001 and put it on the stack
+     *  5C 00 01  ->  read u8 bit 4 at address 0x0002 and put it on the stack
      *  E2 00 09  ->  jump to address 0x0009 if the value from the stack is OFF
      *  78 00 14  ->  toggle u8 bit 0 at address 0x0014
      *  FF        ->  end of program, which is also the address 0x0009 to jump to
     **/
     const u8 program [] = {
-        0x5C, 0x00, 0x01,
+        0x5C, 0x00, 0x02,
         0xE2, 0x00, 0x09,
         0x78, 0x00, 0x14,
         0xFF,

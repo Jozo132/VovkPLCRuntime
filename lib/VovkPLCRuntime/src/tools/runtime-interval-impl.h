@@ -47,31 +47,50 @@ void IntervalGlobalLoopCheck() {
     P_300ms = false;
     P_200ms = false;
     P_100ms = false;
+    P_50ms = false;
     u32 t = millis();
     if (t == interval_millis_now) return; // No need to check if the time hasn't changed
     interval_millis_now = t;
 
     if (interval_millis_last > t) {
         interval_millis_last = t;
-        P_100ms = true;
-        interval_counter_100ms++;
+        P_50ms = true;
+        interval_counter_50ms++;
     }
     u32 diff = t - interval_millis_last;
-    while (diff >= 100) {
-        P_100ms = true;
-        interval_counter_100ms++;
-        interval_millis_last += 100;
-        diff -= 100;
+    while (diff >= 50) {
+        P_50ms = true;
+        interval_counter_50ms++;
+        interval_millis_last += 50;
+        diff -= 50;
     }
-    if (!P_100ms) return; // No need to check if the time hasn't changed
-
-
-    P_200ms = interval_counter_100ms % 2 == 0;
-    P_300ms = interval_counter_100ms % 3 == 0;
-    P_500ms = interval_counter_100ms % 5 == 0;
-    P_1s = interval_counter_100ms % 10 == 0;
+    if (!P_50ms) return; // No need to check if the time hasn't changed
+    P_100ms = interval_counter_50ms % 2 == 0;
+    P_200ms = interval_counter_50ms % 4 == 0;
+    P_300ms = interval_counter_50ms % 6 == 0;
+    P_500ms = interval_counter_50ms % 10 == 0;
+    P_1s = interval_counter_50ms % 20 == 0;
+    
+    S_100ms = !S_100ms; // The 50ms pulse is the half period of 100ms square wave
+    if (interval_counter_50ms % 2 == 0) S_200ms = !S_200ms;
+    if (interval_counter_50ms % 3 == 0) S_300ms = !S_300ms;
+    if (interval_counter_50ms % 5 == 0) S_500ms = !S_500ms;
+    if (interval_counter_50ms % 10 == 0) S_1s = !S_1s;
+    if (interval_counter_50ms % 50 == 0) S_5s = !S_5s;
+    if (interval_counter_50ms % 100 == 0) S_10s = !S_10s;
+    if (interval_counter_50ms % 300 == 0) S_30s = !S_30s;
+    if (interval_counter_50ms % 600 == 0) S_1min = !S_1min;
+    if (interval_counter_50ms % 1200 == 0) S_2min = !S_2min;
+    if (interval_counter_50ms % 3000 == 0) S_5min = !S_5min;
+    if (interval_counter_50ms % 6000 == 0) S_10min = !S_10min;
+    if (interval_counter_50ms % 9000 == 0) S_15min = !S_15min;
+    if (interval_counter_50ms % 18000 == 0) S_30min = !S_30min;
+    if (interval_counter_50ms % 36000 == 0) S_1hr = !S_1hr;
+    if (interval_counter_50ms % 72000 == 0) S_2hr = !S_2hr;
 
     if (P_1s) {
+        S_2s = !S_2s;
+        uptime_seconds++;
         interval_time_seconds = (interval_time_seconds + 1) % 60;
         if (interval_time_seconds == 0) {
             interval_time_minutes = (interval_time_minutes + 1) % 60;
@@ -90,6 +109,7 @@ void IntervalGlobalLoopCheck() {
             P_2s = true;
         }
         if (P_5s_sec_cnt >= 5) {
+            S_10s = !S_10s;
             P_5s_sec_cnt = 0;
             P_5s = true;
         }

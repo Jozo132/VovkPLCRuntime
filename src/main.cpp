@@ -20,8 +20,8 @@
 #define memory_size 64
 #define program_size 1024
 
-#define PLCRUNTIME_NUM_OF_OUTPUTS 10
-#define PLCRUNTIME_INPUT_OFFSET 10
+#define PLCRUNTIME_NUM_OF_OUTPUTS 16
+#define PLCRUNTIME_INPUT_OFFSET 16
 #define PLCRUNTIME_MAX_STACK_SIZE stack_size
 #define PLCRUNTIME_MAX_MEMORY_SIZE memory_size
 #define PLCRUNTIME_MAX_PROGRAM_SIZE program_size

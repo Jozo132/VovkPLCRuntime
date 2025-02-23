@@ -82,14 +82,64 @@ document.head.appendChild(style)
 await styleLoadPromise
 
 
-
-const locations = [
+/** @typedef */
+const memory_locations = [
     { short: 'C', name: 'control', label: 'Control' },
     { short: 'I', name: 'input', label: 'Input' },
     { short: 'Q', name: 'output', label: 'Output' },
     { short: 'M', name: 'memory', label: 'Memory' },
 ]
 
+/** @type { PLC_Symbol[] } */
+const system_symbols = [
+    { name: 'P_100ms', location: 'control', type: 'bit', address: 2.0, initial_value: 0, comment: '100ms pulse' },
+    { name: 'P_200ms', location: 'control', type: 'bit', address: 2.1, initial_value: 0, comment: '200ms pulse' },
+    { name: 'P_300ms', location: 'control', type: 'bit', address: 2.2, initial_value: 0, comment: '300ms pulse' },
+    { name: 'P_500ms', location: 'control', type: 'bit', address: 2.3, initial_value: 0, comment: '500ms pulse' },
+    { name: 'P_1s', location: 'control', type: 'bit', address: 2.4, initial_value: 0, comment: '1 second pulse' },
+    { name: 'P_2s', location: 'control', type: 'bit', address: 2.5, initial_value: 0, comment: '2 second pulse' },
+    { name: 'P_5s', location: 'control', type: 'bit', address: 2.6, initial_value: 0, comment: '5 second pulse' },
+    { name: 'P_10s', location: 'control', type: 'bit', address: 2.7, initial_value: 0, comment: '10 second pulse' },
+    { name: 'P_30s', location: 'control', type: 'bit', address: 3.0, initial_value: 0, comment: '30 second pulse' },
+    { name: 'P_1min', location: 'control', type: 'bit', address: 3.1, initial_value: 0, comment: '1 minute pulse' },
+    { name: 'P_2min', location: 'control', type: 'bit', address: 3.2, initial_value: 0, comment: '2 minute pulse' },
+    { name: 'P_5min', location: 'control', type: 'bit', address: 3.3, initial_value: 0, comment: '5 minute pulse' },
+    { name: 'P_10min', location: 'control', type: 'bit', address: 3.4, initial_value: 0, comment: '10 minute pulse' },
+    { name: 'P_15min', location: 'control', type: 'bit', address: 3.5, initial_value: 0, comment: '15 minute pulse' },
+    { name: 'P_30min', location: 'control', type: 'bit', address: 3.6, initial_value: 0, comment: '30 minute pulse' },
+    { name: 'P_1hr', location: 'control', type: 'bit', address: 3.7, initial_value: 0, comment: '1 hour pulse' },
+    { name: 'P_2hr', location: 'control', type: 'bit', address: 4.0, initial_value: 0, comment: '2 hour pulse' },
+    { name: 'P_3hr', location: 'control', type: 'bit', address: 4.1, initial_value: 0, comment: '3 hour pulse' },
+    { name: 'P_4hr', location: 'control', type: 'bit', address: 4.2, initial_value: 0, comment: '4 hour pulse' },
+    { name: 'P_5hr', location: 'control', type: 'bit', address: 4.3, initial_value: 0, comment: '5 hour pulse' },
+    { name: 'P_6hr', location: 'control', type: 'bit', address: 4.4, initial_value: 0, comment: '6 hour pulse' },
+    { name: 'P_12hr', location: 'control', type: 'bit', address: 4.5, initial_value: 0, comment: '12 hour pulse' },
+    { name: 'P_1day', location: 'control', type: 'bit', address: 4.6, initial_value: 0, comment: '1 day pulse' },
+
+    { name: 'S_100ms', location: 'control', type: 'bit', address: 5.0, initial_value: 0, comment: '100ms square wave' },
+    { name: 'S_200ms', location: 'control', type: 'bit', address: 5.1, initial_value: 0, comment: '200ms square wave' },
+    { name: 'S_300ms', location: 'control', type: 'bit', address: 5.2, initial_value: 0, comment: '300ms square wave' },
+    { name: 'S_500ms', location: 'control', type: 'bit', address: 5.3, initial_value: 0, comment: '500ms square wave' },
+    { name: 'S_1s', location: 'control', type: 'bit', address: 5.4, initial_value: 0, comment: '1 second square wave' },
+    { name: 'S_2s', location: 'control', type: 'bit', address: 5.5, initial_value: 0, comment: '2 second square wave' },
+    { name: 'S_5s', location: 'control', type: 'bit', address: 5.6, initial_value: 0, comment: '5 second square wave' },
+    { name: 'S_10s', location: 'control', type: 'bit', address: 5.7, initial_value: 0, comment: '10 second square wave' },
+    { name: 'S_30s', location: 'control', type: 'bit', address: 6.0, initial_value: 0, comment: '30 second square wave' },
+    { name: 'S_1min', location: 'control', type: 'bit', address: 6.1, initial_value: 0, comment: '1 minute square wave' },
+    { name: 'S_2min', location: 'control', type: 'bit', address: 6.2, initial_value: 0, comment: '2 minute square wave' },
+    { name: 'S_5min', location: 'control', type: 'bit', address: 6.3, initial_value: 0, comment: '5 minute square wave' },
+    { name: 'S_10min', location: 'control', type: 'bit', address: 6.4, initial_value: 0, comment: '10 minute square wave' },
+    { name: 'S_15min', location: 'control', type: 'bit', address: 6.5, initial_value: 0, comment: '15 minute square wave' },
+    { name: 'S_30min', location: 'control', type: 'bit', address: 6.6, initial_value: 0, comment: '30 minute square wave' },
+    { name: 'S_1hr', location: 'control', type: 'bit', address: 6.7, initial_value: 0, comment: '1 hour square wave' },
+
+    { name: 'elapsed_days', location: 'control', type: 'byte', address: 8.0, initial_value: 0, comment: 'Elapsed days' },
+    { name: 'elapsed_hours', location: 'control', type: 'byte', address: 9.0, initial_value: 0, comment: 'Elapsed hours' },
+    { name: 'elapsed_minutes', location: 'control', type: 'byte', address: 10.0, initial_value: 0, comment: 'Elapsed minutes' },
+    { name: 'elapsed_seconds', location: 'control', type: 'byte', address: 11.0, initial_value: 0, comment: 'Elapsed seconds' },
+
+    { name: 'system_uptime', location: 'control', type: 'dint', address: 12.0, initial_value: 0, comment: 'System uptime in seconds' },
+]
 
 
 
@@ -338,53 +388,6 @@ document.addEventListener("mousedown", (event) => { // @ts-ignore
     document.addEventListener("mouseup", onMouseUp);
 });
 
-/** @type { PLC_Symbol[] } */
-const system_symbols = [
-    // P_100ms: "u8.readBit 1.0",
-    // P_200ms: "u8.readBit 1.1",
-    // P_300ms: "u8.readBit 1.2",
-    // P_500ms: "u8.readBit 1.3",
-    // P_1s: "u8.readBit 1.4",
-    // P_2s: "u8.readBit 1.5",
-    // P_5s: "u8.readBit 1.6",
-    // P_10s: "u8.readBit 1.7",
-    // P_30s: "u8.readBit 2.0",
-    // P_1min: "u8.readBit 2.1",
-    // P_2min: "u8.readBit 2.2",
-    // P_5min: "u8.readBit 2.3",
-    // P_10min: "u8.readBit 2.4",
-    // P_30min: "u8.readBit 2.5",
-    // P_1hr: "u8.readBit 2.6",
-    // P_2hr: "u8.readBit 2.7",
-    // P_3hr: "u8.readBit 3.0",
-    // P_4hr: "u8.readBit 3.1",
-    // P_5hr: "u8.readBit 3.2",
-    // P_6hr: "u8.readBit 3.3",
-    // P_12hr: "u8.readBit 3.4",
-    // P_1day: "u8.readBit 3.5",
-    { name: 'P_100ms', location: 'control', type: 'bit', address: 1.0, initial_value: 0, comment: '100ms pulse' },
-    { name: 'P_200ms', location: 'control', type: 'bit', address: 1.1, initial_value: 0, comment: '200ms pulse' },
-    { name: 'P_300ms', location: 'control', type: 'bit', address: 1.2, initial_value: 0, comment: '300ms pulse' },
-    { name: 'P_500ms', location: 'control', type: 'bit', address: 1.3, initial_value: 0, comment: '500ms pulse' },
-    { name: 'P_1s', location: 'control', type: 'bit', address: 1.4, initial_value: 0, comment: '1 second pulse' },
-    { name: 'P_2s', location: 'control', type: 'bit', address: 1.5, initial_value: 0, comment: '2 second pulse' },
-    { name: 'P_5s', location: 'control', type: 'bit', address: 1.6, initial_value: 0, comment: '5 second pulse' },
-    { name: 'P_10s', location: 'control', type: 'bit', address: 1.7, initial_value: 0, comment: '10 second pulse' },
-    { name: 'P_30s', location: 'control', type: 'bit', address: 2.0, initial_value: 0, comment: '30 second pulse' },
-    { name: 'P_1min', location: 'control', type: 'bit', address: 2.1, initial_value: 0, comment: '1 minute pulse' },
-    { name: 'P_2min', location: 'control', type: 'bit', address: 2.2, initial_value: 0, comment: '2 minute pulse' },
-    { name: 'P_5min', location: 'control', type: 'bit', address: 2.3, initial_value: 0, comment: '5 minute pulse' },
-    { name: 'P_10min', location: 'control', type: 'bit', address: 2.4, initial_value: 0, comment: '10 minute pulse' },
-    { name: 'P_30min', location: 'control', type: 'bit', address: 2.5, initial_value: 0, comment: '30 minute pulse' },
-    { name: 'P_1hr', location: 'control', type: 'bit', address: 2.6, initial_value: 0, comment: '1 hour pulse' },
-    { name: 'P_2hr', location: 'control', type: 'bit', address: 2.7, initial_value: 0, comment: '2 hour pulse' },
-    { name: 'P_3hr', location: 'control', type: 'bit', address: 3.0, initial_value: 0, comment: '3 hour pulse' },
-    { name: 'P_4hr', location: 'control', type: 'bit', address: 3.1, initial_value: 0, comment: '4 hour pulse' },
-    { name: 'P_5hr', location: 'control', type: 'bit', address: 3.2, initial_value: 0, comment: '5 hour pulse' },
-    { name: 'P_6hr', location: 'control', type: 'bit', address: 3.3, initial_value: 0, comment: '6 hour pulse' },
-    { name: 'P_12hr', location: 'control', type: 'bit', address: 3.4, initial_value: 0, comment: '12 hour pulse' },
-    { name: 'P_1day', location: 'control', type: 'bit', address: 3.5, initial_value: 0, comment: '1 day pulse' },
-]
 
 /** @type {(editor: VovkPLCEditor, symbol: string | PLC_Symbol | undefined) => number | boolean} */
 const get_symbol_value = (editor, symbol) => {
@@ -521,7 +524,7 @@ const draw_contact = (editor, style, ctx, block) => {
         }
         ctx.stroke()
 
-        const short_location = locations.find(loc => loc.name === symbol.location)?.short || '?'
+        const short_location = memory_locations.find(loc => loc.name === symbol.location)?.short || '?'
 
         // Draw the symbol name
         ctx.fillStyle = '#421'
@@ -623,7 +626,7 @@ const draw_coil = (editor, style, ctx, block) => {
         ctx.stroke()
 
 
-        const short_location = locations.find(loc => loc.name === symbol.location)?.short || '?'
+        const short_location = memory_locations.find(loc => loc.name === symbol.location)?.short || '?'
 
         // Draw the symbol name
         ctx.fillStyle = '#421'

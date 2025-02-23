@@ -7,11 +7,11 @@ import { VovkPLCEditor, ElementSynthesis } from './VovkPLCEditor.js'
 /** @type {PLC_Project} */
 const plc_project = {
     offsets: {
-        control: { offset: 0, size: 10 },
-        input: { offset: 10, size: 10 },
-        output: { offset: 20, size: 10 },
-        memory: { offset: 30, size: 10 },
-        system: { offset: 40, size: 10 },
+        control: { offset: 0, size: 16 },
+        input: { offset: 16, size: 16 },
+        output: { offset: 32, size: 16 },
+        memory: { offset: 48, size: 16 },
+        system: { offset: 64, size: 16 },
     },
     symbols: [
         { name: 'button1', location: 'input', type: 'bit', address: 0.0, initial_value: 0, comment: 'Test input' },
@@ -38,7 +38,7 @@ const plc_project = {
                             comment: 'Trying to get this to work',
                             // Test
                             blocks: [
-                                { id: `0`, x: 0, y: 0, type: 'contact', inverted: false, trigger: 'normal', symbol: 'P_200ms' },
+                                { id: `0`, x: 0, y: 0, type: 'contact', inverted: false, trigger: 'normal', symbol: 'S_1s' },
                                 { id: `3`, x: 0, y: 1, type: 'contact', inverted: false, trigger: 'normal', symbol: 'button2' },
                                 { id: `4`, x: 1, y: 0, type: 'contact', inverted: false, trigger: 'normal', symbol: 'button3' },
                                 { id: `5`, x: 0, y: 2, type: 'contact', inverted: false, trigger: 'normal', symbol: 'light1' },

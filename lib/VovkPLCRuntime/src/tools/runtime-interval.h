@@ -29,13 +29,15 @@
 
 u32 interval_millis_now = 0;
 u32 interval_millis_last = 0;
-u32 interval_counter_100ms = 0;
+u32 interval_counter_50ms = 0;
+u32 uptime_seconds = 0;
 
 u8 interval_time_seconds = 0;
 u8 interval_time_minutes = 0;
 u8 interval_time_hours = 0;
 u8 interval_time_days = 0;
 
+bool P_50ms = false;
 bool P_100ms = false;
 bool P_200ms = false;
 bool P_300ms = false;
@@ -59,6 +61,24 @@ bool P_5hr = false;
 bool P_6hr = false;
 bool P_12hr = false;
 bool P_1day = false;
+
+bool S_100ms = false;
+bool S_200ms = false;
+bool S_300ms = false;
+bool S_500ms = false;
+bool S_1s = false;
+bool S_2s = false;
+bool S_5s = false;
+bool S_10s = false;
+bool S_30s = false;
+bool S_1min = false;
+bool S_2min = false;
+bool S_5min = false;
+bool S_10min = false;
+bool S_15min = false;
+bool S_30min = false;
+bool S_1hr = false;
+bool S_2hr = false;
 
 u32 P_1day_hour_cnt = 0;
 u32 P_12hr_hour_cnt = 0;
