@@ -2,7 +2,7 @@
 "use strict"
 
 /** @typedef { import('./VovkPLCEditor.js').PLC_Project } PLC_Project */
-import { VovkPLCEditor, ElementSynthesis } from './VovkPLCEditor.js'
+import { VovkPLCEditor, ElementSynthesis, ImageRenderer } from './VovkPLCEditor.js'
 
 /** @type {PLC_Project} */
 const plc_project = {
@@ -148,4 +148,4 @@ draw()
 setInterval(draw, 20)
 
 
-Object.assign(window, { PLCEditor, ElementSynthesis, draw, plc_project, toggle_input, toggle_output })
+Object.assign(window, { PLCEditor, ElementSynthesis, ImageRenderer, draw, plc_project, toggle_input, toggle_output })
