@@ -191,11 +191,6 @@ class Menu {
         })
     }
 
-    #clearList() {
-        this.#items = []
-        this.menu.innerHTML = ''
-    }
-
     constructor() {
         const menu = document.createElement('div')
         menu.classList.add('menu')
@@ -223,8 +218,9 @@ class Menu {
             // Get mouse X and Y from the event
             const mouseX = event.clientX
             const mouseY = event.clientY
-            const lmb = event.button === 0
-            const rmb = event.button === 2
+            const lmb = event.button === 0 || event.type === 'touchstart'
+            const rmb = event.button === 2 || event.type === 'contextmenu'
+            // console.log(`Mouse event:`, { mouseX, mouseY, lmb, rmb })
             if (this.open && lmb) {
                 this.menu.classList.add('hidden')
                 this.open = false
@@ -273,6 +269,50 @@ class Menu {
     removeListener(target) { this.#listeners = this.#listeners.filter(listener => listener.target !== target) }
     removeAllListeners() { this.#listeners = [] }
 }
+
+const handleLongPress = (element, delay = 500) => {
+    let timeout = null
+    let target = null
+
+    let start = {
+        clientX: 0,
+        clientY: 0
+    }
+
+    element.addEventListener("touchstart", (event) => {
+        const touch = event.touches[0];
+        const { clientX, clientY } = touch;
+        start = { clientX, clientY }
+        target = event.target
+
+        timeout = setTimeout(() => {
+            const contextEvent = new MouseEvent("contextmenu", {
+                bubbles: true,
+                cancelable: true,
+                view: window,
+                clientX,
+                clientY
+            });
+            target.dispatchEvent(contextEvent);
+        }, delay);
+    });
+
+    element.addEventListener("touchend", () => {
+        if (timeout) clearTimeout(timeout);
+        timeout = null;
+    });
+
+    element.addEventListener("touchmove", (event) => {
+        const distanceX = Math.abs(event.touches[0].clientX - start.clientX);
+        const distanceY = Math.abs(event.touches[0].clientY - start.clientY);
+        const distance = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
+        if (distance > 10) {
+            if (timeout) clearTimeout(timeout);
+            timeout = null;
+        }
+    });
+}
+handleLongPress(document.body)
 
 
 /** @typedef */
