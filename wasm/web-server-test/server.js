@@ -13,46 +13,63 @@ const cl = console.log
 /** @type { (...args: any[]) => void } */
 console.log = (...args) => cl(`[${timestamp()}]:`, ...args)
 
-/** @type { { address: string, first_visit: Date, last_visit: Date, visits: number, pages: { url: string, count: number }[] }[] } */
+/** @type { { address: string, first_visit: Date, last_visit: Date, visits: number, pages: { url: string, count: number }[], blacklisted: boolean }[] } */
 const unique_users = []
-const log_user_interaction = (req) => {
+const get_unique_user = (req) => {
     let address = req.connection.remoteAddress || req.socket.remoteAddress || req.connection.socket.remoteAddress || req.ip
     address = address.replace("::ffff:", "").replace("::1", "").trim() || 'unknown'
+    const exists = unique_users.find(user => user.address === address)
+    if (exists) return exists
+    const new_user = {
+        address,
+        first_visit: new Date(),
+        last_visit: new Date(),
+        visits: 1,
+        pages: [],
+        blacklisted: false
+    }
+    unique_users.push(new_user)
+    return new_user
+}
+const log_user_interaction = (req, res, user) => {
+    const url = req.url
     const now = new Date()
-    const existing_user = unique_users.find(user => user.address === address)
-    if (existing_user) {
-        existing_user.last_visit = now
-        existing_user.visits++
-        const existing_page = existing_user.pages.find(page => page.url === req.url)
+    const blacklist = url.includes("admin") || url.includes("secret") || url.includes("login")
+    if (user) {
+        if (!user.blacklisted && blacklist) {
+            user.blacklisted = true
+            console.log(`User ${user.address} was blacklisted for visiting "${url}"`)
+            return res.status(404).end()
+        }
+        user.last_visit = now
+        user.visits++
+        const existing_page = user.pages.find(page => page.url === req.url)
         if (existing_page) {
             existing_page.count++
         } else {
-            existing_user.pages.push({ url: req.url, count: 1 })
+            user.pages.push({ url: req.url, count: 1 })
         }
-        const page = existing_user.pages.find(page => page.url === req.url)
-        console.log(`User ${address} visited "${page?.url || '???'}" for the ${page?.count} time. Total visits: ${existing_user.visits}`)
-    } else {
-        unique_users.push({
-            address,
-            first_visit: now,
-            last_visit: now,
-            visits: 1,
-            pages: [{ url: req.url, count: 1 }]
-        })
-        console.log(`New user ${address} visited "${req.url}" for the first time`)
+        const page = user.pages.find(page => page.url === req.url)
+        console.log(`User ${user.address} visited "${page?.url || '???'}" for the ${page?.count} time. Total visits: ${user.visits}`)
     }
 }
 
 app.use((req, res, next) => {
     // check if the request is a favicon request
     if (req.url === "/favicon.ico") {
-        res.status(204).end()
+        res.status(404).end()
         return
     }
     // Log the user interaction if the request is a html page
     // console.log(`Request URL: ${req.url}`)
+    const user = get_unique_user(req)
+    if (user.blacklisted) {
+        console.log(`User ${user.address} is blacklisted, trying to access: ${req.url}`)
+        res.status(404).end()
+        return
+    }
     if (req.url.endsWith(".html") || req.url.endsWith("/")) {
-        log_user_interaction(req)
+        log_user_interaction(req, res, user)
     }
     next()
 })
@@ -66,8 +83,13 @@ app.get("/", (req, res) => {
     res.sendFile("index.html", { root: "../" })
 })
 
-app.get("/unique_users", (req, res) => {
+app.get("/custom/unique_users", (req, res) => {
     res.json(unique_users)
+})
+
+// Default 404
+app.use((req, res) => {
+    res.status(404).end()
 })
 
 app.listen(port, () => {
