@@ -42,8 +42,8 @@
  *      mode?: PLC_ContextState
  * }} PLC_Ladder
  * @typedef { PLC_Ladder } PLC_ProgramBlock
- * @typedef {{ id?: string, type: 'program', name: string, comment: string, blocks: PLC_ProgramBlock[], div?: Element }} PLC_Program
- * @typedef {{ id?: string, type: 'folder', name: string, comment: string, children: PLC_ProjectItem[], div?: Element }} PLC_Folder
+ * @typedef {{ id?: string, type: 'program', name: string, comment: string, blocks: PLC_ProgramBlock[], editor?: PLCEditor }} PLC_Program
+ * @typedef {{ id?: string, type: 'folder', name: string, comment: string, children: PLC_ProjectItem[] }} PLC_Folder
  * @typedef { PLC_Folder | PLC_Program } PLC_ProjectItem
  * 
  * @typedef {{ 
@@ -213,6 +213,7 @@ const folder_icon = ImageRenderer.renderSVG({
         <path d="M1,1 L4,1 L6,2 L4,3 L0,3 L0,2 L1,1 Z" fill="#AA0" />
     `
 })
+const folder_icon_str = folder_icon.outerHTML
 
 // Round gear icon with 6 teeth in blue color
 const program_icon = ImageRenderer.renderSVG({
@@ -223,6 +224,7 @@ const program_icon = ImageRenderer.renderSVG({
         <path d="M30.088 12.102l-1.722 2.998c-1.051-0.449-2.172-0.764-3.344-0.919v-3.463h-3.353v3.461c-1.141 0.148-2.236 0.447-3.263 0.873l-1.693-2.95-2.247 1.264-0.927-1.298c0.306-0.425 0.547-0.903 0.708-1.423l3.383-0.37-0.333-3.386-3.237 0.32c-0.253-0.581-0.615-1.108-1.065-1.552l1.293-2.888-3.081-1.379-1.28 2.86c-0.656-0.054-1.297 0.024-1.895 0.213l-1.806-2.529-2.747 2.007 1.859 2.603c-0.313 0.496-0.541 1.056-0.662 1.662l-3.266 0.357 0.333 3.386 3.451-0.378c0.244 0.442 0.555 0.844 0.921 1.193l-1.46 3.261 3.080 1.379 1.472-3.288c0.507 0.033 1.004-0.013 1.478-0.128l2.127 2.914 1.979-1.446 0.728 1.258c-0.918 0.701-1.739 1.522-2.441 2.439l-3.071-1.769-1.603 2.915 3.002 1.744c-0.441 1.056-0.747 2.183-0.895 3.358h-3.492v3.353h3.507c0.104 0.752 0.274 1.481 0.502 2.186h10.566c0 0 0 0 0 0v0c-1.493-0.671-2.533-2.17-2.533-3.913 0-2.369 1.92-4.289 4.289-4.289s4.289 1.92 4.289 4.289c0 1.743-1.040 3.242-2.533 3.913v0c0 0 0 0 0 0h5.71v-18.439l-0.729-0.401zM9.695 12.139c-1.515 0.092-2.818-1.060-2.91-2.575s1.061-2.818 2.576-2.91 2.818 1.061 2.91 2.575c0.092 1.515-1.061 2.817-2.576 2.91z" fill="#3AD"></path>
     `
 })
+const program_icon_str = program_icon.outerHTML
 
 
 
@@ -428,7 +430,7 @@ const middle_mouse_drag = () => {
         if (e.button !== 1) return; // Only trigger on middle mouse button
         // @ts-ignore
         target = e.target.closest(".plc-editor-body");
-        if (!target) return
+        if (!target) return console.error("No target found for middle mouse drag")
 
         e.preventDefault();
         isDragging = true;
@@ -987,7 +989,7 @@ const draw_ladder = (editor, program, ladder) => {
                 console.log(`Ladder selected: ${selected}`)
             }
         })
-        program.div?.appendChild(ladder.div)
+        program.editor?.body?.appendChild(ladder.div)
     }
     const ctx = ladder.ctx || canvas.getContext('2d')
     if (!ctx) throw new Error('Context not found')
@@ -1079,31 +1081,15 @@ const draw_program_block = (editor, program, program_block) => {
 
 
 
-/** @type {(editor: VovkPLCEditor, body: Element, program: PLC_Program) => void} */
-const draw_program = (editor, body, program) => {
+/** @type {(editor: VovkPLCEditor, program: PLC_Program) => void} */
+const draw_program = (editor, program) => {
+    if (!program) throw new Error('Program not found')
     program.id = editor.generateID(program.id)
     const { id } = program
-    const exists = !!program.div
-    program.div = program.div || body
-    if (!exists) {
-        program.div.setAttribute('id', id)
-        program.div = program.div
-        editor.workspace_context_menu.addListener({
-            target: program.div,
-            onOpen: (event) => {
-                console.log(`Program "#${id}" context menu open`)
-                return [
-                    { type: 'item', name: 'edit', label: 'Edit' },
-                    { type: 'item', name: 'delete', label: 'Delete' },
-                    { type: 'separator' },
-                    { type: 'item', name: 'copy', label: 'Copy' },
-                    { type: 'item', name: 'paste', label: 'Paste' },
-                ]
-            },
-            onClose: (selected) => {
-                console.log(`Program selected: ${selected}`)
-            }
-        })
+    if (!program.editor) throw new Error('Editor not found')
+    if (!program.blocks) {
+        console.log(program)
+        throw new Error('Program blocks not found')
     }
     program.blocks.forEach(block => {
         draw_program_block(editor, program, block)
@@ -1138,16 +1124,20 @@ const generateID = () => {
 
 /** @type { (editor: VovkPLCEditor, folder: PLC_Folder) => PLC_Program | null } */
 const searchForProgramInFolder = (editor, folder) => { // @ts-ignore
-    return folder.children.find(child => {
-        if (child.type === 'folder') return searchForProgramInFolder(editor, child)
-        if (child.type === 'program') return searchForProgram(editor, child) // @ts-ignore
-        throw new Error(`Invalid child type: ${child.type}`)
-    }) || null
+    for (let i = 0; i < folder.children.length; i++) {
+        const child = folder.children[i]
+        let program
+        if (child.type === 'folder') program = searchForProgramInFolder(editor, child)
+        else if (child.type === 'program') program = searchForProgram(editor, child) // @ts-ignore
+        else throw new Error(`Invalid child type: ${child.type}`)
+        if (program) return program
+    }
+    return null
 }
 /** @type { (editor: VovkPLCEditor, program: PLC_Program) => PLC_Program | null } */
 const searchForProgram = (editor, program) => {
     if (!program.id) throw new Error('Program ID not found')
-    if (!editor.active_tab) editor.active_tab = program.id // TODO: remove this and actually open the selected program from navigation
+    console.log(`Comparing if ${program.id} is equal to ${editor.active_tab}`)
     if (program.id === editor.active_tab) return program
     return null
 }
@@ -1156,7 +1146,7 @@ const searchForProgram = (editor, program) => {
 import PLCRuntimeWasm from "../../simulator.js"
 
 /** @type { (editor: VovkPLCEditor, id: string) => PLC_Program | null } */
-const findProgram = (editor, id) => {
+export const findProgram = (editor, id) => {
     if (!editor) throw new Error('Editor not found')
     if (!editor.project) return null
     if (!editor.project.project) return null
@@ -1165,32 +1155,37 @@ const findProgram = (editor, id) => {
         const folder = project[i]
         let program
         if (folder.type === 'folder') program = searchForProgramInFolder(editor, folder)
-        if (folder.type === 'program') program = searchForProgram(editor, folder)
+        else if (folder.type === 'program') program = searchForProgram(editor, folder) // @ts-ignore
+        else throw new Error(`Invalid folder type: ${folder.type}`)
         if (id && program && program.id === id) return program
-        if (program) return program
     }
     return null
 }
 
 class PLCEditor {
     id
+    hidden = false
     name = ''
     comment = ''
     div
     header
     body
     /** @type { HTMLCanvasElement } */ canvas
-    editor
+    master
     /** @type { PLC_Program | null } */ program = null
-    /** @param { VovkPLCEditor } editor */
-    constructor(editor) {
-        if (!editor) throw new Error('Editor not found')
-        this.editor = editor
-        const div = editor.workspace.querySelector('.plc-editor')
-        if (!div) throw new Error('Editor not found')
+    /** @param { VovkPLCEditor } master * @param { string } id */
+    constructor(master, id) {
+        if (!master) throw new Error('Editor not found')
+        if (!id) throw new Error('ID not found')
+        this.master = master
+        this.id = id
+        const div = document.createElement('div')
+        div.classList.add('plc-editor')
         this.div = div
-        this.id = editor.generateID(div.getAttribute('id'))
-        div.setAttribute('id', this.id)
+        // master.workspace.appendChild(div)
+        const frame = master.workspace.querySelector('.plc-window-frame')
+        if (!frame) throw new Error('Frame not found')
+        frame.appendChild(div)
         const content = ElementSynthesis(/*HTML*/`
             <div class="plc-editor-top">
                 <div class="plc-editor-header"></div>
@@ -1204,7 +1199,7 @@ class PLCEditor {
         this.header = header
         this.body = body
         content.forEach(c => div.appendChild(c))
-        this.editor.workspace_context_menu.addListener({
+        this.master.workspace_context_menu.addListener({
             target: this.div,
             onOpen: (event) => {
                 console.log(`VovkPLC Editor "#${this.id}" context menu open`)
@@ -1228,13 +1223,17 @@ class PLCEditor {
     }
 
     reloadProgram() {
-        this.program = findProgram(this.editor, this.id)
+        this.program = findProgram(this.master, this.id)
     }
 
     draw() {
-        this.program = this.program || findProgram(this.editor, this.id)
-        if (!this.program) throw new Error('Program not found')
-
+        const linked = !!this.program
+        this.program = this.program || findProgram(this.master, this.id)
+        if (!this.program) return //throw new Error(`Program not found -> ${this.id}`)
+        if (!linked || this.program.editor) {
+            this.program.editor = this
+        }
+        if (this.hidden) return
         const { id, name, comment } = this.program
         if (this.name !== name || this.comment !== comment) {
             this.name = name
@@ -1244,7 +1243,16 @@ class PLCEditor {
                 <p>${comment || ''}</p>
             `
         }
-        draw_program(this.editor, this.body, this.program)
+        draw_program(this.master, this.program)
+    }
+
+    hide() {
+        this.hidden = true
+        this.div.classList.add('hidden')
+    }
+    show() {
+        this.hidden = false
+        this.div.classList.remove('hidden')
     }
 }
 
@@ -1270,7 +1278,7 @@ const draw_navigation_tree = (editor) => {
             <div class="plc-navigation-item">
                 <div class="plc-navigation-folder">
                     <div class="minimize">-</div>
-                    <div class="plc-icon"></div>
+                    <div class="plc-icon">${folder_icon_str}</div>
                     <div class="plc-title">${folder.name}</div>
                 </div>
                 <div class="plc-navigation-children"></div>
@@ -1278,8 +1286,6 @@ const draw_navigation_tree = (editor) => {
         `)[0]
         const children = div.querySelector('.plc-navigation-children'); if (!children) throw new Error('Children not found')
         const minimize = div.querySelector('.minimize'); if (!minimize) throw new Error('Minimize button not found')
-        const icon = div.querySelector('.plc-icon'); if (!icon) throw new Error('Icon not found')
-        icon.appendChild(folder_icon)
         const navigation_folder = div.querySelector('.plc-navigation-folder'); if (!navigation_folder) throw new Error('Navigation folder not found')
         navigation_folder.addEventListener('click', () => {
             div.classList.toggle('minimized') // @ts-ignore
@@ -1290,7 +1296,7 @@ const draw_navigation_tree = (editor) => {
             if (!div) throw new Error('Div not found')
             children.appendChild(div)
         })
-        return folder.div = div
+        return div
     }
     /** @param { PLC_Program } program */
     const draw_item = (program) => {
@@ -1298,14 +1304,16 @@ const draw_navigation_tree = (editor) => {
             <div class="plc-navigation-item">
                 <div class="plc-navigation-program">
                     <div class="plc-void"></div>
-                    <div class="plc-icon"></div>
+                    <div class="plc-icon">${program_icon_str}</div>
                     <div class="plc-title">${program.name}</div>
                 </div>
             </div>
         `)[0]
-        const icon = div.querySelector('.plc-icon'); if (!icon) throw new Error('Icon not found')
-        icon.appendChild(program_icon)
-        return program.div = div
+        div.addEventListener('click', () => {
+            if (!program.id) throw new Error('Program ID not found')
+            editor.openProgram(program.id)
+        })
+        return div
     }
     navigation.forEach(item => {
         const div = draw_structure(item)
@@ -1365,6 +1373,8 @@ export class VovkPLCEditor {
     runtime_ready = false
 
     active_tab = ''
+    /** @type { PLC_Program | null } */
+    active_program = null
 
     /** @type { PLC_ProjectItem[] } */
     navigation_tree = []
@@ -1421,7 +1431,6 @@ export class VovkPLCEditor {
                         <div class="plc-tab">Test</div>
                     </div>
                     <div class="plc-window-frame">
-                        <div class="plc-editor"></div>
                     </div>
                 </div>
                 <div class="plc-tools no-select resizable minimized" style="width: 200px">
@@ -1482,8 +1491,6 @@ export class VovkPLCEditor {
                 bar.innerHTML = '+'
             }
         })
-
-        this.editor = new PLCEditor(this)
         this.workspace_context_menu.addListener({
             target: workspace,
             onOpen: (event) => {
@@ -1516,19 +1523,18 @@ export class VovkPLCEditor {
         this.project = project
 
         /** @type { (folder: PLC_Folder) => void } */
-        const reserveFolder = (folder) => {
+        const checkFolder = (folder) => {
             folder.id = this.generateID(folder.id)
             /** @type { (program: PLC_Program) => void } */
             folder.children.forEach(child => {
-                if (child.type === 'folder') return reserveFolder(child)
-                if (child.type === 'program') return reserveProgram(child) // @ts-ignore
+                if (child.type === 'folder') return checkFolder(child)
+                if (child.type === 'program') return checkProgram(child) // @ts-ignore
                 throw new Error(`Invalid child type: ${child.type}`)
             })
         }
         /** @param { PLC_Program } program */
-        const reserveProgram = (program) => {
+        const checkProgram = (program) => {
             program.id = this.generateID(program.id)
-            if (!this.active_tab) this.active_tab = program.id
             if (program.id === this.active_tab) {
                 program.blocks.forEach(block => {
                     block.id = this.generateID(block.id)
@@ -1542,10 +1548,47 @@ export class VovkPLCEditor {
             }
         }
         this.project.project.forEach(child => {
-            if (child.type === 'folder') return reserveFolder(child)
-            if (child.type === 'program') return reserveProgram(child) // @ts-ignore
+            if (child.type === 'folder') return checkFolder(child)
+            if (child.type === 'program') return checkProgram(child) // @ts-ignore
             throw new Error(`Invalid child type: ${child.type}`)
         })
+        this.draw()
+    }
+
+    openProgram(id) {
+        if (id === this.active_tab) return console.log(`Program already open: ${id}`)
+        if (this.active_program) {
+            this.active_program.editor?.hide()
+        }
+        this.active_tab = id
+        this.active_program = findProgram(this, id)
+        if (!this.active_program) throw new Error(`Program not found: ${id}`)
+        if (!this.active_program.editor) {
+            const editor = new PLCEditor(this, id)
+            this.active_program.editor = editor
+
+            editor.div.setAttribute('id', id)
+            this.workspace_context_menu.addListener({
+                target: editor.div,
+                onOpen: (event) => {
+                    console.log(`Program "#${id}" context menu open`)
+                    return [
+                        { type: 'item', name: 'edit', label: 'Edit' },
+                        { type: 'item', name: 'delete', label: 'Delete' },
+                        { type: 'separator' },
+                        { type: 'item', name: 'copy', label: 'Copy' },
+                        { type: 'item', name: 'paste', label: 'Paste' },
+                    ]
+                },
+                onClose: (selected) => {
+                    console.log(`Program selected: ${selected}`)
+                }
+            })
+        }
+        this.active_program.editor.program = this.active_program
+        this.active_tab = id
+        this.active_program.editor.reloadProgram()
+        this.active_program.editor.show()
         this.draw()
     }
 
@@ -1609,13 +1652,11 @@ export class VovkPLCEditor {
             const u8array = this.runtime.readMemoryArea(0, 50)
             this.memory = [...u8array]
         }
-        this.editor.draw()
+        this.active_program?.editor?.draw()
         update_navigation_tree(this)
     }
 }
 
 export default {
-    ImageRenderer,
-    ElementSynthesis,
     VovkPLCEditor
 }

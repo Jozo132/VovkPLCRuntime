@@ -271,6 +271,9 @@ ul {
     padding-left: 2px;
     user-select: none;
     font-size: 14px;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
 }
 
 .minimize {
