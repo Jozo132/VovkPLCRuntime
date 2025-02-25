@@ -36,13 +36,13 @@ const log_user_interaction = (req, res, user) => {
     const now = new Date()
     const blacklist = url.includes("admin") || url.includes("secret") || url.includes("login")
     if (user) {
-        if (!user.blacklisted && blacklist) {
-            user.blacklisted = true
-            console.log(`User ${user.address} was blacklisted for visiting "${url}"`)
-            return res.status(404).end()
-        }
         user.last_visit = now
         user.visits++
+        if (!user.blacklisted && blacklist) {
+            user.blacklisted = true
+            console.log(`User ${user.address} was blacklisted for visit (${user.visits}) -> "${url}"`)
+            return res.status(404).end()
+        }
         const existing_page = user.pages.find(page => page.url === req.url)
         if (existing_page) {
             existing_page.count++
@@ -50,7 +50,7 @@ const log_user_interaction = (req, res, user) => {
             user.pages.push({ url: req.url, count: 1 })
         }
         const page = user.pages.find(page => page.url === req.url)
-        console.log(`User ${user.address} visited "${page?.url || '???'}" for the ${page?.count} time. Total visits: ${user.visits}`)
+        console.log(`User ${user.address} visit (${user.visits}) -> "${page?.url || '???'}" for the ${page?.count} time.`)
     }
 }
 
@@ -80,7 +80,8 @@ app.use(express.static("./"))
 app.use(express.static("./src"))
 
 app.get("/", (req, res) => {
-    res.sendFile("index.html", { root: "../" })
+    // res.sendFile("index.html", { root: "../" })
+    res.status(404).end()
 })
 
 app.get("/custom/unique_users", (req, res) => {
