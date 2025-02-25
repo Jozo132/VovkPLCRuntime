@@ -1275,9 +1275,9 @@ const draw_navigation_tree = (editor) => {
     /** @param { PLC_Folder } folder */
     const draw_folder = (folder) => {
         const div = ElementSynthesis(/*HTML*/`
-            <div class="plc-navigation-item">
+            <div class="plc-navigation-item minimized">
                 <div class="plc-navigation-folder">
-                    <div class="minimize">-</div>
+                    <div class="minimize">+</div>
                     <div class="plc-icon">${folder_icon_str}</div>
                     <div class="plc-title">${folder.name}</div>
                 </div>
