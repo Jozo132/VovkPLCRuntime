@@ -1197,6 +1197,7 @@ class PLCEditor {
     div
     header
     body
+    /** @type { Element | null } */ frame
     /** @type { HTMLCanvasElement } */ canvas
     master
     /** @type { PLC_Program | null } */ program = null
@@ -1210,9 +1211,9 @@ class PLCEditor {
         div.classList.add('plc-editor')
         this.div = div
         // master.workspace.appendChild(div)
-        const frame = master.workspace.querySelector('.plc-window-frame')
-        if (!frame) throw new Error('Frame not found')
-        frame.appendChild(div)
+        this.frame = master.workspace.querySelector('.plc-window-frame')
+        if (!this.frame) throw new Error('Frame not found')
+        this.frame.appendChild(div)
         const content = ElementSynthesis(/*HTML*/`
             <div class="plc-editor-top">
                 <div class="plc-editor-header"></div>
@@ -1592,7 +1593,6 @@ export class VovkPLCEditor {
 
     openProgram(id) {
         const active_tab = this.tabs_list.find(tab => tab.active)
-        if (active_tab && id === active_tab.program?.id) return //console.log(`Program already open: ${id}`)
         if (this.active_program) {
             this.active_program.editor?.hide()
         }
@@ -1626,6 +1626,18 @@ export class VovkPLCEditor {
         this.active_tab = id
         this.active_program.editor.reloadProgram()
         this.active_program.editor.show()
+        const frame = this.active_program.editor.frame
+        if (!frame) throw new Error('Frame not found')
+        const frame_width = frame.clientWidth
+        if (frame_width <= 500) {
+            // minimize navigation
+            const navigation = this.workspace.querySelector('.plc-navigation')
+            if (!navigation) throw new Error('Navigation not found')
+            navigation.classList.add('minimized')
+            const minimize = navigation.querySelector('.plc-navigation-bar .menu-button')
+            if (!minimize) throw new Error('Minimize button not found')
+            minimize.innerHTML = '+'
+        }
         this.draw()
     }
 
