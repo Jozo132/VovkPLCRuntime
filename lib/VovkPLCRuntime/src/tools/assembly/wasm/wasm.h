@@ -36,8 +36,26 @@
   name
 
 #ifdef __WASM_TIME__
-WASM_IMPORT unsigned long millis(); // const millis = () => +performance.now().toFixed(0);
-WASM_IMPORT unsigned long micros(); // const micros = () => +(performance.now() * 1000).toFixed(0);
+volatile unsigned long _millis_time = 0;
+volatile unsigned long _micros_time = 0;
+unsigned long millis() { // const millis = () => +performance.now().toFixed(0);
+    return _millis_time;
+}
+unsigned long micros() { // const micros = () => +(performance.now() * 1000).toFixed(0);
+    return _micros_time;
+}
+WASM_EXPORT void setMillis(int ms) {
+    _millis_time = ms;
+}
+WASM_EXPORT void setMicros(int us) {
+    _micros_time = us;
+}
+WASM_EXPORT unsigned long getMillis() {
+    return _millis_time;
+}
+WASM_EXPORT unsigned long getMicros() {
+    return _micros_time;
+}
 
 // WARNING: these delay functions are blocking and stop the main thread for their duration, use with caution and only when necessary.
 void delay(int ms) {
@@ -104,6 +122,9 @@ bool streamRead(char* arr, int& len, int max) {
     arr[i] = '\0';
     len = i;
     return i == max;
+}
+bool streamRead(unsigned char* arr, int& len, int max) {
+    return streamRead((char*) arr, len, max);
 }
 
 

@@ -118,14 +118,17 @@ void custom_test() {
 }
 
 WASM_EXPORT int run() {
+    IntervalGlobalLoopCheck();
     return runtime.run();
 }
 
 WASM_EXPORT int runDirty() {
+    IntervalGlobalLoopCheck();
     return runtime.runDirty();
 }
 
 WASM_EXPORT void run_unit_test() {
+    IntervalGlobalLoopCheck();
     runtime_unit_test(runtime);
 }
 

@@ -7,10 +7,12 @@
 // const PLCRuntimeWasm = require("../simulator.js").default
 import PLCRuntimeWasm from "../simulator.js"
 
+const runtime = new PLCRuntimeWasm("/simulator.wasm")
+
 const main = async () => {
-    await PLCRuntimeWasm.initialize()
+    await runtime.initialize()
     // Get the main functions
-    const { run_unit_test, run_custom_test } = PLCRuntimeWasm.getExports()
+    const { run_unit_test, run_custom_test } = runtime.getExports()
 
     if (!run_unit_test) throw new Error("'run_unit_test' function not found")
     if (!run_custom_test) throw new Error("'run_custom_test' function not found")
@@ -20,7 +22,7 @@ const main = async () => {
         console.log("Running VovkPLCRuntime WebAssembly simulation unit test...") // @ts-ignore
         run_unit_test() // @ts-ignore
         for (let i = 0; i < 10; i++) run_custom_test()
-        message = PLCRuntimeWasm.readStream()
+        message = runtime.readStream()
         console.log("Done.")
     } catch (error) {
         console.error(error)

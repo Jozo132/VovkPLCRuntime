@@ -97,7 +97,6 @@ public:
 
 
     void printProperties() {
-        if (!started_up) initialize();
 #ifdef __WASM__
         Serial.printf("Inputs [%d] at offset %d\n", PLCRUNTIME_NUM_OF_INPUTS, input_offset);
         Serial.printf("Outputs [%d] at offset %d\n", PLCRUNTIME_NUM_OF_OUTPUTS, output_offset);
@@ -114,12 +113,10 @@ public:
     VovkPLCRuntime() {}
 
     void loadProgramUnsafe(const u8* program, u32 prog_size) {
-        if (!started_up) initialize();
         this->program.loadUnsafe(program, prog_size);
     }
 
     void loadProgram(const u8* program, u32 prog_size, u8 checksum) {
-        if (!started_up) initialize();
         this->program.load(program, prog_size, checksum);
     }
 
@@ -143,18 +140,15 @@ public:
     }
     // Execute the whole PLC program, returns an error code (0 on success)
     RuntimeError runDirty() {
-        if (!started_up) initialize();
         return run(program.program, program.prog_size);
     }
     // Run the whole PLC program from the beginning, returns an error code (0 on success)
     RuntimeError run() {
-        if (!started_up) initialize();
         clear();
         return run(program.program, program.prog_size);
     }
     // Read a custom type T value from the stack. This will pop the stack by sizeof(T) bytes and return the value.
     template <typename T> T read() {
-        if (!started_up) initialize();
         if (stack.size() < (u32) sizeof(T)) return 0;
         u8 temp[sizeof(T)];
         for (u32 i = 0; i < (u32) sizeof(T); i++)
@@ -575,59 +569,58 @@ void VovkPLCRuntime::clear(RuntimeProgram& program) {
 int VovkPLCRuntime::printStack() { return stack.print(); }
 
 void VovkPLCRuntime::updateGlobals() {
-    IntervalGlobalLoopCheck();
     u8 state = 0;
-    state = state << 1 | P_10s;
-    state = state << 1 | P_5s;
-    state = state << 1 | P_2s;
-    state = state << 1 | P_1s;
-    state = state << 1 | P_500ms;
-    state = state << 1 | P_300ms;
-    state = state << 1 | P_200ms;
-    state = state << 1 | P_100ms;
+    state = state << 1 | P_10s; // 2.7
+    state = state << 1 | P_5s; // 2.6
+    state = state << 1 | P_2s; // 2.5
+    state = state << 1 | P_1s; // 2.4
+    state = state << 1 | P_500ms; // 2.3
+    state = state << 1 | P_300ms; // 2.2
+    state = state << 1 | P_200ms; // 2.1
+    state = state << 1 | P_100ms; // 2.0
     memory[2] = state;
 
     state = 0;
-    state = state << 1 | P_1hr;
-    state = state << 1 | P_30min;
-    state = state << 1 | P_15min;
-    state = state << 1 | P_10min;
-    state = state << 1 | P_5min;
-    state = state << 1 | P_2min;
-    state = state << 1 | P_1min;
-    state = state << 1 | P_30s;
+    state = state << 1 | P_1hr; // 3.7
+    state = state << 1 | P_30min; // 3.6
+    state = state << 1 | P_15min; // 3.5
+    state = state << 1 | P_10min; // 3.4
+    state = state << 1 | P_5min; // 3.3
+    state = state << 1 | P_2min; // 3.2
+    state = state << 1 | P_1min; // 3.1
+    state = state << 1 | P_30s; // 3.0
     memory[3] = state;
 
     state = 0;
-    state = state << 1 | P_1day;
-    state = state << 1 | P_12hr;
-    state = state << 1 | P_6hr;
-    state = state << 1 | P_5hr;
-    state = state << 1 | P_4hr;
-    state = state << 1 | P_3hr;
-    state = state << 1 | P_2hr;
+    state = state << 1 | P_1day; // 4.6
+    state = state << 1 | P_12hr; // 4.5
+    state = state << 1 | P_6hr; // 4.4
+    state = state << 1 | P_5hr; // 4.3
+    state = state << 1 | P_4hr; // 4.2
+    state = state << 1 | P_3hr; // 4.1
+    state = state << 1 | P_2hr; // 4.0
     memory[4] = state;
 
     state = 0;
-    state = state << 1 | S_10s;
-    state = state << 1 | S_5s;
-    state = state << 1 | S_2s;
-    state = state << 1 | S_1s;
-    state = state << 1 | S_500ms;
-    state = state << 1 | S_300ms;
-    state = state << 1 | S_200ms;
-    state = state << 1 | S_100ms;
+    state = state << 1 | S_10s; // 5.7
+    state = state << 1 | S_5s; // 5.6
+    state = state << 1 | S_2s; // 5.5
+    state = state << 1 | S_1s; // 5.4
+    state = state << 1 | S_500ms; // 5.3
+    state = state << 1 | S_300ms; // 5.2 
+    state = state << 1 | S_200ms; // 5.1
+    state = state << 1 | S_100ms; // 5.0
     memory[5] = state;
     
     state = 0;
-    state = state << 1 | S_1hr;
-    state = state << 1 | S_30min;
-    state = state << 1 | S_15min;
-    state = state << 1 | S_10min;
-    state = state << 1 | S_5min;
-    state = state << 1 | S_2min;
-    state = state << 1 | S_1min;
-    state = state << 1 | S_30s;
+    state = state << 1 | S_1hr; // 6.7
+    state = state << 1 | S_30min; // 6.6
+    state = state << 1 | S_15min; // 6.5
+    state = state << 1 | S_10min; // 6.4
+    state = state << 1 | S_5min; // 6.3
+    state = state << 1 | S_2min; // 6.2
+    state = state << 1 | S_1min; // 6.1
+    state = state << 1 | S_30s; // 6.0
     memory[6] = state;
 
     memory[8] = interval_time_seconds;
@@ -643,7 +636,6 @@ RuntimeError VovkPLCRuntime::run(RuntimeProgram& program) { return run(program.p
 
 // Execute the whole PLC program, returns an erro code (0 on success)
 RuntimeError VovkPLCRuntime::run(u8* program, u32 prog_size) {
-    if (!started_up) initialize();
     updateGlobals();
     u32 index = 0;
     while (index < prog_size) {

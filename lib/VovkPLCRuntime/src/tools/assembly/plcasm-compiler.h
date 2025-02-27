@@ -1428,6 +1428,10 @@ WASM_EXPORT bool compileAssembly(bool debug = true) {
 
 VovkPLCRuntime runtime;
 
+WASM_EXPORT void initialize() {
+    runtime.initialize();
+}
+
 WASM_EXPORT void printProperties() {
     runtime.printProperties();
 }
@@ -1439,12 +1443,14 @@ WASM_EXPORT bool loadCompiledProgram() {
 }
 
 WASM_EXPORT void runFullProgramDebug() {
+    IntervalGlobalLoopCheck();
     RuntimeError status = UnitTest::fullProgramDebug(runtime);
     const char* status_name = RUNTIME_ERROR_NAME(status);
     Serial.print(F("Runtime status: ")); Serial.println(status_name);
 }
 
 WASM_EXPORT void runFullProgram() {
+    IntervalGlobalLoopCheck();
     RuntimeError status = runtime.run();
     const char* status_name = RUNTIME_ERROR_NAME(status);
     Serial.print(F("Runtime status: ")); Serial.println(status_name);
@@ -1459,6 +1465,23 @@ WASM_EXPORT u32 uploadProgram() {
         streamOut(c2);
     }
     return built_bytecode_length;
+}
+
+#define MAX_DOWNLOADED_PROGRAM_SIZE 64535
+u8 downloaded_program[MAX_DOWNLOADED_PROGRAM_SIZE];
+int downloaded_program_size = 0;
+
+WASM_EXPORT int downloadProgram(int size, int crc) {
+    streamRead(downloaded_program, downloaded_program_size, MAX_DOWNLOADED_PROGRAM_SIZE);
+    if (downloaded_program_size != size) return 1;
+    u8 calculated_crc = 0;
+    for (u32 i = 0; i < size; i++) {
+        u8 byte = downloaded_program[i];
+        crc8_simple(calculated_crc, byte);
+    }
+    if (calculated_crc != crc) return 2;
+    runtime.loadProgram(downloaded_program, downloaded_program_size, calculated_crc);
+    return 0;
 }
 
 WASM_EXPORT u32 getMemoryArea(u32 address, u32 size) {
