@@ -42,7 +42,7 @@
  *      mode?: PLC_ContextState
  * }} PLC_Ladder
  * @typedef { PLC_Ladder } PLC_ProgramBlock
- * @typedef {{ id?: string, type: 'program', name: string, comment: string, blocks: PLC_ProgramBlock[], editor?: PLCEditor }} PLC_Program
+ * @typedef {{ id?: string, type: 'program', name: string, comment: string, blocks: PLC_ProgramBlock[], editor?: PLCEditor, tab?: Element }} PLC_Program
  * @typedef {{ id?: string, type: 'folder', name: string, comment: string, children: PLC_ProjectItem[] }} PLC_Folder
  * @typedef { PLC_Folder | PLC_Program } PLC_ProjectItem
  * 
@@ -1103,7 +1103,7 @@ const offsetToAddressAndBit = (offset) => {
     return { address, bit }
 }
 
-/** @type { (list: string[], id: string) => void */
+/** @type { (list: string[], id: string) => void } */
 const addIdToList = (list, id) => {
     if (!list.includes(id)) list.push(id)
 }
@@ -1137,7 +1137,7 @@ const searchForProgramInFolder = (editor, folder) => { // @ts-ignore
 /** @type { (editor: VovkPLCEditor, program: PLC_Program) => PLC_Program | null } */
 const searchForProgram = (editor, program) => {
     if (!program.id) throw new Error('Program ID not found')
-    console.log(`Comparing if ${program.id} is equal to ${editor.active_tab}`)
+    // console.log(`Comparing if ${program.id} is equal to ${editor.active_tab}`)
     if (program.id === editor.active_tab) return program
     return null
 }
@@ -1145,8 +1145,8 @@ const searchForProgram = (editor, program) => {
 
 import PLCRuntimeWasm from "../../simulator.js"
 
-/** @type { (editor: VovkPLCEditor, id: string) => PLC_Program | null } */
-export const findProgram = (editor, id) => {
+/** @type { (editor: VovkPLCEditor, id: string | null) => PLC_Program | null } */
+const findProgram = (editor, id) => {
     if (!editor) throw new Error('Editor not found')
     if (!editor.project) return null
     if (!editor.project.project) return null
@@ -1158,8 +1158,35 @@ export const findProgram = (editor, id) => {
         else if (folder.type === 'program') program = searchForProgram(editor, folder) // @ts-ignore
         else throw new Error(`Invalid folder type: ${folder.type}`)
         if (id && program && program.id === id) return program
+        if (program && id === null) {
+            console.log(`Loading the first program found`, program)
+            return program
+        }
     }
     return null
+}
+
+/** @type { (editor: VovkPLCEditor, id: string) => Element | null } */
+const activateTab = (editor, id) => {
+    if (!editor) throw new Error('Editor not found')
+    if (!editor.project) return null
+    if (!editor.project.project) return null
+    const program = findProgram(editor, id)
+    if (!program) return null
+    if (!program.tab) {
+        const tabs_element = editor.workspace.querySelector('.plc-window-tabs')
+        if (!tabs_element) throw new Error('Tabs element not found')
+        const tab = ElementSynthesis(`<div class="plc-tab" for="${id}">${program.name}</div>`)[0]
+        tab.addEventListener('click', () => {
+            editor.openProgram(id)
+        })
+        tabs_element.appendChild(tab)
+        program.tab = tab
+    }
+    const tabs = editor.workspace.querySelectorAll('.plc-tab')
+    tabs.forEach(tab => tab.classList.remove('active'))
+    program.tab.classList.add('active')
+    return program.tab
 }
 
 class PLCEditor {
@@ -1313,6 +1340,10 @@ const draw_navigation_tree = (editor) => {
             if (!program.id) throw new Error('Program ID not found')
             editor.openProgram(program.id)
         })
+        if (editor.initial_program && program.name === editor.initial_program) {
+            editor.initial_program = null
+            setTimeout(() => editor.openProgram(program.id), 50)
+        }
         return div
     }
     navigation.forEach(item => {
@@ -1320,6 +1351,8 @@ const draw_navigation_tree = (editor) => {
         if (!div) throw new Error('Div not found')
         container.appendChild(div)
     })
+
+    editor.initial_program = null // Prevent opening the initial program again on redraw
 }
 
 /** @type { (editor: VovkPLCEditor) => void } */
@@ -1373,8 +1406,12 @@ export class VovkPLCEditor {
     runtime_ready = false
 
     active_tab = ''
-    /** @type { PLC_Program | null } */
-    active_program = null
+
+    /** @type { { id: string, tab: Element, program?: PLC_Program, active: boolean }[] } */
+    tabs_list = []
+
+    /** @type { string | null } */
+    initial_program = null
 
     /** @type { PLC_ProjectItem[] } */
     navigation_tree = []
@@ -1388,13 +1425,15 @@ export class VovkPLCEditor {
      * @param {{ 
      *      workspace?: HTMLElement | string | null
      *      debug_css?: boolean
+     *      initial_program?: string
      * }} options 
     */
-    constructor({ workspace, debug_css }) {
+    constructor({ workspace, debug_css, initial_program }) {
         this.runtime.initialize('/simulator.wasm').then(() => {
-            console.log('PLC Runtime initialized')
+            // console.log('PLC Runtime initialized')
             this.runtime_ready = true
         })
+        this.initial_program = initial_program || null
         workspace = workspace || this.workspace
         if (typeof workspace === 'string') workspace = document.getElementById(workspace)
         if (workspace !== null) {
@@ -1426,12 +1465,8 @@ export class VovkPLCEditor {
                     </div>
                 </div>
                 <div class="plc-window">
-                    <div class="plc-window-bar">
-                        <div class="plc-tab active">Main</div>
-                        <div class="plc-tab">Test</div>
-                    </div>
-                    <div class="plc-window-frame">
-                    </div>
+                    <div class="plc-window-tabs"></div>
+                    <div class="plc-window-frame"></div>
                 </div>
                 <div class="plc-tools no-select resizable minimized" style="width: 200px">
                     <div class="plc-tools-bar">
@@ -1556,13 +1591,15 @@ export class VovkPLCEditor {
     }
 
     openProgram(id) {
-        if (id === this.active_tab) return console.log(`Program already open: ${id}`)
+        const active_tab = this.tabs_list.find(tab => tab.active)
+        if (active_tab && id === active_tab.program?.id) return //console.log(`Program already open: ${id}`)
         if (this.active_program) {
             this.active_program.editor?.hide()
         }
         this.active_tab = id
         this.active_program = findProgram(this, id)
         if (!this.active_program) throw new Error(`Program not found: ${id}`)
+        activateTab(this, id)
         if (!this.active_program.editor) {
             const editor = new PLCEditor(this, id)
             this.active_program.editor = editor
@@ -1590,6 +1627,12 @@ export class VovkPLCEditor {
         this.active_program.editor.reloadProgram()
         this.active_program.editor.show()
         this.draw()
+    }
+
+    closeTab(id) {
+        const program = findProgram(this, id)
+        if (!program) throw new Error(`Program not found: ${id}`)
+        program.editor?.hide()
     }
 
     /** @param { number } offset */
@@ -1648,7 +1691,7 @@ export class VovkPLCEditor {
 
     draw() {
         if (this.runtime_ready && this.runtime.wasm_exports) {
-            this.runtime.wasm_exports.run()
+            this.runtime.run()
             const u8array = this.runtime.readMemoryArea(0, 50)
             this.memory = [...u8array]
         }

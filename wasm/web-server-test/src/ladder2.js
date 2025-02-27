@@ -161,6 +161,7 @@ const plc_project = {
 const PLCEditor = new VovkPLCEditor({
     workspace: 'PLCEditor',
     // debug_css: true,
+    initial_program: 'Main'
 })
 
 PLCEditor.open(plc_project)
@@ -180,7 +181,13 @@ const toggle_output = (offset) => {
 
 
 let button1_state = false
+let cycle = 0
 const draw = () => {
+    if (!PLCEditor.runtime_ready) return // Wait for the runtime to be ready
+    cycle++
+    if (cycle === 1) {
+        PLCEditor.runtime.downloadProgram('5D 00 05 61 00 20 FF')
+    }
     const light1 = PLCEditor.getOutputBit(0.0)
     const light2 = PLCEditor.getOutputBit(0.1)
 
@@ -213,4 +220,4 @@ draw()
 setInterval(draw, 20)
 
 
-Object.assign(window, { PLCEditor, draw, plc_project, toggle_input, toggle_output })
+Object.assign(window, { PLCEditor, runtime: PLCEditor.runtime, draw, plc_project, toggle_input, toggle_output })

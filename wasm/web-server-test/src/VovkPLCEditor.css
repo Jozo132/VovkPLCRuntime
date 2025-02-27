@@ -366,7 +366,7 @@ ul {
     box-sizing: border-box;
 }
 
-.plc-window-bar {
+.plc-window-tabs {
     display: flex;
     flex-direction: row;
     align-items: bottom;
@@ -374,7 +374,7 @@ ul {
     width: 100%;
     min-height: 32px;
 }
-.plc-window-bar .plc-tab:first-child {
+.plc-window-tabs .plc-tab:first-child {
     margin-left: 8px;
 }
 .plc-tab {
