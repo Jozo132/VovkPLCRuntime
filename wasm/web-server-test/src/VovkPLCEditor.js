@@ -600,8 +600,8 @@ const draw_contact = (editor, like, ctx, block) => {
         ctx.beginPath()
         if (state.powered) {
             if (state.terminated_input) {
-                ctx.moveTo(x0, y_mid - 12)
-                ctx.lineTo(x0, y_mid + 12)
+                ctx.moveTo(x0 + 1, y_mid - 12)
+                ctx.lineTo(x0 + 1, y_mid + 12)
             }
             ctx.moveTo(x0, y_mid)
             ctx.lineTo(cl, y_mid)
@@ -629,8 +629,8 @@ const draw_contact = (editor, like, ctx, block) => {
         // Draw horizontal line from the left side of the contact
         ctx.beginPath()
         if (state.terminated_input) {
-            ctx.moveTo(x0, y_mid - 8)
-            ctx.lineTo(x0, y_mid + 8)
+            ctx.moveTo(x0 + 1, y_mid - 8)
+            ctx.lineTo(x0 + 1, y_mid + 8)
         }
         ctx.moveTo(x0, y_mid)
         ctx.lineTo(cl, y_mid)
@@ -735,8 +735,8 @@ const draw_coil = (editor, like, ctx, block) => {
             ctx.fill()
         }
         if (state.terminated_output) {
-            ctx.moveTo(x1, y_mid - 12)
-            ctx.lineTo(x1, y_mid + 12)
+            ctx.moveTo(x1 - 2, y_mid - 12)
+            ctx.lineTo(x1 - 2, y_mid + 12)
         }
         if (state.powered) {
             ctx.stroke()
@@ -761,8 +761,8 @@ const draw_coil = (editor, like, ctx, block) => {
 
 
         if (state.terminated_output) {
-            ctx.moveTo(x1, y_mid - 8)
-            ctx.lineTo(x1, y_mid + 8)
+            ctx.moveTo(x1 - 2, y_mid - 8)
+            ctx.lineTo(x1 - 2, y_mid + 8)
         }
 
         ctx.stroke()
