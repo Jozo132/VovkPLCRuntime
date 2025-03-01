@@ -396,7 +396,8 @@ const default_properties = {
     ladder_blocks_per_row: 7,
     style: {
         background_color_alt: '#333',
-        background_color: '#444',
+        background_color_online: '#444',
+        background_color_edit: '#666',
         color: '#000',
         highlight_color: '#4D4',
         grid_color: '#FFF4',
@@ -917,11 +918,13 @@ const draw_ladder = (editor, program, ladder) => {
     ladder.id = editor.generateID(ladder.id)
     const { id, name, comment } = ladder
     const scale = 1.5
+    const edit = editor.active_mode === 'edit'
+    const live = !edit
     // Generate the canvas and context if not already present
     let ladder_block_height = editor.properties.ladder_block_height
     let ladder_block_width = editor.properties.ladder_block_width
     const { ladder_blocks_per_row, style } = editor.properties
-    const { background_color, grid_color, color } = style
+    const { background_color_online, background_color_edit, grid_color, color } = style
     const div_exists = !!ladder.div
     const div = ladder.div || ElementSynthesis(`<div class="plc-program-block"></div>`)[0]
     if (!div) throw new Error('Div not found')
@@ -1005,7 +1008,7 @@ const draw_ladder = (editor, program, ladder) => {
     canvas.height = height
 
     // Canvas fill background
-    ctx.fillStyle = background_color
+    ctx.fillStyle = live ? background_color_online : background_color_edit
     ctx.fillRect(0, 0, canvas.width, canvas.height)
 
     // Draw grid
@@ -1029,10 +1032,13 @@ const draw_ladder = (editor, program, ladder) => {
 
     // Draw the ladder blocks and connections
     evaluate_ladder(editor, ladder)
+    
     // Draw the ladder
     ladder.blocks.forEach(block => {
-        if (block.type === 'contact') draw_contact(editor, 'highlight', ctx, block)
-        if (['coil', 'coil_set', 'coil_rset'].includes(block.type)) draw_coil(editor, 'highlight', ctx, block)
+        if (live) {
+            if (block.type === 'contact') draw_contact(editor, 'highlight', ctx, block)
+            if (['coil', 'coil_set', 'coil_rset'].includes(block.type)) draw_coil(editor, 'highlight', ctx, block)
+        }
     })
     /** @type { LadderLink[] } */
     const links = []
@@ -1044,7 +1050,9 @@ const draw_ladder = (editor, program, ladder) => {
         links.push({ from, to, powered: !!con.state?.powered })
     })
     links.forEach(link => {
-        draw_connection(editor, 'highlight', ctx, link)
+        if (live) {
+            draw_connection(editor, 'highlight', ctx, link)
+        }
     })
 
 
@@ -1406,6 +1414,12 @@ export class VovkPLCEditor {
     runtime = new PLCRuntimeWasm()
     runtime_ready = false
 
+    /** @type { 'edit' | 'online' } */
+    active_mode = 'edit'
+
+    /** @type { 'simulation' | 'device' } */
+    active_device = 'simulation'
+
     active_tab = ''
 
     /** @type { { id: string, tab: Element, program?: PLC_Program, active: boolean }[] } */
@@ -1421,6 +1435,30 @@ export class VovkPLCEditor {
     /** @type { String[] } */ reserved_ids = []
 
     properties = default_properties
+
+    /** @param { 'edit' | 'online' } mode */
+    setMode(mode) {
+        this.active_mode = mode
+        if (mode === 'edit') {
+            this.workspace.classList.remove('online')
+            this.workspace.classList.add('edit')
+        } else {
+            this.workspace.classList.remove('edit')
+            this.workspace.classList.add('online')
+        }
+    }
+
+    /** @param { 'simulation' | 'device' } device */
+    setDevice(device) {
+        this.active_device = device
+        if (device === 'simulation') {
+            this.workspace.classList.remove('device')
+            this.workspace.classList.add('simulation')
+        } else {
+            this.workspace.classList.remove('simulation')
+            this.workspace.classList.add('device')
+        }
+    }
 
     /** 
      * @param {{ 
@@ -1457,6 +1495,17 @@ export class VovkPLCEditor {
                 <div class="plc-navigation no-select resizable" style="width: 200px">
                     <div class="plc-navigation-container">
                         <h3>Navigation</h3>
+                        <div class="plc-device">
+                            <!-- Left side: dropdown with options 'Device' and 'Simulation,  the right side: button for going online with text content 'Go online'  -->
+                            <div class="plc-device-dropdown">
+                                <select>
+                                    <option value="simulation">Simulation</option>
+                                    <option value="device">Device</option>
+                                </select>
+                            </div>
+                            <div class="plc-device-online green">Go online</div>
+                        </div>
+                        <h4>Project</h4>
                         <div class="plc-navigation-tree"></div>
                     </div>
                     <div class="resizer right"></div>
@@ -1527,6 +1576,32 @@ export class VovkPLCEditor {
                 bar.innerHTML = '+'
             }
         })
+
+        const device_select_element = workspace.querySelector('.plc-device-dropdown select')
+        if (!device_select_element) throw new Error('Device select element not found')
+        device_select_element.addEventListener('change', () => { // @ts-ignore
+            const value = device_select_element.value
+            this.setDevice(value)
+        })
+
+        const device_online_button = workspace.querySelector('.plc-device-online')
+        if (!device_online_button) throw new Error('Device online button not found')
+        device_online_button.addEventListener('click', () => {
+            const mode = this.active_mode === 'edit' ? 'online' : 'edit' // @ts-ignore
+            device_online_button.innerText = mode === 'online' ? 'Go offline' : 'Go online'
+            if (mode === 'online') {
+                device_select_element.setAttribute('disabled', 'disabled')
+                device_online_button.classList.remove('green')
+                device_online_button.classList.add('orange')
+            } else {
+                device_select_element.removeAttribute('disabled')
+                device_online_button.classList.remove('orange')
+                device_online_button.classList.add('green')
+            }
+            this.setMode(mode)
+        })
+
+
         this.workspace_context_menu.addListener({
             target: workspace,
             onOpen: (event) => {
@@ -1592,7 +1667,6 @@ export class VovkPLCEditor {
     }
 
     openProgram(id) {
-        const active_tab = this.tabs_list.find(tab => tab.active)
         if (this.active_program) {
             this.active_program.editor?.hide()
         }
@@ -1702,9 +1776,11 @@ export class VovkPLCEditor {
     }
 
     draw() {
-        if (this.runtime_ready && this.runtime.wasm_exports) {
+        const simulation = this.active_mode === 'online' && this.active_device === 'simulation'
+        const production = this.active_mode === 'online' && this.active_device === 'device'
+        if (simulation && this.runtime_ready && this.runtime.wasm_exports) {
             this.runtime.run()
-            const u8array = this.runtime.readMemoryArea(0, 50)
+            const u8array = this.runtime.readMemoryArea(0, 64)
             this.memory = [...u8array]
         }
         this.active_program?.editor?.draw()

@@ -125,6 +125,64 @@ ul {
     background: repeating-linear-gradient( -60deg, #121212d6, #313a4a 24px,#28283e 24px, #252526 36px);
 }
 
+.plc-device {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 0px;
+    width: 95%;
+    max-width: 180px;
+    background: #444;
+    border: 1px solid #ccc;
+    border-radius: 2px;
+    margin: 5px;
+}
+
+.plc-device-dropdown {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 0px;
+    width: 50%;
+    background: #444;
+    border-right: 1px solid #ccc;
+}
+
+.plc-device-dropdown select {
+    padding: 0px;
+    width: 100%;
+    background: #444;
+    color: #DDD;
+    border: none;
+    border-right: 1px solid #ccc;
+    border-radius: 0px;
+    margin: 0px;
+}
+
+.plc-device-online {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    text-align: center;
+    align-items: center;
+    padding: 0px;
+    padding-left: 5px;
+    width: 50%;
+    background: #444;
+    color: #DDD;
+    cursor: pointer;
+}
+
+.plc-device-online.green {
+    background: #4A4;
+}
+
+.plc-device-online.orange {
+    background: #A44;
+}
+
+
+
 /* Ensure the navigation and tools don't shrink */
 .plc-navigation, .plc-tools {
     display: flex;
