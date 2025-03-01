@@ -173,7 +173,7 @@ class PLCRuntimeWasm_class {
     }
 
     /** @param { string | number[] } program */
-    downloadProgram = (program) => {
+    downloadBytecode = (program) => {
         if (!this.wasm_exports) throw new Error("WebAssembly module not initialized")
         if (!this.wasm_exports.streamIn) throw new Error("'streamIn' function not found")
         if (!this.wasm_exports.downloadProgram) throw new Error("'downloadProgram' function not found")

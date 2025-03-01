@@ -180,39 +180,15 @@ const toggle_output = (offset) => {
 }
 
 
-let button1_state = false
 let cycle = 0
 const draw = () => {
     if (!PLCEditor.runtime_ready) return // Wait for the runtime to be ready
     cycle++
     if (cycle === 1) {
-        PLCEditor.runtime.downloadProgram('5D 00 05 61 00 20 FF')
-    }
-    const light1 = PLCEditor.getOutputBit(0.0)
-    const light2 = PLCEditor.getOutputBit(0.1)
-
-    const button1 = PLCEditor.getInputBit(0.0)
-    const button2 = PLCEditor.getInputBit(0.1)
-    const button3 = PLCEditor.getInputBit(0.2)
-    const button4 = PLCEditor.getInputBit(0.3)
-
-    // Test
-    const on = (((button1 || button2) && button3) || light1) && !button4
-    PLCEditor.setOutputBit(20.0, on)
-    if (on) {
-        PLCEditor.setOutputBit(20.1, on)
+        PLCEditor.runtime.downloadBytecode('5D 00 05 61 00 20 FF')
     }
 
     PLCEditor.draw()
-
-    // // Toggle switch
-    // const button1_rising = button1 && !button1_state
-    // button1_state = button1
-    // if (button1_rising) {
-    //     const light1_state = !light1
-    //     setMemoryBit(20.0, light1_state)
-    // }
-
 }
 
 
