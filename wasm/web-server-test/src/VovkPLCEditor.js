@@ -866,7 +866,8 @@ const evaluate_ladder = (editor, ladder) => {
         if (inverted) active = !active
         state.active = active // The actual state of the block
         // All blocks that have no input are powered by the power rail
-        state.powered = !blockHasInputConnection(block)
+        // state.powered = !blockHasInputConnection(block)
+        state.powered = block.type === 'contact' && block.x === 0
         state.evaluated = false
     })
     connections.forEach(con => {
@@ -878,7 +879,8 @@ const evaluate_ladder = (editor, ladder) => {
         con.state.evaluated = false
     })
 
-    const starting_blocks = blocks.filter(block => !blockHasInputConnection(block))
+    // const starting_blocks = blocks.filter(block => !blockHasInputConnection(block))
+    const starting_blocks = blocks.filter(block => block.type === 'contact' && block.x === 0)
     starting_blocks.forEach(block => {
         if (!block.state) throw new Error(`Block state not found: ${block.symbol}`)
         block.state.terminated_input = true
@@ -906,7 +908,8 @@ const evaluate_ladder = (editor, ladder) => {
             outgoing_connections.forEach(con => {
                 if (!con.state) throw new Error(`Connection state not found: ${con.from.id} -> ${con.to.id}`)
                 const to_block = blocks.find(block => block.id === con.to.id)
-                if (!to_block) throw new Error(`Block not found: ${con.to.id}`)
+                // if (!to_block) throw new Error(`Block not found: ${con.to.id}`)
+                if (!to_block) return // Block not found, skip
                 con.state.powered = true
                 con.state.evaluated = true
                 evaluate_powered_block(to_block, false)
@@ -986,24 +989,42 @@ const draw_ladder = (editor, program, ladder) => {
             target: canvas,
             onOpen: (event) => {
                 console.log(`Ladder canvas "#${id}" context menu open`)
-                return [
-                    { type: 'item', name: 'edit', label: 'Edit' },
-                    { type: 'item', name: 'delete', label: 'Delete' },
-                    { type: 'separator' },
-                    { type: 'item', name: 'copy', label: 'Copy' },
-                    { type: 'item', name: 'paste', label: 'Paste' },
-                ]
+                const selected = editor.program_block_selection.program_block === id ? editor.program_block_selection.selection : []
+                if (selected.length === 0) {
+                    return [
+                        { type: 'item', name: 'add', label: 'Properties' },
+                    ]
+                }
+                else {
+                    return [
+                        { type: 'item', name: 'delete', label: 'Delete' },
+                        { type: 'separator' },
+                        { type: 'item', name: 'cut', label: 'Cut' },
+                        { type: 'item', name: 'copy', label: 'Copy' },
+                        { type: 'item', name: 'paste', label: 'Paste', disabled: editor.clipboard.selection.length === 0 },
+                        { type: 'separator' },
+                        { type: 'item', name: 'add', label: 'Properties' },
+                    ]
+                }
             },
             onClose: (selected) => {
                 console.log(`Ladder selected: ${selected}`)
+                if (selected === 'delete') editor.deleteSelection()
+                if (selected === 'cut') editor.cutSelection()
+                if (selected === 'copy') editor.copySelection()
+                if (selected === 'paste') editor.pasteSelection()
             }
         })
         let is_dragging = false
+        let is_moving = false
+        let moving_elements = []
         let was_dragging = false
         let start_x = 0
         let start_y = 0
         let end_x = 0
         let end_y = 0
+        let temp_x = 0
+        let temp_y = 0
         canvas.addEventListener('mousedown', (event) => {
             // left mouse select area
             if (event.button != 0) return
@@ -1013,6 +1034,26 @@ const draw_ladder = (editor, program, ladder) => {
             end_x = start_x
             end_y = start_y
             // console.log(`Dragging started at ${start_x}, ${start_y}`)
+            // If the mousedown is on the first slected block (x, y) then start moving the selection
+            const x = Math.floor(start_x * scale / ladder_block_width)
+            const y = Math.floor(start_y * scale / ladder_block_height)
+            const selected = editor.program_block_selection.program_block === id ? editor.program_block_selection.selection : []
+            const exists = selected.find(selection => (selection.type === 'block' || selection.type === 'area') && selection.x === x && selection.y === y)
+            if (exists) {
+                is_moving = true
+                const elements = [... new Set(editor.program_block_selection.selection.map(selection => {
+                    if (selection.type === 'block') {
+                        return ladder.blocks.find(block => block.x === selection.x && block.y === selection.y)
+                    }
+                    if (selection.type === 'area') {
+                        return ladder.blocks.filter(block => block.x >= selection.x && block.x < selection.x + selection.width && block.y >= selection.y && block.y < selection.y + selection.height)
+                    }
+                    return null
+                }).flat().filter(block => block))]
+                moving_elements = elements
+                temp_x = x
+                temp_y = y
+            }
         })
         canvas.addEventListener('mousemove', (event) => {
             if (!is_dragging) return
@@ -1024,10 +1065,44 @@ const draw_ladder = (editor, program, ladder) => {
             const distance = Math.sqrt(distance_x * distance_x + distance_y * distance_y)
             if (distance < 10) return // Don't start dragging until the distance is greater than 10
 
+            if (is_moving) {
+                // Move the selection
+                const end_x_block = Math.floor(end_x * scale / ladder_block_width)
+                const end_y_block = Math.floor(end_y * scale / ladder_block_height)
+                const dx = end_x_block - temp_x
+                const dy = end_y_block - temp_y
+                temp_x = end_x_block
+                temp_y = end_y_block
+
+                const selected = editor.program_block_selection.program_block === id ? editor.program_block_selection.selection : []
+                for (const selection of selected) {
+                    if (selection.type === 'block') {
+                        selection.x += dx
+                        selection.y += dy
+                    }
+                    if (selection.type === 'area') {
+                        selection.x += dx
+                        selection.y += dy
+                    }
+                }
+                editor.program_block_selection.origin.x += dx
+                editor.program_block_selection.origin.y += dy
+
+                // console.log(`Moving selection: ${dx}, ${dy}`, elements)
+                moving_elements.forEach(block => {
+                    if (!block) return
+                    block.x += dx
+                    block.y += dy
+                })
+                return
+            }
+
             const x = Math.floor(start_x * scale / ladder_block_width)
             const y = Math.floor(start_y * scale / ladder_block_height)
             const width = Math.floor(1 + (end_x - start_x) * scale / ladder_block_width)
             const height = Math.floor(1 + (end_y - start_y) * scale / ladder_block_height)
+
+
             // Update selection area
             const ctrl = event.ctrlKey
             const shift = event.shiftKey
@@ -1038,11 +1113,16 @@ const draw_ladder = (editor, program, ladder) => {
                     exists.width = width
                     exists.height = height
                 } else {
+                    if (editor.program_block_selection.origin.x > x) editor.program_block_selection.origin.x = x
+                    if (editor.program_block_selection.origin.y > y) editor.program_block_selection.origin.y = y
                     editor.program_block_selection.selection.push({ type: 'area', x, y, width, height })
                 }
             } else {
                 editor.program_block_selection = {
+                    type: 'ladder',
+                    program: program.id || '',
                     program_block: id,
+                    origin: { x, y },
                     selection: [{ type: 'area', x, y, width, height }]
                 }
             }
@@ -1052,8 +1132,10 @@ const draw_ladder = (editor, program, ladder) => {
             // console.log(`Dragging ended at ${end_x}, ${end_y}`)
             is_dragging = false
             was_dragging = true
+            is_moving = false
         })
         canvas.addEventListener('click', (event) => {
+            is_moving = false
             if (was_dragging) {
                 was_dragging = false
                 const distance_x = Math.abs(end_x - start_x)
@@ -1075,17 +1157,25 @@ const draw_ladder = (editor, program, ladder) => {
                         editor.program_block_selection.selection = editor.program_block_selection.selection.filter(selection => !(selection.type === 'block' && selection.x === x && selection.y === y))
                     }
                 } else {
+                    if (editor.program_block_selection.origin.x > x) editor.program_block_selection.origin.x = x
+                    if (editor.program_block_selection.origin.y > y) editor.program_block_selection.origin.y = y
                     editor.program_block_selection.selection.push({ type: 'block', x, y })
                 }
             } else {
                 if (editor.program_block_selection.selection[0]?.type === 'area') { // Deselect the area selection first
                     editor.program_block_selection = {
+                        type: 'ladder',
+                        program: program.id || '',
                         program_block: id,
+                        origin: { x, y },
                         selection: []
                     }
                 } else {
                     editor.program_block_selection = {
+                        type: 'ladder',
+                        program: program.id || '',
                         program_block: id,
+                        origin: { x, y },
                         selection: [{ type: 'block', x, y }]
                     }
                 }
@@ -1097,7 +1187,7 @@ const draw_ladder = (editor, program, ladder) => {
     if (!ctx) throw new Error('Context not found')
     if (!ladder.ctx) ladder.ctx = ctx
 
-    const max_x = ladder.blocks.reduce((max, block) => Math.max(max, block.x), 0)
+    const max_x = ladder.blocks.reduce((max, block) => Math.max(max, block.x), 0) + (edit && editor.program_block_selection.program_block == id ? 1 : 0)
     const max_y = ladder.blocks.reduce((max, block) => Math.max(max, block.y), 0) + (edit && editor.program_block_selection.program_block == id ? 1 : 0)
     const width = Math.max(max_x + 1, ladder_blocks_per_row) * ladder_block_width
     const height = (max_y + 1) * ladder_block_height
@@ -1160,8 +1250,8 @@ const draw_ladder = (editor, program, ladder) => {
         con.id = editor.generateID(con.id)
         const from = ladder.blocks.find(block => block.id === con.from.id)
         const to = ladder.blocks.find(block => block.id === con.to.id)
-        if (!from || !to) throw new Error(`Connection block not found`)
-        links.push({ from, to, powered: !!con.state?.powered })
+        // if (!from || !to) throw new Error(`Connection block not found`)
+        if (from && to) links.push({ from, to, powered: !!con.state?.powered })
     })
     links.forEach(link => {
         if (live) {
@@ -1550,30 +1640,155 @@ export class VovkPLCEditor {
 
     properties = default_properties
 
-    /** @type { { program_block: string, selection: ({ type: 'block', x: number, y: number } | { type: 'area', x: number, y: number, width: number, height: number } | { type: 'connection', from: string, to: string })[] } } */
-    program_block_selection = { program_block: '', selection: [] }
+    /** @type { { type: '' | 'ladder', program: string, program_block: string, origin: { x: number, y: number }, selection: ({ type: 'block', x: number, y: number } | { type: 'area', x: number, y: number, width: number, height: number } | { type: 'connection', from: string, to: string })[] } } */
+    program_block_selection = { type: '', program: '', program_block: '', origin: { x: 0, y: 0 }, selection: [] }
 
-    /** @type { { method: 'copy' | 'cut' | '', program_block: string, selection: ({ type: 'block', x: number, y: number } | { type: 'area', x: number, y: number, width: number, height: number } | { type: 'connection', from: string, to: string })[] } } */
-    clipboard = { method: '', program_block: '', selection: [] }
+    /** @type { { type: '' | 'ladder', program: string, program_block: string, selection: ({ type: 'block', x: number, y: number } | { type: 'area', x: number, y: number, width: number, height: number } | { type: 'connection', from: string, to: string })[], elements: { blocks: any[], connections: any[]} } } */
+    clipboard = { type: '', program: '', program_block: '', selection: [], elements: { blocks: [], connections: [] } }
 
 
     copySelection() {
-        this.clipboard.method = 'copy'
+        if (this.program_block_selection.program === '') return console.log('No program selected')
+        if (this.program_block_selection.program_block === '') return console.log('No program block selected')
+        if (this.program_block_selection.selection.length === 0) return console.log('No selection found')
+        if (this.program_block_selection.type === '') return console.log('Invalid selection type')
+
+        const origin = this.program_block_selection.origin
+        const origin_x = origin.x
+        const origin_y = origin.y
+
+        this.clipboard.elements = {
+            blocks: [],
+            connections: []
+        }
+        const program = findProgram(this, this.program_block_selection.program)
+        if (!program) return console.log('Program not found')
+        // Find the selected program block
+        const program_block = program.blocks.find(block => block.id === this.program_block_selection.program_block)
+        if (!program_block) return console.log('Program block not found')
+        // Find all the selected elements from the selections
+        this.program_block_selection.selection.forEach(selection => {
+            if (selection.type === 'block') {
+                const block = program_block.blocks.find(block => block.x === selection.x && block.y === selection.y)
+                if (block) {
+                    const copy = { ...block }
+                    delete copy.state
+                    const exists = this.clipboard.elements.blocks.find(b => b.id === copy.id)
+                    if (!exists) this.clipboard.elements.blocks.push(copy)
+                }
+            }
+            if (selection.type === 'area') {
+                const blocks = program_block.blocks.filter(block => block.x >= selection.x && block.x < selection.x + selection.width && block.y >= selection.y && block.y < selection.y + selection.height)
+                blocks.forEach(block => {
+                    const copy = { ...block }
+                    delete copy.state
+                    const exists = this.clipboard.elements.blocks.find(b => b.id === copy.id)
+                    if (!exists) this.clipboard.elements.blocks.push(copy)
+                })
+            }
+        })
+        if (this.clipboard.elements.blocks.length === 0) return console.log('No blocks found in the selection')
+        this.clipboard.elements.blocks.forEach(block => {
+            block.x -= origin_x
+            block.y -= origin_y
+        })
+        // Find connections that are connected to any pairs of the selected blocks
+        const valid_connections = program_block.connections.filter(connection => {
+            const from = this.clipboard.elements.blocks.find(block => block.id === connection.from.id)
+            const to = this.clipboard.elements.blocks.find(block => block.id === connection.to.id)
+            return from && to
+        })
+        valid_connections.forEach(connection => {
+            const exists = this.clipboard.elements.connections.find(c => c.id === connection.id)
+            if (!exists) this.clipboard.elements.connections.push(connection)
+        })
+        this.clipboard.type = this.program_block_selection.type
+        this.clipboard.program = this.program_block_selection.program
         this.clipboard.program_block = this.program_block_selection.program_block
         this.clipboard.selection = this.program_block_selection.selection
     }
 
     cutSelection() {
-        this.clipboard.method = 'cut'
-        this.clipboard.program_block = this.program_block_selection.program_block
-        this.clipboard.selection = this.program_block_selection.selection
+        this.copySelection()
+        this.deleteSelection()
     }
 
     pasteSelection() {
-        // Paste the selection from the clipboard to the active selection
-        if (this.clipboard.method === 'copy') {
-            this.program_block_selection = this.clipboard
-        }
+        if (this.clipboard.type === '') return console.log('Invalid clipboard type')
+        if (this.program_block_selection.type === '') return console.log('Invalid selection type')
+        if (this.program_block_selection.type !== this.clipboard.type) return console.log(`Selected target does not match the clipboard content type: ${this.program_block_selection.type} !== ${this.clipboard.type}`)
+        if (this.clipboard.program === '') return console.log('No program found in the clipboard')
+        if (this.program_block_selection.program === '') return console.log('No target program selected')
+        if (this.program_block_selection.program_block === '') return console.log('No program block selected')
+        if (this.clipboard.program_block === '') return console.log('No clipboard content found')
+        if (this.clipboard.selection.length === 0) return console.log('No selection found in the clipboard')
+        if (this.program_block_selection.selection.length === 0) return console.log('No selection found')
+        const program = findProgram(this, this.program_block_selection.program)
+        if (!program) return console.log('Program not found')
+        const program_block = program.blocks.find(block => block.id === this.program_block_selection.program_block)
+        if (!program_block) return console.log('Program block not found')
+        const elements = this.clipboard.elements
+        if (!elements || !elements.blocks) return console.log('Clipboard elements not found')
+        const origin = this.program_block_selection.origin
+        const origin_x = origin.x
+        const origin_y = origin.y
+        const name_map = {}
+        const program_block_items = []
+        const program_block_connections = []
+        elements.blocks.forEach(block => {
+            const copy = { ...block }
+            copy.x += origin_x
+            copy.y += origin_y
+            copy.id = this.generateID()
+            name_map[block.id] = copy.id
+            program_block_items.push(copy)
+        })
+        elements.connections.forEach(connection => {
+            const copy = { ...connection }
+            copy.id = this.generateID()
+            copy.from.id = name_map[copy.from.id]
+            copy.to.id = name_map[copy.to.id]
+            program_block_connections.push(copy)
+        })
+        program_block_items.forEach(item => program_block.blocks.push(item))
+        program_block_connections.forEach(connection => program_block.connections.push(connection))
+        this.program_block_selection.selection = []
+        this.program_block_selection.origin = { x: 0, y: 0 }
+    }
+
+    deleteSelection() {
+        // Delete the selected blocks
+        if (this.program_block_selection.program === '') return console.log('No program selected')
+        if (this.program_block_selection.program_block === '') return console.log('No program block selected')
+        if (this.program_block_selection.selection.length === 0) return console.log('No selection found')
+        if (this.program_block_selection.type === '') return console.log('Invalid selection type')
+        const program = findProgram(this, this.program_block_selection.program)
+        if (!program) return console.log('Program not found')
+        const program_block = program.blocks.find(block => block.id === this.program_block_selection.program_block)
+        if (!program_block) return console.log('Program block not found')
+        const program_block_items = []
+        this.program_block_selection.selection.forEach(selection => {
+            if (selection.type === 'block') {
+                const block = program_block.blocks.find(block => block.x === selection.x && block.y === selection.y)
+                if (block) program_block_items.push(block)
+            }
+            if (selection.type === 'area') {
+                const blocks = program_block.blocks.filter(block => block.x >= selection.x && block.x < selection.x + selection.width && block.y >= selection.y && block.y < selection.y + selection.height)
+                blocks.forEach(block => program_block_items.push(block))
+            }
+        })
+        program_block_items.forEach(item => {
+            const index = program_block.blocks.indexOf(item)
+            if (index >= 0) {
+                program_block.blocks.splice(index, 1)
+                const connections = program_block.connections.filter(connection => connection.from.id === item.id || connection.to.id === item.id)
+                connections.forEach(connection => {
+                    const index = program_block.connections.indexOf(connection)
+                    if (index >= 0) program_block.connections.splice(index, 1)
+                })
+            }
+        })
+        this.program_block_selection.selection = []
     }
 
     /** @param { 'edit' | 'online' } mode */
@@ -1763,10 +1978,20 @@ export class VovkPLCEditor {
 
         // On ESC remove all selections
         window.addEventListener('keydown', (event) => {
-            if (event.key === 'Escape') {
-                this.deselectAll()
-                this.workspace_context_menu.close()
-            }
+            const esc = event.key === 'Escape'
+            const ctrl = event.ctrlKey
+            const shift = event.shiftKey
+            const alt = event.altKey
+            const del = event.key === 'Delete'
+            const x = event.key.toLocaleLowerCase() === 'x'
+            const c = event.key.toLocaleLowerCase() === 'c'
+            const v = event.key.toLocaleLowerCase() === 'v'
+            const a = event.key.toLocaleLowerCase() === 'a'
+            if (esc) this.deselectAll()
+            if (ctrl && c) this.copySelection()
+            if (ctrl && x) this.cutSelection()
+            if (ctrl && v) this.pasteSelection()
+            if (del) this.deleteSelection()
         })
 
     }
@@ -1862,10 +2087,11 @@ export class VovkPLCEditor {
         if (!program) throw new Error(`Program not found: ${id}`)
         program.editor?.hide()
     }
-    
+
     deselectAll() {
         this.program_block_selection.program_block = ''
         this.program_block_selection.selection = []
+        this.workspace_context_menu.close()
     }
 
     /** @param { number } offset */
