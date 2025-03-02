@@ -342,6 +342,11 @@ class Menu {
     /** @type { (target: HTMLElement | Element) => void } */
     removeListener(target) { this.#listeners = this.#listeners.filter(listener => listener.target !== target) }
     removeAllListeners() { this.#listeners = [] }
+
+    close() {
+        this.menu.classList.add('hidden')
+        this.open = false
+    }
 }
 
 const handleLongPress = (element, delay = 500) => {
@@ -401,8 +406,8 @@ const default_properties = {
         color: '#000',
         highlight_color: '#4D4',
         grid_color: '#FFF4',
-        select_color: '#0af',
-        hover_color: '#0cf',
+        select_color: '#479',
+        hover_color: '#456',
         font: '16px Arial',
         font_color: '#DDD',
         line_width: 3,
@@ -992,6 +997,99 @@ const draw_ladder = (editor, program, ladder) => {
                 console.log(`Ladder selected: ${selected}`)
             }
         })
+        let is_dragging = false
+        let was_dragging = false
+        let start_x = 0
+        let start_y = 0
+        let end_x = 0
+        let end_y = 0
+        canvas.addEventListener('mousedown', (event) => {
+            // left mouse select area
+            if (event.button != 0) return
+            is_dragging = true
+            start_x = Math.floor(event.clientX - canvas.getBoundingClientRect().left)
+            start_y = Math.floor(event.clientY - canvas.getBoundingClientRect().top)
+            end_x = start_x
+            end_y = start_y
+            // console.log(`Dragging started at ${start_x}, ${start_y}`)
+        })
+        canvas.addEventListener('mousemove', (event) => {
+            if (!is_dragging) return
+            end_x = Math.floor(event.clientX - canvas.getBoundingClientRect().left)
+            end_y = Math.floor(event.clientY - canvas.getBoundingClientRect().top)
+
+            const distance_x = Math.abs(end_x - start_x)
+            const distance_y = Math.abs(end_y - start_y)
+            const distance = Math.sqrt(distance_x * distance_x + distance_y * distance_y)
+            if (distance < 10) return // Don't start dragging until the distance is greater than 10
+
+            const x = Math.floor(start_x * scale / ladder_block_width)
+            const y = Math.floor(start_y * scale / ladder_block_height)
+            const width = Math.floor(1 + (end_x - start_x) * scale / ladder_block_width)
+            const height = Math.floor(1 + (end_y - start_y) * scale / ladder_block_height)
+            // Update selection area
+            const ctrl = event.ctrlKey
+            const shift = event.shiftKey
+            const ctrl_or_shift = ctrl || shift
+            if (ctrl_or_shift && editor.program_block_selection.program_block === id) {
+                const exists = editor.program_block_selection.selection.find(selection => selection.type === 'area' && selection.x === x && selection.y === y)
+                if (exists && exists.type === 'area') {
+                    exists.width = width
+                    exists.height = height
+                } else {
+                    editor.program_block_selection.selection.push({ type: 'area', x, y, width, height })
+                }
+            } else {
+                editor.program_block_selection = {
+                    program_block: id,
+                    selection: [{ type: 'area', x, y, width, height }]
+                }
+            }
+
+        })
+        canvas.addEventListener('mouseup', () => {
+            // console.log(`Dragging ended at ${end_x}, ${end_y}`)
+            is_dragging = false
+            was_dragging = true
+        })
+        canvas.addEventListener('click', (event) => {
+            if (was_dragging) {
+                was_dragging = false
+                const distance_x = Math.abs(end_x - start_x)
+                const distance_y = Math.abs(end_y - start_y)
+                const distance = Math.sqrt(distance_x * distance_x + distance_y * distance_y)
+                if (distance > 10) return // prevent click event after dragging
+            }
+            const x = Math.floor(event.offsetX * scale / ladder_block_width)
+            const y = Math.floor(event.offsetY * scale / ladder_block_height)
+            // console.log(`Clicked on block at ${x}, ${y}`)
+            const ctrl = event.ctrlKey
+            const shift = event.shiftKey
+            const ctrl_or_shift = ctrl || shift
+            if (ctrl_or_shift && editor.program_block_selection.program_block === id) {
+                const exists = editor.program_block_selection.selection.some(selection => selection.type === 'block' && selection.x === x && selection.y === y)
+                if (exists) {
+                    if (ctrl) {
+                        // remove selected block
+                        editor.program_block_selection.selection = editor.program_block_selection.selection.filter(selection => !(selection.type === 'block' && selection.x === x && selection.y === y))
+                    }
+                } else {
+                    editor.program_block_selection.selection.push({ type: 'block', x, y })
+                }
+            } else {
+                if (editor.program_block_selection.selection[0]?.type === 'area') { // Deselect the area selection first
+                    editor.program_block_selection = {
+                        program_block: id,
+                        selection: []
+                    }
+                } else {
+                    editor.program_block_selection = {
+                        program_block: id,
+                        selection: [{ type: 'block', x, y }]
+                    }
+                }
+            }
+        })
         program.editor?.body?.appendChild(ladder.div)
     }
     const ctx = ladder.ctx || canvas.getContext('2d')
@@ -999,7 +1097,7 @@ const draw_ladder = (editor, program, ladder) => {
     if (!ladder.ctx) ladder.ctx = ctx
 
     const max_x = ladder.blocks.reduce((max, block) => Math.max(max, block.x), 0)
-    const max_y = ladder.blocks.reduce((max, block) => Math.max(max, block.y), 0)
+    const max_y = ladder.blocks.reduce((max, block) => Math.max(max, block.y), 0) + (edit && editor.program_block_selection.program_block == id ? 1 : 0)
     const width = Math.max(max_x + 1, ladder_blocks_per_row) * ladder_block_width
     const height = (max_y + 1) * ladder_block_height
     canvas.style.width = (width / scale) + 'px';
@@ -1010,6 +1108,21 @@ const draw_ladder = (editor, program, ladder) => {
     // Canvas fill background
     ctx.fillStyle = live ? background_color_online : background_color_edit
     ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+    if (editor.program_block_selection.program_block === id) {
+        for (const selection of editor.program_block_selection.selection) {
+            if (selection.type === 'block') {
+                const { x, y } = selection
+                ctx.fillStyle = style.select_color
+                ctx.fillRect(x * ladder_block_width, y * ladder_block_height, ladder_block_width, ladder_block_height)
+            }
+            if (selection.type === 'area') {
+                const { x, y, width, height } = selection
+                ctx.fillStyle = style.select_color
+                ctx.fillRect(x * ladder_block_width, y * ladder_block_height, width * ladder_block_width, height * ladder_block_height)
+            }
+        }
+    }
 
     // Draw grid
     ctx.strokeStyle = grid_color
@@ -1032,7 +1145,7 @@ const draw_ladder = (editor, program, ladder) => {
 
     // Draw the ladder blocks and connections
     evaluate_ladder(editor, ladder)
-    
+
     // Draw the ladder
     ladder.blocks.forEach(block => {
         if (live) {
@@ -1436,6 +1549,32 @@ export class VovkPLCEditor {
 
     properties = default_properties
 
+    /** @type { { program_block: string, selection: ({ type: 'block', x: number, y: number } | { type: 'area', x: number, y: number, width: number, height: number } | { type: 'connection', from: string, to: string })[] } } */
+    program_block_selection = { program_block: '', selection: [] }
+
+    /** @type { { method: 'copy' | 'cut' | '', program_block: string, selection: ({ type: 'block', x: number, y: number } | { type: 'area', x: number, y: number, width: number, height: number } | { type: 'connection', from: string, to: string })[] } } */
+    clipboard = { method: '', program_block: '', selection: [] }
+
+
+    copySelection() {
+        this.clipboard.method = 'copy'
+        this.clipboard.program_block = this.program_block_selection.program_block
+        this.clipboard.selection = this.program_block_selection.selection
+    }
+
+    cutSelection() {
+        this.clipboard.method = 'cut'
+        this.clipboard.program_block = this.program_block_selection.program_block
+        this.clipboard.selection = this.program_block_selection.selection
+    }
+
+    pasteSelection() {
+        // Paste the selection from the clipboard to the active selection
+        if (this.clipboard.method === 'copy') {
+            this.program_block_selection = this.clipboard
+        }
+    }
+
     /** @param { 'edit' | 'online' } mode */
     setMode(mode) {
         this.active_mode = mode
@@ -1445,6 +1584,7 @@ export class VovkPLCEditor {
         } else {
             this.workspace.classList.remove('edit')
             this.workspace.classList.add('online')
+            this.deselectAll()
         }
     }
 
@@ -1619,14 +1759,15 @@ export class VovkPLCEditor {
             }
         })
 
-        // ladder_canvas.width = PLCEditor_element.clientWidth * 0.996
-        // ladder_canvas.height = PLCEditor_element.clientHeight * 0.996
 
-        // // On window resize
-        // window.onresize = () => {
-        //     ladder_canvas.width = PLCEditor_element.clientWidth * 0.996
-        //     ladder_canvas.height = PLCEditor_element.clientHeight * 0.996
-        // }
+        // On ESC remove all selections
+        window.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                this.deselectAll()
+                this.workspace_context_menu.close()
+            }
+        })
+
     }
 
     /** @param { PLC_Project } project */
@@ -1719,6 +1860,11 @@ export class VovkPLCEditor {
         const program = findProgram(this, id)
         if (!program) throw new Error(`Program not found: ${id}`)
         program.editor?.hide()
+    }
+    
+    deselectAll() {
+        this.program_block_selection.program_block = ''
+        this.program_block_selection.selection = []
     }
 
     /** @param { number } offset */
