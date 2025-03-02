@@ -1221,11 +1221,11 @@ const draw_ladder = (editor, program, ladder) => {
     ctx.setLineDash([5, 5])
     ctx.lineDashOffset = 2.5
     ctx.beginPath()
-    for (let x = 1; x < 10; x++) {
+    for (let x = 1; x < Math.max(max_x + 1, ladder_blocks_per_row); x++) {
         ctx.moveTo(x * ladder_block_width, 0)
         ctx.lineTo(x * ladder_block_width, canvas.height)
     }
-    for (let y = 1; y < 10; y++) {
+    for (let y = 1; y < max_y + 1; y++) {
         ctx.moveTo(0, y * ladder_block_height)
         ctx.lineTo(canvas.width, y * ladder_block_height)
     }
