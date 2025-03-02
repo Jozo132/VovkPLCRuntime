@@ -408,6 +408,7 @@ const default_properties = {
         highlight_color: '#3C3',
         highlight_sim_color: '#4AD',
         grid_color: '#FFF4',
+        select_highlight_color: '#7AF',
         select_color: '#479',
         hover_color: '#456',
         font: '16px Arial',
@@ -1124,10 +1125,12 @@ const draw_ladder = (editor, program, ladder) => {
             // console.log(`Dragging ended at ${end_x}, ${end_y}`)
             is_dragging = false
             was_dragging = true
-            is_moving = false
         })
         canvas.addEventListener('click', (event) => {
-            is_moving = false
+            if (is_moving) {
+                is_moving = false
+                editor.connectTouchingBlocks()
+            }
             if (was_dragging) {
                 was_dragging = false
                 const distance_x = Math.abs(end_x - start_x)
@@ -1222,6 +1225,20 @@ const draw_ladder = (editor, program, ladder) => {
         ctx.lineTo(canvas.width, y * ladder_block_height)
     }
     ctx.stroke()
+
+    // Check if this ladder has a selection and highlight the first selected block origin
+    if (editor.program_block_selection.program_block === id) {
+        const first_block = editor.program_block_selection.selection.find(s => s.type === 'block' || s.type === 'area')
+        if (first_block) {
+            const { x, y } = first_block
+            ctx.strokeStyle = style.select_highlight_color
+            ctx.lineWidth = 2
+            ctx.beginPath()
+            ctx.strokeRect(x * ladder_block_width, y * ladder_block_height, ladder_block_width, ladder_block_height)
+            ctx.stroke()
+        }
+    }
+
     ctx.setLineDash([])
 
     // manual_plc_cycle()
@@ -1701,11 +1718,13 @@ export class VovkPLCEditor {
     }
 
     cutSelection() {
+        if (this.active_mode === 'online') return console.log('Cannot cut in online mode')
         this.copySelection()
         this.deleteSelection()
     }
 
     pasteSelection() {
+        if (this.active_mode === 'online') return console.log('Cannot paste in online mode')
         if (this.clipboard.type === '') return console.log('Invalid clipboard type')
         if (this.program_block_selection.type === '') return console.log('Invalid selection type')
         if (this.program_block_selection.type !== this.clipboard.type) return console.log(`Selected target does not match the clipboard content type: ${this.program_block_selection.type} !== ${this.clipboard.type}`)
@@ -1744,16 +1763,15 @@ export class VovkPLCEditor {
         })
         program_block_items.forEach(item => program_block.blocks.push(item))
         program_block_connections.forEach(connection => program_block.connections.push(connection))
-        this.program_block_selection.selection = []
-        this.program_block_selection.origin = { x: 0, y: 0 }
+        this.connectTouchingBlocks()
     }
 
     deleteSelection() {
-        // Delete the selected blocks
+        if (this.active_mode === 'online') return console.log('Cannot delete in online mode')
+        if (this.program_block_selection.type === '') return console.log('Invalid selection type')
         if (this.program_block_selection.program === '') return console.log('No program selected')
         if (this.program_block_selection.program_block === '') return console.log('No program block selected')
         if (this.program_block_selection.selection.length === 0) return console.log('No selection found')
-        if (this.program_block_selection.type === '') return console.log('Invalid selection type')
         const program = findProgram(this, this.program_block_selection.program)
         if (!program) return console.log('Program not found')
         const program_block = program.blocks.find(block => block.id === this.program_block_selection.program_block)
@@ -1780,7 +1798,48 @@ export class VovkPLCEditor {
                 })
             }
         })
-        this.program_block_selection.selection = []
+    }
+
+    connectTouchingBlocks() {
+        if (!this.project) return null
+        if (!this.project.project) return null
+        if (this.active_mode === 'online') return null
+        const project = this.project.project
+        /** @type { (folder: PLC_Program) => void } */
+        const updateProgram = (program) => {
+            program.blocks.forEach(block => {
+                if (block.type === 'ladder') {
+                    const blocks = block.blocks
+                    const connections = block.connections
+                    for (let i = 0; i < blocks.length; i++) {
+                        const block = blocks[i]
+                        const x = block.x + 1
+                        const neighbors_right = blocks.filter(b => b.x === x && b.y === block.y)
+                        neighbors_right.forEach(neighbor => {
+                            const exists = connections.find(connection => connection.from.id === block.id && connection.to.id === neighbor.id)
+                            if (!exists) {
+                                console.log(`Connecting block ${block.id} to block ${neighbor.id}`)
+                                connections.push({ id: this.generateID(), from: { id: block.id }, to: { id: neighbor.id } })
+                            }
+                        })
+                    }
+                }
+            })
+        }
+        /** @type { (folder: PLC_Folder) => void } */
+        const updateFolder = (folder) => {
+            for (let i = 0; i < folder.children.length; i++) {
+                const child = folder.children[i]
+                if (child.type === 'folder') updateFolder(child)
+                if (child.type === 'program') updateProgram(child)
+            }
+        }
+
+        for (let i = 0; i < project.length; i++) {
+            const folder = project[i]
+            if (folder.type === 'folder') updateFolder(folder)
+            if (folder.type === 'program') updateProgram(folder)
+        }
     }
 
     /** @param { 'edit' | 'online' } mode */
