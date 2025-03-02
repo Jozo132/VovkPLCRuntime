@@ -230,7 +230,7 @@ const program_icon_str = program_icon.outerHTML
 
 class Menu {
     /**
-     *  @typedef {{ type: 'item', name: string, label: string }} MenuItem 
+     *  @typedef {{ type: 'item', name: string, label: string, disabled?: boolean }} MenuItem 
      *  @typedef {{ type: 'separator', name?: undefined, label?: undefined }} MenuSeparator
      *  @typedef { MenuItem | MenuSeparator } MenuElement
      *  @typedef { (event: MouseEvent) => MenuElement[] | undefined } MenuOnOpen 
@@ -255,8 +255,9 @@ class Menu {
             if (item.type === 'item') {
                 const div = document.createElement('div')
                 div.classList.add('item')
+                if (item.disabled) div.classList.add('disabled')
                 div.innerText = item.label
-                div.addEventListener('click', () => {
+                if (!item.disabled) div.addEventListener('click', () => {
                     this.#onClose(item.name)
                     this.menu.classList.add('hidden')
                 })
