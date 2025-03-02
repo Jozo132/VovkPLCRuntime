@@ -405,7 +405,8 @@ const default_properties = {
         background_color_online: '#444',
         background_color_edit: '#666',
         color: '#000',
-        highlight_color: '#4D4',
+        highlight_color: '#3C3',
+        highlight_sim_color: '#4AD',
         grid_color: '#FFF4',
         select_color: '#479',
         hover_color: '#456',
@@ -414,17 +415,6 @@ const default_properties = {
         line_width: 3,
         highlight_width: 8,
     }
-    // style: {
-    //     background_color_alt: '#333',
-    //     background_color: '#aaa',
-    //     color: '#000',
-    //     highlight_color: '#0f0',
-    //     grid_color: '#337',
-    //     select_color: '#0af',
-    //     hover_color: '#0cf',
-    //     font: '16px Arial',
-    //     font_color: '#421',
-    // }
 }
 
 
@@ -571,7 +561,7 @@ const draw_contact = (editor, like, ctx, block) => {
     // output state: the right side of the contact (green when true)
     // value: the inner state of the contact (green when true)
     const { ladder_block_width, ladder_block_height, style } = editor.properties
-    const { line_width, highlight_width, color, highlight_color, font, font_color } = style
+    const { line_width, highlight_width, color, highlight_color, highlight_sim_color, font, font_color } = style
     block = getBlockState(editor, block)
     if (!block.state) throw new Error(`Block state not found: ${block.symbol}`)
     const { x, y, type, inverted, trigger, state } = block
@@ -602,7 +592,7 @@ const draw_contact = (editor, like, ctx, block) => {
 
     // Draw thick green line for the contact to symbolize the input state if true for the left and the right side of the contact
     if (like === 'highlight') {
-        ctx.strokeStyle = highlight_color
+        ctx.strokeStyle = editor.active_device === 'simulation' ? highlight_sim_color : highlight_color
         ctx.lineWidth = highlight_width
         ctx.beginPath()
         if (state.powered) {
@@ -694,7 +684,7 @@ const draw_coil = (editor, like, ctx, block) => {
     // output state: the right side of the contact is equal to the input state
     // value: the inner state of the contact (green when true)
     const { ladder_block_width, ladder_block_height, style } = editor.properties
-    const { line_width, highlight_width, color, highlight_color, font, font_color } = style
+    const { line_width, highlight_width, color, highlight_color, highlight_sim_color, font, font_color } = style
     block = getBlockState(editor, block)
     if (!block.state) throw new Error(`Block state not found: ${block.symbol}`)
     const { x, y, type, inverted, trigger, state } = block
@@ -726,7 +716,7 @@ const draw_coil = (editor, like, ctx, block) => {
 
     // Draw thick green line for the contact to symbolize the input state if true for the left and the right side of the contact
     if (like === 'highlight') {
-        ctx.strokeStyle = highlight_color
+        ctx.strokeStyle = editor.active_device === 'simulation' ? highlight_sim_color : highlight_color
         ctx.lineWidth = highlight_width
         ctx.beginPath()
         if (state.powered) {
@@ -806,7 +796,7 @@ const draw_connection = (editor, like, ctx, link) => {
     // If the target block is above the source block, draw the horizontal line first
     // If the target block is to the right, just draw a straight line
     const { ladder_block_width, ladder_block_height, style } = editor.properties
-    const { line_width, highlight_width, highlight_color, color } = style
+    const { line_width, highlight_width, highlight_color, highlight_sim_color, color } = style
     const { from, to, powered } = link
     const x0 = from.x * ladder_block_width + ladder_block_width
     const y0 = from.y * ladder_block_height + ladder_block_height / 2
@@ -818,7 +808,7 @@ const draw_connection = (editor, like, ctx, link) => {
     if (x_direction === 0 && y_direction === 0) return // elements are touching, no need to draw a connection
     if (like === 'highlight') {
         if (powered) {
-            ctx.strokeStyle = highlight_color
+            ctx.strokeStyle = editor.active_device === 'simulation' ? highlight_sim_color : highlight_color
             ctx.lineWidth = highlight_width
             ctx.beginPath()
             if (x_direction === 0) {
