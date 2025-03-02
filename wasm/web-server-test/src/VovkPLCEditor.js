@@ -1488,9 +1488,9 @@ export class VovkPLCEditor {
 
         /** @type { Element[] } */
         const workspace_body = ElementSynthesis(/*HTML*/`
-            <!--div class="plc-workspace-header">
-                <h2>Header</h2>
-            </div-->
+            <div class="plc-workspace-header">
+                <p>Header</p>
+            </div>
             <div class="plc-workspace-body">
                 <div class="plc-navigation no-select resizable" style="width: 200px">
                     <div class="plc-navigation-container">
@@ -1529,9 +1529,9 @@ export class VovkPLCEditor {
                     </div>
                 </div>
             </div>
-            <!--div class="plc-workspace-footer">
-                <h3>Footer</h3>
-            </div-->
+            <div class="plc-workspace-footer">
+                <p>Footer</p>
+            </div>
         `)
         workspace_body.forEach(element => workspace.appendChild(element))
         const [header, body, footer] = workspace_body
