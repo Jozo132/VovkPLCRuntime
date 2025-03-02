@@ -983,6 +983,9 @@ const draw_ladder = (editor, program, ladder) => {
             onOpen: (event) => {
                 console.log(`Ladder canvas "#${id}" context menu open`)
                 const selected = editor.program_block_selection.program_block === id ? editor.program_block_selection.selection : []
+                const clipboard_empty = editor.clipboard.selection.length === 0
+                const edit = editor.active_mode === 'edit'
+                const live = !edit
                 if (selected.length === 0) {
                     return [
                         { type: 'item', name: 'add', label: 'Properties' },
@@ -990,11 +993,11 @@ const draw_ladder = (editor, program, ladder) => {
                 }
                 else {
                     return [
-                        { type: 'item', name: 'delete', label: 'Delete' },
+                        { type: 'item', name: 'delete', label: 'Delete', disabled: live },
                         { type: 'separator' },
-                        { type: 'item', name: 'cut', label: 'Cut' },
+                        { type: 'item', name: 'cut', label: 'Cut', disabled: live },
                         { type: 'item', name: 'copy', label: 'Copy' },
-                        { type: 'item', name: 'paste', label: 'Paste', disabled: editor.clipboard.selection.length === 0 },
+                        { type: 'item', name: 'paste', label: 'Paste', disabled: live || clipboard_empty },
                         { type: 'separator' },
                         { type: 'item', name: 'add', label: 'Properties' },
                     ]
