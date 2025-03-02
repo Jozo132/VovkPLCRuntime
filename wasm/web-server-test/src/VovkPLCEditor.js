@@ -869,6 +869,8 @@ const evaluate_ladder = (editor, ladder) => {
         // state.powered = !blockHasInputConnection(block)
         state.powered = block.type === 'contact' && block.x === 0
         state.evaluated = false
+        block.state.terminated_input = false
+        block.state.terminated_output = false
     })
     connections.forEach(con => {
         con.state = con.state || {
