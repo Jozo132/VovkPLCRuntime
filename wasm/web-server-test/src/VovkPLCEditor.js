@@ -409,7 +409,7 @@ const default_properties = {
         highlight_sim_color: '#4AD',
         grid_color: '#FFF4',
         select_highlight_color: '#7AF',
-        select_color: '#479',
+        select_color: '#456',
         hover_color: '#456',
         font: '16px Arial',
         font_color: '#DDD',
@@ -1095,8 +1095,8 @@ const draw_ladder = (editor, program, ladder) => {
 
             const x = Math.floor(start_x * scale / ladder_block_width)
             const y = Math.floor(start_y * scale / ladder_block_height)
-            const width = Math.floor(1 + (end_x - start_x) * scale / ladder_block_width)
-            const height = Math.floor(1 + (end_y - start_y) * scale / ladder_block_height)
+            const width = Math.max(Math.round(1 + (end_x - start_x) * scale / ladder_block_width), 1)
+            const height = Math.max(Math.round(1 + (end_y - start_y) * scale / ladder_block_height), 1)
 
 
             // Update selection area
@@ -1199,15 +1199,14 @@ const draw_ladder = (editor, program, ladder) => {
     ctx.fillRect(0, 0, canvas.width, canvas.height)
 
     if (editor.program_block_selection.program_block === id) {
+        ctx.fillStyle = style.select_color
         for (const selection of editor.program_block_selection.selection) {
             if (selection.type === 'block') {
                 const { x, y } = selection
-                ctx.fillStyle = style.select_color
                 ctx.fillRect(x * ladder_block_width, y * ladder_block_height, ladder_block_width, ladder_block_height)
             }
             if (selection.type === 'area') {
                 const { x, y, width, height } = selection
-                ctx.fillStyle = style.select_color
                 ctx.fillRect(x * ladder_block_width, y * ladder_block_height, width * ladder_block_width, height * ladder_block_height)
             }
         }
@@ -1235,7 +1234,7 @@ const draw_ladder = (editor, program, ladder) => {
         if (first_block) {
             const { x, y } = first_block
             ctx.strokeStyle = style.select_highlight_color
-            ctx.lineWidth = 2
+            ctx.lineWidth = 3
             ctx.beginPath()
             ctx.strokeRect(x * ladder_block_width, y * ladder_block_height, ladder_block_width, ladder_block_height)
             ctx.stroke()
