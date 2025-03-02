@@ -1065,10 +1065,14 @@ const draw_ladder = (editor, program, ladder) => {
                 // Move the selection
                 const end_x_block = Math.floor(end_x * scale / ladder_block_width)
                 const end_y_block = Math.floor(end_y * scale / ladder_block_height)
-                const dx = end_x_block - temp_x
-                const dy = end_y_block - temp_y
+                let dx = end_x_block - temp_x
+                let dy = end_y_block - temp_y
                 temp_x = end_x_block
                 temp_y = end_y_block
+                const x = editor.program_block_selection.origin.x
+                const y = editor.program_block_selection.origin.y
+                if (dx + x < 0) dx = 0
+                if (dy + y < 0) dy = 0
 
                 const selected = editor.program_block_selection.program_block === id ? editor.program_block_selection.selection : []
                 for (const selection of selected) {
