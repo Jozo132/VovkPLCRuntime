@@ -640,7 +640,9 @@ const draw_contact = (editor, like, ctx, block) => {
         if (inverted) {
             ctx.moveTo(cl, ct)
             ctx.lineTo(cl, cb)
-            ctx.lineTo(cr, ct)
+            ctx.moveTo(cl, cb - 1)
+            ctx.lineTo(cr, ct + 1)
+            ctx.moveTo(cr, ct)
             ctx.lineTo(cr, cb)
         } else {
             ctx.moveTo(cl, ct)
