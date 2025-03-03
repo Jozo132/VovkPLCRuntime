@@ -411,7 +411,7 @@ const default_properties = {
         select_highlight_color: '#7AF',
         select_color: '#456',
         hover_color: '#456',
-        font: '16px Arial',
+        font: '16px Consolas',
         font_color: '#DDD',
         line_width: 3,
         highlight_width: 8,
