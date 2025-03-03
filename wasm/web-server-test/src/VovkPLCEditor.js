@@ -1030,9 +1030,12 @@ const draw_ladder = (editor, program, ladder) => {
         let end_y = 0
         let temp_x = 0
         let temp_y = 0
-        canvas.addEventListener('mousedown', (event) => {
+
+        /** @type { (event: MouseEvent) => void } */
+        const onMouseDown = (event) => {
             // left mouse select area
             if (event.button != 0) return
+            event.preventDefault()
             is_dragging = true
             start_x = Math.floor(event.clientX - canvas.getBoundingClientRect().left)
             start_y = Math.floor(event.clientY - canvas.getBoundingClientRect().top)
@@ -1040,11 +1043,40 @@ const draw_ladder = (editor, program, ladder) => {
             end_y = start_y
             // console.log(`Dragging started at ${start_x}, ${start_y}`)
             // If the mousedown is on the first slected block (x, y) then start moving the selection
-            const x = Math.floor(start_x * scale / ladder_block_width)
-            const y = Math.floor(start_y * scale / ladder_block_height)
+            const x_raw = start_x * scale / ladder_block_width
+            const y_raw = start_y * scale / ladder_block_height
+            const x = Math.floor(x_raw)
+            const y = Math.floor(y_raw)
+
+            const distance_from_block_center_x = Math.abs(2 * (Math.abs(x_raw - x) - 0.5))
+            const distance_from_block_center_y = Math.abs(2 * (Math.abs(y_raw - y) - 0.5))
+            const distance_from_block_center = Math.sqrt(distance_from_block_center_x * distance_from_block_center_x + distance_from_block_center_y * distance_from_block_center_y)
+            // console.log(`Clicked on block at ${x}, ${y} with distance from center: ${distance_from_block_center}`)
+            const near_center = distance_from_block_center <= 0.5
+
+            const ctrl = event.ctrlKey
+            const shift = event.shiftKey
+            const ctrl_or_shift = ctrl || shift
+
             const selected = editor.program_block_selection.program_block === id ? editor.program_block_selection.selection : []
             const exists = selected.find(selection => (selection.type === 'block' && selection.x === x && selection.y === y) || (selection.type === 'area' && x >= selection.x && x < selection.x + selection.width && y >= selection.y && y < selection.y + selection.height))
-            if (exists) {
+
+            let click_move = false
+            if (!ctrl_or_shift && near_center && !exists) {
+                // select current block and start moving it
+                const block = ladder.blocks.find(block => block.x === x && block.y === y)
+                if (block) {
+                    editor.program_block_selection = {
+                        type: 'ladder',
+                        program: program.id || '',
+                        program_block: id,
+                        origin: { x, y },
+                        selection: [{ type: 'block', x, y }]
+                    }
+                    click_move = true
+                }
+            }
+            if (exists || click_move) {
                 is_moving = true
                 const elements = [... new Set(editor.program_block_selection.selection.map(selection => {
                     if (selection.type === 'block') {
@@ -1059,8 +1091,11 @@ const draw_ladder = (editor, program, ladder) => {
                 temp_x = x
                 temp_y = y
             }
-        })
-        canvas.addEventListener('mousemove', (event) => {
+        }
+
+        /** @type { (event: MouseEvent) => void } */
+        const onMove = event => {
+            event.preventDefault()
             if (!is_dragging) return
             end_x = Math.floor(event.clientX - canvas.getBoundingClientRect().left)
             end_y = Math.floor(event.clientY - canvas.getBoundingClientRect().top)
@@ -1135,14 +1170,16 @@ const draw_ladder = (editor, program, ladder) => {
                     selection: [{ type: 'area', x, y, width, height }]
                 }
             }
+        }
 
-        })
-        canvas.addEventListener('mouseup', () => {
+        const onRelease = () => {
             // console.log(`Dragging ended at ${end_x}, ${end_y}`)
             is_dragging = false
             was_dragging = true
-        })
-        canvas.addEventListener('click', (event) => {
+        }
+
+        /** @type { (event: MouseEvent) => void } */
+        const onClick = (event) => {
             if (is_moving) {
                 is_moving = false
                 editor.connectTouchingBlocks()
@@ -1191,7 +1228,54 @@ const draw_ladder = (editor, program, ladder) => {
                     }
                 }
             }
+        }
+
+        canvas.addEventListener('mousedown', onMouseDown)
+        canvas.addEventListener('mousemove', onMove)
+        canvas.addEventListener('mouseup', onRelease)
+        canvas.addEventListener('click', onClick)
+
+        let last_touched = {}
+
+        // Handle touch events
+        canvas.addEventListener('touchstart', event => {
+            const edit = editor.active_mode === 'edit'
+            if (!edit) return
+            // event.preventDefault()
+            const touch = event.touches[0]
+            last_touched = {
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            }
+            const mouse_event = new MouseEvent('mousedown', last_touched)
+            onMouseDown(mouse_event)
         })
+        canvas.addEventListener('touchmove', event => {
+            const edit = editor.active_mode === 'edit'
+            if (!edit) return
+            if (!is_dragging) return
+            event.preventDefault()
+            const touch = event.touches[0]
+            last_touched = {
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            }
+            const mouse_event = new MouseEvent('mousemove', last_touched)
+            onMove(mouse_event)
+        })
+        canvas.addEventListener('touchend', event => {
+            const edit = editor.active_mode === 'edit'
+            if (!edit) return
+            event.preventDefault()
+            last_touched = {}
+            onRelease()
+            is_moving = false
+            was_dragging = false
+            moving_elements = []
+            // onClick(mouse_event)
+        })
+
+
         program.editor?.body?.appendChild(ladder.div)
     }
     const ctx = ladder.ctx || canvas.getContext('2d')
