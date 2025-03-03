@@ -1043,7 +1043,7 @@ const draw_ladder = (editor, program, ladder) => {
             const x = Math.floor(start_x * scale / ladder_block_width)
             const y = Math.floor(start_y * scale / ladder_block_height)
             const selected = editor.program_block_selection.program_block === id ? editor.program_block_selection.selection : []
-            const exists = selected.find(selection => (selection.type === 'block' || selection.type === 'area') && selection.x === x && selection.y === y)
+            const exists = selected.find(selection => (selection.type === 'block' && selection.x === x && selection.y === y) || (selection.type === 'area' && x >= selection.x && x < selection.x + selection.width && y >= selection.y && y < selection.y + selection.height))
             if (exists) {
                 is_moving = true
                 const elements = [... new Set(editor.program_block_selection.selection.map(selection => {
