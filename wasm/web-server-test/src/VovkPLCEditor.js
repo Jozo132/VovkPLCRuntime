@@ -1902,7 +1902,6 @@ export class VovkPLCEditor {
         this.workspace.classList.add('plc-workspace')
         if (debug_css) this.workspace.classList.add('debug')
 
-        /** @type { Element[] } */
         const workspace_body = ElementSynthesis(/*HTML*/`
             <div class="plc-workspace-header">
                 <p>Header</p>
@@ -1950,7 +1949,6 @@ export class VovkPLCEditor {
             </div>
         `)
         workspace_body.forEach(element => workspace.appendChild(element))
-        const [header, body, footer] = workspace_body
 
         const navigation_minimize_button = workspace.querySelector('.plc-navigation-bar .menu-button')
         const tools_minimize_button = workspace.querySelector('.plc-tools-bar .menu-button')
