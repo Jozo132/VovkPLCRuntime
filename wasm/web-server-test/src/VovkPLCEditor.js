@@ -22,7 +22,7 @@
  *      inverted: boolean, 
  *      trigger: PLC_Trigger_Type, 
  *      symbol: string, 
- *      state?: { active: boolean, powered: boolean, terminated_input: boolean, terminated_output: boolean, evaluated: boolean, symbol: PLC_Symbol } 
+ *      state?: { active: boolean, powered: boolean, terminated_input: boolean, terminated_output: boolean, evaluated: boolean, symbol?: PLC_Symbol } 
  * }} PLC_LadderBlock
  * @typedef {{ 
  *      id?: string, 
@@ -413,6 +413,7 @@ const default_properties = {
         hover_color: '#456',
         font: '16px Consolas',
         font_color: '#DDD',
+        font_error_color: '#FCC',
         line_width: 3,
         highlight_width: 8,
     }
@@ -550,7 +551,7 @@ const get_symbol_value = (editor, symbol) => {
 const getBlockState = (editor, block) => {
     if (!block.state) {
         const symbol = system_symbols.find(symbol => symbol.name === block.symbol) || editor.project.symbols.find(symbol => symbol.name === block.symbol)
-        if (!symbol) throw new Error(`Symbol not found: ${block.symbol}`)
+        // if (!symbol) throw new Error(`Symbol not found: ${block.symbol}`)
         block.state = { active: false, powered: false, evaluated: false, symbol, terminated_input: false, terminated_output: false }
     }
     return block
@@ -562,13 +563,13 @@ const draw_contact = (editor, like, ctx, block) => {
     // output state: the right side of the contact (green when true)
     // value: the inner state of the contact (green when true)
     const { ladder_block_width, ladder_block_height, style } = editor.properties
-    const { line_width, highlight_width, color, highlight_color, highlight_sim_color, font, font_color } = style
+    const { line_width, highlight_width, color, highlight_color, highlight_sim_color, font, font_color, font_error_color } = style
     block = getBlockState(editor, block)
     if (!block.state) throw new Error(`Block state not found: ${block.symbol}`)
     const { x, y, type, inverted, trigger, state } = block
     const symbol = state.symbol
-    if (!symbol) throw new Error(`Symbol not found: ${block.symbol}`)
-    let value = get_symbol_value(editor, symbol)
+    // if (!symbol) throw new Error(`Symbol not found: ${block.symbol}`)
+    let value = symbol ? get_symbol_value(editor, symbol) : false
     if (inverted) value = !value
 
     const x0 = x * ladder_block_width
@@ -663,15 +664,16 @@ const draw_contact = (editor, like, ctx, block) => {
         }
         ctx.stroke()
 
-        const short_location = memory_locations.find(loc => loc.name === symbol.location)?.short || '?'
+        const short_location = symbol ? memory_locations.find(loc => loc.name === symbol.location)?.short || '?' : '?'
 
         // Draw the symbol name
-        ctx.fillStyle = font_color
+        if (symbol) ctx.fillStyle = font_color
+        else ctx.fillStyle = font_error_color
         ctx.font = font
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
-        ctx.fillText(symbol.name, x_mid, ct - 13)
-        ctx.fillText(`${short_location}: ${symbol.address.toFixed(1)}`, x_mid, cb + 13)
+        ctx.fillText(block.symbol, x_mid, ct - 13)
+        if (symbol) ctx.fillText(`${short_location}${symbol.address.toFixed(1)}`, x_mid, cb + 13)
         return
     }
 
@@ -685,13 +687,13 @@ const draw_coil = (editor, like, ctx, block) => {
     // output state: the right side of the contact is equal to the input state
     // value: the inner state of the contact (green when true)
     const { ladder_block_width, ladder_block_height, style } = editor.properties
-    const { line_width, highlight_width, color, highlight_color, highlight_sim_color, font, font_color } = style
+    const { line_width, highlight_width, color, highlight_color, highlight_sim_color, font, font_color, font_error_color } = style
     block = getBlockState(editor, block)
     if (!block.state) throw new Error(`Block state not found: ${block.symbol}`)
     const { x, y, type, inverted, trigger, state } = block
     const symbol = state.symbol
-    if (!symbol) throw new Error(`Symbol not found: ${block.symbol}`)
-    let value = get_symbol_value(editor, symbol)
+    // if (!symbol) throw new Error(`Symbol not found: ${block.symbol}`)
+    let value = symbol ? get_symbol_value(editor, symbol) : false
     if (inverted) value = !value
 
     const x0 = x * ladder_block_width
@@ -766,15 +768,16 @@ const draw_coil = (editor, like, ctx, block) => {
         ctx.stroke()
 
 
-        const short_location = memory_locations.find(loc => loc.name === symbol.location)?.short || '?'
+        const short_location = symbol ? memory_locations.find(loc => loc.name === symbol.location)?.short || '?' : '?'
 
         // Draw the symbol name
-        ctx.fillStyle = font_color
+        if (symbol) ctx.fillStyle = font_color
+        else ctx.fillStyle = font_error_color
         ctx.font = font
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
-        ctx.fillText(symbol.name, x_mid, ct - 13)
-        ctx.fillText(`${short_location}: ${symbol.address.toFixed(1)}`, x_mid, cb + 13)
+        ctx.fillText(block.symbol, x_mid, ct - 13)
+        if (symbol) ctx.fillText(`${short_location}${symbol.address.toFixed(1)}`, x_mid, cb + 13)
 
         ctx.fillStyle = color
         ctx.font = '18px Arial Black'
@@ -852,8 +855,8 @@ const evaluate_ladder = (editor, ladder) => {
         if (!block.state) throw new Error(`Block state not found: ${block.symbol}`)
         const { state, inverted } = block
         const symbol = state.symbol
-        if (!symbol) throw new Error(`Symbol not found: ${block.symbol}`)
-        let active = !!get_symbol_value(editor, symbol)
+        // if (!symbol) throw new Error(`Symbol not found: ${block.symbol}`)
+        let active = symbol ? !!get_symbol_value(editor, symbol) : false
         if (inverted) active = !active
         state.active = active // The actual state of the block
         // All blocks that have no input are powered by the power rail
