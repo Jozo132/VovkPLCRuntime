@@ -987,8 +987,10 @@ const draw_ladder = (editor, program, ladder) => {
             div.classList.toggle('minimized') // @ts-ignore
             minimize_button.innerText = is_minimized ? '-' : '+'
         })
+        /** @type { PLC_Symbol | undefined } */
+        let selected_for_toggle = undefined
         editor.workspace_context_menu.addListener({
-            target: canvas,
+            target: canvas, // @ts-ignore
             onOpen: (event) => {
                 console.log(`Ladder canvas "#${id}" context menu open`)
                 const selected = editor.program_block_selection.program_block === id ? editor.program_block_selection.selection : []
@@ -999,9 +1001,17 @@ const draw_ladder = (editor, program, ladder) => {
                     return [
                         { type: 'item', name: 'add', label: 'Properties' },
                     ]
-                }
-                else {
+                } else {
+                    const selected_single_block = selected.length === 1 && selected[0].type === 'block' || (selected[0].type === 'area' && selected[0].width === 1 && selected[0].height === 1)
+                    const has_element = ladder.blocks.find(block => selected.find(selection => selection.type === 'block' && selection.x === block.x && selection.y === block.y)) || ladder.blocks.find(block => selected.find(selection => selection.type === 'area' && selection.x <= block.x && selection.x + selection.width > block.x && selection.y <= block.y && selection.y + selection.height > block.y))
+                    const state = has_element?.state
+                    const symbol = state?.symbol
+                    selected_for_toggle = symbol
                     return [
+                        live && typeof symbol !== 'undefined' ? [
+                            { type: 'item', name: 'toggle', label: 'Toggle', disabled: edit },
+                            { type: 'separator' },
+                        ] : null,
                         { type: 'item', name: 'delete', label: 'Delete', disabled: live },
                         { type: 'separator' },
                         { type: 'item', name: 'cut', label: 'Cut', disabled: live },
@@ -1009,7 +1019,7 @@ const draw_ladder = (editor, program, ladder) => {
                         { type: 'item', name: 'paste', label: 'Paste', disabled: live || clipboard_empty },
                         { type: 'separator' },
                         { type: 'item', name: 'add', label: 'Properties' },
-                    ]
+                    ].flat().filter(Boolean)
                 }
             },
             onClose: (selected) => {
@@ -1018,6 +1028,13 @@ const draw_ladder = (editor, program, ladder) => {
                 if (selected === 'cut') editor.cutSelection()
                 if (selected === 'copy') editor.copySelection()
                 if (selected === 'paste') editor.pasteSelection()
+                if (selected === 'toggle' && typeof selected_for_toggle !== 'undefined') {
+                    const { location, address } = selected_for_toggle
+                    const value = get_symbol_value(editor, selected_for_toggle)
+                    const new_value = value ? false : true
+                    const offset = editor.project.offsets[location].offset || 0
+                    editor.setMemoryBit(address + offset, new_value)
+                }
             }
         })
         let is_dragging = false
@@ -1033,7 +1050,34 @@ const draw_ladder = (editor, program, ladder) => {
 
         /** @type { (event: MouseEvent) => void } */
         const onMouseDown = (event) => {
-            // left mouse select area
+            // Right click opens context menu, if no selection is chosen, select the block below the cursor
+            if (event.button === 2) {
+
+                const start_x = Math.floor(event.clientX - canvas.getBoundingClientRect().left)
+                const start_y = Math.floor(event.clientY - canvas.getBoundingClientRect().top)
+                // console.log(`Dragging started at ${start_x}, ${start_y}`)
+                // If the mousedown is on the first slected block (x, y) then start moving the selection
+                const x_raw = start_x * scale / ladder_block_width
+                const y_raw = start_y * scale / ladder_block_height
+                const x = Math.floor(x_raw)
+                const y = Math.floor(y_raw)
+
+                const selected = editor.program_block_selection.program_block === id ? editor.program_block_selection.selection : []
+                const element_is_not_selected = !selected.find(block => block.type === 'block' && block.x === x && block.y === y)
+                if (selected.length === 0 || element_is_not_selected) {
+                    const block = ladder.blocks.find(block => block.x === x && block.y === y)
+                    if (block) {
+                        editor.program_block_selection = {
+                            type: 'ladder',
+                            program: program.id || '',
+                            program_block: id,
+                            origin: { x, y },
+                            selection: [{ type: 'block', x, y }]
+                        }
+                    }
+                }
+                return
+            }
             if (event.button != 0) return
             event.preventDefault()
             is_dragging = true
