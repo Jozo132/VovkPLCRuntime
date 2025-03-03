@@ -614,8 +614,12 @@ const draw_contact = (editor, like, ctx, block) => {
         if (value) {
             ctx.fillStyle = ctx.strokeStyle
             // Draw box inside the contact
-            ctx.roundRect(cl, ct, cr - cl, cb - ct, 2)
-            ctx.fillRect(cl - 1, ct - 1, cr - cl + 2, cb - ct + 2)
+            if (state.powered) {
+                ctx.roundRect(cl, ct, cr - cl, cb - ct, 2)
+                ctx.fillRect(cl - 1, ct - 1, cr - cl + 2, cb - ct + 2)
+            } else {
+                ctx.fillRect(cl - 1, ct, cr - cl + 2, cb - ct)
+            }
         }
         ctx.stroke()
         return
