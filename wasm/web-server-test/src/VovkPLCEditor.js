@@ -1910,7 +1910,7 @@ export class VovkPLCEditor {
 
         const workspace_body = ElementSynthesis(/*HTML*/`
             <div class="plc-workspace-header">
-                <p>Header</p>
+                <p>VovkPLC Editor - Preview</p>
             </div>
             <div class="plc-workspace-body">
                 <div class="plc-navigation no-select resizable" style="width: 200px">
