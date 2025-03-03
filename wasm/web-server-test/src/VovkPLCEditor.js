@@ -1329,7 +1329,7 @@ const draw_program = (editor, program) => {
 /** @type { (offset: number) => { address: number, bit: number } } */
 const offsetToAddressAndBit = (offset) => {
     const address = Math.floor(offset)
-    const bit = Math.min((offset % 1) * 10, 7)
+    const bit = Math.min(Math.round((offset % 1) * 10), 7)
     return { address, bit }
 }
 
