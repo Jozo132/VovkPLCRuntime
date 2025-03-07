@@ -176,9 +176,9 @@ bool set_u8(u8* memory, u32 offset, u8 value);
 bool readArea_u8(u8* memory, u32 offset, u8* value, u32 size);
 bool writeArea_u8(u8* memory, u32 offset, u8* value, u32 size);
 
-u8* ___reverse_byte_order_ptr = 0;
-u8* ___reverse_byte_order_res_ptr = 0;
 template <typename T> T reverse_byte_order(T value) {
+    u8* ___reverse_byte_order_ptr = 0;
+    u8* ___reverse_byte_order_res_ptr = 0;
     u32 size = sizeof(T);
     switch (size) {
         case 1: return value;
