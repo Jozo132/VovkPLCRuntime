@@ -26,7 +26,7 @@
 #define USE_X64_OPS
 
 
-#include "../lib/VovkPLCRuntime/src/VovkPLCRuntime.h"
+#include "../src/VovkPLCRuntime.h"
 
 #ifndef WASM_EXPORT
 #define WASM_EXPORT

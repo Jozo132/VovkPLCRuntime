@@ -4,7 +4,7 @@
 
 #include "common.h"
 
-#include "../../lib/VovkPLCRuntime/src/VovkPLCRuntime.h"
+#include "../../src/VovkPLCRuntime.h"
 
 WASM_EXPORT void doSomething() {
     // Do nothing

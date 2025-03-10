@@ -1,17 +1,8 @@
 // Main file for testing the VovkPLCRuntime library
 
-
-
-
-
-// #define __RUNTIME_DEBUG__  // Avoid using this with microcontrollers with limited RAM!
-#ifndef __RUNTIME_PRODUCTION__
-#define __RUNTIME_FULL_UNIT_TEST___ // Only use this for testing the library
-#endif // __RUNTIME_PRODUCTION__
-
-
+#undef __RUNTIME_PRODUCTION__
 // #define __RUNTIME_DEBUG__
-// #define __RUNTIME_FULL_UNIT_TEST___
+// #define __RUNTIME_FULL_UNIT_TEST___ // Only use this for testing the library
 
 #define PLCRUNTIME_SERIAL_ENABLED
 
@@ -26,7 +17,8 @@
 #define PLCRUNTIME_MAX_MEMORY_SIZE memory_size
 #define PLCRUNTIME_MAX_PROGRAM_SIZE program_size
 
-#include <VovkPLCRuntime.h>
+// #include <VovkPLCRuntime.h> // Practical include when the library is installed
+#include "../../../src/VovkPLCRuntime.h" // Only for testing the library within the examples folder
 VovkPLCRuntime runtime = VovkPLCRuntime(); // Stack size, memory size, program size
 
 
@@ -73,6 +65,8 @@ void load_plc_blinky() {
     Serial.println(F("Loading program..."));
     Serial.flush();
     runtime.loadProgramUnsafe(program, size);
+    Serial.println(F("Program loaded"));
+    Serial.flush();
 }
 
 void setup() {
