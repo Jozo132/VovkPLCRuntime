@@ -27,15 +27,20 @@
 #define PLCRUNTIME_MAX_PROGRAM_SIZE 104857
 #endif // __WASM__
 
+#ifndef PLCRUNTIME_NUM_OF_INPUTS
 #define PLCRUNTIME_NUM_OF_INPUTS 16
+#endif // PLCRUNTIME_NUM_OF_INPUTS
+
+#ifndef PLCRUNTIME_NUM_OF_OUTPUTS
 #define PLCRUNTIME_NUM_OF_OUTPUTS 16
+#endif // PLCRUNTIME_NUM_OF_OUTPUTS
 
 #ifndef PLCRUNTIME_INPUT_OFFSET 
 #define PLCRUNTIME_INPUT_OFFSET 16
 #endif // PLCRUNTIME_INPUT_OFFSET
 
 #ifndef PLCRUNTIME_OUTPUT_OFFSET
-#define PLCRUNTIME_OUTPUT_OFFSET PLCRUNTIME_NUM_OF_INPUTS
+#define PLCRUNTIME_OUTPUT_OFFSET PLCRUNTIME_INPUT_OFFSET + PLCRUNTIME_NUM_OF_INPUTS
 #endif // PLCRUNTIME_OUTPUT_OFFSET
 
 #ifndef PLCRUNTIME_MAX_STACK_SIZE
@@ -72,7 +77,7 @@ private:
     bool started_up = false;
 public:
     const u32 input_offset = PLCRUNTIME_INPUT_OFFSET; // Output offset in memory
-    const u32 output_offset = PLCRUNTIME_OUTPUT_OFFSET + PLCRUNTIME_INPUT_OFFSET; // Output offset in memory
+    const u32 output_offset = PLCRUNTIME_OUTPUT_OFFSET; // Output offset in memory
 
     RuntimeStack stack = RuntimeStack(); // Active memory stack for PLC execution
     u8 memory[PLCRUNTIME_MAX_MEMORY_SIZE]; // PLC memory to manipulate
