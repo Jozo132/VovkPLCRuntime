@@ -65,7 +65,7 @@
 #include "runtime-program.h"
 
 #define SERIAL_TIMEOUT_RETURN if (serial_timeout) return;
-#define SERIAL_TIMEOUT_JOB(task) if (serial_timeout) { Serial.flush(); task; return; };
+#define SERIAL_TIMEOUT_JOB(task) if (serial_timeout) { task; return; };
 
 class VovkPLCRuntime {
 private:
@@ -83,7 +83,6 @@ public:
         REPRINTLN(70, ':');
         Serial.println(F(":: Using VovkPLCRuntime Library - Author J.Vovk <jozo132@gmail.com> ::"));
         REPRINTLN(70, ':');
-        Serial.flush();
     }
 
     void initialize() {
@@ -303,12 +302,10 @@ public:
                 // Verify the checksum
                 if (checksum != checksum_calc) {
                     Serial.println(F("Invalid checksum"));
-                    Serial.flush();
                     return;
                 }
 
                 Serial.println(F("Complete"));
-                Serial.flush();
                 processExit();
                 return;
 
@@ -341,14 +338,12 @@ public:
                 // If the checksum is invalid, restart the runtime
                 if (checksum != checksum_calc) {
                     Serial.println(F("Invalid checksum, restarting the runtime..."));
-                    Serial.flush();
                     delay(1000);
                     processExit();
                     return;
                 }
                 program.resetLine();
 
-                Serial.flush();
                 Serial.println(F("Complete"));
             } else if (program_upload) {
                 Serial.print(F("PROGRAM UPLOAD - "));
@@ -358,14 +353,12 @@ public:
                 // Verify the checksum
                 if (checksum != checksum_calc) {
                     Serial.println(F("Invalid checksum"));
-                    Serial.flush();
                     return;
                 }
 
                 // Print the program
                 program.println();
 
-                Serial.flush();
                 Serial.println(F("Complete"));
             } else if (program_run) {
                 Serial.print(F("PROGRAM RUN - "));
@@ -375,11 +368,9 @@ public:
                 // Verify the checksum
                 if (checksum != checksum_calc) {
                     Serial.println(F("Invalid checksum"));
-                    Serial.flush();
                     return;
                 }
 
-                Serial.flush();
                 Serial.println(F("Complete"));
             } else if (program_stop) {
                 Serial.print(F("PROGRAM STOP - "));
@@ -389,11 +380,9 @@ public:
                 // Verify the checksum
                 if (checksum != checksum_calc) {
                     Serial.println(F("Invalid checksum"));
-                    Serial.flush();
                     return;
                 }
 
-                Serial.flush();
                 Serial.println(F("Complete"));
             } else if (memory_read) {
                 Serial.print(F("MEMORY READ - "));
@@ -423,7 +412,6 @@ public:
                 // Verify the checksum
                 if (checksum != checksum_calc) {
                     Serial.println(F("Invalid checksum"));
-                    Serial.flush();
                     return;
                 }
 
@@ -444,9 +432,7 @@ public:
 
                 // Print the data
                 Serial.println();
-                Serial.flush();
 
-                Serial.flush();
                 Serial.println(F("Complete"));
             } else if (memory_write) {
                 Serial.print(F("MEMORY WRITE - "));
@@ -483,7 +469,6 @@ public:
                 // Verify the checksum
                 if (checksum != checksum_calc) {
                     Serial.println(F("Invalid checksum"));
-                    Serial.flush();
                     return;
                 }
 
@@ -491,7 +476,6 @@ public:
                 for (u32 i = 0; i < size; i++)
                     set_u8(memory, address + i, data[i]);
 
-                Serial.flush();
                 Serial.println(F("Complete"));
             } else if (memory_format) {
                 Serial.print(F("MEMORY FORMAT - "));
@@ -525,7 +509,6 @@ public:
                 // Verify the checksum
                 if (checksum != checksum_calc) {
                     Serial.println(F("Invalid checksum"));
-                    Serial.flush();
                     return;
                 }
 
@@ -533,7 +516,6 @@ public:
                 for (u32 i = 0; i < size; i++)
                     set_u8(memory, address + i, value);
 
-                Serial.flush();
                 Serial.println(F("Complete"));
             } else if (source_download) {
                 Serial.println(F("SOURCE DOWNLOAD - Not implemented"));

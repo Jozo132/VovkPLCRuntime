@@ -262,7 +262,6 @@ void runtime_unit_test(VovkPLCRuntime& runtime) {
     REPRINTLN(70, '#');
     Serial.println(F("Runtime Unit Tests Report Completed."));
     REPRINTLN(70, '#');
-    Serial.flush();
 };
 
 #else // __RUNTIME_UNIT_TEST__

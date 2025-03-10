@@ -63,10 +63,8 @@ void load_plc_blinky() {
     };
     const u16 size = sizeof(program);
     Serial.println(F("Loading program..."));
-    Serial.flush();
     runtime.loadProgramUnsafe(program, size);
     Serial.println(F("Program loaded"));
-    Serial.flush();
 }
 
 void setup() {
@@ -165,7 +163,6 @@ void loop() {
                 Serial.println(F("RPN        = 10|1|'a'|'b'|'c'|'c'|'d'|'d'|'e'|'e'|'f'|-|*|-|*|+|*|+|'d'|/|*|-|*"));
                 Serial.println(F("Result     = -287.5"));
                 Serial.println();
-                Serial.flush();
                 float a = 1; float b = 2; float c = 3; float d = 4; float e = 5; float f = 6;
                 float expected = 10 * (1 - a * (b + c * (c + d * (d - e * (e - f)))) / d);
 
