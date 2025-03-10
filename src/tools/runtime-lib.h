@@ -247,7 +247,6 @@ public:
         return writeArea_u8(memory, offset, value, size);
     }
 
-public:
     void listen() {
 #ifdef __WASM__
         // Unused, access is available directly through the wasm.h interface
