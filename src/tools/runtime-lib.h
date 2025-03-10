@@ -636,6 +636,9 @@ RuntimeError VovkPLCRuntime::run(RuntimeProgram& program) { return run(program.p
 
 // Execute the whole PLC program, returns an erro code (0 on success)
 RuntimeError VovkPLCRuntime::run(u8* program, u32 prog_size) {
+    #ifndef __WASM__ // WASM can optionally execute the global loop check, embedded systems must always call this
+    IntervalGlobalLoopCheck();
+    #endif // __WASM__
     updateGlobals();
     u32 index = 0;
     while (index < prog_size) {
