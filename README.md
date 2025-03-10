@@ -24,7 +24,50 @@ You will also need Node.JS to run the web server that serves the web interface a
 My plan is to have the web interface running as a VS Code extension in the future.
 ```
 
-#### Web PLC editor still work in progress
+## Usage
+### Include the library
+```cpp
+#define __RUNTIME_PRODUCTION__
+#define PLCRUNTIME_SERIAL_ENABLED
+#include <VovkPLCRuntime.h>
+VovkPLCRuntime runtime;
+```
+### Initialize the PLC runtime in the setup function
+```cpp
+void setup() {
+    // ...
+    runtime.initialize();
+    // ...
+}
+```
+### Run the PLC runtime in the loop function without blocking delays as quickly as possible for smooth operation
+```cpp
+void loop() {
+    // 1. Read inputs
+    bool input = digitalRead(2);
+    runtime.setInputBit(0, 0, input); // Set input bit 0.0 to the value of the input
+
+    // 2. Run the PLC program
+    runtime.run();
+
+    // 3. Write outputs
+    bool output = runtime.getOutputBit(0, 0); // Get the value of output bit 0.0
+    digitalWrite(3, output); // Write the output to the output pin
+
+    // 4. Listen for external plc commands (default Serial)
+    runtime.listen();
+}
+```
+
+### How a PLC cycle works
+- Read inputs
+- Run PLC program
+- Write outputs
+
+
+
+## Web interface and WebAssembly
+#### Web PLC editor is still a work in progress but it's getting there
 ![image](https://github.com/user-attachments/assets/a797114d-4c84-46da-aaba-6b65d8215293)
 
 #### Web PLC assembly compiler and simulator demo
