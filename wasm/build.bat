@@ -29,13 +29,13 @@ rem try to execute 'cd wasm', if failed do nothing
 cd wasm 2>nul
 
 IF not exist build (mkdir build)
-clang++ --target=wasm32-undefined-undefined-wasm -Wall -std=c++11 -nostdlib -O3 -D __WASM__ -c simulator.cpp -o build/simulator.o        || goto :error
+clang++ --target=wasm32-undefined-undefined-wasm -Wall -std=c++11 -nostdlib -O3 -D __WASM__ -c VovkPLC.cpp -o build/VovkPLC.o        || goto :error
 
 @echo on
 @echo Building...
 @echo off
 
-wasm-ld --no-entry --export-dynamic --allow-undefined --lto-O3 build/simulator.o -o simulator.wasm      || goto :error
+wasm-ld --no-entry --export-dynamic --allow-undefined --lto-O3 build/VovkPLC.o -o VovkPLC.wasm      || goto :error
 
 @echo on
 @echo Done.
@@ -44,7 +44,7 @@ wasm-ld --no-entry --export-dynamic --allow-undefined --lto-O3 build/simulator.o
 goto :EOF
 
 @REM Compile Windows EXE (TEST)
-@REM clang++ -Wall -std=c++11 simulator.cpp -o simulator.exe
+@REM clang++ -Wall -std=c++11 VovkPLC.cpp -o VovkPLC.exe
 
 :error
 echo Failed with error %errorlevel%

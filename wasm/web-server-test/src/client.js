@@ -1,10 +1,10 @@
 // @ts-check
 "use strict"
 
-import PLCRuntimeWasm from "../../simulator.js"
+import PLCRuntimeWasm from "../../VovkPLC.js"
 
 const main = async () => {
-    const runtime = new PLCRuntimeWasm("/simulator.wasm")
+    const runtime = new PLCRuntimeWasm("/VovkPLC.wasm")
     await runtime.initialize()
     const PLC = runtime.getExports()
 

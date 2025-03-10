@@ -39,7 +39,7 @@ cd ..
 goto :EOF
 
 @REM Compile Windows EXE (TEST)
-@REM clang++ -Wall -std=c++11 simulator.cpp -o simulator.exe
+@REM clang++ -Wall -std=c++11 VovkPLC.cpp -o VovkPLC.exe
 
 :error
 

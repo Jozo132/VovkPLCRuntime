@@ -24,16 +24,16 @@ if code:
     print("Error building the WASM executable.")
     print(code)
 else:
-    msg = "The compiled WASM file is located in: " + BUILD_PATH + "simulator.wasm"
+    msg = "The compiled WASM file is located in: " + BUILD_PATH + "VovkPLC.wasm"
     print("-" * len(msg))
     print(msg)
-    print("Along with the JS wrapper: " + BUILD_PATH + "simulator.js")
+    print("Along with the JS wrapper: " + BUILD_PATH + "VovkPLC.js")
     print("-" * len(msg))
     print("To use it, navigate into the " + BUILD_PATH + " directory")
     print("and you can either test it like for example:")
     print("   - Node.JS -> cd into 'node-test' and run 'node run.js'")
     print("   - Browser -> cd into 'web-server-test' and run 'node server.js'")
-    print("Or you can copy the 'simulator.wasm' and 'simulator.js' files into your project and use them there as you wish.")
+    print("Or you can copy the 'VovkPLC.wasm' and 'VovkPLC.js' files into your project and use them there as you wish.")
 
 # Exit with the same code as the build script
 exit(code)

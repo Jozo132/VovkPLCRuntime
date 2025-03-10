@@ -1507,7 +1507,7 @@ const searchForProgram = (editor, program) => {
 }
 
 
-import PLCRuntimeWasm from "../../simulator.js"
+import PLCRuntimeWasm from "../../VovkPLC.js"
 
 /** @type { (editor: VovkPLCEditor, id: string | null) => PLC_Program | null } */
 const findProgram = (editor, id) => {
@@ -2019,7 +2019,7 @@ export class VovkPLCEditor {
      * }} options 
     */
     constructor({ workspace, debug_css, initial_program }) {
-        this.runtime.initialize('/simulator.wasm').then(() => {
+        this.runtime.initialize('/VovkPLC.wasm').then(() => {
             // console.log('PLC Runtime initialized')
             this.runtime_ready = true
         })

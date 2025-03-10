@@ -28,14 +28,14 @@
  *     downloadAssembly: (assembly: string) => boolean
  *     extractProgram: () => { size: number, output: string }
  *     memory: WebAssembly.Memory
- * }} PLCRUntimeWasmExportTypes
+ * }} VovkPLCExportTypes
 */
 
 /** @typedef */// @ts-ignore
-class PLCRuntimeWasm_class {
+class VovkPLC_class {
     /** @type { WebAssembly.Instance | null } */
     wasm = null
-    /** @type { PLCRUntimeWasmExportTypes | null } */
+    /** @type { VovkPLCExportTypes | null } */
     wasm_exports
     wasmImports
     running = false
@@ -64,7 +64,7 @@ class PLCRuntimeWasm_class {
     constructor(wasm_path = '') { this.wasm_path = wasm_path }
 
     initialize = async (wasm_path = '', debug = false) => {
-        wasm_path = wasm_path || this.wasm_path || "/simulator.wasm" // "/wasm_test_cases/string_alloc.wasm"
+        wasm_path = wasm_path || this.wasm_path || "/VovkPLC.wasm" // "/wasm_test_cases/string_alloc.wasm"
         this.wasm_path = wasm_path
         if (this.running && this.wasm) return this
         this.running = true
@@ -81,7 +81,7 @@ class PLCRuntimeWasm_class {
             const fs = await import("fs")
             const path = await import("path")
             const __dirname = path.resolve(path.dirname(''), '../')
-            const wasm_path = path.join(__dirname, "simulator.wasm")
+            const wasm_path = path.join(__dirname, "VovkPLC.wasm")
             wasmBuffer = fs.readFileSync(wasm_path)
         }
         this.wasmImports = {
@@ -472,13 +472,13 @@ class PLCRuntimeWasm_class {
 // Export the module if we are in a browser
 if (typeof window !== 'undefined') {
     // console.log(`WASM exported as window object`)
-    Object.assign(window, { PLCRuntimeWasm: PLCRuntimeWasm_class })
+    Object.assign(window, { VovkPLC: VovkPLC_class })
 }
 
 // Export for CommonJS modules
 if (typeof module !== 'undefined') {
     // console.log(`WASM exported as module`)
-    module.exports = PLCRuntimeWasm_class
+    module.exports = VovkPLC_class
 }
 // Export for ES modules
-export default PLCRuntimeWasm_class;
+export default VovkPLC_class;
