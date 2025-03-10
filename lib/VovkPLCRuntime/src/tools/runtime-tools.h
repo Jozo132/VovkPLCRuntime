@@ -322,7 +322,9 @@ Serial_t Stream(STREAM_TO_STREAMOUT);
 int get_used_memory();
 
 extern bool serial_timeout;
+extern "C"
 char serialReadTimeout(u32 timeout = 100);
+extern "C"
 u8 serialReadHexByteTimeout(u32 timeout = 100);
 
 #endif // __SIMULATOR__

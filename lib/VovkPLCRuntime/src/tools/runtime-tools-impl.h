@@ -361,7 +361,8 @@ int get_used_memory() {
 }
 
 bool serial_timeout = false;
-char serialReadTimeout(unsigned long timeout) {
+extern "C"
+char serialReadTimeout(u32 timeout) {
     unsigned long t = millis();
     unsigned long start = t;
     unsigned long elapsed = 0;
@@ -379,7 +380,8 @@ char serialReadTimeout(unsigned long timeout) {
     return Serial.read();
 }
 
-u8 serialReadHexByteTimeout(unsigned long timeout) {
+extern "C"
+u8 serialReadHexByteTimeout(u32 timeout) {
     u8 b = 0;
     char c = serialReadTimeout(timeout);
     if (c >= '0' && c <= '9') b = c - '0';
