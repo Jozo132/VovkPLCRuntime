@@ -1,0 +1,37 @@
+##########################################
+# Syntax Coloring Map For VovkPLCRuntime #
+##########################################
+
+##########################################
+# Datatypes (KEYWORD1)
+##########################################
+
+VovkPLCRuntime	KEYWORD1
+
+##########################################
+# Methods and Functions (KEYWORD2)
+##########################################
+
+initialize	KEYWORD2
+loadProgram	KEYWORD2
+loadProgramUnsafe	KEYWORD2
+updateGlobals	KEYWORD2
+clear	KEYWORD2
+step	KEYWORD2
+run	KEYWORD2
+runDirty	KEYWORD2
+read	KEYWORD2
+printStack	KEYWORD2
+setInput	KEYWORD2
+setInputBit	KEYWORD2
+getOutput	KEYWORD2
+getOutputBit	KEYWORD2
+setBit	KEYWORD2
+getBit	KEYWORD2
+readMemory	KEYWORD2
+writeMemory	KEYWORD2
+listen	KEYWORD2
+
+##########################################
+# Constants (LITERAL1)
+##########################################
