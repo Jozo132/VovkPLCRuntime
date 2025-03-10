@@ -21,10 +21,12 @@
 
 #pragma once
 
-// Use x64 operations on all architectures except AVR to fit the memory
-#ifndef __AVR__
-#define USE_X64_OPS
-#endif // __AVR__
+
+// EDIT #### Manually provide `USE_X64_OPS` to enable x64 operations
+//// Use x64 operations on all architectures except AVR to fit the memory
+// #ifndef __AVR__
+// #define USE_X64_OPS
+// #endif // __AVR__
 
 #ifdef __SIMULATOR__
 
