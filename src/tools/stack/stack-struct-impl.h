@@ -89,14 +89,14 @@ template <typename T> int Stack<T>::print() {
     if (_size < 10) length += Serial.print(' ');
     length += Serial.print(_size);
     length += Serial.print(F(") ["));
-    if (_size > 16) {
+    if (_size > 16) { // Show at most the last 16 bytes on the stack
         u32 hidden = _size - 16;
         length += Serial.print(' ');
         if (hidden < 10) length += Serial.print(' ');
         length += Serial.print(hidden);
         length += Serial.print(F(" more bytes... "));
-        for (u32 i = 0; i < 16; i++) {
-            T value = _data[hidden + i];
+        for (u32 i = hidden; i < _size; i++) {
+            T value = _data[i];
             if (value < 0x10) length += Serial.print('0');
             length += Serial.print(value, HEX);
             length += Serial.print(' ');
