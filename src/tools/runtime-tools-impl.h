@@ -88,6 +88,9 @@ void processExit() {
     throw 1;
 #elif defined(ESP8266) || defined(ESP32)
     ESP.restart();
+#elif defined(ARDUINO_ARCH_RP2040)
+    watchdog_enable(1, 1);
+    while(1);
 #elif defined(__arm__)
     NVIC_SystemReset();
 #elif defined(__SIMULATOR__)

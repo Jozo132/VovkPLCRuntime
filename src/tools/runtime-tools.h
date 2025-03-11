@@ -98,7 +98,16 @@ const char* device_name = "WASM Emulator";
 const char* device_name = "ESP8266";
 #elif defined(ESP32)
 const char* device_name = "ESP32";
-#elif defined(ARDUINO_ARCH_RP2040)
+#elif defined(ARDUINO_ARCH_RP2040) || defined(ARDUINO_RASPBERRY_PI_PICO) || defined(ARDUINO_ARCH_MBED_RP2040)
+#ifndef ARDUINO_ARCH_RP2040
+#define ARDUINO_ARCH_RP2040
+#endif // ARDUINO_ARCH_RP2040
+#include <hardware/watchdog.h>
+#include <String.h>
+#ifdef F
+#undef F
+#endif // F
+#define F(x) x
 const char* device_name = "Raspberry Pi Pico";
 #elif defined(STM32F1)
 const char* device_name = "STM32F1";
