@@ -17,8 +17,7 @@
 #define PLCRUNTIME_MAX_MEMORY_SIZE memory_size
 #define PLCRUNTIME_MAX_PROGRAM_SIZE program_size
 
-// #include <VovkPLCRuntime.h> // Practical include when the library is installed
-#include "../../../src/VovkPLCRuntime.h" // Only for testing the library within the examples folder
+#include <VovkPLCRuntime.h>
 VovkPLCRuntime runtime = VovkPLCRuntime(); // Stack size, memory size, program size
 
 
