@@ -1,4 +1,4 @@
-// stack-struct-impl.h - 1.0.0 - 2022-12-11
+// stack-struct-impl.h - 2022-12-11
 //
 // Copyright (c) 2022 J.Vovk
 //

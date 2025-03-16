@@ -1,4 +1,4 @@
-// runtime-tools.h - 1.0.0 - 2022-12-11
+// runtime-tools.h - 2022-12-11
 //
 // Copyright (c) 2022 J.Vovk
 //

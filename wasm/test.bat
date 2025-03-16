@@ -1,5 +1,5 @@
 @echo off
-rem build.bat - 1.0.0 - 2022-12-11
+rem build.bat - 2022-12-11
 rem
 rem Copyright (c) 2022 J.Vovk
 rem

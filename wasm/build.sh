@@ -1,5 +1,5 @@
 #!/bin/bash
-# build.sh - 1.0.0 - 2022-12-11
+# build.sh - 2022-12-11
 #
 # Copyright (c) 2022 J.Vovk
 #

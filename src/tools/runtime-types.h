@@ -1,4 +1,4 @@
-// runtime-types.h - 1.0.0 - 2024-01-11
+// runtime-types.h - 2024-01-11
 //
 // Copyright (c) 2024 J.Vovk
 //

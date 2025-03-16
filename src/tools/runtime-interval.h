@@ -1,4 +1,4 @@
-// runtime-interval.h - 1.0.0 - 2023-08-05
+// runtime-interval.h - 2023-08-05
 //
 // Copyright (c) 2023 J.Vovk
 //
