@@ -90,15 +90,20 @@ double log10(double x);
 #include "runtime-types.h"
 
 
-/* ##################### DEVICE NAME ###################### */
-#ifndef device_name
+/* ##################### ARCH NAME ###################### */
+#ifdef VOVKPLC_ARCH
+#undef VOVKPLC_ARCH
+#endif // VOVKPLC_ARCH
+
 #ifdef __WASM__
-const char* device_name = "WASM";
-#elif defined(ESP8266)
-const char* device_name = "ESP8266";
-#elif defined(ESP32)
-const char* device_name = "ESP32";
-#elif defined(ARDUINO_ARCH_RP2040) || defined(ARDUINO_RASPBERRY_PI_PICO) || defined(ARDUINO_ARCH_MBED_RP2040)
+#define VOVKPLC_ARCH "WASM"
+#elif defined(AVR) || defined(ARDUINO_ARCH_AVR)
+#define VOVKPLC_ARCH "AVR"
+#elif defined(ESP8266) || defined(ARDUINO_ARCH_ESP8266)
+#define VOVKPLC_ARCH "ESP8266"
+#elif defined(ESP32) || defined(ARDUINO_ARCH_ESP32)
+#define VOVKPLC_ARCH "ESP32"
+#elif defined(RP2040) || defined(ARDUINO_ARCH_RP2040) || defined(ARDUINO_RASPBERRY_PI_PICO) || defined(ARDUINO_ARCH_MBED_RP2040)
 #ifndef ARDUINO_ARCH_RP2040
 #define ARDUINO_ARCH_RP2040
 #endif // ARDUINO_ARCH_RP2040
@@ -108,17 +113,19 @@ const char* device_name = "ESP32";
 #undef F
 #endif // F
 #define F(x) x
-const char* device_name = "RPi Pico";
-#elif defined(STM32F1)
-const char* device_name = "STM32F1";
-#elif defined(STM32F4)
-const char* device_name = "STM32F4";
+#define VOVKPLC_ARCH "RP2040"
+#elif defined(STM32) || defined(ARDUINO_ARCH_STM32)
+#define VOVKPLC_ARCH "STM32"
 #elif defined(__SIMULATOR__)
-const char* device_name = "Simulator";
+#define VOVKPLC_ARCH "Simulator"
 #else
-const char* device_name = "Unknown";
+#define VOVKPLC_ARCH "Unknown"
 #endif
-#endif // device_name
+
+// Define your device name with `VOVKPLC_DEVICE_NAME`
+#ifndef VOVKPLC_DEVICE_NAME
+#define VOVKPLC_DEVICE_NAME "Unnamed"
+#endif // VOVKPLC_DEVICE_NAME
 
 
 

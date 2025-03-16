@@ -59,6 +59,7 @@
 #include "assembly/wasm/wasm.h"
 #endif
 
+#include "runtime-version.h"
 #include "runtime-tools.h"
 #include "stack/runtime-stack.h"
 #include "runtime-interval.h"
@@ -247,6 +248,40 @@ public:
         return writeArea_u8(memory, offset, value, size);
     }
 
+
+
+    void printInfo() {
+        // Start of the info
+        Serial.print(F("[VovkPLCRuntime,"));
+        // Architecture
+        Serial.print(F(VOVKPLC_ARCH)); Serial.print(F(","));
+        // Version
+        Serial.print(VOVKPLCRUNTIME_VERSION_MAJOR); Serial.print(F(","));
+        Serial.print(VOVKPLCRUNTIME_VERSION_MINOR); Serial.print(F(","));
+        Serial.print(VOVKPLCRUNTIME_VERSION_PATCH); Serial.print(F(","));
+        // Build
+        Serial.print(VOVKPLCRUNTIME_VERSION_BUILD); Serial.print(F(","));
+        // Compile date
+        // Serial.print(__DATE__); Serial.print(F(","));
+        // Serial.print(__TIME__); Serial.print(F(","));
+        Serial.print(__ISO_TIMESTAMP__); Serial.print(F(","));
+        // Memory info
+        Serial.print(PLCRUNTIME_MAX_STACK_SIZE); Serial.print(F(","));
+        Serial.print(PLCRUNTIME_MAX_MEMORY_SIZE); Serial.print(F(","));
+        Serial.print(PLCRUNTIME_MAX_PROGRAM_SIZE); Serial.print(F(","));
+        // IO map
+        Serial.print(PLCRUNTIME_INPUT_OFFSET); Serial.print(F(","));
+        Serial.print(PLCRUNTIME_NUM_OF_INPUTS); Serial.print(F(","));
+        Serial.print(PLCRUNTIME_OUTPUT_OFFSET); Serial.print(F(","));
+        Serial.print(PLCRUNTIME_NUM_OF_OUTPUTS); Serial.print(F(","));
+        // Device name
+        Serial.print(F(VOVKPLC_DEVICE_NAME));
+
+        // End of the info
+        Serial.println(F("]"));
+    }
+
+    bool print_info_first_time = true;
     void listen() {
 #ifdef __WASM__
         // Unused, access is available directly through the wasm.h interface
@@ -254,7 +289,13 @@ public:
         // Production code for microcontrollers
         // Listen for input from [serial, ethernet, wifi, etc.]
 #ifdef PLCRUNTIME_SERIAL_ENABLED
-            // If the serial port is available and the first character is not 'P' or 'M', skip the character
+
+        if (print_info_first_time) {
+            printInfo();
+            print_info_first_time = false;
+        }
+
+        // If the serial port is available and the first character is not 'P' or 'M', skip the character
         while (Serial.available() && Serial.peek() != 'R' && Serial.peek() != 'P' && Serial.peek() != 'M' && Serial.peek() != 'S') Serial.read();
         if (Serial.available() > 1) {
             // Command syntax:
@@ -286,6 +327,7 @@ public:
             crc8_simple(checksum_calc, cmd[0]);
             crc8_simple(checksum_calc, cmd[1]);
 
+            bool plc_info = cmd[0] == 'P' && cmd[0] == 'I';
             bool plc_reset = cmd[0] == 'R' && cmd[1] == 'S';
             bool program_download = cmd[0] == 'P' && cmd[1] == 'D';
             bool program_upload = cmd[0] == 'P' && cmd[1] == 'U';
@@ -297,7 +339,20 @@ public:
             bool source_download = cmd[0] == 'S' && cmd[1] == 'D';
             bool source_upload = cmd[0] == 'S' && cmd[1] == 'U';
 
-            if (plc_reset) {
+            if (plc_info) {
+                Serial.print(F("PLC INFO - "));
+
+                // Read the checksum
+                checksum = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+
+                // Verify the checksum
+                if (checksum != checksum_calc) {
+                    Serial.println(F("Invalid checksum"));
+                    return;
+                }
+                printInfo();
+
+            } else if (plc_reset) {
                 Serial.print(F("PLC RESET - "));
 
                 // Read the checksum
@@ -597,7 +652,7 @@ void VovkPLCRuntime::updateGlobals() {
     state = state << 1 | S_200ms; // 5.1
     state = state << 1 | S_100ms; // 5.0
     memory[5] = state;
-    
+
     state = 0;
     state = state << 1 | S_1hr; // 6.7
     state = state << 1 | S_30min; // 6.6
@@ -622,9 +677,9 @@ RuntimeError VovkPLCRuntime::run(RuntimeProgram& program) { return run(program.p
 
 // Execute the whole PLC program, returns an erro code (0 on success)
 RuntimeError VovkPLCRuntime::run(u8* program, u32 prog_size) {
-    #ifndef __WASM__ // WASM can optionally execute the global loop check, embedded systems must always call this
+#ifndef __WASM__ // WASM can optionally execute the global loop check, embedded systems must always call this
     IntervalGlobalLoopCheck();
-    #endif // __WASM__
+#endif // __WASM__
     updateGlobals();
     u32 index = 0;
     while (index < prog_size) {
