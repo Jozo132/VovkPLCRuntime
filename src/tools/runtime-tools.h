@@ -340,6 +340,28 @@ u8 serialReadHexByteTimeout(u32 timeout = 100);
 
 #endif // __SIMULATOR__
 
+constexpr int monthToNumber(const char* month) {
+    return (month[0] == 'J' && month[1] == 'a') ? 1 :
+        (month[0] == 'F') ? 2 :
+        (month[0] == 'M' && month[2] == 'r') ? 3 :
+        (month[0] == 'A' && month[1] == 'p') ? 4 :
+        (month[0] == 'M' && month[2] == 'y') ? 5 :
+        (month[0] == 'J' && month[2] == 'n') ? 6 :
+        (month[0] == 'J' && month[2] == 'l') ? 7 :
+        (month[0] == 'A' && month[1] == 'u') ? 8 :
+        (month[0] == 'S') ? 9 :
+        (month[0] == 'O') ? 10 :
+        (month[0] == 'N') ? 11 :
+        12;
+}
+
+constexpr char __ISO_TIMESTAMP__ [] = {
+    __DATE__[7], __DATE__[8], __DATE__[9], __DATE__[10], '-',                  // YYYY-
+    (monthToNumber(__DATE__) / 10) + '0', (monthToNumber(__DATE__) % 10) + '0', '-',  // MM-
+    __DATE__[4] == ' ' ? '0' : __DATE__[4], __DATE__[5], ' ',                   // DD 
+    __TIME__[0], __TIME__[1], ':', __TIME__[3], __TIME__[4], ':', __TIME__[6], __TIME__[7], '\0'  // HH:mm:ss
+};
+
 int print_number_padStart(int value, int pad, char padChar = ' ', int base = 10);
 int print_number_padEnd(int value, int pad, char padChar = ' ', int base = 10);
 
