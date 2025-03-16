@@ -93,7 +93,7 @@ double log10(double x);
 /* ##################### DEVICE NAME ###################### */
 #ifndef device_name
 #ifdef __WASM__
-const char* device_name = "WASM Emulator";
+const char* device_name = "WASM";
 #elif defined(ESP8266)
 const char* device_name = "ESP8266";
 #elif defined(ESP32)
@@ -108,7 +108,7 @@ const char* device_name = "ESP32";
 #undef F
 #endif // F
 #define F(x) x
-const char* device_name = "Raspberry Pi Pico";
+const char* device_name = "RPi Pico";
 #elif defined(STM32F1)
 const char* device_name = "STM32F1";
 #elif defined(STM32F4)
