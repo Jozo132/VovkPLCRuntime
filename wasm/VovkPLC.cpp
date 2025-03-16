@@ -25,6 +25,7 @@
 #define __RUNTIME_FULL_UNIT_TEST___
 #define USE_X64_OPS
 
+#define VOVKPLC_DEVICE_NAME "Simulator"
 
 #include "../src/VovkPLCRuntime.h"
 

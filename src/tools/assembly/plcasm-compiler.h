@@ -1435,6 +1435,9 @@ WASM_EXPORT void initialize() {
 WASM_EXPORT void printProperties() {
     runtime.printProperties();
 }
+WASM_EXPORT void printInfo() {
+    runtime.printInfo();
+}
 
 WASM_EXPORT bool loadCompiledProgram() {
     Serial.printf("Loading program with %d bytes and checksum 0x%02X ...\n", built_bytecode_length, built_bytecode_checksum);

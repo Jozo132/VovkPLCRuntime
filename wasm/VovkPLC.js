@@ -4,6 +4,7 @@
 /** 
  * @typedef {{ 
  *     initialize: () => void
+ *     printInfo: () => void
  *     streamIn: (char: number) => boolean
  *     loadAssembly: () => void
  *     downloadProgram: (size: number, crc: number) => number
