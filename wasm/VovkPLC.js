@@ -102,12 +102,42 @@ class VovkPLC_class {
         this.wasm_exports.initialize()
         this.wasm_exports.downloadAssembly = (assembly) => this.downloadAssembly(assembly)
         this.wasm_exports.extractProgram = () => this.extractProgram()
-        const required_methods = ['run_unit_test', 'run_custom_test', 'get_free_memory', 'doNothing', 'compileAssembly', 'loadCompiledProgram', 'runFullProgramDebug', 'runFullProgram', 'uploadProgram', 'getMemoryArea', 'writeMemoryByte']
+        const required_methods = ['printInfo', 'run_unit_test', 'run_custom_test', 'get_free_memory', 'doNothing', 'compileAssembly', 'loadCompiledProgram', 'runFullProgramDebug', 'runFullProgram', 'uploadProgram', 'getMemoryArea', 'writeMemoryByte']
         for (let i = 0; i < required_methods.length; i++) {
             const method = required_methods[i]
             if (!this.wasm_exports[method]) throw new Error(`${method} function not found`)
         }
         return this
+    }
+
+    printInfo = () => {
+        if (!this.wasm_exports) throw new Error("WebAssembly module not initialized")
+        if (!this.wasm_exports.printInfo) throw new Error("'printInfo' function not found")
+        this.wasm_exports.printInfo()
+        const raw = this.readStream().trim()
+        if (raw.length === 0) return "No info available"
+        if (raw.startsWith("[") && raw.endsWith("]")) { // '[VovkPLCRuntime,WASM,0,1,0,324,2025-03-16 19:16:44,1024,104857,104857,16,16,32,16,Simulator]'
+            const content = raw.substring(1, raw.length - 1)
+            const parts = content.split(",")
+            const info = {
+                header: parts[0],
+                arch: parts[1],
+                version: `${parts[2]}.${parts[3]}.${parts[4]} Build ${parts[5]}`,
+                date: parts[6],
+                stack: +parts[7],
+                memory: +parts[8],
+                program: +parts[9],
+                input_offset: +parts[10],
+                input_size: +parts[11],
+                output_offset: +parts[12],
+                output_size: +parts[13],
+                device: parts[14]
+            }
+            return info
+        }
+        console.error(`Invalid info response:`, raw)
+        return raw
+        // return raw
     }
 
     /** @param { string } assembly */

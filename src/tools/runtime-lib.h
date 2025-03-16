@@ -57,7 +57,10 @@
 
 #ifdef __WASM__
 #include "assembly/wasm/wasm.h"
-#endif
+#define STDOUT_PRINT Stream
+#else // Normal
+#define STDOUT_PRINT Serial
+#endif // __WASM__
 
 #include "runtime-version.h"
 #include "runtime-tools.h"
@@ -252,33 +255,31 @@ public:
 
     void printInfo() {
         // Start of the info
-        Serial.print(F("[VovkPLCRuntime,"));
+        STDOUT_PRINT.print(F("[VovkPLCRuntime,"));
         // Architecture
-        Serial.print(F(VOVKPLC_ARCH)); Serial.print(F(","));
+        STDOUT_PRINT.print(F(VOVKPLC_ARCH)); STDOUT_PRINT.print(F(","));
         // Version
-        Serial.print(VOVKPLCRUNTIME_VERSION_MAJOR); Serial.print(F(","));
-        Serial.print(VOVKPLCRUNTIME_VERSION_MINOR); Serial.print(F(","));
-        Serial.print(VOVKPLCRUNTIME_VERSION_PATCH); Serial.print(F(","));
+        STDOUT_PRINT.print(VOVKPLCRUNTIME_VERSION_MAJOR); STDOUT_PRINT.print(F(","));
+        STDOUT_PRINT.print(VOVKPLCRUNTIME_VERSION_MINOR); STDOUT_PRINT.print(F(","));
+        STDOUT_PRINT.print(VOVKPLCRUNTIME_VERSION_PATCH); STDOUT_PRINT.print(F(","));
         // Build
-        Serial.print(VOVKPLCRUNTIME_VERSION_BUILD); Serial.print(F(","));
+        STDOUT_PRINT.print(VOVKPLCRUNTIME_VERSION_BUILD); STDOUT_PRINT.print(F(","));
         // Compile date
-        // Serial.print(__DATE__); Serial.print(F(","));
-        // Serial.print(__TIME__); Serial.print(F(","));
-        Serial.print(__ISO_TIMESTAMP__); Serial.print(F(","));
+        STDOUT_PRINT.print(__ISO_TIMESTAMP__); STDOUT_PRINT.print(F(","));
         // Memory info
-        Serial.print(PLCRUNTIME_MAX_STACK_SIZE); Serial.print(F(","));
-        Serial.print(PLCRUNTIME_MAX_MEMORY_SIZE); Serial.print(F(","));
-        Serial.print(PLCRUNTIME_MAX_PROGRAM_SIZE); Serial.print(F(","));
+        STDOUT_PRINT.print(PLCRUNTIME_MAX_STACK_SIZE); STDOUT_PRINT.print(F(","));
+        STDOUT_PRINT.print(PLCRUNTIME_MAX_MEMORY_SIZE); STDOUT_PRINT.print(F(","));
+        STDOUT_PRINT.print(PLCRUNTIME_MAX_PROGRAM_SIZE); STDOUT_PRINT.print(F(","));
         // IO map
-        Serial.print(PLCRUNTIME_INPUT_OFFSET); Serial.print(F(","));
-        Serial.print(PLCRUNTIME_NUM_OF_INPUTS); Serial.print(F(","));
-        Serial.print(PLCRUNTIME_OUTPUT_OFFSET); Serial.print(F(","));
-        Serial.print(PLCRUNTIME_NUM_OF_OUTPUTS); Serial.print(F(","));
+        STDOUT_PRINT.print(PLCRUNTIME_INPUT_OFFSET); STDOUT_PRINT.print(F(","));
+        STDOUT_PRINT.print(PLCRUNTIME_NUM_OF_INPUTS); STDOUT_PRINT.print(F(","));
+        STDOUT_PRINT.print(PLCRUNTIME_OUTPUT_OFFSET); STDOUT_PRINT.print(F(","));
+        STDOUT_PRINT.print(PLCRUNTIME_NUM_OF_OUTPUTS); STDOUT_PRINT.print(F(","));
         // Device name
-        Serial.print(F(VOVKPLC_DEVICE_NAME));
+        STDOUT_PRINT.print(F(VOVKPLC_DEVICE_NAME));
 
         // End of the info
-        Serial.println(F("]"));
+        STDOUT_PRINT.println(F("]"));
     }
 
     bool print_info_first_time = true;
