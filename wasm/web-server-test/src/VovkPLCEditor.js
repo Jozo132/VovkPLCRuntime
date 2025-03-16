@@ -230,7 +230,7 @@ const program_icon_str = program_icon.outerHTML
 
 class Menu {
     /**
-     *  @typedef {{ type: 'item', name: string, label: string, disabled?: boolean }} MenuItem 
+     *  @typedef {{ type: 'item', name: string, label: string, disabled?: boolean, hidden?: boolean }} MenuItem 
      *  @typedef {{ type: 'separator', name?: undefined, label?: undefined }} MenuSeparator
      *  @typedef { MenuItem | MenuSeparator } MenuElement
      *  @typedef { (event: MouseEvent) => MenuElement[] | undefined } MenuOnOpen 
@@ -247,12 +247,16 @@ class Menu {
 
     #drawList() {
         this.menu.innerHTML = ''
+        let was_separator = false
         this.#items.forEach(item => {
-            if (item.type === 'separator') {
+            if (item.hidden) return
+            if (item.type === 'separator' && !was_separator) {
                 const hr = document.createElement('hr')
                 this.menu.appendChild(hr)
+                was_separator = true
             }
             if (item.type === 'item') {
+                was_separator = false
                 const div = document.createElement('div')
                 div.classList.add('item')
                 if (item.disabled) div.classList.add('disabled')
@@ -1009,16 +1013,18 @@ const draw_ladder = (editor, program, ladder) => {
                     selected_for_toggle = symbol
                     return [
                         live && typeof symbol !== 'undefined' ? [
-                            { type: 'item', name: 'toggle', label: 'Toggle', disabled: edit },
+                            { type: 'item', name: 'toggle', label: 'Toggle' },
+                            { type: 'item', name: 'set_on', label: 'Set ON' },
+                            { type: 'item', name: 'set_off', label: 'Set OFF' },
                             { type: 'separator' },
                         ] : null,
-                        { type: 'item', name: 'delete', label: 'Delete', disabled: live },
+                        { type: 'item', name: 'delete', label: 'Delete', hidden: live },
                         { type: 'separator' },
-                        { type: 'item', name: 'cut', label: 'Cut', disabled: live },
-                        { type: 'item', name: 'copy', label: 'Copy' },
-                        { type: 'item', name: 'paste', label: 'Paste', disabled: live || clipboard_empty },
+                        { type: 'item', name: 'cut', label: 'Cut', hidden: live },
+                        { type: 'item', name: 'copy', label: 'Copy', hidden: live },
+                        { type: 'item', name: 'paste', label: 'Paste', hidden: live, disabled: clipboard_empty },
                         { type: 'separator' },
-                        { type: 'item', name: 'add', label: 'Properties' },
+                        { type: 'item', name: 'properties', label: 'Properties' },
                     ].flat().filter(Boolean)
                 }
             },
@@ -1028,10 +1034,11 @@ const draw_ladder = (editor, program, ladder) => {
                 if (selected === 'cut') editor.cutSelection()
                 if (selected === 'copy') editor.copySelection()
                 if (selected === 'paste') editor.pasteSelection()
-                if (selected === 'toggle' && typeof selected_for_toggle !== 'undefined') {
+                const modify = ['toggle', 'set_on', 'set_off'].includes(selected)
+                if (modify && typeof selected_for_toggle !== 'undefined') {
                     const { location, address } = selected_for_toggle
                     const value = get_symbol_value(editor, selected_for_toggle)
-                    const new_value = value ? false : true
+                    const new_value = selected === 'toggle' ? !value : selected === 'set_on' ? true : selected === 'set_off' ? false : value
                     const offset = editor.project.offsets[location].offset || 0
                     editor.setMemoryBit(address + offset, new_value)
                 }
