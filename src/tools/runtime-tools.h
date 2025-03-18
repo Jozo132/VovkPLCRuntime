@@ -95,6 +95,25 @@ double log10(double x);
 #undef VOVKPLC_ARCH
 #endif // VOVKPLC_ARCH
 
+#if defined(RP2350) || defined(PICO_RP2350) || defined(PICO_RP2350B) || defined(ARDUINO_ARCH_RP2350) || defined(ARDUINO_ARCH_MBED_RP2350) 
+#if !defined(RP2350)
+#define RP2350
+#endif // RP2350
+#endif
+
+#if defined(RP2040) || defined(PICO_RP2040) || defined(ARDUINO_ARCH_RP2040) || defined(ARDUINO_ARCH_MBED_RP2040)
+#if !defined(RP2040) && !defined (RP2350)
+#define RP2040
+#endif // RP2040
+#endif
+
+
+#if !defined(RP2040) && !defined(RP2350) && defined(ARDUINO_RASPBERRY_PI_PICO)
+#ifndef RPI_PICO
+#define RPI_PICO
+#endif // RPI_PICO
+#endif
+
 #ifdef __WASM__
 #define VOVKPLC_ARCH "WASM"
 #elif defined(AVR) || defined(ARDUINO_ARCH_AVR)
@@ -103,17 +122,23 @@ double log10(double x);
 #define VOVKPLC_ARCH "ESP8266"
 #elif defined(ESP32) || defined(ARDUINO_ARCH_ESP32)
 #define VOVKPLC_ARCH "ESP32"
-#elif defined(RP2040) || defined(ARDUINO_ARCH_RP2040) || defined(ARDUINO_RASPBERRY_PI_PICO) || defined(ARDUINO_ARCH_MBED_RP2040)
-#ifndef ARDUINO_ARCH_RP2040
-#define ARDUINO_ARCH_RP2040
-#endif // ARDUINO_ARCH_RP2040
+#elif defined(RP2040) || defined(RP2350) || defined(RPI_PICO)
+#ifndef RPI_PICO
+#define RPI_PICO
+#endif // RPI_PICO
 #include <hardware/watchdog.h>
 #include <String.h>
 #ifdef F
 #undef F
 #endif // F
 #define F(x) x
+#ifdef RP2040
 #define VOVKPLC_ARCH "RP2040"
+#elif defined(RP2350)
+#define VOVKPLC_ARCH "RP2350"
+#else 
+#define VOVKPLC_ARCH "RPi Pico"
+#endif
 #elif defined(STM32) || defined(ARDUINO_ARCH_STM32)
 #define VOVKPLC_ARCH "STM32"
 #elif defined(__SIMULATOR__)
@@ -153,7 +178,7 @@ void byteToHex(u8 byte, char& c1, char& c2);
 #endif
 
 // If Raspeberry Pi Pico is used
-#if defined(ARDUINO_ARCH_RP2040)
+#if defined(RPI_PICO)
 #define FSH char
 #else 
 #define FSH __FlashStringHelper
