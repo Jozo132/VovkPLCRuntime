@@ -73,9 +73,19 @@ class VovkPLC_class {
         /** @type { ArrayBuffer | Buffer } */
         let wasmBuffer
         // Browser environment
-        this.perf = window.performance
-        const wasmFile = await fetch(wasm_path)
-        wasmBuffer = await wasmFile.arrayBuffer()
+        if (typeof window !== 'undefined') {
+            this.perf = window.performance
+            const wasmFile = await fetch(wasm_path)
+            wasmBuffer = await wasmFile.arrayBuffer()
+        } else { // Node.js environment
+            // @ts-ignore
+            this.perf = (await import('perf_hooks')).performance
+            const fs = await import("fs")
+            const path = await import("path")
+            const __dirname = path.resolve(path.dirname(''), '../')
+            const wp = path.join(__dirname, "dist/VovkPLC.wasm")
+            wasmBuffer = fs.readFileSync(wp)
+        }
         this.wasmImports = {
             env: {
                 stdout: this.console_print,

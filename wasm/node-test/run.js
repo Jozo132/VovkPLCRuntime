@@ -5,7 +5,7 @@
 // It is used for testing purposes only.
 
 // const PLCRuntimeWasm = require("../dist/VovkPLC.js").default
-import VovkPLC from "../dist/VovkPLC-node.js"
+import VovkPLC from "../dist/VovkPLC.js"
 
 const runtime = new VovkPLC("/dist/VovkPLC.wasm")
 
