@@ -35,7 +35,7 @@ clang++ --target=wasm32-undefined-undefined-wasm -Wall -std=c++11 -nostdlib -O3 
 @echo Building...
 @echo off
 
-wasm-ld --no-entry --export-dynamic --allow-undefined --lto-O3 build/VovkPLC.o -o VovkPLC.wasm      || goto :error
+wasm-ld --no-entry --export-dynamic --allow-undefined --lto-O3 build/VovkPLC.o -o dist/VovkPLC.wasm      || goto :error
 
 @echo on
 @echo Done.

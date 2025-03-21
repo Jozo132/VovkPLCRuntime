@@ -65,7 +65,7 @@ class VovkPLC_class {
     constructor(wasm_path = '') { this.wasm_path = wasm_path }
 
     initialize = async (wasm_path = '', debug = false) => {
-        wasm_path = wasm_path || this.wasm_path || "/VovkPLC.wasm" // "/wasm_test_cases/string_alloc.wasm"
+        wasm_path = wasm_path || this.wasm_path || "/dist/VovkPLC.wasm" // "/wasm_test_cases/string_alloc.wasm"
         this.wasm_path = wasm_path
         if (this.running && this.wasm) return this
         this.running = true
@@ -82,7 +82,7 @@ class VovkPLC_class {
             const fs = await import("fs")
             const path = await import("path")
             const __dirname = path.resolve(path.dirname(''), '../')
-            const wasm_path = path.join(__dirname, "VovkPLC.wasm")
+            const wasm_path = path.join(__dirname, "dist/VovkPLC.wasm")
             wasmBuffer = fs.readFileSync(wasm_path)
         }
         this.wasmImports = {

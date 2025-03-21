@@ -231,7 +231,7 @@ const program_icon_str = program_icon.outerHTML
 class Menu {
     /**
      *  @typedef {{ type: 'item', name: string, label: string, disabled?: boolean, hidden?: boolean }} MenuItem 
-     *  @typedef {{ type: 'separator', name?: undefined, label?: undefined }} MenuSeparator
+     *  @typedef {{ type: 'separator', name?: undefined, label?: undefined, hidden?: boolean }} MenuSeparator
      *  @typedef { MenuItem | MenuSeparator } MenuElement
      *  @typedef { (event: MouseEvent) => MenuElement[] | undefined } MenuOnOpen 
      *  @typedef { (selected: string) => void } MenuOnClose  
@@ -1037,7 +1037,7 @@ const draw_ladder = (editor, program, ladder) => {
                 const modify = ['toggle', 'set_on', 'set_off'].includes(selected)
                 if (modify && typeof selected_for_toggle !== 'undefined') {
                     const { location, address } = selected_for_toggle
-                    const value = get_symbol_value(editor, selected_for_toggle)
+                    const value = !!get_symbol_value(editor, selected_for_toggle)
                     const new_value = selected === 'toggle' ? !value : selected === 'set_on' ? true : selected === 'set_off' ? false : value
                     const offset = editor.project.offsets[location].offset || 0
                     editor.setMemoryBit(address + offset, new_value)
@@ -1514,7 +1514,7 @@ const searchForProgram = (editor, program) => {
 }
 
 
-import PLCRuntimeWasm from "../../VovkPLC.js"
+import PLCRuntimeWasm from "../../dist/VovkPLC.js"
 
 /** @type { (editor: VovkPLCEditor, id: string | null) => PLC_Program | null } */
 const findProgram = (editor, id) => {
@@ -2026,7 +2026,7 @@ export class VovkPLCEditor {
      * }} options 
     */
     constructor({ workspace, debug_css, initial_program }) {
-        this.runtime.initialize('/VovkPLC.wasm').then(() => {
+        this.runtime.initialize('/dist/VovkPLC.wasm').then(() => {
             // console.log('PLC Runtime initialized')
             this.runtime_ready = true
         })

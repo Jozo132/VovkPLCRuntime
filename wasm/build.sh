@@ -29,5 +29,5 @@ cd wasm 2>/dev/null || true
 mkdir -p build
 clang++ --target=wasm32-undefined-undefined-wasm -Wall -std=c++11 -nostdlib -O3 -D __WASM__ -c VovkPLC.cpp -o build/VovkPLC.o
 echo "Building..."
-wasm-ld --no-entry --export-dynamic --allow-undefined --lto-O3 build/VovkPLC.o -o VovkPLC.wasm
+wasm-ld --no-entry --export-dynamic --allow-undefined --lto-O3 build/VovkPLC.o -o dist/VovkPLC.wasm
 echo "Done."

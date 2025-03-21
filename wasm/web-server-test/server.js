@@ -78,6 +78,7 @@ app.use((req, res, next) => {
 app.use(express.static("../"))
 app.use(express.static("./"))
 app.use(express.static("./src"))
+app.use(express.static("./dist"))
 
 app.get("/", (req, res) => {
     // res.sendFile("index.html", { root: "../" })

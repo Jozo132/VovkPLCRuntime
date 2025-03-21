@@ -4,10 +4,10 @@
 // This file is used to the WebAssembly module (which was compiled from C++ code) to run in Node.js.
 // It is used for testing purposes only.
 
-// const PLCRuntimeWasm = require("../VovkPLC.js").default
-import VovkPLC from "../VovkPLC.js"
+// const PLCRuntimeWasm = require("../dist/VovkPLC.js").default
+import VovkPLC from "../dist/VovkPLC.js"
 
-const runtime = new VovkPLC("/VovkPLC.wasm")
+const runtime = new VovkPLC("/dist/VovkPLC.wasm")
 
 const main = async () => {
     await runtime.initialize()
