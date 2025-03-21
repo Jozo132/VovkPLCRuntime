@@ -3,7 +3,7 @@ import { resolve } from 'path';
 import { platform } from 'os';
 
 const isWindows = platform() === 'win32';
-const BUILD_PATH = './wasm/dist/';
+const BUILD_PATH = './wasm/';
 const BUILD_FILE = isWindows ? 'build.bat' : 'build.sh';
 const TARGET_RELATIVE = BUILD_PATH + BUILD_FILE;
 const TARGET = resolve(TARGET_RELATIVE);

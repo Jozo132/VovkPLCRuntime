@@ -4,7 +4,7 @@ import platform
 
 is_windows = platform.system() == "Windows"
 
-BUILD_PATH = "./wasm/dist/"
+BUILD_PATH = "./wasm/"
 BUILD_FILE = "build.bat" if is_windows else "build.sh"
 TARGET_RELATIVE = BUILD_PATH + BUILD_FILE
 TARGET = abspath(TARGET_RELATIVE)
