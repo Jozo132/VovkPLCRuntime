@@ -328,7 +328,7 @@ public:
             crc8_simple(checksum_calc, cmd[0]);
             crc8_simple(checksum_calc, cmd[1]);
 
-            bool plc_info = cmd[0] == 'P' && cmd[0] == 'I';
+            bool plc_info = cmd[0] == 'P' && cmd[1] == 'I';
             bool plc_reset = cmd[0] == 'R' && cmd[1] == 'S';
             bool program_download = cmd[0] == 'P' && cmd[1] == 'D';
             bool program_upload = cmd[0] == 'P' && cmd[1] == 'U';
