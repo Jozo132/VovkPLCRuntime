@@ -297,8 +297,8 @@ public:
         }
 
         // If the serial port is available and the first character is not 'P' or 'M', skip the character
-        while (Serial.available() && Serial.peek() != 'R' && Serial.peek() != 'P' && Serial.peek() != 'M' && Serial.peek() != 'S') Serial.read();
-        if (Serial.available() > 1) {
+        while (Serial.available() && Serial.peek() != 'R' && Serial.peek() != 'P' && Serial.peek() != 'M' && Serial.peek() != 'S' && Serial.peek() != '?') Serial.read();
+        if (Serial.available() > 1 || Serial.peek() == '?') {
             // Command syntax:
             // <command>[<size>][<data>]<checksum>
             // Where the command is always 2 characters and the rest is %02x encoded
@@ -323,11 +323,13 @@ public:
 
             // Read the command
             cmd[0] = serialReadTimeout(); SERIAL_TIMEOUT_RETURN;
-            cmd[1] = serialReadTimeout(); SERIAL_TIMEOUT_RETURN;
+            if (Serial.peek() != '?')
+                cmd[1] = serialReadTimeout(); SERIAL_TIMEOUT_RETURN;
 
             crc8_simple(checksum_calc, cmd[0]);
             crc8_simple(checksum_calc, cmd[1]);
 
+            bool ping = cmd[0] == '?';
             bool plc_info = cmd[0] == 'P' && cmd[1] == 'I';
             bool plc_reset = cmd[0] == 'R' && cmd[1] == 'S';
             bool program_download = cmd[0] == 'P' && cmd[1] == 'D';
@@ -340,7 +342,9 @@ public:
             bool source_download = cmd[0] == 'S' && cmd[1] == 'D';
             bool source_upload = cmd[0] == 'S' && cmd[1] == 'U';
 
-            if (plc_info) {
+            if (ping) {
+                Serial.println(F("<VovkPLC>"));
+            } else if (plc_info) {
                 Serial.print(F("PLC INFO - "));
 
                 // Read the checksum
@@ -582,7 +586,7 @@ public:
             } else if (source_upload) {
                 Serial.println(F("SOURCE UPLOAD - Not implemented"));
             }
-        }
+    }
 #endif // PLCRUNTIME_SERIAL_ENABLED
 
 #ifdef PLCRUNTIME_ETHERNET_ENABLED
@@ -593,7 +597,7 @@ public:
         // To be implemented
 #endif // PLCRUNTIME_WIFI_ENABLED
 #endif // __WASM__
-    }
+}
 };
 
 // Clear the runtime stack
