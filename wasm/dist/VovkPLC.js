@@ -284,7 +284,7 @@ class VovkPLC_class {
         const char = String.fromCharCode(c)
         if (char === '\n') {
             const callback = this.stdout_callback || console.log
-            callback(this.console_message)
+            if (this.console_message && this.console_message.length > 0) callback(this.console_message)
             this.console_message = ''
         } else {
             this.console_message += char
