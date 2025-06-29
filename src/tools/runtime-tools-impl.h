@@ -62,12 +62,30 @@ uint32_t getFreeHeap(void) {
 }
 #endif // ARDUINO_ARCH_RP2040
 
+#if defined(RA4M1)
+#include <malloc.h>
+
+extern char end;            // heap base
+extern char __StackLimit;   // stack bottom (set in fsp.ld)
+
+static uint32_t getTotalHeap() {
+    return (uint32_t)(&__StackLimit - &end);
+}
+
+static uint32_t getFreeHeap() {
+    struct mallinfo mi = mallinfo();
+    return getTotalHeap() - mi.uordblks;
+}
+#endif
+
 int freeMemory() {
 #ifdef __WASM__
     return heap_size - heap_used;
 #elif defined(ESP8266) || defined(ESP32)
     return ESP.getFreeHeap();
 #elif defined(ARDUINO_ARCH_RP2040)
+    return getFreeHeap();
+#elif defined(RA4M1)
     return getFreeHeap();
 #elif defined(__SIMULATOR__)
     return 9000;

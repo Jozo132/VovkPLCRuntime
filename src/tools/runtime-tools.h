@@ -114,6 +114,13 @@ double log10(double x);
 #endif // RPI_PICO
 #endif
 
+#if defined(ARDUINO_UNOR4_MINIMA) || defined(ARDUINO_ARCH_RENESAS_UNO) || defined(ARDUINO_ARCH_RENESAS) || defined(ARDUINO_UNOR4_WIFI)
+#if !defined(RA4M1)
+#define RA4M1
+#endif // RA4M1
+#endif
+
+
 #ifdef __WASM__
 #define VOVKPLC_ARCH "WASM"
 #elif defined(AVR) || defined(ARDUINO_ARCH_AVR)
@@ -139,6 +146,8 @@ double log10(double x);
 #else 
 #define VOVKPLC_ARCH "RPi Pico"
 #endif
+#elif defined(RA4M1)
+#define VOVKPLC_ARCH "RA4M1"
 #elif defined(STM32) || defined(ARDUINO_ARCH_STM32)
 #define VOVKPLC_ARCH "STM32"
 #elif defined(__SIMULATOR__)
@@ -178,7 +187,7 @@ void byteToHex(u8 byte, char& c1, char& c2);
 #endif
 
 // If Raspeberry Pi Pico is used
-#if defined(RPI_PICO)
+#if defined(RPI_PICO) || defined(RA4M1)
 #define FSH char
 #else 
 #define FSH __FlashStringHelper
