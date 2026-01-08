@@ -20,6 +20,7 @@ struct LinterProblem {
     int column;    // Column number (1-based)
     int length;    // Length of the token causing the issue
     char message[64]; // Text description
+    char* token_text; // Text of the token (only useful for internal debugging)
 };
 
 #define MAX_LINT_PROBLEMS 100
@@ -45,11 +46,27 @@ public:
         // Stop if we reached the limit
         if (problem_count >= MAX_LINT_PROBLEMS) return true;
 
+        // Check for duplicates (same line, column, and message) before adding
+        for (int j = 0; j < problem_count; j++) {
+             if (problems[j].line == token.line && problems[j].column == token.column) {
+                 const char* s1 = problems[j].message;
+                 const char* s2 = message;
+                 bool same = true;
+                 // Compare messages (up to 63 chars as stored)
+                 for(int k=0; k<63; k++) {
+                     if (s1[k] != s2[k]) { same = false; break; }
+                     if (s1[k] == 0) break; // End of string
+                 }
+                 if (same) return false; // Duplicate: Don't add, continue building
+             }
+        }
+
         LinterProblem& p = problems[problem_count];
         p.type = LINT_ERROR;
         p.line = token.line;
         p.column = token.column;
         p.length = token.length;
+        p.token_text = token.string.data;
 
         // Reset message buffer
         for(int k=0; k<64; k++) p.message[k] = 0;
@@ -65,7 +82,7 @@ public:
         p.message[i] = '\0';
 
         problem_count++;
-        return true; 
+        return problem_count >= MAX_LINT_PROBLEMS;
     }
     
     // Override logBytecode to do nothing during linting
@@ -87,7 +104,7 @@ extern "C" {
     // Runs the linter (compilation with debug=false, using the linter instance)
     WASM_EXPORT void lint_run() {
         defaultLinter.clearArray();
-        defaultLinter.compileAssembly(false); // false = no debug printing (though reportError is overridden anyway)
+        defaultLinter.compileAssembly(false, true); // false = no debug printing (though reportError is overridden anyway)
     }
 
     // Returns a pointer to the problems array. JS reads 'count' from the int pointer argument.

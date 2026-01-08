@@ -38,7 +38,7 @@ void custom_test() {
     
     // 3. Run compilation (linting)
     // We expect compileAssembly to return false because there are errors.
-    bool success = defaultLinter.compileAssembly(false);
+    bool success = defaultLinter.compileAssembly(false, true);
     
     if (success) {
         Serial.println(F("Compilation UNEXPECTEDLY SUCCEEDED!"));
@@ -60,11 +60,19 @@ void custom_test() {
         
         Serial.println(F("Errors found:"));
         for (int i = 0; i < found_errors; i++) {
-            Serial.print(i + 1);
-            Serial.print(F(". [Line "));
-            Serial.print(defaultLinter.problems[i].line);
-            Serial.print(F("]: "));
-            Serial.println(defaultLinter.problems[i].message);
+            char token_text[64] = {0};
+            // Safely copy token text
+            int j = 0;
+            for (j = 0; j < defaultLinter.problems[i].length && j < 63; j++) {
+                token_text[j] = defaultLinter.problems[i].token_text[j];
+            }
+            token_text[j] = '\0';
+            Serial.print(F("  ")); Serial.print(i + 1); Serial.print(F(" ["));
+            Serial.print((defaultLinter.problems[i].type == LINT_ERROR) ? F("ERROR") : F("WARNING")); Serial.print(F(" @ "));
+            Serial.print(defaultLinter.problems[i].line); Serial.print(F(":")); Serial.print(defaultLinter.problems[i].column); Serial.print(F(":"));
+            Serial.print(defaultLinter.problems[i].length); Serial.print(F("] "));
+            Serial.print(defaultLinter.problems[i].message); Serial.print(F(" -> "));
+            Serial.println(token_text);
         }
         
         if (found_errors < 3) {
