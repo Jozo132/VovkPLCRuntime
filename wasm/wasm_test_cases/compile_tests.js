@@ -131,11 +131,13 @@ const readStream = () => {
     return output
 }
 
+const verbose = process.argv.includes('--verbose') || process.argv.includes('-v')
+
 /** @param { string } file_name * @returns { Promise<any> } */
 const instantiate_wasm = async file_name => {
     const wasmImports = {
         env: {
-            stdout: (charcode) => { /* console_print(charcode) */ }, // Skip logging to console
+            stdout: (charcode) => { if (verbose) console_print(charcode) }, // Skip logging to console unless verbose
             stderr: (charcode) => { console_error(charcode) },
             streamOut: (charcode) => { console_stream(charcode) },
             millis: () => +performance.now().toFixed(0),

@@ -6,6 +6,7 @@
   "scripts": {
     "build": "node wasm/wasm_build.js",
     "memory_leak_test": "node wasm/wasm_test.js",
+    "memory_leak_test:verbose": "node wasm/wasm_test.js --verbose",
     "unit_test": "cd wasm/node-test && node run.js",
     "test": "npm run unit_test && npm run memory_leak_test",
     "serve": "cd wasm/web-server-test && npm install express && node server.js"

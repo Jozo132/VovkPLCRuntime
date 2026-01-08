@@ -6,7 +6,8 @@ const isWindows = platform() === 'win32';
 const BUILD_PATH = './wasm/';
 const BUILD_FILE = isWindows ? 'test.bat' : 'test.sh';
 const TARGET_RELATIVE = BUILD_PATH + BUILD_FILE;
-const TARGET = resolve(TARGET_RELATIVE);
+const args = process.argv.slice(2).join(' ');
+const TARGET = resolve(TARGET_RELATIVE) + ' ' + args;
 
 console.log('-----------------------------------------------------------------');
 console.log('Note: to compile the WASM tests, you need to have LLVM installed.');

@@ -29,7 +29,7 @@ rem try to execute 'cd wasm/wasm_test_cases', if failed do nothing
 cd wasm\wasm_test_cases 2>nul
 cd wasm_test_cases 2>nul
 
-node compile_tests.js      || goto :error
+node compile_tests.js %*      || goto :error
 
 cd ..
 @echo on
