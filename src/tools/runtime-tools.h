@@ -120,6 +120,16 @@ double log10(double x);
 #endif // RA4M1
 #endif
 
+#if defined(NRF52840_XXAA) || defined(ARDUINO_ARCH_NRF52) || defined(ARDUINO_NRF52840_FEATHER)
+#ifndef NRF52840
+#define NRF52840
+#endif
+#include <nrf.h>
+// Define Serial
+#ifndef Serial
+#define Serial SerialUSB
+#endif // Serial
+#endif
 
 #ifdef __WASM__
 #define VOVKPLC_ARCH "WASM"
@@ -148,6 +158,8 @@ double log10(double x);
 #endif
 #elif defined(RA4M1)
 #define VOVKPLC_ARCH "RA4M1"
+#elif defined(NRF52840) || defined(ARDUINO_ARCH_NRF52) || defined(ARDUINO_NRF52840_FEATHER)
+#define VOVKPLC_ARCH "NRF52840"
 #elif defined(STM32) || defined(ARDUINO_ARCH_STM32)
 #define VOVKPLC_ARCH "STM32"
 #elif defined(__SIMULATOR__)

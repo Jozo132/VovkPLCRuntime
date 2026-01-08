@@ -87,6 +87,9 @@ int freeMemory() {
     return getFreeHeap();
 #elif defined(RA4M1)
     return getFreeHeap();
+#elif defined(ARDUINO_ARCH_NRF52) || defined(NRF52840_XXAA)
+    char top;
+    return &top - reinterpret_cast<char*>(sbrk(0));
 #elif defined(__SIMULATOR__)
     return 9000;
 #else
