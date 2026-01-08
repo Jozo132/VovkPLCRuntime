@@ -11,3 +11,4 @@
 *settings.json
 .vscode
 *.wasm
+wasm/web-server-test/package.json

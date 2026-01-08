@@ -1,0 +1,20 @@
+{
+  "name": "vovk-plc-runtime",
+  "version": "1.0.0",
+  "description": "VovkPLC Runtime Library",
+  "type": "module",
+  "scripts": {
+    "build": "node wasm/wasm_build.js",
+    "memory_leak_test": "node wasm/wasm_test.js",
+    "unit_test": "cd wasm/node-test && node run.js",
+    "test": "npm run unit_test && npm run memory_leak_test",
+    "serve": "cd wasm/web-server-test && npm install express && node server.js"
+  },
+  "keywords": [
+    "plc",
+    "arduino",
+    "wasm"
+  ],
+  "author": "",
+  "license": "ISC"
+}
