@@ -119,29 +119,6 @@ void fill(char c, int count) {
     for (int i = 0; i < count; i++) Serial.print(c);
 }
 
-// Part 1: Reading the assembly
-char assembly_string[MAX_ASSEMBLY_STRING_SIZE] = R"(
-# This is a comment
-    f32.const 0.1
-    f32.const 0.2
-    f32.add
-    f32.const -1
-    f32.mul
-)";
-
-void set_assembly_string(char* new_assembly_string) {
-    const int size = string_len(new_assembly_string);
-    if (size == 0) {
-        printf("Error: input assembly is empty.\n");
-        return;
-    }
-    if (size > MAX_ASSEMBLY_STRING_SIZE) {
-        printf("Error: input assembly is too long (%d characters). Max size is %d characters.\n", size, MAX_ASSEMBLY_STRING_SIZE);
-        return;
-    }
-    string_copy(assembly_string, new_assembly_string);
-}
-
 // ################################################################################################
 
 // Part 2: Tokenization
@@ -228,11 +205,11 @@ struct Token {
         if (type == TOKEN_STRING) return printf("'") + string.print() + printf("'");
         return printf("\"") + string.print() + printf("\"");
     }
-    void highlight() {
+    void highlight(const char* assembly_string) {
         // jump test
         //      ~~~~
         int row = 1;
-        char* c = assembly_string;
+        const char* c = assembly_string;
         while (*c != '\0') {
             if (*c == '\n') row++;
             c++;
@@ -515,23 +492,10 @@ void Token::parse() {
     this->type = TOKEN_KEYWORD;
 }
 
-
-Token tokens[MAX_NUM_OF_TOKENS] = { };
-int token_count = 0;
-int token_count_temp = 0;
-
-int line = 1;
-int column = 1;
-
-
-
 struct LUT_label {
     StringView string;
     int address;
 };
-
-struct LUT_label LUT_labels[MAX_NUM_OF_TOKENS] = { };
-int LUT_label_count = 0;
 
 struct LUT_const {
     int address;
@@ -543,293 +507,6 @@ struct LUT_const {
     StringView value_string;
 };
 
-struct LUT_const LUT_consts[MAX_NUM_OF_TOKENS] = { };
-int LUT_const_count = 0;
-
-// List of illegal keywords
-const char* illegal_keywords [] = { "const", "var", "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "string", "true", "false", "if", "else", "while", "for", "do", "break", "continue", "return", "function" };
-const int illegal_keywords_count = sizeof(illegal_keywords) / sizeof(illegal_keywords[0]);
-
-bool add_label(Token& token, int address) {
-    for (int i = 0; i < LUT_label_count; i++) {
-        if (str_cmp(LUT_labels[i].string, token.string)) {
-            Serial.print(F("Error: duplicate label. Label ")); token.print(); Serial.print(F(" already exists at ")); Serial.print(token.line); Serial.print(F(":")); Serial.println(token.column);
-            return true;
-        }
-    }
-    for (int i = 0; i < illegal_keywords_count; i++) {
-        if (str_cmp(token.string, illegal_keywords[i])) {
-            Serial.print(F("Error: illegal label. Label ")); token.print(); Serial.print(F(" is illegal at ")); Serial.print(token.line); Serial.print(F(":")); Serial.println(token.column);
-            return true;
-        }
-    }
-    if (LUT_label_count >= MAX_NUM_OF_TOKENS) {
-        Serial.print(F("Error: too many labels. Max number of labels is")); Serial.println(MAX_NUM_OF_TOKENS);
-        return true;
-    }
-    LUT_labels[LUT_label_count].string = token.string;
-    LUT_labels[LUT_label_count].address = -1;
-    LUT_label_count++;
-    return false;
-}
-
-bool add_const(Token& keyword, Token& value, int address) {
-    for (int i = 0; i < LUT_const_count; i++) {
-        if (str_cmp(LUT_consts[i].string, keyword.string)) {
-            Serial.print(F("Error: duplicate const. Const ")); keyword.print(); Serial.print(F(" already exists at ")); Serial.print(keyword.line); Serial.print(F(":")); Serial.println(keyword.column);
-            return true;
-        }
-    }
-    for (int i = 0; i < illegal_keywords_count; i++) {
-        if (str_cmp(keyword.string, illegal_keywords[i])) {
-            Serial.print(F("Error: illegal const. Const ")); keyword.print(); Serial.print(F(" is illegal at ")); Serial.print(keyword.line); Serial.print(F(":")); Serial.println(keyword.column);
-            return true;
-        }
-    }
-    if (LUT_const_count >= MAX_NUM_OF_TOKENS) {
-        Serial.print(F("Error: too many consts. Max number of consts is")); Serial.println(MAX_NUM_OF_TOKENS);
-        return true;
-    }
-    LUT_consts[LUT_const_count].string = keyword.string;
-    LUT_consts[LUT_const_count].address = address;
-    LUT_consts[LUT_const_count].value_string = value.string;
-    if (value.type == TOKEN_BOOLEAN) {
-        LUT_consts[LUT_const_count].type = VAL_BOOLEAN;
-        LUT_consts[LUT_const_count].value_bool = value.value_bool;
-    }
-    if (value.type == TOKEN_INTEGER) {
-        LUT_consts[LUT_const_count].type = VAL_INTEGER;
-        LUT_consts[LUT_const_count].value_int = value.value_int;
-    }
-    if (value.type == TOKEN_REAL) {
-        LUT_consts[LUT_const_count].type = VAL_REAL;
-        LUT_consts[LUT_const_count].value_float = value.value_float;
-    }
-    if (value.type == TOKEN_STRING) {
-        LUT_consts[LUT_const_count].type = VAL_STRING;
-        LUT_consts[LUT_const_count].value_string = value.string;
-    }
-    LUT_const_count++;
-    return false;
-}
-
-
-bool last_token_is_exit = false;
-bool add_token(char* string, int length) {
-    last_token_is_exit = false;
-    if (token_count_temp >= MAX_NUM_OF_TOKENS) {
-        Serial.print(F("Error: too many tokens. Max number of tokens is")); Serial.println(MAX_NUM_OF_TOKENS);
-        return true;
-    }
-    Token& token = tokens[token_count_temp];
-    token.string.data = string;
-    token.string.length = length;
-    token.length = length;
-    token.line = line;
-    token.column = column;
-    token.parse();
-    if (token.type == TOKEN_UNKNOWN) {
-        Serial.print(F("Error: unknown token ")); token.print(); Serial.print(F(" at ")); Serial.print(line); Serial.print(F(":")); Serial.println(column);
-        return true;
-    }
-    last_token_is_exit = token == "exit";
-    bool isNumber = token.type == TOKEN_INTEGER || token.type == TOKEN_REAL;
-    if (token_count_temp >= 2 && isNumber) { // handle negative numbers
-        Token& p1_token = tokens[token_count_temp - 1];
-        Token& p2_token = tokens[token_count_temp - 2];
-        TokenType p1_type = p1_token.type;
-        TokenType p2_type = p2_token.type;
-        // If [keyword , - , number] then change to [keyword , -number]
-
-        bool skip = false;
-        if (p1_type == TOKEN_OPERATOR && p2_type == TOKEN_KEYWORD) {
-            if (token.type == TOKEN_INTEGER) {
-                p1_token.value_int = -token.value_int;
-                p1_token.type = TOKEN_INTEGER;
-                skip = true;
-            }
-            if (token.type == TOKEN_REAL) {
-                p1_token.value_float = -token.value_float;
-                p1_token.type = TOKEN_REAL;
-                skip = true;
-            }
-        }
-        // Check if [keyword="const" , keyword , bool|int|real] then change to []
-        if (!skip) token_count_temp++; // Work one step back
-
-        if (token_count_temp >= 3) {
-            Token& p1_token = tokens[token_count_temp - 1];
-            Token& p2_token = tokens[token_count_temp - 2];
-            Token& p3_token = tokens[token_count_temp - 3];
-            TokenType p1_type = p1_token.type;
-            TokenType p2_type = p2_token.type;
-            if (str_cmp(p3_token, "const") && p2_type == TOKEN_KEYWORD && (p1_type == TOKEN_BOOLEAN || p1_type == TOKEN_INTEGER || p1_type == TOKEN_REAL)) {
-                token_count_temp -= 3;
-                bool error = add_const(p2_token, p1_token, token_count_temp - 1);
-                if (error) return error;
-            }
-        }
-        return false;
-    }
-    if (token_count_temp >= 2) {
-        Token& p1_token = tokens[token_count_temp - 1];
-        Token& p2_token = tokens[token_count_temp - 2];
-        // If [' , * , '] then change to [string]
-        if (token == "'" && p2_token == "'") {
-            p2_token.type = TOKEN_STRING;
-            p2_token.string = p1_token.string;
-            token_count_temp--;
-            token_count_temp--;
-            return false;
-        }
-    }
-    if (token_count_temp >= 1) {
-        Token& p1_token = tokens[token_count_temp - 1];
-        TokenType p1_type = p1_token.type;
-        // If [keyword , :] then change to [label]
-        if (p1_type == TOKEN_KEYWORD) {
-            if (token.type == TOKEN_OPERATOR && token == ":") {
-                p1_token.type = TOKEN_LABEL;
-                bool error = add_label(p1_token, token_count_temp - 1);
-                if (error) return error;
-                return false;
-            }
-        }
-    }
-    token_count_temp++;
-    return false;
-}
-
-bool add_token_optional(char* string, int length) {
-    if (length == 0) return false;
-    return add_token(string, length);
-}
-
-const char lex_ignored [] = { ' ', ';', '\t', '\r', '\n', '\0' };
-const char lex_dividers [] = { '(', ')', '=', '+', '-', '*', '/', '%', '&', '|', '^', '~', '!', '<', '>', '?', ':', ',', ';', '[', ']', '{', '}', '\'', '"', '`', '\\', '\0' };
-
-bool tokenize() {
-    LUT_label_count = 0;
-    LUT_const_count = 0;
-    char* token_start = assembly_string;
-    int token_length = 0;
-    int assembly_string_length = string_len(assembly_string);
-    bool in_string = false;
-    bool error = false;
-    for (int i = 0; i < assembly_string_length; i++) {
-        char c = assembly_string[i];
-
-        if (in_string && !(c == '\'' || c == '\n')) {
-            if (token_length == 0) token_start = assembly_string + i;
-            token_length++;
-            continue;
-        }
-
-
-        // c == "/*"
-        bool hasNext = i + 1 < assembly_string_length;
-        char c1 = hasNext ? assembly_string[i + 1] : '\0';
-        bool blockComment = hasNext && c == '/' && c1 == '*';
-        if (blockComment) {
-            error = add_token_optional(token_start, token_length);
-            if (error) return error;
-            bool found = false;
-            i += 2;
-            while (i < assembly_string_length - 1 && !found) {
-                i++;
-                c = assembly_string[i];
-                if (c == '\n') {
-                    line++;
-                    column = 1;
-                }
-                if (c != '*') continue;
-                hasNext = i + 1 < assembly_string_length;
-                c1 = hasNext ? assembly_string[i + 1] : '\0';
-                found = c == '*' && c1 == '/';
-            }
-            if (!found || i >= assembly_string_length - 1) {
-                Serial.print(F("Error: unexpected end of file. Expected '*/' at ")); Serial.print(line); Serial.print(F(":")); Serial.println(column);
-                return true;
-            }
-            i++;
-            token_start = assembly_string + i + 1;
-            token_length = 0;
-            continue;
-        }
-
-        // c == # || c == /
-        if (c == '#' || c == '/') {
-            error = add_token_optional(token_start, token_length);
-            if (error) return error;
-            while (i < assembly_string_length && assembly_string[i] != '\n') i++;
-            token_start = assembly_string + i + 1;
-            token_length = 0;
-            line++;
-            column = 1;
-            continue;
-        }
-        // c == \n
-        if (c == '\n') {
-            error = add_token_optional(token_start, token_length);
-            if (error) return error;
-            token_start = assembly_string + i + 1;
-            token_length = 0;
-            line++;
-            column = 1;
-            continue;
-        }
-        // c == ' ' || c == '\t' || c == '\r'
-        if (string_chr(lex_ignored, c) != NULL) {
-            error = add_token_optional(token_start, token_length);
-            if (error) return error;
-            column += token_length + 1;
-            token_length = 0;
-            continue;
-        }
-        // c == '(' || c == ')' || c == '=' || c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '&' || c == '|' || c == '^' || c == '~' || c == '!' || c == '<' || c == '>' || c == '?' || c == ':' || c == ',' || c == ';' || c == '[' || c == ']' || c == '{' || c == '}' || c == '\'' || c == '"' || c == '`' || c == '\\'
-        if (string_chr(lex_dividers, c) != NULL) {
-            error = add_token_optional(token_start, token_length);
-            if (error) return error;
-            column += token_length;
-            if (c == '\'') in_string = !in_string;
-            if (c != '"' && c != '=') error = add_token(assembly_string + i, 1);
-            if (error) return error;
-            token_length = 0;
-            column++;
-            continue;
-        }
-        if (token_length == 0) token_start = assembly_string + i;
-        token_length++;
-    }
-    error = add_token_optional(token_start, token_length);
-    if (error) return error;
-    if (!last_token_is_exit) {
-        char* exit_string = new char[5];
-        exit_string[0] = 'e';
-        exit_string[1] = 'x';
-        exit_string[2] = 'i';
-        exit_string[3] = 't';
-        exit_string[4] = '\0';
-        error = add_token(exit_string, 4);
-        if (error) return error;
-    }
-    token_count = token_count_temp;
-    token_count_temp = 0;
-    line = 1;
-    column = 1;
-    return false;
-}
-
-
-// data type keywords
-const char* data_type_keywords [] = { "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "string", "bit", "byte", "ptr", "pointer", "*" };
-const int data_type_keywords_count = sizeof(data_type_keywords) / sizeof(data_type_keywords[0]);
-
-
-u8 built_bytecode[PLCRUNTIME_MAX_PROGRAM_SIZE] = { };
-int built_bytecode_length = 0;
-u8 built_bytecode_checksum = 0;
-
 struct ProgramLine {
     u8 code[16];
     int index;
@@ -837,596 +514,955 @@ struct ProgramLine {
     Token* refToken;
 };
 
-ProgramLine programLines[PLCRUNTIME_MAX_PROGRAM_SIZE] = { };
-int programLineCount = 0;
+// Global config lists
+const char* illegal_keywords [] = { "const", "var", "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "string", "true", "false", "if", "else", "while", "for", "do", "break", "continue", "return", "function" };
+const int illegal_keywords_count = sizeof(illegal_keywords) / sizeof(illegal_keywords[0]);
 
-int address_end = 0;
-#define _line_push \
-    address_end = built_bytecode_length + line.size; \
-    if (address_end >= PLCRUNTIME_MAX_PROGRAM_SIZE) return buildErrorSizeLimit(token); \
-    for (int j = 0; j < line.size; j++) { \
-        built_bytecode[built_bytecode_length + j] = bytecode[j]; \
-        crc8_simple(built_bytecode_checksum, bytecode[j]); \
-    } \
-    built_bytecode_length = address_end; \
-    continue;
+const char lex_ignored [] = { ' ', ';', '\t', '\r', '\n', '\0' };
+const char lex_dividers [] = { '(', ')', '=', '+', '-', '*', '/', '%', '&', '|', '^', '~', '!', '<', '>', '?', ':', ',', ';', '[', ']', '{', '}', '\'', '"', '`', '\\', '\0' };
+
+const char* data_type_keywords [] = { "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "string", "bit", "byte", "ptr", "pointer", "*" };
+const int data_type_keywords_count = sizeof(data_type_keywords) / sizeof(data_type_keywords[0]);
 
 
-bool typeFromToken(Token& token, u8& type) {
-    if (token.type == TOKEN_KEYWORD) {
-        // "u8" = type_u8
-        for (int i = 0; i < data_type_keywords_count; i++) {
-            if (token.startsWith(data_type_keywords[i])) {
-                switch (i) {
-                    case 0:  type = type_i8; break;
-                    case 1:  type = type_i16; break;
-                    case 2:  type = type_i32; break;
-                    case 3:  type = type_i64; break;
-                    case 4:  type = type_u8; break;
-                    case 5:  type = type_u16; break;
-                    case 6:  type = type_u32; break;
-                    case 7:  type = type_u64; break;
-                    case 8:  type = type_f32; break;
-                    case 9:  type = type_f64; break;
-                    case 10: type = type_bool; break;
-                    case 11: return false; // type = type_string; break; // TODO: Add support for strings
-                    case 12: type = type_bool; break;
-                    case 13: type = type_u8; break;
-                    case 14: type = type_pointer; break;
-                    case 15: type = type_pointer; break;
-                    case 16: type = type_pointer; break;
-                    default: return true;
-                }
-                return false;
-            }
+class PLCASMCompiler {
+public:
+    char assembly_string[MAX_ASSEMBLY_STRING_SIZE];
+    
+    Token tokens[MAX_NUM_OF_TOKENS];
+    int token_count = 0;
+    int token_count_temp = 0;
+
+    int line = 1;
+    int column = 1;
+
+    struct LUT_label LUT_labels[MAX_NUM_OF_TOKENS];
+    int LUT_label_count = 0;
+
+    struct LUT_const LUT_consts[MAX_NUM_OF_TOKENS];
+    int LUT_const_count = 0;
+
+    u8 built_bytecode[PLCRUNTIME_MAX_PROGRAM_SIZE];
+    int built_bytecode_length = 0;
+    u8 built_bytecode_checksum = 0;
+
+    ProgramLine programLines[PLCRUNTIME_MAX_PROGRAM_SIZE];
+    int programLineCount = 0;
+
+    bool last_token_is_exit = false;
+    int num_of_compile_runs = 0;
+
+    #define MAX_DOWNLOADED_PROGRAM_SIZE 64535
+    u8 downloaded_program[MAX_DOWNLOADED_PROGRAM_SIZE];
+    int downloaded_program_size = 0;
+
+    PLCASMCompiler() {
+        memset(tokens, 0, sizeof(tokens));
+        memset(LUT_labels, 0, sizeof(LUT_labels));
+        memset(LUT_consts, 0, sizeof(LUT_consts));
+        memset(built_bytecode, 0, sizeof(built_bytecode));
+        memset(programLines, 0, sizeof(programLines));
+        memset(downloaded_program, 0, sizeof(downloaded_program));
+        // Default assembly string
+        char default_asm[] = R"(
+# This is a comment
+    f32.const 0.1
+    f32.const 0.2
+    f32.add
+    f32.const -1
+    f32.mul
+)";
+        set_assembly_string(default_asm);
+    }
+
+    void set_assembly_string(char* new_assembly_string) {
+        const int size = string_len(new_assembly_string);
+        if (size == 0) {
+            printf("Error: input assembly is empty.\n");
+            return;
         }
-    }
-    return true;
-}
-
-int typeSize(u8& type) {
-    switch ((PLCRuntimeInstructionSet) type) {
-        case type_bool: case type_i8: case type_u8: return 8;
-        case type_i16: case type_u16: return 16;
-        case type_i32: case type_u32: case type_f32: return 32;
-        case type_i64: case type_u64: case type_f64: return 64;
-        case type_pointer: return sizeof(MY_PTR_t) * 8;
-        default: return -1;
-    }
-}
-
-bool boolFromToken(Token& token, bool& output) {
-    if (token.type == TOKEN_INTEGER) {
-        output = token.value_int != 0;
-        return false;
-    }
-    if (token.type == TOKEN_REAL) {
-        output = token.value_float != 0;
-        return false;
-    }
-    if (token.type == TOKEN_BOOLEAN) {
-        output = token.value_bool;
-        return false;
-    }
-    if (token.type == TOKEN_KEYWORD) {
-        for (int i = 0; i < LUT_const_count; i++) {
-            LUT_const& c = LUT_consts[i];
-            if (str_cmp(token, c.string)) {
-                if (c.type == VAL_BOOLEAN) {
-                    token.string = c.string;
-                    output = c.value_bool;
-                    return false;
-                }
-                if (c.type == VAL_INTEGER) {
-                    token.string = c.string;
-                    output = c.value_int != 0;
-                    return false;
-                }
-                if (c.type == VAL_REAL) {
-                    token.string = c.string;
-                    output = c.value_float != 0;
-                    return false;
-                }
-                return true;
-            }
+        if (size > MAX_ASSEMBLY_STRING_SIZE) {
+            printf("Error: input assembly is too long (%d characters). Max size is %d characters.\n", size, MAX_ASSEMBLY_STRING_SIZE);
+            return;
         }
+        string_copy(assembly_string, new_assembly_string);
     }
-    return true;
-}
 
-bool intFromToken(Token& token, int& output) {
-    if (token.type == TOKEN_INTEGER) {
-        output = token.value_int;
-        return false;
-    }
-    if (token.type == TOKEN_REAL) {
-        output = token.value_float;
-        return false;
-    }
-    if (token.type == TOKEN_KEYWORD) {
-        for (int i = 0; i < LUT_const_count; i++) {
-            LUT_const& c = LUT_consts[i];
-            if (str_cmp(token, c.string)) {
-                if (c.type == VAL_BOOLEAN) {
-                    token.string = c.string;
-                    output = c.value_bool;
-                    return false;
-                }
-                if (c.type == VAL_INTEGER) {
-                    token.string = c.string;
-                    output = c.value_int;
-                    return false;
-                }
-                if (c.type == VAL_REAL) {
-                    token.string = c.string;
-                    output = c.value_float;
-                    return false;
-                }
-                return true;
-            }
-        }
-    }
-    return true;
-}
-
-bool realFromToken(Token& token, float& output) {
-    if (token.type == TOKEN_INTEGER) {
-        output = token.value_int;
-        return false;
-    }
-    if (token.type == TOKEN_REAL) {
-        output = token.value_float;
-        return false;
-    }
-    if (token.type == TOKEN_KEYWORD) {
-        for (int i = 0; i < LUT_const_count; i++) {
-            LUT_const& c = LUT_consts[i];
-            if (str_cmp(token, c.string)) {
-                if (c.type == VAL_BOOLEAN) {
-                    token.string = c.string;
-                    output = c.value_bool;
-                    return false;
-                }
-                if (c.type == VAL_INTEGER) {
-                    token.string = c.string;
-                    output = c.value_int;
-                    return false;
-                }
-                if (c.type == VAL_REAL) {
-                    token.string = c.string;
-                    output = c.value_float;
-                    return false;
-                }
-                return true;
-            }
-        }
-    }
-    return true;
-}
-
-// Parse "2.7" into address and bit, where we separate the two with a dot. The bits range from 0 to 7
-bool memoryBitFromToken(Token& token, int& address, int& bit) {
-    if (token.type == TOKEN_INTEGER) { // Expect token "2" to be address 2 at the index 0 by default 
-        address = token.value_int;
-        bit = 0;
-        return false;
-    }
-    float value = 0;
-    bool e_real = realFromToken(token, value);
-    bool isReal = !e_real;
-    if (isReal || token.type == TOKEN_REAL) { // Expect token "2.7" to be address 2 at the index 7
-        // Iterate over the float value and separate the address and bit
-        float addr = (int) value;
-        address = (int) addr;
-        bit = (int) ((value - addr) * 100.0);
-        bit = bit > 65 ? 7 :
-            bit > 55 ? 6 :
-            bit > 45 ? 5 :
-            bit > 35 ? 4 :
-            bit > 25 ? 3 :
-            bit > 15 ? 2 :
-            bit > 5 ? 1 : 0;
-        return false;
-    }
-    return true;
-}
-
-bool labelFromToken(Token& token, int& output) {
-    if (token.type == TOKEN_KEYWORD) {
+    bool add_label(Token& token, int address) {
         for (int i = 0; i < LUT_label_count; i++) {
-            LUT_label& l = LUT_labels[i];
-            if (str_cmp(token, l.string)) {
-                output = l.address;
-                return false;
+            if (str_cmp(LUT_labels[i].string, token.string)) {
+                Serial.print(F("Error: duplicate label. Label ")); token.print(); Serial.print(F(" already exists at ")); Serial.print(token.line); Serial.print(F(":")); Serial.println(token.column);
+                return true;
             }
         }
-    }
-    if (token.type == TOKEN_INTEGER) {
-        output = token.value_int;
-        return false;
-    }
-    return true;
-}
-
-bool buildError(Token token, const char* message) {
-    Serial.print(F(" ERROR: ")); Serial.print(F(message)); Serial.print(F(" -> ")); token.print(); Serial.print(F(" at line ")); Serial.print(token.line); Serial.print(F(":")); Serial.println(token.column);
-    token.highlight();
-    return true;
-}
-
-bool buildErrorSizeLimit(Token token) { return buildError(token, "program size limit reached"); }
-bool buildErrorUnknownToken(Token token) { return buildError(token, "unknown token"); }
-bool buildErrorExpectedInt(Token token) { return buildError(token, "unexpected token, expected integer"); }
-bool buildErrorExpectedFloat(Token token) { return buildError(token, "unexpected token, expected float"); }
-bool buildErrorUnknownLabel(Token token) { return buildError(token, "unknown label"); }
-
-bool build(bool finalPass) {
-    programLineCount = 0;
-    built_bytecode_length = 0;
-    built_bytecode_checksum = 0;
-    for (int i = 0; i < token_count; i++) {
-        Token& token = tokens[i];
-        TokenType type = token.type;
-        if (type == TOKEN_UNKNOWN) return buildErrorUnknownToken(token);
-
-        if (type == TOKEN_LABEL) {
-            if (finalPass) continue;
-            for (int i = 0; i < LUT_label_count; i++) {
-                LUT_label& label = LUT_labels[i];
-                if (str_cmp(token, label.string)) {
-                    label.address = built_bytecode_length;
-                    break;
-                }
-            }
-            continue;
-        }
-
-        // bool value_bool;
-        int label_address = -1;
-        int value_int;
-        float value_float;
-        u8 data_type;
-
-        ProgramLine& line = programLines[programLineCount];
-        line.index = built_bytecode_length;
-        line.refToken = &token;
-        u8* bytecode = line.code;
-
-        bool hasNext = i + 1 < token_count;
-        // [ u8.const , 3 ]
-        Token& token_p1 = hasNext ? tokens[i + 1] : tokens[i];
-        bool e_label = finalPass ? labelFromToken(token_p1, label_address) : false;
-        // bool e_bool = boolFromToken(token_p1, value_bool);
-        bool e_int = intFromToken(token_p1, value_int);
-        bool e_real = realFromToken(token_p1, value_float);
-        /* bool e_data_type = */ typeFromToken(token, data_type);
-
-
-        bool hasThird = i + 2 < token_count;
-        Token& token_p2 = hasThird ? tokens[i + 2] : tokens[i];
-
-        if (type == TOKEN_KEYWORD) {
-            { // Handle flow
-                if (hasNext && (token == "jmp" || token == "jump")) { if (finalPass && e_label) return buildErrorUnknownLabel(token_p1); i++; line.size = InstructionCompiler::push_jmp(bytecode, label_address); _line_push; }
-                if (hasNext && (token == "jmp_if" || token == "jump_if")) { if (finalPass && e_label) return buildErrorUnknownLabel(token_p1); i++; line.size = InstructionCompiler::push_jmp_if(bytecode, label_address); _line_push; }
-                if (hasNext && (token == "jmp_if_not" || token == "jump_if_not")) { if (finalPass && e_label) return buildErrorUnknownLabel(token_p1); i++; line.size = InstructionCompiler::push_jmp_if_not(bytecode, label_address); _line_push; }
-                if (hasNext && token == "call") { if (finalPass && e_label) return buildErrorUnknownLabel(token_p1); i++; line.size = InstructionCompiler::pushCALL(bytecode, label_address); _line_push; }
-                if (hasNext && token == "call_if") { if (finalPass && e_label) return buildErrorUnknownLabel(token_p1); i++; line.size = InstructionCompiler::pushCALL_IF(bytecode, label_address); _line_push; }
-                if (hasNext && token == "call_if_not") { if (finalPass && e_label) return buildErrorUnknownLabel(token_p1); i++; line.size = InstructionCompiler::pushCALL_IF_NOT(bytecode, label_address); _line_push; }
-                if (token == "ret" || token == "return") { line.size = InstructionCompiler::push(bytecode, RET); _line_push; }
-                if (token == "ret_if" || token == "return_if") { line.size = InstructionCompiler::push(bytecode, RET_IF); _line_push; }
-                if (token == "ret_if_not" || token == "return_if_not") { line.size = InstructionCompiler::push(bytecode, RET_IF_NOT); _line_push; }
-                if (token == "nop") { line.size = InstructionCompiler::push(bytecode, NOP); _line_push; }
-            }
-
-            { // Stack operations
-                if (token == "clear") { line.size = InstructionCompiler::push(bytecode, CLEAR); _line_push; }
-            }
-
-            { // Mapped instructions
-                if (token.equals("P_On")) { line.size = InstructionCompiler::push_u8(bytecode, 1); _line_push; } // P_On: "u8.const 1",
-                if (token.equals("P_Off")) { line.size = InstructionCompiler::push_u8(bytecode, 0); _line_push; } // P_Off: "u8.const 0",
-                if (token.equals("P_100ms")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B0, 2); _line_push; } // P_100ms: "u8.readBit 2.0",
-                if (token.equals("P_200ms")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B1, 2); _line_push; } // P_200ms: "u8.readBit 2.1",
-                if (token.equals("P_300ms")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B2, 2); _line_push; } // P_300ms: "u8.readBit 2.2",
-                if (token.equals("P_500ms")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B3, 2); _line_push; } // P_500ms: "u8.readBit 2.3",
-                if (token.equals("P_1s")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B4, 2); _line_push; } // P_1s: "u8.readBit 2.4",
-                if (token.equals("P_2s")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B5, 2); _line_push; } // P_2s: "u8.readBit 2.5",
-                if (token.equals("P_5s")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B6, 2); _line_push; } // P_5s: "u8.readBit 2.6",
-                if (token.equals("P_10s")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B7, 2); _line_push; } // P_10s: "u8.readBit 2.7",
-                if (token.equals("P_30s")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B0, 3); _line_push; } // P_30s: "u8.readBit 3.0",
-                if (token.equals("P_1min")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B1, 3); _line_push; } // P_1min: "u8.readBit 3.1",
-                if (token.equals("P_2min")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B2, 3); _line_push; } // P_2min: "u8.readBit 3.2",
-                if (token.equals("P_5min")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B3, 3); _line_push; } // P_5min: "u8.readBit 3.3",
-                if (token.equals("P_10min")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B4, 3); _line_push; } // P_10min: "u8.readBit 3.4",
-                if (token.equals("P_15min")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B5, 3); _line_push; } // P_10min: "u8.readBit 3.5",
-                if (token.equals("P_30min")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B6, 3); _line_push; } // P_30min: "u8.readBit 3.6",
-                if (token.equals("P_1hr")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B7, 3); _line_push; } // P_1hr: "u8.readBit 3.7",
-                if (token.equals("P_2hr")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B0, 4); _line_push; } // P_2hr: "u8.readBit 4.0",
-                if (token.equals("P_3hr")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B1, 4); _line_push; } // P_3hr: "u8.readBit 4.1",
-                if (token.equals("P_4hr")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B2, 4); _line_push; } // P_4hr: "u8.readBit 4.2",
-                if (token.equals("P_5hr")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B3, 4); _line_push; } // P_5hr: "u8.readBit 4.3",
-                if (token.equals("P_6hr")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B4, 4); _line_push; } // P_6hr: "u8.readBit 4.4",
-                if (token.equals("P_12hr")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B5, 4); _line_push; } // P_12hr: "u8.readBit 4.5",
-                if (token.equals("P_1day")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B6, 4); _line_push; } // P_1day: "u8.readBit 4.6",
-                
-                if (token.equals("S_100ms")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B0, 5); _line_push; } // P_100ms: "u8.readBit 2.0",
-                if (token.equals("S_200ms")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B1, 5); _line_push; } // P_200ms: "u8.readBit 2.1",
-                if (token.equals("S_300ms")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B2, 5); _line_push; } // P_300ms: "u8.readBit 2.2",
-                if (token.equals("S_500ms")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B3, 5); _line_push; } // P_500ms: "u8.readBit 2.3",
-                if (token.equals("S_1s")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B4, 5); _line_push; } // P_1s: "u8.readBit 2.4",
-                if (token.equals("S_2s")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B5, 5); _line_push; } // P_2s: "u8.readBit 2.5",
-                if (token.equals("S_5s")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B6, 5); _line_push; } // P_5s: "u8.readBit 2.6",
-                if (token.equals("S_10s")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B7, 5); _line_push; } // P_10s: "u8.readBit 2.7",
-                if (token.equals("S_30s")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B0, 6); _line_push; } // P_30s: "u8.readBit 3.0",
-                if (token.equals("S_1min")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B1, 6); _line_push; } // P_1min: "u8.readBit 3.1",
-                if (token.equals("S_2min")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B2, 6); _line_push; } // P_2min: "u8.readBit 3.2",
-                if (token.equals("S_5min")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B3, 6); _line_push; } // P_5min: "u8.readBit 3.3",
-                if (token.equals("S_10min")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B4, 6); _line_push; } // P_10min: "u8.readBit 3.4",
-                if (token.equals("S_15min")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B5, 6); _line_push; } // P_10min: "u8.readBit 3.5",
-                if (token.equals("S_30min")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B6, 6); _line_push; } // P_30min: "u8.readBit 3.6",
-                if (token.equals("S_1hr")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B7, 6); _line_push; } // P_1hr: "u8.readBit 3.7",
-            }
-
-            { // Handle Bit operations (PLC specific)
-
-                if (data_type) {
-                    PLCRuntimeInstructionSet type = (PLCRuntimeInstructionSet) data_type;
-                    if (type == type_u8) {
-
-                        // Stack operations
-                        PLCRuntimeInstructionSet stack_bit_task = (PLCRuntimeInstructionSet) 0;
-                        if (!stack_bit_task && token.endsWith(".get")) stack_bit_task = GET_X8_B0; // READ BIT FROM BYTE
-                        if (!stack_bit_task && token.endsWith(".set")) stack_bit_task = SET_X8_B0; // SET BIT IN BYTE
-                        if (!stack_bit_task && token.endsWith(".rset")) stack_bit_task = RSET_X8_B0; // RESET BIT IN BYTE
-                        if (stack_bit_task) {
-                            if (e_int) return buildErrorExpectedInt(token_p1); i++;
-                            if (value_int < 0 || value_int > 7) return buildError(token_p1, "bit value out of range for 8-bit type");
-                            stack_bit_task = (PLCRuntimeInstructionSet) ((int) stack_bit_task + value_int);
-                            line.size = InstructionCompiler::push(bytecode, stack_bit_task); _line_push;
-                        }
-
-                        if (token == "u8.and") { line.size = InstructionCompiler::push(bytecode, LOGIC_AND); _line_push; }
-                        if (token == "u8.or") { line.size = InstructionCompiler::push(bytecode, LOGIC_OR); _line_push; }
-                        if (token == "u8.xor") { line.size = InstructionCompiler::push(bytecode, LOGIC_XOR); _line_push; }
-                        if (token == "u8.not") { line.size = InstructionCompiler::push(bytecode, LOGIC_NOT); _line_push; }
-
-                        // Direct memory read/write
-                        PLCRuntimeInstructionSet mem_bit_task = (PLCRuntimeInstructionSet) 0;
-                        if (!mem_bit_task && token.includes(".writeBitInv")) mem_bit_task = WRITE_INV_X8_B0; // WRITE_INV_X8 (INVERT)
-                        if (!mem_bit_task && token.includes(".writeBitOff")) mem_bit_task = WRITE_R_X8_B0; // WRITE_R_X8 (RESET)
-                        if (!mem_bit_task && token.includes(".writeBitOn")) mem_bit_task = WRITE_S_X8_B0; // WRITE_S_X8 (SET)
-                        if (!mem_bit_task && token.includes(".writeBit")) mem_bit_task = WRITE_X8_B0; // WRITE_X8
-                        if (!mem_bit_task && token.includes(".readBit")) mem_bit_task = READ_X8_B0; // READ_X8
-                        if (mem_bit_task) {
-                            if (e_int) return buildErrorExpectedInt(token_p1); i++;
-                            int address, bit;
-                            bool e_membit = memoryBitFromToken(token_p1, address, bit);
-                            if (e_membit) return buildError(token_p1, "unexpected token, expected bit representation");
-                            if (bit < 0 || bit > 7) return buildError(token_p1, "bit value out of range for 8-bit type");
-                            mem_bit_task = (PLCRuntimeInstructionSet) ((int) mem_bit_task + bit);
-                            line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, mem_bit_task, value_int); _line_push;
-                        }
-                    }
-                }
-            }
-
-            { // Handle data type operations
-                if (data_type) {
-                    PLCRuntimeInstructionSet type = (PLCRuntimeInstructionSet) data_type;
-                    if (hasNext && token.endsWith(".const")) {
-                        if (type == type_pointer) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_pointer(bytecode, value_int); _line_push; }
-                        if (type == type_bool) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_bool(bytecode, value_int != 0); _line_push; }
-                        if (type == type_u8) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_u8(bytecode, value_int); _line_push; }
-                        if (type == type_u16) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_u16(bytecode, value_int); _line_push; }
-                        if (type == type_u32) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_u32(bytecode, value_int); _line_push; }
-                        if (type == type_u64) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_u64(bytecode, value_int); _line_push; }
-                        if (type == type_i8) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_i8(bytecode, value_int); _line_push; }
-                        if (type == type_i16) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_i16(bytecode, value_int); _line_push; }
-                        if (type == type_i32) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_i32(bytecode, value_int); _line_push; }
-                        if (type == type_i64) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_i64(bytecode, value_int); _line_push; }
-                        if (type == type_f32) { if (e_real) return buildErrorExpectedFloat(token_p1); i++; line.size = InstructionCompiler::push_f32(bytecode, value_float); _line_push; }
-                        if (type == type_f64) { if (e_real) return buildErrorExpectedFloat(token_p1); i++; line.size = InstructionCompiler::push_f64(bytecode, value_float); _line_push; }
-                        Serial.print(F("Error: unknown data type ")); token.print(); Serial.print(F(" at ")); Serial.print(token.line); Serial.print(F(":")); Serial.println(token.column);
-                        return true;
-                    }
-                    // if (hasNext && token.endsWith(".load")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::pushGET(bytecode, value_int, type); _line_push; }
-                    // if (hasNext && token.endsWith(".store")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::pushPUT(bytecode, value_int, type); _line_push; }
-                    if (hasNext && token.endsWith(".load")) { line.size = InstructionCompiler::push_load(bytecode, type); _line_push; }
-                    if (hasNext && token.endsWith(".move")) { line.size = InstructionCompiler::push_move(bytecode, type); _line_push; }
-                    if (hasNext && token.endsWith(".move_copy")) { line.size = InstructionCompiler::push_move_copy(bytecode, type); _line_push; }
-                    if (hasNext && token.endsWith(".copy")) { line.size = InstructionCompiler::push_copy(bytecode, type); _line_push; }
-                    // if (hasNext && token.endsWith(".swap")) { line.size = InstructionCompiler::push_swap(bytecode, type); _line_push; }
-                    if (hasNext && token.endsWith(".drop")) { line.size = InstructionCompiler::push_drop(bytecode, type); _line_push; }
-                    if (token.endsWith(".cmp_lt")) { line.size = InstructionCompiler::push(bytecode, CMP_LT, type); _line_push; }
-                    if (token.endsWith(".cmp_gt")) { line.size = InstructionCompiler::push(bytecode, CMP_GT, type); _line_push; }
-                    if (token.endsWith(".cmp_eq")) { line.size = InstructionCompiler::push(bytecode, CMP_EQ, type); _line_push; }
-                    if (token.endsWith(".cmp_neq")) { line.size = InstructionCompiler::push(bytecode, CMP_NEQ, type); _line_push; }
-                    if (token.endsWith(".cmp_gte")) { line.size = InstructionCompiler::push(bytecode, CMP_GTE, type); _line_push; }
-                    if (token.endsWith(".cmp_lte")) { line.size = InstructionCompiler::push(bytecode, CMP_LTE, type); _line_push; }
-
-                    if (token.endsWith(".add")) { line.size = InstructionCompiler::push(bytecode, ADD, type); _line_push; }
-                    if (token.endsWith(".sub")) { line.size = InstructionCompiler::push(bytecode, SUB, type); _line_push; }
-                    if (token.endsWith(".mul")) { line.size = InstructionCompiler::push(bytecode, MUL, type); _line_push; }
-                    if (token.endsWith(".div")) { line.size = InstructionCompiler::push(bytecode, DIV, type); _line_push; }
-                    if (token.endsWith(".mod")) { line.size = InstructionCompiler::push(bytecode, MOD, type); _line_push; }
-                    if (token.endsWith(".pow")) { line.size = InstructionCompiler::push(bytecode, POW, type); _line_push; }
-                    if (token.endsWith(".sqrt")) { line.size = InstructionCompiler::push(bytecode, SQRT, type); _line_push; }
-                    if (token.endsWith(".neg")) { line.size = InstructionCompiler::push(bytecode, NEG, type); _line_push; }
-                    if (token.endsWith(".abs")) { line.size = InstructionCompiler::push(bytecode, ABS, type); _line_push; }
-                    if (token.endsWith(".sin")) { line.size = InstructionCompiler::push(bytecode, SIN, type); _line_push; }
-                    if (token.endsWith(".cos")) { line.size = InstructionCompiler::push(bytecode, COS, type); _line_push; }
-                }
+        for (int i = 0; i < illegal_keywords_count; i++) {
+            if (str_cmp(token.string, illegal_keywords[i])) {
+                Serial.print(F("Error: illegal label. Label ")); token.print(); Serial.print(F(" is illegal at ")); Serial.print(token.line); Serial.print(F(":")); Serial.println(token.column);
+                return true;
             }
         }
-
-        // [cvt , keyword , keyword]
-        if (hasThird) {
-            u8 type_1;
-            u8 type_2;
-            bool e_dataType1 = typeFromToken(token_p1, type_1);
-            bool e_dataType2 = typeFromToken(token_p2, type_2);
-            if (token == "cvt") { // Convert from one type to another
-                if (e_dataType1) return e_dataType1; i++;
-                if (e_dataType2) return e_dataType2; i++;
-                if (type_1 == type_2) continue; // No need to convert if types are the same
-                line.size = InstructionCompiler::push_cvt(bytecode, (PLCRuntimeInstructionSet) type_1, (PLCRuntimeInstructionSet) type_2);
-                _line_push;
-            }
-            if (token == "swap") { // Swap two values on the stack of any combination of types
-                if (e_dataType1) return e_dataType1; i++;
-                if (e_dataType2) return e_dataType2; i++;
-                line.size = InstructionCompiler::push_swap(bytecode, (PLCRuntimeInstructionSet) type_1, (PLCRuntimeInstructionSet) type_2);
-                _line_push;
-
-            }
-        }
-
-        // if (type == TOKEN_KEYWORD && token == "u8.loadI") {
-        //     if (!hasNext || !hasThird) return buildError(token_p1, "requires numeric parameter");
-        //     bool nextHasDot = str_includes(token_p1, ".");
-        //     i += 1;
-        // }
-
-        if (type == TOKEN_KEYWORD && token == "exit") {
-            line.size = InstructionCompiler::push(bytecode, EXIT);
-            _line_push;
-        }
-
-        return buildErrorUnknownToken(token);
-    }
-    for (int i = 0; i < LUT_label_count; i++) {
-        LUT_label& label = LUT_labels[i];
-        if (label.address == -1) {
-            Serial.print(F("Error: label ")); label.string.print(); Serial.print(F(" is not defined"));
+        if (LUT_label_count >= MAX_NUM_OF_TOKENS) {
+            Serial.print(F("Error: too many labels. Max number of labels is")); Serial.println(MAX_NUM_OF_TOKENS);
             return true;
         }
+        LUT_labels[LUT_label_count].string = token.string;
+        LUT_labels[LUT_label_count].address = -1;
+        LUT_label_count++;
+        return false;
     }
-    return false;
-}
 
-
-WASM_EXPORT void loadAssembly() {
-    int size = 0;
-    streamRead(assembly_string, size, MAX_ASSEMBLY_STRING_SIZE);
-}
-
-
-WASM_EXPORT void logBytecode() {
-    Serial.print(F("Bytecode checksum ")); print_hex(built_bytecode_checksum); Serial.print(F(", ")); Serial.print(built_bytecode_length); Serial.println(F(" bytes:"));
-    for (int i = 0; i < built_bytecode_length; i++) {
-        u8 byte = built_bytecode[i]; // Format it as hex
-        char c1, c2;
-        byteToHex(byte, c1, c2);
-        Serial.print(F(" ")); Serial.print(c1); Serial.print(c2);
-    }
-    Serial.println();
-}
-
-int num_of_compile_runs = 0;
-WASM_EXPORT bool compileAssembly(bool debug = true) {
-    num_of_compile_runs++;
-    if (num_of_compile_runs == 1) debug = true;
-    long total = millis();
-    if (num_of_compile_runs == 1) {
-        VovkPLCRuntime::splash();
-    }
-    if (debug) Serial.println(F("VovkPLCRuntime - PLCASM Compiler v1.0"));
-    if (debug) Serial.print(F("Compiling assembly to bytecode "));
-    bool error = false;
-    if (debug) Serial.print(F("."));
-    long t1 = millis();
-    error = tokenize();
-    t1 = millis() - t1;
-    if (error) { Serial.println(F("Failed at tokenization"));  return error; }
-
-    // if (token_count > 0) {
-    //     Serial.print(F("Tokens ")); Serial.print(token_count); Serial.println(F(":"));
-    //     for (int i = 0; i < token_count; i++) {
-    //         Token& token = tokens[i];
-    //         TokenType type = token.type;
-    //         Serial.print(F("    "));
-    //         fill(' ', 4 - Serial.print(i));
-    //         int s = Serial.print(F(" (")) + Serial.print(token.line) + Serial.print(F(":")) + Serial.print(token.column) + Serial.print(F(") "));
-    //         fill(' ', 10 - s);
-    //         Serial.print(F(" "));
-    //         fill(' ', 12 - printTokenType(type));
-    //         token.print();
-    //         Serial.println();
-    //     }
-    // } else Serial.println(F("No tokens"));
-
-    if (debug) Serial.print(F("."));
-    t1 = millis();
-    error = build(false); // First pass
-    t1 = millis() - t1;
-    if (error) { Serial.println(F("Failed at building"));  return error; }
-
-
-    if (debug) Serial.print(F("."));
-    t1 = millis();
-    error = build(true); // Second pass to link labels
-    t1 = millis() - t1;
-    if (error) { Serial.println(F("Failed at linking"));  return error; }
-
-    total = millis() - total;
-    if (debug) { Serial.print(F(" finished in ")); Serial.print(total); Serial.println(F(" ms")); }
-
-    if (debug) {
-        if (LUT_label_count > 0) {
-            Serial.print(F("Labels ")); Serial.print(LUT_label_count); Serial.println(F(":"));
-            for (int i = 0; i < LUT_label_count; i++) {
-                LUT_label& label = LUT_labels[i];
-                Serial.print(F("    ")); label.string.print(); Serial.print(F(" = ")); Serial.println(label.address);
+    bool add_const(Token& keyword, Token& value, int address) {
+        for (int i = 0; i < LUT_const_count; i++) {
+            if (str_cmp(LUT_consts[i].string, keyword.string)) {
+                Serial.print(F("Error: duplicate const. Const ")); keyword.print(); Serial.print(F(" already exists at ")); Serial.print(keyword.line); Serial.print(F(":")); Serial.println(keyword.column);
+                return true;
             }
-        } else Serial.println(F("No labels"));
+        }
+        for (int i = 0; i < illegal_keywords_count; i++) {
+            if (str_cmp(keyword.string, illegal_keywords[i])) {
+                Serial.print(F("Error: illegal const. Const ")); keyword.print(); Serial.print(F(" is illegal at ")); Serial.print(keyword.line); Serial.print(F(":")); Serial.println(keyword.column);
+                return true;
+            }
+        }
+        if (LUT_const_count >= MAX_NUM_OF_TOKENS) {
+            Serial.print(F("Error: too many consts. Max number of consts is")); Serial.println(MAX_NUM_OF_TOKENS);
+            return true;
+        }
+        LUT_consts[LUT_const_count].string = keyword.string;
+        LUT_consts[LUT_const_count].address = address;
+        LUT_consts[LUT_const_count].value_string = value.string;
+        if (value.type == TOKEN_BOOLEAN) {
+            LUT_consts[LUT_const_count].type = VAL_BOOLEAN;
+            LUT_consts[LUT_const_count].value_bool = value.value_bool;
+        }
+        if (value.type == TOKEN_INTEGER) {
+            LUT_consts[LUT_const_count].type = VAL_INTEGER;
+            LUT_consts[LUT_const_count].value_int = value.value_int;
+        }
+        if (value.type == TOKEN_REAL) {
+            LUT_consts[LUT_const_count].type = VAL_REAL;
+            LUT_consts[LUT_const_count].value_float = value.value_float;
+        }
+        if (value.type == TOKEN_STRING) {
+            LUT_consts[LUT_const_count].type = VAL_STRING;
+            LUT_consts[LUT_const_count].value_string = value.string;
+        }
+        LUT_const_count++;
+        return false;
+    }
 
-        if (LUT_const_count > 0) {
-            Serial.print(F("Consts ")); Serial.print(LUT_const_count); Serial.println(F(":"));
+    bool add_token(char* string, int length) {
+        last_token_is_exit = false;
+        if (token_count_temp >= MAX_NUM_OF_TOKENS) {
+            Serial.print(F("Error: too many tokens. Max number of tokens is")); Serial.println(MAX_NUM_OF_TOKENS);
+            return true;
+        }
+        Token& token = tokens[token_count_temp];
+        token.string.data = string;
+        token.string.length = length;
+        token.length = length;
+        token.line = line;
+        token.column = column;
+        token.parse();
+        if (token.type == TOKEN_UNKNOWN) {
+            Serial.print(F("Error: unknown token ")); token.print(); Serial.print(F(" at ")); Serial.print(line); Serial.print(F(":")); Serial.println(column);
+            return true;
+        }
+        last_token_is_exit = token == "exit";
+        bool isNumber = token.type == TOKEN_INTEGER || token.type == TOKEN_REAL;
+        if (token_count_temp >= 2 && isNumber) { // handle negative numbers
+            Token& p1_token = tokens[token_count_temp - 1];
+            Token& p2_token = tokens[token_count_temp - 2];
+            TokenType p1_type = p1_token.type;
+            TokenType p2_type = p2_token.type;
+            // If [keyword , - , number] then change to [keyword , -number]
+
+            bool skip = false;
+            if (p1_type == TOKEN_OPERATOR && p2_type == TOKEN_KEYWORD) {
+                if (token.type == TOKEN_INTEGER) {
+                    p1_token.value_int = -token.value_int;
+                    p1_token.type = TOKEN_INTEGER;
+                    skip = true;
+                }
+                if (token.type == TOKEN_REAL) {
+                    p1_token.value_float = -token.value_float;
+                    p1_token.type = TOKEN_REAL;
+                    skip = true;
+                }
+            }
+            // Check if [keyword="const" , keyword , bool|int|real] then change to []
+            if (!skip) token_count_temp++; // Work one step back
+
+            if (token_count_temp >= 3) {
+                Token& p1_token = tokens[token_count_temp - 1];
+                Token& p2_token = tokens[token_count_temp - 2];
+                Token& p3_token = tokens[token_count_temp - 3];
+                TokenType p1_type = p1_token.type;
+                TokenType p2_type = p2_token.type;
+                if (str_cmp(p3_token, "const") && p2_type == TOKEN_KEYWORD && (p1_type == TOKEN_BOOLEAN || p1_type == TOKEN_INTEGER || p1_type == TOKEN_REAL)) {
+                    token_count_temp -= 3;
+                    bool error = add_const(p2_token, p1_token, token_count_temp - 1);
+                    if (error) return error;
+                }
+            }
+            return false;
+        }
+        if (token_count_temp >= 2) {
+            Token& p1_token = tokens[token_count_temp - 1];
+            Token& p2_token = tokens[token_count_temp - 2];
+            // If [' , * , '] then change to [string]
+            if (token == "'" && p2_token == "'") {
+                p2_token.type = TOKEN_STRING;
+                p2_token.string = p1_token.string;
+                token_count_temp--;
+                token_count_temp--;
+                return false;
+            }
+        }
+        if (token_count_temp >= 1) {
+            Token& p1_token = tokens[token_count_temp - 1];
+            TokenType p1_type = p1_token.type;
+            // If [keyword , :] then change to [label]
+            if (p1_type == TOKEN_KEYWORD) {
+                if (token.type == TOKEN_OPERATOR && token == ":") {
+                    p1_token.type = TOKEN_LABEL;
+                    bool error = add_label(p1_token, token_count_temp - 1);
+                    if (error) return error;
+                    return false;
+                }
+            }
+        }
+        token_count_temp++;
+        return false;
+    }
+
+    bool add_token_optional(char* string, int length) {
+        if (length == 0) return false;
+        return add_token(string, length);
+    }
+
+    bool tokenize() {
+        LUT_label_count = 0;
+        LUT_const_count = 0;
+        char* token_start = assembly_string;
+        int token_length = 0;
+        int assembly_string_length = string_len(assembly_string);
+        bool in_string = false;
+        bool error = false;
+        for (int i = 0; i < assembly_string_length; i++) {
+            char c = assembly_string[i];
+
+            if (in_string && !(c == '\'' || c == '\n')) {
+                if (token_length == 0) token_start = assembly_string + i;
+                token_length++;
+                continue;
+            }
+
+
+            // c == "/*"
+            bool hasNext = i + 1 < assembly_string_length;
+            char c1 = hasNext ? assembly_string[i + 1] : '\0';
+            bool blockComment = hasNext && c == '/' && c1 == '*';
+            if (blockComment) {
+                error = add_token_optional(token_start, token_length);
+                if (error) return error;
+                bool found = false;
+                i += 2;
+                while (i < assembly_string_length - 1 && !found) {
+                    i++;
+                    c = assembly_string[i];
+                    if (c == '\n') {
+                        line++;
+                        column = 1;
+                    }
+                    if (c != '*') continue;
+                    hasNext = i + 1 < assembly_string_length;
+                    c1 = hasNext ? assembly_string[i + 1] : '\0';
+                    found = c == '*' && c1 == '/';
+                }
+                if (!found || i >= assembly_string_length - 1) {
+                    Serial.print(F("Error: unexpected end of file. Expected '*/' at ")); Serial.print(line); Serial.print(F(":")); Serial.println(column);
+                    return true;
+                }
+                i++;
+                token_start = assembly_string + i + 1;
+                token_length = 0;
+                continue;
+            }
+
+            // c == # || c == /
+            if (c == '#' || c == '/') {
+                error = add_token_optional(token_start, token_length);
+                if (error) return error;
+                while (i < assembly_string_length && assembly_string[i] != '\n') i++;
+                token_start = assembly_string + i + 1;
+                token_length = 0;
+                line++;
+                column = 1;
+                continue;
+            }
+            // c == \n
+            if (c == '\n') {
+                error = add_token_optional(token_start, token_length);
+                if (error) return error;
+                token_start = assembly_string + i + 1;
+                token_length = 0;
+                line++;
+                column = 1;
+                continue;
+            }
+            // c == ' ' || c == '\t' || c == '\r'
+            if (string_chr(lex_ignored, c) != NULL) {
+                error = add_token_optional(token_start, token_length);
+                if (error) return error;
+                column += token_length + 1;
+                token_length = 0;
+                continue;
+            }
+            // c == '(' || c == ')' || c == '=' || c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '&' || c == '|' || c == '^' || c == '~' || c == '!' || c == '<' || c == '>' || c == '?' || c == ':' || c == ',' || c == ';' || c == '[' || c == ']' || c == '{' || c == '}' || c == '\'' || c == '"' || c == '`' || c == '\\'
+            if (string_chr(lex_dividers, c) != NULL) {
+                error = add_token_optional(token_start, token_length);
+                if (error) return error;
+                column += token_length;
+                if (c == '\'') in_string = !in_string;
+                if (c != '"' && c != '=') error = add_token(assembly_string + i, 1);
+                if (error) return error;
+                token_length = 0;
+                column++;
+                continue;
+            }
+            if (token_length == 0) token_start = assembly_string + i;
+            token_length++;
+        }
+        error = add_token_optional(token_start, token_length);
+        if (error) return error;
+        if (!last_token_is_exit) {
+            char* exit_string = new char[5];
+            exit_string[0] = 'e';
+            exit_string[1] = 'x';
+            exit_string[2] = 'i';
+            exit_string[3] = 't';
+            exit_string[4] = '\0';
+            error = add_token(exit_string, 4);
+            if (error) return error;
+        }
+        token_count = token_count_temp;
+        token_count_temp = 0;
+        line = 1;
+        column = 1;
+        return false;
+    }
+
+    bool typeFromToken(Token& token, u8& type) {
+        if (token.type == TOKEN_KEYWORD) {
+            // "u8" = type_u8
+            for (int i = 0; i < data_type_keywords_count; i++) {
+                if (token.startsWith(data_type_keywords[i])) {
+                    switch (i) {
+                        case 0:  type = type_i8; break;
+                        case 1:  type = type_i16; break;
+                        case 2:  type = type_i32; break;
+                        case 3:  type = type_i64; break;
+                        case 4:  type = type_u8; break;
+                        case 5:  type = type_u16; break;
+                        case 6:  type = type_u32; break;
+                        case 7:  type = type_u64; break;
+                        case 8:  type = type_f32; break;
+                        case 9:  type = type_f64; break;
+                        case 10: type = type_bool; break;
+                        case 11: return false; // type = type_string; break; // TODO: Add support for strings
+                        case 12: type = type_bool; break;
+                        case 13: type = type_u8; break;
+                        case 14: type = type_pointer; break;
+                        case 15: type = type_pointer; break;
+                        case 16: type = type_pointer; break;
+                        default: return true;
+                    }
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    int typeSize(u8& type) {
+        switch ((PLCRuntimeInstructionSet) type) {
+            case type_bool: case type_i8: case type_u8: return 8;
+            case type_i16: case type_u16: return 16;
+            case type_i32: case type_u32: case type_f32: return 32;
+            case type_i64: case type_u64: case type_f64: return 64;
+            case type_pointer: return sizeof(MY_PTR_t) * 8;
+            default: return -1;
+        }
+    }
+
+    bool boolFromToken(Token& token, bool& output) {
+        if (token.type == TOKEN_INTEGER) {
+            output = token.value_int != 0;
+            return false;
+        }
+        if (token.type == TOKEN_REAL) {
+            output = token.value_float != 0;
+            return false;
+        }
+        if (token.type == TOKEN_BOOLEAN) {
+            output = token.value_bool;
+            return false;
+        }
+        if (token.type == TOKEN_KEYWORD) {
             for (int i = 0; i < LUT_const_count; i++) {
                 LUT_const& c = LUT_consts[i];
-                Serial.print(F("    ")); c.string.print(); Serial.print(F(" <"));
-                switch (c.type) {
-                    case VAL_BOOLEAN: Serial.print(F("bool")); break;
-                    case VAL_INTEGER: Serial.print(F("int")); break;
-                    case VAL_REAL: Serial.print(F("real")); break;
-                    case VAL_STRING: Serial.print(F("string")); break;
-                    default: Serial.print(F("unknown")); break;
+                if (str_cmp(token, c.string)) {
+                    if (c.type == VAL_BOOLEAN) {
+                        token.string = c.string;
+                        output = c.value_bool;
+                        return false;
+                    }
+                    if (c.type == VAL_INTEGER) {
+                        token.string = c.string;
+                        output = c.value_int != 0;
+                        return false;
+                    }
+                    if (c.type == VAL_REAL) {
+                        token.string = c.string;
+                        output = c.value_float != 0;
+                        return false;
+                    }
+                    return true;
                 }
-                Serial.print(F("> = "));
-                c.value_string.print();
-                Serial.print(F(" => "));
-                if (c.type == VAL_BOOLEAN) Serial.print(c.value_bool ? "true" : "false");
-                if (c.type == VAL_INTEGER) Serial.print(c.value_int);
-                if (c.type == VAL_REAL) Serial.print(c.value_float);
-                if (c.type == VAL_STRING) c.value_string.print();
-                Serial.println();
             }
-        } else Serial.println(F("No consts"));
-
-        // if (token_count > 0) {
-        //     Serial.print(F("Tokens ")); Serial.print(token_count); Serial.println(F(":"));
-        //     for (int i = 0; i < token_count; i++) {
-        //         Token& token = tokens[i];
-        //         TokenType type = token.type;
-        //         Serial.print(F("    "));
-        //         fill(' ', 4 - Serial.print(i));
-        //         int s = Serial.print(F(" (")) + Serial.print(token.line) + Serial.print(F(":")) + Serial.print(token.column) + Serial.print(F(") "));
-        //         fill(' ', 10 - s);
-        //         Serial.print(F(" "));
-        //         fill(' ', 12 - printTokenType(type));
-        //         token.print();
-        //         Serial.println();
-        //     }
-        // } else Serial.println(F("No tokens"));
-
-        // Serial.print(F("Assembly: \"")); Serial.print(assembly_string); Serial.println(F("\""));
-        logBytecode();
+        }
+        return true;
     }
+
+    bool intFromToken(Token& token, int& output) {
+        if (token.type == TOKEN_INTEGER) {
+            output = token.value_int;
+            return false;
+        }
+        if (token.type == TOKEN_REAL) {
+            output = token.value_float;
+            return false;
+        }
+        if (token.type == TOKEN_KEYWORD) {
+            for (int i = 0; i < LUT_const_count; i++) {
+                LUT_const& c = LUT_consts[i];
+                if (str_cmp(token, c.string)) {
+                    if (c.type == VAL_BOOLEAN) {
+                        token.string = c.string;
+                        output = c.value_bool;
+                        return false;
+                    }
+                    if (c.type == VAL_INTEGER) {
+                        token.string = c.string;
+                        output = c.value_int;
+                        return false;
+                    }
+                    if (c.type == VAL_REAL) {
+                        token.string = c.string;
+                        output = c.value_float;
+                        return false;
+                    }
+                    return true;
+                }
+            }
+        }
+        return true;
+    }
+
+    bool realFromToken(Token& token, float& output) {
+        if (token.type == TOKEN_INTEGER) {
+            output = token.value_int;
+            return false;
+        }
+        if (token.type == TOKEN_REAL) {
+            output = token.value_float;
+            return false;
+        }
+        if (token.type == TOKEN_KEYWORD) {
+            for (int i = 0; i < LUT_const_count; i++) {
+                LUT_const& c = LUT_consts[i];
+                if (str_cmp(token, c.string)) {
+                    if (c.type == VAL_BOOLEAN) {
+                        token.string = c.string;
+                        output = c.value_bool;
+                        return false;
+                    }
+                    if (c.type == VAL_INTEGER) {
+                        token.string = c.string;
+                        output = c.value_int;
+                        return false;
+                    }
+                    if (c.type == VAL_REAL) {
+                        token.string = c.string;
+                        output = c.value_float;
+                        return false;
+                    }
+                    return true;
+                }
+            }
+        }
+        return true;
+    }
+
+    // Parse "2.7" into address and bit, where we separate the two with a dot. The bits range from 0 to 7
+    bool memoryBitFromToken(Token& token, int& address, int& bit) {
+        if (token.type == TOKEN_INTEGER) { // Expect token "2" to be address 2 at the index 0 by default 
+            address = token.value_int;
+            bit = 0;
+            return false;
+        }
+        float value = 0;
+        bool e_real = realFromToken(token, value);
+        bool isReal = !e_real;
+        if (isReal || token.type == TOKEN_REAL) { // Expect token "2.7" to be address 2 at the index 7
+            // Iterate over the float value and separate the address and bit
+            float addr = (int) value;
+            address = (int) addr;
+            bit = (int) ((value - addr) * 100.0);
+            bit = bit > 65 ? 7 :
+                bit > 55 ? 6 :
+                bit > 45 ? 5 :
+                bit > 35 ? 4 :
+                bit > 25 ? 3 :
+                bit > 15 ? 2 :
+                bit > 5 ? 1 : 0;
+            return false;
+        }
+        return true;
+    }
+
+    bool labelFromToken(Token& token, int& output) {
+        if (token.type == TOKEN_KEYWORD) {
+            for (int i = 0; i < LUT_label_count; i++) {
+                LUT_label& l = LUT_labels[i];
+                if (str_cmp(token, l.string)) {
+                    output = l.address;
+                    return false;
+                }
+            }
+        }
+        if (token.type == TOKEN_INTEGER) {
+            output = token.value_int;
+            return false;
+        }
+        return true;
+    }
+
+    virtual bool reportError(Token& token, const char* message) {
+        Serial.print(F(" ERROR: ")); Serial.print(F(message)); Serial.print(F(" -> ")); token.print(); Serial.print(F(" at line ")); Serial.print(token.line); Serial.print(F(":")); Serial.println(token.column);
+        token.highlight(assembly_string);
+        return true;
+    }
+
+    bool buildError(Token token, const char* message) { return reportError(token, message); }
+    bool buildErrorSizeLimit(Token token) { return buildError(token, "program size limit reached"); }
+    bool buildErrorUnknownToken(Token token) { return buildError(token, "unknown token"); }
+    bool buildErrorExpectedInt(Token token) { return buildError(token, "unexpected token, expected integer"); }
+    bool buildErrorExpectedFloat(Token token) { return buildError(token, "unexpected token, expected float"); }
+    bool buildErrorUnknownLabel(Token token) { return buildError(token, "unknown label"); }
+
+    bool build(bool finalPass) {
+        programLineCount = 0;
+        built_bytecode_length = 0;
+        built_bytecode_checksum = 0;
+        
+        #define _line_push \
+            address_end = built_bytecode_length + line.size; \
+            if (address_end >= PLCRUNTIME_MAX_PROGRAM_SIZE) return buildErrorSizeLimit(token); \
+            for (int j = 0; j < line.size; j++) { \
+                built_bytecode[built_bytecode_length + j] = bytecode[j]; \
+                crc8_simple(built_bytecode_checksum, bytecode[j]); \
+            } \
+            built_bytecode_length = address_end; \
+            continue;
+
+        int address_end = 0;
+
+        for (int i = 0; i < token_count; i++) {
+            Token& token = tokens[i];
+            TokenType type = token.type;
+            if (type == TOKEN_UNKNOWN) return buildErrorUnknownToken(token);
+
+            if (type == TOKEN_LABEL) {
+                if (finalPass) continue;
+                for (int i = 0; i < LUT_label_count; i++) {
+                    LUT_label& label = LUT_labels[i];
+                    if (str_cmp(token, label.string)) {
+                        label.address = built_bytecode_length;
+                        break;
+                    }
+                }
+                continue;
+            }
+
+            // bool value_bool;
+            int label_address = -1;
+            int value_int;
+            float value_float;
+            u8 data_type;
+
+            ProgramLine& line = programLines[programLineCount];
+            line.index = built_bytecode_length;
+            line.refToken = &token;
+            u8* bytecode = line.code;
+
+            bool hasNext = i + 1 < token_count;
+            // [ u8.const , 3 ]
+            Token& token_p1 = hasNext ? tokens[i + 1] : tokens[i];
+            bool e_label = finalPass ? labelFromToken(token_p1, label_address) : false;
+            // bool e_bool = boolFromToken(token_p1, value_bool);
+            bool e_int = intFromToken(token_p1, value_int);
+            bool e_real = realFromToken(token_p1, value_float);
+            /* bool e_data_type = */ typeFromToken(token, data_type);
+
+
+            bool hasThird = i + 2 < token_count;
+            Token& token_p2 = hasThird ? tokens[i + 2] : tokens[i];
+
+            if (type == TOKEN_KEYWORD) {
+                { // Handle flow
+                    if (hasNext && (token == "jmp" || token == "jump")) { if (finalPass && e_label) return buildErrorUnknownLabel(token_p1); i++; line.size = InstructionCompiler::push_jmp(bytecode, label_address); _line_push; }
+                    if (hasNext && (token == "jmp_if" || token == "jump_if")) { if (finalPass && e_label) return buildErrorUnknownLabel(token_p1); i++; line.size = InstructionCompiler::push_jmp_if(bytecode, label_address); _line_push; }
+                    if (hasNext && (token == "jmp_if_not" || token == "jump_if_not")) { if (finalPass && e_label) return buildErrorUnknownLabel(token_p1); i++; line.size = InstructionCompiler::push_jmp_if_not(bytecode, label_address); _line_push; }
+                    if (hasNext && token == "call") { if (finalPass && e_label) return buildErrorUnknownLabel(token_p1); i++; line.size = InstructionCompiler::pushCALL(bytecode, label_address); _line_push; }
+                    if (hasNext && token == "call_if") { if (finalPass && e_label) return buildErrorUnknownLabel(token_p1); i++; line.size = InstructionCompiler::pushCALL_IF(bytecode, label_address); _line_push; }
+                    if (hasNext && token == "call_if_not") { if (finalPass && e_label) return buildErrorUnknownLabel(token_p1); i++; line.size = InstructionCompiler::pushCALL_IF_NOT(bytecode, label_address); _line_push; }
+                    if (token == "ret" || token == "return") { line.size = InstructionCompiler::push(bytecode, RET); _line_push; }
+                    if (token == "ret_if" || token == "return_if") { line.size = InstructionCompiler::push(bytecode, RET_IF); _line_push; }
+                    if (token == "ret_if_not" || token == "return_if_not") { line.size = InstructionCompiler::push(bytecode, RET_IF_NOT); _line_push; }
+                    if (token == "nop") { line.size = InstructionCompiler::push(bytecode, NOP); _line_push; }
+                }
+
+                { // Stack operations
+                    if (token == "clear") { line.size = InstructionCompiler::push(bytecode, CLEAR); _line_push; }
+                }
+
+                { // Mapped instructions
+                    if (token.equals("P_On")) { line.size = InstructionCompiler::push_u8(bytecode, 1); _line_push; } // P_On: "u8.const 1",
+                    if (token.equals("P_Off")) { line.size = InstructionCompiler::push_u8(bytecode, 0); _line_push; } // P_Off: "u8.const 0",
+                    if (token.equals("P_100ms")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B0, 2); _line_push; } // P_100ms: "u8.readBit 2.0",
+                    if (token.equals("P_200ms")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B1, 2); _line_push; } // P_200ms: "u8.readBit 2.1",
+                    if (token.equals("P_300ms")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B2, 2); _line_push; } // P_300ms: "u8.readBit 2.2",
+                    if (token.equals("P_500ms")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B3, 2); _line_push; } // P_500ms: "u8.readBit 2.3",
+                    if (token.equals("P_1s")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B4, 2); _line_push; } // P_1s: "u8.readBit 2.4",
+                    if (token.equals("P_2s")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B5, 2); _line_push; } // P_2s: "u8.readBit 2.5",
+                    if (token.equals("P_5s")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B6, 2); _line_push; } // P_5s: "u8.readBit 2.6",
+                    if (token.equals("P_10s")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B7, 2); _line_push; } // P_10s: "u8.readBit 2.7",
+                    if (token.equals("P_30s")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B0, 3); _line_push; } // P_30s: "u8.readBit 3.0",
+                    if (token.equals("P_1min")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B1, 3); _line_push; } // P_1min: "u8.readBit 3.1",
+                    if (token.equals("P_2min")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B2, 3); _line_push; } // P_2min: "u8.readBit 3.2",
+                    if (token.equals("P_5min")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B3, 3); _line_push; } // P_5min: "u8.readBit 3.3",
+                    if (token.equals("P_10min")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B4, 3); _line_push; } // P_10min: "u8.readBit 3.4",
+                    if (token.equals("P_15min")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B5, 3); _line_push; } // P_10min: "u8.readBit 3.5",
+                    if (token.equals("P_30min")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B6, 3); _line_push; } // P_30min: "u8.readBit 3.6",
+                    if (token.equals("P_1hr")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B7, 3); _line_push; } // P_1hr: "u8.readBit 3.7",
+                    if (token.equals("P_2hr")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B0, 4); _line_push; } // P_2hr: "u8.readBit 4.0",
+                    if (token.equals("P_3hr")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B1, 4); _line_push; } // P_3hr: "u8.readBit 4.1",
+                    if (token.equals("P_4hr")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B2, 4); _line_push; } // P_4hr: "u8.readBit 4.2",
+                    if (token.equals("P_5hr")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B3, 4); _line_push; } // P_5hr: "u8.readBit 4.3",
+                    if (token.equals("P_6hr")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B4, 4); _line_push; } // P_6hr: "u8.readBit 4.4",
+                    if (token.equals("P_12hr")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B5, 4); _line_push; } // P_12hr: "u8.readBit 4.5",
+                    if (token.equals("P_1day")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B6, 4); _line_push; } // P_1day: "u8.readBit 4.6",
+                    
+                    if (token.equals("S_100ms")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B0, 5); _line_push; } // P_100ms: "u8.readBit 2.0",
+                    if (token.equals("S_200ms")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B1, 5); _line_push; } // P_200ms: "u8.readBit 2.1",
+                    if (token.equals("S_300ms")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B2, 5); _line_push; } // P_300ms: "u8.readBit 2.2",
+                    if (token.equals("S_500ms")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B3, 5); _line_push; } // P_500ms: "u8.readBit 2.3",
+                    if (token.equals("S_1s")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B4, 5); _line_push; } // P_1s: "u8.readBit 2.4",
+                    if (token.equals("S_2s")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B5, 5); _line_push; } // P_2s: "u8.readBit 2.5",
+                    if (token.equals("S_5s")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B6, 5); _line_push; } // P_5s: "u8.readBit 2.6",
+                    if (token.equals("S_10s")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B7, 5); _line_push; } // P_10s: "u8.readBit 2.7",
+                    if (token.equals("S_30s")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B0, 6); _line_push; } // P_30s: "u8.readBit 3.0",
+                    if (token.equals("S_1min")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B1, 6); _line_push; } // P_1min: "u8.readBit 3.1",
+                    if (token.equals("S_2min")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B2, 6); _line_push; } // P_2min: "u8.readBit 3.2",
+                    if (token.equals("S_5min")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B3, 6); _line_push; } // P_5min: "u8.readBit 3.3",
+                    if (token.equals("S_10min")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B4, 6); _line_push; } // P_10min: "u8.readBit 3.4",
+                    if (token.equals("S_15min")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B5, 6); _line_push; } // P_10min: "u8.readBit 3.5",
+                    if (token.equals("S_30min")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B6, 6); _line_push; } // P_30min: "u8.readBit 3.6",
+                    if (token.equals("S_1hr")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B7, 6); _line_push; } // P_1hr: "u8.readBit 3.7",
+                }
+
+                { // Handle Bit operations (PLC specific)
+
+                    if (data_type) {
+                        PLCRuntimeInstructionSet type = (PLCRuntimeInstructionSet) data_type;
+                        if (type == type_u8) {
+
+                            // Stack operations
+                            PLCRuntimeInstructionSet stack_bit_task = (PLCRuntimeInstructionSet) 0;
+                            if (!stack_bit_task && token.endsWith(".get")) stack_bit_task = GET_X8_B0; // READ BIT FROM BYTE
+                            if (!stack_bit_task && token.endsWith(".set")) stack_bit_task = SET_X8_B0; // SET BIT IN BYTE
+                            if (!stack_bit_task && token.endsWith(".rset")) stack_bit_task = RSET_X8_B0; // RESET BIT IN BYTE
+                            if (stack_bit_task) {
+                                if (e_int) return buildErrorExpectedInt(token_p1); i++;
+                                if (value_int < 0 || value_int > 7) return buildError(token_p1, "bit value out of range for 8-bit type");
+                                stack_bit_task = (PLCRuntimeInstructionSet) ((int) stack_bit_task + value_int);
+                                line.size = InstructionCompiler::push(bytecode, stack_bit_task); _line_push;
+                            }
+
+                            if (token == "u8.and") { line.size = InstructionCompiler::push(bytecode, LOGIC_AND); _line_push; }
+                            if (token == "u8.or") { line.size = InstructionCompiler::push(bytecode, LOGIC_OR); _line_push; }
+                            if (token == "u8.xor") { line.size = InstructionCompiler::push(bytecode, LOGIC_XOR); _line_push; }
+                            if (token == "u8.not") { line.size = InstructionCompiler::push(bytecode, LOGIC_NOT); _line_push; }
+
+                            // Direct memory read/write
+                            PLCRuntimeInstructionSet mem_bit_task = (PLCRuntimeInstructionSet) 0;
+                            if (!mem_bit_task && token.includes(".writeBitInv")) mem_bit_task = WRITE_INV_X8_B0; // WRITE_INV_X8 (INVERT)
+                            if (!mem_bit_task && token.includes(".writeBitOff")) mem_bit_task = WRITE_R_X8_B0; // WRITE_R_X8 (RESET)
+                            if (!mem_bit_task && token.includes(".writeBitOn")) mem_bit_task = WRITE_S_X8_B0; // WRITE_S_X8 (SET)
+                            if (!mem_bit_task && token.includes(".writeBit")) mem_bit_task = WRITE_X8_B0; // WRITE_X8
+                            if (!mem_bit_task && token.includes(".readBit")) mem_bit_task = READ_X8_B0; // READ_X8
+                            if (mem_bit_task) {
+                                if (e_int) return buildErrorExpectedInt(token_p1); i++;
+                                int address, bit;
+                                bool e_membit = memoryBitFromToken(token_p1, address, bit);
+                                if (e_membit) return buildError(token_p1, "unexpected token, expected bit representation");
+                                if (bit < 0 || bit > 7) return buildError(token_p1, "bit value out of range for 8-bit type");
+                                mem_bit_task = (PLCRuntimeInstructionSet) ((int) mem_bit_task + bit);
+                                line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, mem_bit_task, value_int); _line_push;
+                            }
+                        }
+                    }
+                }
+
+                { // Handle data type operations
+                    if (data_type) {
+                        PLCRuntimeInstructionSet type = (PLCRuntimeInstructionSet) data_type;
+                        if (hasNext && token.endsWith(".const")) {
+                            if (type == type_pointer) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_pointer(bytecode, value_int); _line_push; }
+                            if (type == type_bool) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_bool(bytecode, value_int != 0); _line_push; }
+                            if (type == type_u8) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_u8(bytecode, value_int); _line_push; }
+                            if (type == type_u16) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_u16(bytecode, value_int); _line_push; }
+                            if (type == type_u32) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_u32(bytecode, value_int); _line_push; }
+                            if (type == type_u64) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_u64(bytecode, value_int); _line_push; }
+                            if (type == type_i8) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_i8(bytecode, value_int); _line_push; }
+                            if (type == type_i16) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_i16(bytecode, value_int); _line_push; }
+                            if (type == type_i32) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_i32(bytecode, value_int); _line_push; }
+                            if (type == type_i64) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::push_i64(bytecode, value_int); _line_push; }
+                            if (type == type_f32) { if (e_real) return buildErrorExpectedFloat(token_p1); i++; line.size = InstructionCompiler::push_f32(bytecode, value_float); _line_push; }
+                            if (type == type_f64) { if (e_real) return buildErrorExpectedFloat(token_p1); i++; line.size = InstructionCompiler::push_f64(bytecode, value_float); _line_push; }
+                            Serial.print(F("Error: unknown data type ")); token.print(); Serial.print(F(" at ")); Serial.print(token.line); Serial.print(F(":")); Serial.println(token.column);
+                            return true;
+                        }
+                        // if (hasNext && token.endsWith(".load")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::pushGET(bytecode, value_int, type); _line_push; }
+                        // if (hasNext && token.endsWith(".store")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::pushPUT(bytecode, value_int, type); _line_push; }
+                        if (hasNext && token.endsWith(".load")) { line.size = InstructionCompiler::push_load(bytecode, type); _line_push; }
+                        if (hasNext && token.endsWith(".move")) { line.size = InstructionCompiler::push_move(bytecode, type); _line_push; }
+                        if (hasNext && token.endsWith(".move_copy")) { line.size = InstructionCompiler::push_move_copy(bytecode, type); _line_push; }
+                        if (hasNext && token.endsWith(".copy")) { line.size = InstructionCompiler::push_copy(bytecode, type); _line_push; }
+                        // if (hasNext && token.endsWith(".swap")) { line.size = InstructionCompiler::push_swap(bytecode, type); _line_push; }
+                        if (hasNext && token.endsWith(".drop")) { line.size = InstructionCompiler::push_drop(bytecode, type); _line_push; }
+                        if (token.endsWith(".cmp_lt")) { line.size = InstructionCompiler::push(bytecode, CMP_LT, type); _line_push; }
+                        if (token.endsWith(".cmp_gt")) { line.size = InstructionCompiler::push(bytecode, CMP_GT, type); _line_push; }
+                        if (token.endsWith(".cmp_eq")) { line.size = InstructionCompiler::push(bytecode, CMP_EQ, type); _line_push; }
+                        if (token.endsWith(".cmp_neq")) { line.size = InstructionCompiler::push(bytecode, CMP_NEQ, type); _line_push; }
+                        if (token.endsWith(".cmp_gte")) { line.size = InstructionCompiler::push(bytecode, CMP_GTE, type); _line_push; }
+                        if (token.endsWith(".cmp_lte")) { line.size = InstructionCompiler::push(bytecode, CMP_LTE, type); _line_push; }
+
+                        if (token.endsWith(".add")) { line.size = InstructionCompiler::push(bytecode, ADD, type); _line_push; }
+                        if (token.endsWith(".sub")) { line.size = InstructionCompiler::push(bytecode, SUB, type); _line_push; }
+                        if (token.endsWith(".mul")) { line.size = InstructionCompiler::push(bytecode, MUL, type); _line_push; }
+                        if (token.endsWith(".div")) { line.size = InstructionCompiler::push(bytecode, DIV, type); _line_push; }
+                        if (token.endsWith(".mod")) { line.size = InstructionCompiler::push(bytecode, MOD, type); _line_push; }
+                        if (token.endsWith(".pow")) { line.size = InstructionCompiler::push(bytecode, POW, type); _line_push; }
+                        if (token.endsWith(".sqrt")) { line.size = InstructionCompiler::push(bytecode, SQRT, type); _line_push; }
+                        if (token.endsWith(".neg")) { line.size = InstructionCompiler::push(bytecode, NEG, type); _line_push; }
+                        if (token.endsWith(".abs")) { line.size = InstructionCompiler::push(bytecode, ABS, type); _line_push; }
+                        if (token.endsWith(".sin")) { line.size = InstructionCompiler::push(bytecode, SIN, type); _line_push; }
+                        if (token.endsWith(".cos")) { line.size = InstructionCompiler::push(bytecode, COS, type); _line_push; }
+                    }
+                }
+            }
+
+            // [cvt , keyword , keyword]
+            if (hasThird) {
+                u8 type_1;
+                u8 type_2;
+                bool e_dataType1 = typeFromToken(token_p1, type_1);
+                bool e_dataType2 = typeFromToken(token_p2, type_2);
+                if (token == "cvt") { // Convert from one type to another
+                    if (e_dataType1) return e_dataType1; i++;
+                    if (e_dataType2) return e_dataType2; i++;
+                    if (type_1 == type_2) continue; // No need to convert if types are the same
+                    line.size = InstructionCompiler::push_cvt(bytecode, (PLCRuntimeInstructionSet) type_1, (PLCRuntimeInstructionSet) type_2);
+                    _line_push;
+                }
+                if (token == "swap") { // Swap two values on the stack of any combination of types
+                    if (e_dataType1) return e_dataType1; i++;
+                    if (e_dataType2) return e_dataType2; i++;
+                    line.size = InstructionCompiler::push_swap(bytecode, (PLCRuntimeInstructionSet) type_1, (PLCRuntimeInstructionSet) type_2);
+                    _line_push;
+
+                }
+            }
+
+            // if (type == TOKEN_KEYWORD && token == "u8.loadI") {
+            //     if (!hasNext || !hasThird) return buildError(token_p1, "requires numeric parameter");
+            //     bool nextHasDot = str_includes(token_p1, ".");
+            //     i += 1;
+            // }
+
+            if (type == TOKEN_KEYWORD && token == "exit") {
+                line.size = InstructionCompiler::push(bytecode, EXIT);
+                _line_push;
+            }
+
+            return buildErrorUnknownToken(token);
+        }
+        for (int i = 0; i < LUT_label_count; i++) {
+            LUT_label& label = LUT_labels[i];
+            if (label.address == -1) {
+                Serial.print(F("Error: label ")); label.string.print(); Serial.print(F(" is not defined"));
+                return true;
+            }
+        }
+        return false;
+    }
+
+
+    void loadAssembly() {
+        int size = 0;
+        streamRead(assembly_string, size, MAX_ASSEMBLY_STRING_SIZE);
+    }
+
+
+    void logBytecode() {
+        Serial.print(F("Bytecode checksum ")); print_hex(built_bytecode_checksum); Serial.print(F(", ")); Serial.print(built_bytecode_length); Serial.println(F(" bytes:"));
+        for (int i = 0; i < built_bytecode_length; i++) {
+            u8 byte = built_bytecode[i]; // Format it as hex
+            char c1, c2;
+            byteToHex(byte, c1, c2);
+            Serial.print(F(" ")); Serial.print(c1); Serial.print(c2);
+        }
+        Serial.println();
+    }
+    
+    // Check if I missed functions: uploadProgram, downloadProgram
+
+    u32 uploadProgram() {
+        for (int i = 0; i < built_bytecode_length; i++) {
+            u8 byte = built_bytecode[i]; // Format it as hex
+            char c1, c2;
+            byteToHex(byte, c1, c2);
+            streamOut(c1);
+            streamOut(c2);
+        }
+        return built_bytecode_length;
+    }
+
+    int downloadProgram(int size, int crc);
+
+    // loadCompiledProgram
+    // Needs access to runtime global? Wait, loadCompiledProgram in original code called runtime.loadProgram
+    // User said: "loadCompiledProgram (from WASM_EXPORT below, implementation needs to be in class to access built_bytecode)."
+    bool loadCompiledProgram(); // Impl needs access to built_bytecode which is member.
+
+    bool compileAssembly(bool debug = true) {
+        num_of_compile_runs++;
+        if (num_of_compile_runs == 1) debug = true;
+        long total = millis();
+        if (num_of_compile_runs == 1) {
+            VovkPLCRuntime::splash();
+        }
+        if (debug) Serial.println(F("VovkPLCRuntime - PLCASM Compiler v1.0"));
+        if (debug) Serial.print(F("Compiling assembly to bytecode "));
+        bool error = false;
+        if (debug) Serial.print(F("."));
+        long t1 = millis();
+        error = tokenize();
+        t1 = millis() - t1;
+        if (error) { Serial.println(F("Failed at tokenization"));  return error; }
+
+        if (debug) Serial.print(F("."));
+        t1 = millis();
+        error = build(false); // First pass
+        t1 = millis() - t1;
+        if (error) { Serial.println(F("Failed at building"));  return error; }
+
+
+        if (debug) Serial.print(F("."));
+        t1 = millis();
+        error = build(true); // Second pass to link labels
+        t1 = millis() - t1;
+        if (error) { Serial.println(F("Failed at linking"));  return error; }
+
+        total = millis() - total;
+        if (debug) { Serial.print(F(" finished in ")); Serial.print(total); Serial.println(F(" ms")); }
+
+        if (debug) {
+            if (LUT_label_count > 0) {
+                Serial.print(F("Labels ")); Serial.print(LUT_label_count); Serial.println(F(":"));
+                for (int i = 0; i < LUT_label_count; i++) {
+                    LUT_label& label = LUT_labels[i];
+                    Serial.print(F("    ")); label.string.print(); Serial.print(F(" = ")); Serial.println(label.address);
+                }
+            } else Serial.println(F("No labels"));
+
+            if (LUT_const_count > 0) {
+                Serial.print(F("Consts ")); Serial.print(LUT_const_count); Serial.println(F(":"));
+                for (int i = 0; i < LUT_const_count; i++) {
+                    LUT_const& c = LUT_consts[i];
+                    Serial.print(F("    ")); c.string.print(); Serial.print(F(" <"));
+                    switch (c.type) {
+                        case VAL_BOOLEAN: Serial.print(F("bool")); break;
+                        case VAL_INTEGER: Serial.print(F("int")); break;
+                        case VAL_REAL: Serial.print(F("real")); break;
+                        case VAL_STRING: Serial.print(F("string")); break;
+                        default: Serial.print(F("unknown")); break;
+                    }
+                    Serial.print(F("> = "));
+                    c.value_string.print();
+                    Serial.print(F(" => "));
+                    if (c.type == VAL_BOOLEAN) Serial.print(c.value_bool ? "true" : "false");
+                    if (c.type == VAL_INTEGER) Serial.print(c.value_int);
+                    if (c.type == VAL_REAL) Serial.print(c.value_float);
+                    if (c.type == VAL_STRING) c.value_string.print();
+                    Serial.println();
+                }
+            } else Serial.println(F("No consts"));
+
+            logBytecode();
+        }
+        return false;
+    }
+};
+
+VovkPLCRuntime runtime;
+
+// Implementation of methods relying on 'runtime'
+bool PLCASMCompiler::loadCompiledProgram() {
+    Serial.printf("Loading program with %d bytes and checksum 0x%02X ...\n", built_bytecode_length, built_bytecode_checksum);
+    runtime.loadProgram(built_bytecode, built_bytecode_length, built_bytecode_checksum);
     return false;
 }
 
-VovkPLCRuntime runtime;
+int PLCASMCompiler::downloadProgram(int size, int crc) {
+    streamRead(downloaded_program, downloaded_program_size, MAX_DOWNLOADED_PROGRAM_SIZE);
+    if (downloaded_program_size != size) return 1;
+    u8 calculated_crc = 0;
+    for (u32 i = 0; i < size; i++) {
+        u8 byte = downloaded_program[i];
+        crc8_simple(calculated_crc, byte);
+    }
+    if (calculated_crc != crc) return 2;
+    runtime.loadProgram(downloaded_program, downloaded_program_size, calculated_crc);
+    return 0;
+}
+
+PLCASMCompiler defaultCompiler;
+
+WASM_EXPORT void loadAssembly() {
+    defaultCompiler.loadAssembly();
+}
+
+WASM_EXPORT void logBytecode() {
+    defaultCompiler.logBytecode();
+}
+
+WASM_EXPORT bool compileAssembly(bool debug = true) {
+    return defaultCompiler.compileAssembly(debug);
+}
 
 WASM_EXPORT void initialize() {
     runtime.initialize();
@@ -1440,9 +1476,7 @@ WASM_EXPORT void printInfo() {
 }
 
 WASM_EXPORT bool loadCompiledProgram() {
-    Serial.printf("Loading program with %d bytes and checksum 0x%02X ...\n", built_bytecode_length, built_bytecode_checksum);
-    runtime.loadProgram(built_bytecode, built_bytecode_length, built_bytecode_checksum);
-    return false;
+    return defaultCompiler.loadCompiledProgram();
 }
 
 WASM_EXPORT void runFullProgramDebug() {
@@ -1460,31 +1494,11 @@ WASM_EXPORT void runFullProgram() {
 }
 
 WASM_EXPORT u32 uploadProgram() {
-    for (u32 i = 0; i < built_bytecode_length; i++) {
-        u8 byte = built_bytecode[i]; // Format it as hex
-        char c1, c2;
-        byteToHex(byte, c1, c2);
-        streamOut(c1);
-        streamOut(c2);
-    }
-    return built_bytecode_length;
+    return defaultCompiler.uploadProgram();
 }
 
-#define MAX_DOWNLOADED_PROGRAM_SIZE 64535
-u8 downloaded_program[MAX_DOWNLOADED_PROGRAM_SIZE];
-int downloaded_program_size = 0;
-
 WASM_EXPORT int downloadProgram(int size, int crc) {
-    streamRead(downloaded_program, downloaded_program_size, MAX_DOWNLOADED_PROGRAM_SIZE);
-    if (downloaded_program_size != size) return 1;
-    u8 calculated_crc = 0;
-    for (u32 i = 0; i < size; i++) {
-        u8 byte = downloaded_program[i];
-        crc8_simple(calculated_crc, byte);
-    }
-    if (calculated_crc != crc) return 2;
-    runtime.loadProgram(downloaded_program, downloaded_program_size, calculated_crc);
-    return 0;
+    return defaultCompiler.downloadProgram(size, crc);
 }
 
 WASM_EXPORT u32 getMemoryArea(u32 address, u32 size) {
@@ -1515,6 +1529,8 @@ WASM_EXPORT u32 writeMemoryByte(u32 address, u8 byte) {
 WASM_EXPORT void external_print(const char* string) {
     Serial.print(string);
 }
+
+void set_assembly_string(char* s) { defaultCompiler.set_assembly_string(s); }
 
 #else
 

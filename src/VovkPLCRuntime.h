@@ -24,3 +24,4 @@
 #include "tools/runtime-lib.h"
 #include "tools/runtime-test.h"
 #include "tools/assembly/plcasm-compiler.h"
+#include "tools/assembly/plcasm-linter.h"
