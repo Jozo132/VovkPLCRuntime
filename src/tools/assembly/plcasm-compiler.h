@@ -528,6 +528,7 @@ const int data_type_keywords_count = sizeof(data_type_keywords) / sizeof(data_ty
 class PLCASMCompiler {
 public:
     char assembly_string[MAX_ASSEMBLY_STRING_SIZE];
+    char auto_exit_string[5]; // Stores "exit" for auto-append
     
     Token tokens[MAX_NUM_OF_TOKENS];
     int token_count = 0;
@@ -563,6 +564,8 @@ public:
         memset(built_bytecode, 0, sizeof(built_bytecode));
         memset(programLines, 0, sizeof(programLines));
         memset(downloaded_program, 0, sizeof(downloaded_program));
+        // Initialize auto_exit_string
+        auto_exit_string[0] = 'e'; auto_exit_string[1] = 'x'; auto_exit_string[2] = 'i'; auto_exit_string[3] = 't'; auto_exit_string[4] = '\0';
         // Default assembly string
         char default_asm[] = R"(
 # This is a comment
@@ -837,13 +840,7 @@ public:
         error = add_token_optional(token_start, token_length);
         if (error) return error;
         if (!last_token_is_exit) {
-            char* exit_string = new char[5];
-            exit_string[0] = 'e';
-            exit_string[1] = 'x';
-            exit_string[2] = 'i';
-            exit_string[3] = 't';
-            exit_string[4] = '\0';
-            error = add_token(exit_string, 4);
+            error = add_token(auto_exit_string, 4);
             if (error) return error;
         }
         token_count = token_count_temp;
