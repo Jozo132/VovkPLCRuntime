@@ -45,16 +45,7 @@ class VovkPLC_class {
     stream_message = ''
     /** @type { Performance } */
     perf
-    millis = 0
-    micros = 0
-    updateTime = () => {
-        this.micros = Math.round(this.perf.now() * 1000)
-        this.millis = Math.round(this.micros * 0.001)
-        if (this.wasm_exports) {
-            this.wasm_exports.setMillis(this.millis)
-            this.wasm_exports.setMicros(this.micros)
-        }
-    }
+    
     /** @type { Uint8Array } */
     crc8_table = new Uint8Array(256)
     crc8_table_loaded = false
@@ -90,7 +81,10 @@ class VovkPLC_class {
             env: {
                 stdout: this.console_print,
                 stderr: this.console_error,
-                streamOut: this.console_stream
+                streamOut: this.console_stream,
+                millis: () => Math.round(this.perf.now()),
+                micros: () => Math.round(this.perf.now() * 1000),
+                // memory: new WebAssembly.Memory({ initial: 256, maximum: 512 }),
             }
         }
         const wasmModule = await WebAssembly.compile(wasmBuffer)
@@ -197,7 +191,7 @@ class VovkPLC_class {
         if (!this.wasm_exports.loadCompiledProgram) throw new Error("'loadCompiledProgram' function not found")
         if (this.wasm_exports.compileAssembly(false)) throw new Error("Failed to compile assembly")
         if (run) {
-            this.updateTime()
+            // this.updateTime()
             this.wasm_exports.loadCompiledProgram()
             this.runDebug()
         }
@@ -225,13 +219,13 @@ class VovkPLC_class {
     run = () => {
         if (!this.wasm_exports) throw new Error("WebAssembly module not initialized")
         if (!this.wasm_exports.run) throw new Error("'runFullProgram' function not found")
-        this.updateTime() // Update millis and micros
+        // this.updateTime() // Update millis and micros
         return this.wasm_exports.run()
     }
     runDebug = () => {
         if (!this.wasm_exports) throw new Error("WebAssembly module not initialized")
         if (!this.wasm_exports.runFullProgramDebug) throw new Error("'runFullProgramDebug' function not found")
-        this.updateTime() // Update millis and micros
+        // this.updateTime() // Update millis and micros
         return this.wasm_exports.runFullProgramDebug()
     }
 

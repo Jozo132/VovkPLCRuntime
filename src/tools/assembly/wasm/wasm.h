@@ -36,40 +36,21 @@
   name
 
 #ifdef __WASM_TIME__
-volatile unsigned long _millis_time = 0;
-volatile unsigned long _micros_time = 0;
-unsigned long millis() { // const millis = () => +performance.now().toFixed(0);
-    return _millis_time;
-}
-unsigned long micros() { // const micros = () => +(performance.now() * 1000).toFixed(0);
-    return _micros_time;
-}
-WASM_EXPORT void setMillis(int ms) {
-    _millis_time = ms;
-}
-WASM_EXPORT void setMicros(int us) {
-    _micros_time = us;
-}
-WASM_EXPORT unsigned long getMillis() {
-    return _millis_time;
-}
-WASM_EXPORT unsigned long getMicros() {
-    return _micros_time;
-}
+
+WASM_IMPORT unsigned long millis(); // const millis = () => +performance.now().toFixed(0);
+WASM_IMPORT unsigned long micros(); // const micros = () => +(performance.now() * 1000).toFixed(0);
 
 // WARNING: these delay functions are blocking and stop the main thread for their duration, use with caution and only when necessary.
 void delay(int ms) {
-    unsigned long t = millis();
-    const unsigned long end = t + ms;
-    while (t < end) {
-        t = millis();
+    unsigned long start = millis();
+    while (millis() - start < ms) {
+        // wait
     }
 }
 void delayMicroseconds(int us) {
-    unsigned long t = micros();
-    const unsigned long end = t + us;
-    while (t < end) {
-        t = micros();
+    unsigned long start = micros();
+    while (micros() - start < us) {
+        // wait
     }
 }
 #else // __WASM_TIME__

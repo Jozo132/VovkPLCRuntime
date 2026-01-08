@@ -21,7 +21,7 @@ const main = async () => {
     try {
         console.log("Running VovkPLCRuntime WebAssembly simulation unit test...") // @ts-ignore
         run_unit_test() // @ts-ignore
-        // for (let i = 0; i < 10; i++) run_custom_test()
+        for (let i = 0; i < 10; i++) run_custom_test()
         message = runtime.readStream()
         console.log("Done.")
     } catch (error) {
