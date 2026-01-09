@@ -44,7 +44,10 @@ jmp undefined_label
 
         // Lint the assembly
         console.log('Linting assembly...')
+        const t_start = performance.now()
         const problems = await runtime.lint(assembly)
+        const t_end = performance.now()
+        console.log(`Linting completed in ${(t_end - t_start).toFixed(2)} ms`)
 
         if (problems.length > 0) {
             console.log('Linting detected errors:')
