@@ -1063,6 +1063,14 @@ public:
     bool buildErrorSizeLimit(Token token) { return buildError(token, "program size limit reached"); }
     bool buildErrorUnknownToken(Token token) { return buildError(token, "unknown token"); }
     bool buildErrorExpectedInt(Token token) { return buildError(token, "unexpected token, expected integer"); }
+    bool buildErrorExpectedIntSameLine(Token& current, Token& next, bool& rewind) {
+        if (next.line != current.line) {
+            rewind = true;
+            return buildError(current, "missing a number in the same line");
+        }
+        rewind = false;
+        return buildErrorExpectedInt(next);
+    }
     bool buildErrorExpectedFloat(Token token) { return buildError(token, "unexpected token, expected float"); }
     bool buildErrorUnknownLabel(Token token) { return buildError(token, "unknown label"); }
 
@@ -1201,7 +1209,12 @@ public:
                             if (!stack_bit_task && token.endsWith(".set")) stack_bit_task = SET_X8_B0; // SET BIT IN BYTE
                             if (!stack_bit_task && token.endsWith(".rset")) stack_bit_task = RSET_X8_B0; // RESET BIT IN BYTE
                             if (stack_bit_task) {
-                                if (e_int) { if (buildErrorExpectedInt(token_p1)) return true; } i++;
+                                if (e_int) {
+                                    bool rewind = false;
+                                    if (buildErrorExpectedIntSameLine(token, token_p1, rewind)) return true;
+                                    if (rewind) continue;
+                                }
+                                i++;
                                 if (value_int < 0 || value_int > 7) { if (buildError(token_p1, "bit value out of range for 8-bit type")) return true; }
                                 stack_bit_task = (PLCRuntimeInstructionSet) ((int) stack_bit_task + value_int);
                                 line.size = InstructionCompiler::push(bytecode, stack_bit_task); _line_push;
@@ -1220,7 +1233,12 @@ public:
                             if (!mem_bit_task && token.includes(".writeBit")) mem_bit_task = WRITE_X8_B0; // WRITE_X8
                             if (!mem_bit_task && token.includes(".readBit")) mem_bit_task = READ_X8_B0; // READ_X8
                             if (mem_bit_task) {
-                                if (e_int) { if (buildErrorExpectedInt(token_p1)) return true; } i++;
+                                if (e_int) {
+                                    bool rewind = false;
+                                    if (buildErrorExpectedIntSameLine(token, token_p1, rewind)) return true;
+                                    if (rewind) continue;
+                                }
+                                i++;
                                 int address, bit;
                                 bool e_membit = memoryBitFromToken(token_p1, address, bit);
                                 if (e_membit) { if (buildError(token_p1, "unexpected token, expected bit representation")) return true; }
@@ -1236,16 +1254,86 @@ public:
                     if (data_type) {
                         PLCRuntimeInstructionSet type = (PLCRuntimeInstructionSet) data_type;
                         if (hasNext && token.endsWith(".const")) {
-                            if (type == type_pointer) { if (e_int) { if (buildErrorExpectedInt(token_p1)) return true; } i++; line.size = InstructionCompiler::push_pointer(bytecode, value_int); _line_push; }
-                            if (type == type_bool) { if (e_int) { if (buildErrorExpectedInt(token_p1)) return true; } i++; line.size = InstructionCompiler::push_bool(bytecode, value_int != 0); _line_push; }
-                            if (type == type_u8) { if (e_int) { if (buildErrorExpectedInt(token_p1)) return true; } i++; line.size = InstructionCompiler::push_u8(bytecode, value_int); _line_push; }
-                            if (type == type_u16) { if (e_int) { if (buildErrorExpectedInt(token_p1)) return true; } i++; line.size = InstructionCompiler::push_u16(bytecode, value_int); _line_push; }
-                            if (type == type_u32) { if (e_int) { if (buildErrorExpectedInt(token_p1)) return true; } i++; line.size = InstructionCompiler::push_u32(bytecode, value_int); _line_push; }
-                            if (type == type_u64) { if (e_int) { if (buildErrorExpectedInt(token_p1)) return true; } i++; line.size = InstructionCompiler::push_u64(bytecode, value_int); _line_push; }
-                            if (type == type_i8) { if (e_int) { if (buildErrorExpectedInt(token_p1)) return true; } i++; line.size = InstructionCompiler::push_i8(bytecode, value_int); _line_push; }
-                            if (type == type_i16) { if (e_int) { if (buildErrorExpectedInt(token_p1)) return true; } i++; line.size = InstructionCompiler::push_i16(bytecode, value_int); _line_push; }
-                            if (type == type_i32) { if (e_int) { if (buildErrorExpectedInt(token_p1)) return true; } i++; line.size = InstructionCompiler::push_i32(bytecode, value_int); _line_push; }
-                            if (type == type_i64) { if (e_int) { if (buildErrorExpectedInt(token_p1)) return true; } i++; line.size = InstructionCompiler::push_i64(bytecode, value_int); _line_push; }
+                            if (type == type_pointer) {
+                                if (e_int) {
+                                    bool rewind = false;
+                                    if (buildErrorExpectedIntSameLine(token, token_p1, rewind)) return true;
+                                    if (rewind) continue;
+                                }
+                                i++; line.size = InstructionCompiler::push_pointer(bytecode, value_int); _line_push;
+                            }
+                            if (type == type_bool) {
+                                if (e_int) {
+                                    bool rewind = false;
+                                    if (buildErrorExpectedIntSameLine(token, token_p1, rewind)) return true;
+                                    if (rewind) continue;
+                                }
+                                i++; line.size = InstructionCompiler::push_bool(bytecode, value_int != 0); _line_push;
+                            }
+                            if (type == type_u8) {
+                                if (e_int) {
+                                    bool rewind = false;
+                                    if (buildErrorExpectedIntSameLine(token, token_p1, rewind)) return true;
+                                    if (rewind) continue;
+                                }
+                                i++; line.size = InstructionCompiler::push_u8(bytecode, value_int); _line_push;
+                            }
+                            if (type == type_u16) {
+                                if (e_int) {
+                                    bool rewind = false;
+                                    if (buildErrorExpectedIntSameLine(token, token_p1, rewind)) return true;
+                                    if (rewind) continue;
+                                }
+                                i++; line.size = InstructionCompiler::push_u16(bytecode, value_int); _line_push;
+                            }
+                            if (type == type_u32) {
+                                if (e_int) {
+                                    bool rewind = false;
+                                    if (buildErrorExpectedIntSameLine(token, token_p1, rewind)) return true;
+                                    if (rewind) continue;
+                                }
+                                i++; line.size = InstructionCompiler::push_u32(bytecode, value_int); _line_push;
+                            }
+                            if (type == type_u64) {
+                                if (e_int) {
+                                    bool rewind = false;
+                                    if (buildErrorExpectedIntSameLine(token, token_p1, rewind)) return true;
+                                    if (rewind) continue;
+                                }
+                                i++; line.size = InstructionCompiler::push_u64(bytecode, value_int); _line_push;
+                            }
+                            if (type == type_i8) {
+                                if (e_int) {
+                                    bool rewind = false;
+                                    if (buildErrorExpectedIntSameLine(token, token_p1, rewind)) return true;
+                                    if (rewind) continue;
+                                }
+                                i++; line.size = InstructionCompiler::push_i8(bytecode, value_int); _line_push;
+                            }
+                            if (type == type_i16) {
+                                if (e_int) {
+                                    bool rewind = false;
+                                    if (buildErrorExpectedIntSameLine(token, token_p1, rewind)) return true;
+                                    if (rewind) continue;
+                                }
+                                i++; line.size = InstructionCompiler::push_i16(bytecode, value_int); _line_push;
+                            }
+                            if (type == type_i32) {
+                                if (e_int) {
+                                    bool rewind = false;
+                                    if (buildErrorExpectedIntSameLine(token, token_p1, rewind)) return true;
+                                    if (rewind) continue;
+                                }
+                                i++; line.size = InstructionCompiler::push_i32(bytecode, value_int); _line_push;
+                            }
+                            if (type == type_i64) {
+                                if (e_int) {
+                                    bool rewind = false;
+                                    if (buildErrorExpectedIntSameLine(token, token_p1, rewind)) return true;
+                                    if (rewind) continue;
+                                }
+                                i++; line.size = InstructionCompiler::push_i64(bytecode, value_int); _line_push;
+                            }
                             if (type == type_f32) { if (e_real) { if (buildErrorExpectedFloat(token_p1)) return true; } i++; line.size = InstructionCompiler::push_f32(bytecode, value_float); _line_push; }
                             if (type == type_f64) { if (e_real) { if (buildErrorExpectedFloat(token_p1)) return true; } i++; line.size = InstructionCompiler::push_f64(bytecode, value_float); _line_push; }
                             Serial.print(F("Error: unknown data type ")); token.print(); Serial.print(F(" at ")); Serial.print(token.line); Serial.print(F(":")); Serial.println(token.column);
