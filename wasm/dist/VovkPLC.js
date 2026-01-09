@@ -1,8 +1,8 @@
 // @ts-check
-"use strict"
+'use strict'
 
-/** 
- * @typedef {{ 
+/**
+ * @typedef {{
  *     initialize: () => void
  *     printInfo: () => void
  *     streamIn: (char: number) => boolean
@@ -34,9 +34,9 @@
  *     lint_get_problem_count: () => number
  *     lint_get_problems_pointer: () => number
  * }} VovkPLCExportTypes
-*/
+ */
 
-/** @typedef */// @ts-ignore
+/** @typedef */ // @ts-ignore
 class VovkPLC_class {
     /** @type { WebAssembly.Instance | null } */
     wasm = null
@@ -44,12 +44,13 @@ class VovkPLC_class {
     wasm_exports
     wasmImports
     running = false
+    silent = false
     console_message = ''
     error_message = ''
     stream_message = ''
     /** @type { Performance } */
     perf
-    
+
     /** @type { Uint8Array } */
     crc8_table = new Uint8Array(256)
     crc8_table_loaded = false
@@ -57,14 +58,16 @@ class VovkPLC_class {
     stdout_callback = console.log
     stderr_callback = console.error
 
-    constructor(wasm_path = '') { this.wasm_path = wasm_path }
+    constructor(wasm_path = '') {
+        this.wasm_path = wasm_path
+    }
 
     initialize = async (wasm_path = '', debug = false) => {
-        wasm_path = wasm_path || this.wasm_path || "/dist/VovkPLC.wasm" // "/wasm_test_cases/string_alloc.wasm"
+        wasm_path = wasm_path || this.wasm_path || '/dist/VovkPLC.wasm' // "/wasm_test_cases/string_alloc.wasm"
         this.wasm_path = wasm_path
         if (this.running && this.wasm) return this
         this.running = true
-        if (debug) console.log("Starting up...")
+        if (debug) console.log('Starting up...')
         /** @type { ArrayBuffer | Buffer } */
         let wasmBuffer
         // Browser environment
@@ -72,13 +75,14 @@ class VovkPLC_class {
             this.perf = window.performance
             const wasmFile = await fetch(wasm_path)
             wasmBuffer = await wasmFile.arrayBuffer()
-        } else { // Node.js environment
+        } else {
+            // Node.js environment
             // @ts-ignore
             this.perf = (await import('perf_hooks')).performance
-            const fs = await import("fs")
-            const path = await import("path")
+            const fs = await import('fs')
+            const path = await import('path')
             const __dirname = path.resolve(path.dirname(''), '../')
-            const wp = path.join(__dirname, "dist/VovkPLC.wasm")
+            const wp = path.join(__dirname, 'dist/VovkPLC.wasm')
             wasmBuffer = fs.readFileSync(wp)
         }
         this.wasmImports = {
@@ -89,17 +93,17 @@ class VovkPLC_class {
                 millis: () => Math.round(this.perf.now()),
                 micros: () => Math.round(this.perf.now() * 1000),
                 // memory: new WebAssembly.Memory({ initial: 256, maximum: 512 }),
-            }
+            },
         }
         const wasmModule = await WebAssembly.compile(wasmBuffer)
         const wasmInstance = await WebAssembly.instantiate(wasmModule, this.wasmImports)
         if (typeof window !== 'undefined') Object.assign(window, wasmInstance.exports) // Assign all exports to the global scope
-        if (!wasmInstance) throw new Error("Failed to instantiate WebAssembly module")
+        if (!wasmInstance) throw new Error('Failed to instantiate WebAssembly module')
         this.wasm = wasmInstance // @ts-ignore
-        this.wasm_exports = { ...wasmInstance.exports }
-        if (!this.wasm_exports) throw new Error("WebAssembly module exports not found")
+        this.wasm_exports = {...wasmInstance.exports}
+        if (!this.wasm_exports) throw new Error('WebAssembly module exports not found')
         this.wasm_exports.initialize()
-        this.wasm_exports.downloadAssembly = (assembly) => this.downloadAssembly(assembly)
+        this.wasm_exports.downloadAssembly = assembly => this.downloadAssembly(assembly)
         this.wasm_exports.extractProgram = () => this.extractProgram()
         const required_methods = ['printInfo', 'run_unit_test', 'run_custom_test', 'get_free_memory', 'doNothing', 'compileAssembly', 'loadCompiledProgram', 'runFullProgramDebug', 'runFullProgram', 'uploadProgram', 'getMemoryArea', 'writeMemoryByte']
         for (let i = 0; i < required_methods.length; i++) {
@@ -109,8 +113,8 @@ class VovkPLC_class {
         return this
     }
 
-    /** 
-     * @typedef {{ 
+    /**
+     * @typedef {{
      *     type: 'error' | 'warning' | 'info',
      *     line: number,
      *     column: number,
@@ -120,85 +124,107 @@ class VovkPLC_class {
      * }} LinterProblem
      */
 
-    /** @param { string } assembly * @returns { LinterProblem[] } */
-    lint = (assembly) => {
-        if (!this.wasm_exports) throw new Error("WebAssembly module not initialized")
+    /** @param { string } assembly * @param { boolean } [debug=false] * @returns { LinterProblem[] } */
+    lint = (assembly, debug = false) => {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         if (!this.wasm_exports.lint_load_assembly) throw new Error("'lint_load_assembly' function not found")
         if (!this.wasm_exports.lint_run) throw new Error("'lint_run' function not found")
         if (!this.wasm_exports.lint_get_problem_count) throw new Error("'lint_get_problem_count' function not found")
         if (!this.wasm_exports.lint_get_problems_pointer) throw new Error("'lint_get_problems_pointer' function not found")
 
-        // 1. Download assembly to Linter
-        let ok = true
-        for (let i = 0; i < assembly.length && ok; i++) {
-            const char = assembly[i]
-            const c = char.charCodeAt(0)
-            ok = this.wasm_exports.streamIn(c)
+        const wasSilent = this.silent
+
+        // Temporarily disable stream output unless debug is enabled
+        if (!debug) {
+            this.setSilent(true)
         }
-        if (!ok) throw new Error("Failed to stream assembly")
-        this.wasm_exports.lint_load_assembly()
-        
-        // 2. Run Linter
-        this.wasm_exports.lint_run()
-        
-        // 3. Get results
-        const count = this.wasm_exports.lint_get_problem_count()
-        if (count === 0) return []
-        
-        const pointer = this.wasm_exports.lint_get_problems_pointer()
-        const problems = []
-        
-        // Struct size = 84 bytes  (4+4+4+4+64+4)
-        const struct_size = 84
-        
-        // Access memory directly
-        const memoryBuffer = this.wasm_exports.memory.buffer
-        const view = new DataView(memoryBuffer)
-        
-        for (let i = 0; i < count; i++) {
-            const offset = pointer + (i * struct_size)
-            const type_int = view.getInt32(offset + 0, true)
-            const line = view.getInt32(offset + 4, true)
-            const column = view.getInt32(offset + 8, true)
-            const length = view.getInt32(offset + 12, true)
-            
-            // message is 64 bytes at offset 16
-            let message = ""
-            for (let j = 0; j < 64; j++) {
-                const charCode = view.getUint8(offset + 16 + j)
-                if (charCode === 0) break;
-                message += String.fromCharCode(charCode)
+
+        try {
+            // 1. Download assembly to Linter
+            let ok = true
+            for (let i = 0; i < assembly.length && ok; i++) {
+                const char = assembly[i]
+                const c = char.charCodeAt(0)
+                ok = this.wasm_exports.streamIn(c)
             }
-            
-            const token_ptr = view.getInt32(offset + 80, true)
-            let token = ""
-            if (token_ptr !== 0 && length > 0) {
-                 const token_buf = new Uint8Array(memoryBuffer, token_ptr, length)
-                 token = new TextDecoder().decode(token_buf)
+            if (!ok) throw new Error('Failed to stream assembly')
+            this.wasm_exports.lint_load_assembly()
+
+            // 2. Run Linter
+            this.wasm_exports.lint_run()
+
+            // 3. Get results
+            const count = this.wasm_exports.lint_get_problem_count()
+            if (count === 0) return []
+
+            const pointer = this.wasm_exports.lint_get_problems_pointer()
+            /** @type { LinterProblem[] } */
+            const problems = []
+
+            // Struct size = 84 bytes  (4+4+4+4+64+4)
+            const struct_size = 84
+
+            // Access memory directly
+            const memoryBuffer = this.wasm_exports.memory.buffer
+            const view = new DataView(memoryBuffer)
+
+            for (let i = 0; i < count; i++) {
+                const offset = pointer + i * struct_size
+                const type_int = view.getInt32(offset + 0, true)
+                const line = view.getInt32(offset + 4, true)
+                const column = view.getInt32(offset + 8, true)
+                const length = view.getInt32(offset + 12, true)
+
+                // message is 64 bytes at offset 16
+                let message = ''
+                for (let j = 0; j < 64; j++) {
+                    const charCode = view.getUint8(offset + 16 + j)
+                    if (charCode === 0) break
+                    message += String.fromCharCode(charCode)
+                }
+
+                const token_ptr = view.getInt32(offset + 80, true)
+                let token = ''
+                if (token_ptr !== 0 && length > 0) {
+                    const token_buf = new Uint8Array(memoryBuffer, token_ptr, length)
+                    token = new TextDecoder().decode(token_buf)
+                }
+
+                problems.push({
+                    type: type_int === 2 ? 'error' : type_int === 1 ? 'warning' : 'info',
+                    line,
+                    column,
+                    length,
+                    message,
+                    token,
+                })
             }
-            
-            problems.push({
-                type: type_int === 2 ? 'error' : (type_int === 1 ? 'warning' : 'info'),
-                line,
-                column,
-                length,
-                message,
-                token
-            })
+
+            return problems
+        } finally {
+            // Restore original stream callback
+            this.setSilent(wasSilent)
+            // Clear any accumulated stream output
+            if (!debug) {
+                this.readStream()
+            }
         }
-        
-        return problems
+    }
+
+    setSilent = (value = true) => {
+        this.silent = value
     }
 
     printInfo = () => {
-        if (!this.wasm_exports) throw new Error("WebAssembly module not initialized")
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         if (!this.wasm_exports.printInfo) throw new Error("'printInfo' function not found")
         this.wasm_exports.printInfo()
         const raw = this.readStream().trim()
-        if (raw.length === 0) return "No info available"
-        if (raw.startsWith("[") && raw.endsWith("]")) { // '[VovkPLCRuntime,WASM,0,1,0,324,2025-03-16 19:16:44,1024,104857,104857,16,16,32,16,Simulator]'
+        if (raw.length === 0) return 'No info available'
+        if (raw.startsWith('[') && raw.endsWith(']')) {
+            // '[VovkPLCRuntime,WASM,0,1,0,324,2025-03-16 19:16:44,1024,104857,104857,16,16,32,16,Simulator]'
             const content = raw.substring(1, raw.length - 1)
-            const parts = content.split(",")
+            const parts = content.split(',')
             const info = {
                 header: parts[0],
                 arch: parts[1],
@@ -211,7 +237,7 @@ class VovkPLC_class {
                 input_size: +parts[11],
                 output_offset: +parts[12],
                 output_size: +parts[13],
-                device: parts[14]
+                device: parts[14],
             }
             return info
         }
@@ -221,10 +247,10 @@ class VovkPLC_class {
     }
 
     /** @param { string } assembly */
-    downloadAssembly = (assembly) => {
+    downloadAssembly = assembly => {
         // Use 'bool streamIn(char)' to download the assembly character by character
         // Use 'void loadAssembly()' to load the assembly into the PLC from the stream buffer
-        if (!this.wasm_exports) throw new Error("WebAssembly module not initialized")
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         if (!this.wasm_exports.streamIn) throw new Error("'streamIn' function not found")
         if (!this.wasm_exports.loadAssembly) throw new Error("'loadAssembly' function not found")
         const translate = {
@@ -263,18 +289,18 @@ class VovkPLC_class {
             const c = char.charCodeAt(0)
             ok = this.wasm_exports.streamIn(c)
         }
-        if (!ok) throw new Error("Failed to download assembly")
+        if (!ok) throw new Error('Failed to download assembly')
         this.wasm_exports.loadAssembly()
         const error = !ok
         return error
     }
     /** @param { string } assembly */
     compile(assembly, run = false) {
-        if (!this.wasm_exports) throw new Error("WebAssembly module not initialized")
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         if (assembly) this.downloadAssembly(assembly)
         if (!this.wasm_exports.compileAssembly) throw new Error("'compileAssembly' function not found")
         if (!this.wasm_exports.loadCompiledProgram) throw new Error("'loadCompiledProgram' function not found")
-        if (this.wasm_exports.compileAssembly(false)) throw new Error("Failed to compile assembly")
+        if (this.wasm_exports.compileAssembly(false)) throw new Error('Failed to compile assembly')
         if (run) {
             // this.updateTime()
             this.wasm_exports.loadCompiledProgram()
@@ -284,8 +310,8 @@ class VovkPLC_class {
     }
 
     /** @param { string | number[] } program */
-    downloadBytecode = (program) => {
-        if (!this.wasm_exports) throw new Error("WebAssembly module not initialized")
+    downloadBytecode = program => {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         if (!this.wasm_exports.streamIn) throw new Error("'streamIn' function not found")
         if (!this.wasm_exports.downloadProgram) throw new Error("'downloadProgram' function not found")
         const code = Array.isArray(program) ? program : this.parseHex(program)
@@ -296,45 +322,42 @@ class VovkPLC_class {
             this.wasm_exports.streamIn(c)
         }
         const error = this.wasm_exports.downloadProgram(size, crc)
-        if (error === 1) throw new Error("Failed to download program -> size mismatch")
-        if (error === 2) throw new Error("Failed to download program -> checksum mismatch")
+        if (error === 1) throw new Error('Failed to download program -> size mismatch')
+        if (error === 2) throw new Error('Failed to download program -> checksum mismatch')
         return error
     }
 
     run = () => {
-        if (!this.wasm_exports) throw new Error("WebAssembly module not initialized")
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         if (!this.wasm_exports.run) throw new Error("'runFullProgram' function not found")
         // this.updateTime() // Update millis and micros
         return this.wasm_exports.run()
     }
     runDebug = () => {
-        if (!this.wasm_exports) throw new Error("WebAssembly module not initialized")
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         if (!this.wasm_exports.runFullProgramDebug) throw new Error("'runFullProgramDebug' function not found")
         // this.updateTime() // Update millis and micros
         return this.wasm_exports.runFullProgramDebug()
     }
 
-
     extractProgram = () => {
-        if (!this.wasm_exports) throw new Error("WebAssembly module not initialized")
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         if (!this.wasm_exports.uploadProgram) throw new Error("'uploadProgram' function not found")
         this.stream_message = ''
         const size = +this.wasm_exports.uploadProgram()
         const output = this.readStream()
-        return { size, output }
+        return {size, output}
     }
-
-
 
     /** @type { (address: number, size?: number) => Uint8Array } */
     readMemoryArea = (address, size = 1) => {
-        if (!this.wasm_exports) throw new Error("WebAssembly module not initialized")
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         // const { getMemoryArea } = this.wasm_exports
         // if (!getMemoryArea) throw new Error("'getMemoryArea' function not found")
         // getMemoryArea(address, size)
         // const output = this.readStream()
         // const { memory, getMemoryLocation } = this.wasm_exports
-        if (!this.wasm_exports.memory) throw new Error("WebAssembly memory not found")
+        if (!this.wasm_exports.memory) throw new Error('WebAssembly memory not found')
         if (!this.wasm_exports.getMemoryLocation) throw new Error("'getMemoryLocation' function not found")
         const offset = this.wasm_exports.getMemoryLocation()
         const buffer = new Uint8Array(this.wasm_exports.memory.buffer, offset + address, size)
@@ -343,10 +366,10 @@ class VovkPLC_class {
 
     /** @type { (address: number, data: number[]) => string } */
     writeMemoryArea = (address, data) => {
-        if (!this.wasm_exports) throw new Error("WebAssembly module not initialized")
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         if (!this.wasm_exports.writeMemoryByte) throw new Error("'writeMemoryByte' function not found")
         for (let i = 0; i < data.length; i++) {
-            const byte = data[i] & 0xFF
+            const byte = data[i] & 0xff
             const success = this.wasm_exports.writeMemoryByte(address + i, byte)
             if (!success) throw new Error(`Failed to write byte ${byte} at address ${address + i}`)
         }
@@ -355,7 +378,7 @@ class VovkPLC_class {
     }
 
     getExports = () => {
-        if (!this.wasm_exports) throw new Error("WebAssembly module not initialized")
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         return this.wasm_exports
     }
 
@@ -363,7 +386,7 @@ class VovkPLC_class {
         const char = String.fromCharCode(c)
         if (char === '\n') {
             const callback = this.stdout_callback || console.log
-            if (this.console_message && this.console_message.length > 0) callback(this.console_message)
+            if (this.console_message && this.console_message.length > 0 && !this.silent) callback(this.console_message)
             this.console_message = ''
         } else {
             this.console_message += char
@@ -388,9 +411,13 @@ class VovkPLC_class {
     }
 
     /** @param { (message: string) => void } callback */
-    onStdout = callback => { this.stdout_callback = callback }
+    onStdout = callback => {
+        this.stdout_callback = callback
+    }
     /** @param { (message: string) => void } callback */
-    onStderr = callback => { this.stderr_callback = callback }
+    onStderr = callback => {
+        this.stderr_callback = callback
+    }
 
     /** @param { number | number[] | string } charcode */
     console_stream = charcode => {
@@ -417,40 +444,42 @@ class VovkPLC_class {
             this.crc8_table_loaded = true
             for (let i = 0; i < 256; i++) {
                 let crc8 = i
-                for (let j = 0; j < 8; j++)
-                    crc8 = crc8 & 0x80 ? (crc8 << 1) ^ 0x31 : crc8 << 1;
-                this.crc8_table[i] = crc8 & 0xff;
+                for (let j = 0; j < 8; j++) crc8 = crc8 & 0x80 ? (crc8 << 1) ^ 0x31 : crc8 << 1
+                this.crc8_table[i] = crc8 & 0xff
             }
         }
-        data = Array.isArray(data) ? data : [data];
-        const size = data.length;
-        for (let i = 0; i < size; i++)
-            if (!(data[i] >= 0 && data[i] <= 255)) throw new Error(`Invalid data byte at index ${i}: ${data[i]}`);
+        data = Array.isArray(data) ? data : [data]
+        const size = data.length
+        for (let i = 0; i < size; i++) if (!(data[i] >= 0 && data[i] <= 255)) throw new Error(`Invalid data byte at index ${i}: ${data[i]}`)
         for (let i = 0; i < size; i++) {
-            let index = (crc ^ data[i]) & 0xff;
-            crc = this.crc8_table[index] & 0xff;
+            let index = (crc ^ data[i]) & 0xff
+            crc = this.crc8_table[index] & 0xff
         }
-        return crc;
+        return crc
     }
 
     /** @param { string } hex_string * @returns { number[] } */
     parseHex = hex_string => {
         // Parse 02x formatted HEX string
-        if (typeof hex_string !== 'string') throw new Error(`Invalid HEX string: ${hex_string}`);
-        hex_string = hex_string.replace(/[^0-9a-fA-F]/g, '');
-        if (hex_string.length % 2 !== 0) throw new Error(`Invalid HEX string length: ${hex_string.length}`);
-        const hex_array = hex_string.match(/.{1,2}/g);
-        if (!hex_array) throw new Error(`Invalid HEX string: ${hex_string}`);
-        const num_array = [];
+        if (typeof hex_string !== 'string') throw new Error(`Invalid HEX string: ${hex_string}`)
+        hex_string = hex_string.replace(/[^0-9a-fA-F]/g, '')
+        if (hex_string.length % 2 !== 0) throw new Error(`Invalid HEX string length: ${hex_string.length}`)
+        const hex_array = hex_string.match(/.{1,2}/g)
+        if (!hex_array) throw new Error(`Invalid HEX string: ${hex_string}`)
+        const num_array = []
         for (let i = 0; i < hex_array.length; i++) {
-            const num = parseInt(hex_array[i], 16);
-            if (num < 0 || num > 255) throw new Error(`Invalid HEX string byte at index ${i}: ${hex_array[i]}`);
-            num_array.push(num);
+            const num = parseInt(hex_array[i], 16)
+            if (num < 0 || num > 255) throw new Error(`Invalid HEX string byte at index ${i}: ${hex_array[i]}`)
+            num_array.push(num)
         }
-        return num_array;
+        return num_array
     }
     /** @param { string } str * @returns { string } */
-    stringToHex = str => str.split('').map(c => c.charCodeAt(0).toString(16).padStart(2, '0')).join('')
+    stringToHex = str =>
+        str
+            .split('')
+            .map(c => c.charCodeAt(0).toString(16).padStart(2, '0'))
+            .join('')
 
     //  - PLC reset:        'RS<u8>' (checksum)
     //  - Program download: 'PD<u32><u8[]><u8>' (size, data, checksum)
@@ -463,127 +492,136 @@ class VovkPLC_class {
     //  - Source download:  'SD<u32><u8[]><u8>' (size, data, checksum) // Only available if PLCRUNTIME_SOURCE_ENABLED is defined
     //  - Source upload:    'SU<u32><u8>' (size, checksum) // Only available if PLCRUNTIME_SOURCE_ENABLED is defined
     buildCommand = {
-
         /** @returns { string } */
         plcReset: () => {
-            const cmd = "RS"
+            const cmd = 'RS'
             const cmd_hex = this.stringToHex(cmd)
             const checksum = this.crc8(this.parseHex(cmd_hex))
-            const checksum_hex = checksum.toString(16).padStart(2, '0');
-            const command = cmd + checksum_hex;
-            return command;
+            const checksum_hex = checksum.toString(16).padStart(2, '0')
+            const command = cmd + checksum_hex
+            return command
         },
 
         /** @param { number[] | [number[]] | [string] } input * @returns { string } */
         programDownload: (...input) => {
-            const cmd = "PD"
+            const cmd = 'PD'
             const cmd_hex = this.stringToHex(cmd)
             let checksum = this.crc8(this.parseHex(cmd_hex))
             input = Array.isArray(input[0]) ? input[0] : input
             const allowedChars = '0123456789abcdefABCDEF'
-            if (typeof input[0] === 'string') input = this.parseHex(input[0].split('').filter(c => allowedChars.includes(c)).join('') || '')
-            /** @type { number[] } */// @ts-ignore
+            if (typeof input[0] === 'string')
+                input = this.parseHex(
+                    input[0]
+                        .split('')
+                        .filter(c => allowedChars.includes(c))
+                        .join('') || ''
+                )
+            /** @type { number[] } */ // @ts-ignore
             const data = input
             const data_hex = data.map(d => d.toString(16).padStart(2, '0'))
-            const size = data.length;
-            const size_hex_u32 = size.toString(16).padStart(8, '0');
+            const size = data.length
+            const size_hex_u32 = size.toString(16).padStart(8, '0')
             checksum = this.crc8(this.parseHex(size_hex_u32), checksum)
             checksum = this.crc8(data, checksum)
-            const checksum_hex = checksum.toString(16).padStart(2, '0');
-            const command = cmd + size_hex_u32 + data_hex.join('') + checksum_hex;
-            return command.toUpperCase();
+            const checksum_hex = checksum.toString(16).padStart(2, '0')
+            const command = cmd + size_hex_u32 + data_hex.join('') + checksum_hex
+            return command.toUpperCase()
         },
 
         /** @returns { string } */
         programUpload: () => {
-            const cmd = "PU"
+            const cmd = 'PU'
             const cmd_hex = this.stringToHex(cmd)
             const checksum = this.crc8(this.parseHex(cmd_hex))
-            const checksum_hex = checksum.toString(16).padStart(2, '0');
-            const command = cmd + checksum_hex;
-            return command;
+            const checksum_hex = checksum.toString(16).padStart(2, '0')
+            const command = cmd + checksum_hex
+            return command
         },
 
         /** @returns { string } */
         programRun: () => {
-            const cmd = "PR"
+            const cmd = 'PR'
             const cmd_hex = this.stringToHex(cmd)
             const checksum = this.crc8(this.parseHex(cmd_hex))
-            const checksum_hex = checksum.toString(16).padStart(2, '0');
-            const command = cmd + checksum_hex;
-            return command;
+            const checksum_hex = checksum.toString(16).padStart(2, '0')
+            const command = cmd + checksum_hex
+            return command
         },
 
         /** @returns { string } */
         programStop: () => {
-            const cmd = "PS"
+            const cmd = 'PS'
             const cmd_hex = this.stringToHex(cmd)
             const checksum = this.crc8(this.parseHex(cmd_hex))
-            const checksum_hex = checksum.toString(16).padStart(2, '0');
-            const command = cmd + checksum_hex;
-            return command;
+            const checksum_hex = checksum.toString(16).padStart(2, '0')
+            const command = cmd + checksum_hex
+            return command
         },
 
         /** @param { number } address * @param { number } size * @returns { string } */
         memoryRead: (address, size = 1) => {
-            const cmd = "MR"
+            const cmd = 'MR'
             const cmd_hex = this.stringToHex(cmd)
-            const address_hex_u32 = address.toString(16).padStart(8, '0');
-            const size_hex_u32 = size.toString(16).padStart(8, '0');
+            const address_hex_u32 = address.toString(16).padStart(8, '0')
+            const size_hex_u32 = size.toString(16).padStart(8, '0')
             let checksum = this.crc8(this.parseHex(cmd_hex))
             checksum = this.crc8(this.parseHex(address_hex_u32), checksum)
             checksum = this.crc8(this.parseHex(size_hex_u32), checksum)
-            const checksum_hex = checksum.toString(16).padStart(2, '0');
-            const command = cmd + address_hex_u32 + size_hex_u32 + checksum_hex;
-            return command;
+            const checksum_hex = checksum.toString(16).padStart(2, '0')
+            const command = cmd + address_hex_u32 + size_hex_u32 + checksum_hex
+            return command
         },
 
         /** @param { number } address * @param { number[] | [number[]] | [string] } input * @returns { string } */
         memoryWrite: (address, input) => {
-            const cmd = "MW"
+            const cmd = 'MW'
             const cmd_hex = this.stringToHex(cmd)
             let checksum = this.crc8(this.parseHex(cmd_hex))
-            const address_hex_u32 = address.toString(16).padStart(8, '0');
+            const address_hex_u32 = address.toString(16).padStart(8, '0')
             checksum = this.crc8(this.parseHex(address_hex_u32), checksum)
             input = Array.isArray(input[0]) ? input[0] : input
             const allowedChars = '0123456789abcdefABCDEF'
-            if (typeof input[0] === 'string') input = this.parseHex(input[0].split('').filter(c => allowedChars.includes(c)).join('') || '')
-            /** @type { number[] } */// @ts-ignore
+            if (typeof input[0] === 'string')
+                input = this.parseHex(
+                    input[0]
+                        .split('')
+                        .filter(c => allowedChars.includes(c))
+                        .join('') || ''
+                )
+            /** @type { number[] } */ // @ts-ignore
             const data = input
             const data_hex = data.map(d => d.toString(16).padStart(2, '0')).join('')
-            const size = data.length;
-            const size_hex_u32 = size.toString(16).padStart(8, '0');
+            const size = data.length
+            const size_hex_u32 = size.toString(16).padStart(8, '0')
             checksum = this.crc8(this.parseHex(size_hex_u32), checksum)
             checksum = this.crc8(data, checksum)
-            const checksum_hex = checksum.toString(16).padStart(2, '0');
-            const command = cmd + address_hex_u32 + size_hex_u32 + data_hex + checksum_hex;
-            return command;
+            const checksum_hex = checksum.toString(16).padStart(2, '0')
+            const command = cmd + address_hex_u32 + size_hex_u32 + data_hex + checksum_hex
+            return command
         },
 
         /** @param { number } address * @param { number } size * @param { number } value * @returns { string } */
         memoryFormat: (address, size, value) => {
-            const cmd = "MF"
+            const cmd = 'MF'
             const cmd_hex = this.stringToHex(cmd)
-            const address_hex_u32 = address.toString(16).padStart(8, '0');
-            const size_hex_u32 = size.toString(16).padStart(8, '0');
-            const value_hex = value.toString(16).padStart(2, '0');
+            const address_hex_u32 = address.toString(16).padStart(8, '0')
+            const size_hex_u32 = size.toString(16).padStart(8, '0')
+            const value_hex = value.toString(16).padStart(2, '0')
             let checksum = this.crc8(this.parseHex(cmd_hex))
             checksum = this.crc8(this.parseHex(address_hex_u32), checksum)
             checksum = this.crc8(this.parseHex(size_hex_u32), checksum)
             checksum = this.crc8(this.parseHex(value_hex), checksum)
-            const checksum_hex = checksum.toString(16).padStart(2, '0');
-            const command = cmd + address_hex_u32 + size_hex_u32 + value_hex + checksum_hex;
-            return command;
+            const checksum_hex = checksum.toString(16).padStart(2, '0')
+            const command = cmd + address_hex_u32 + size_hex_u32 + value_hex + checksum_hex
+            return command
         },
-
     }
-
 }
 
 // Export the module if we are in a browser
 if (typeof window !== 'undefined') {
     // console.log(`WASM exported as window object`)
-    Object.assign(window, { VovkPLC: VovkPLC_class })
+    Object.assign(window, {VovkPLC: VovkPLC_class})
 }
 
 // Export for CommonJS modules
@@ -592,4 +630,4 @@ if (typeof module !== 'undefined') {
     module.exports = VovkPLC_class
 }
 // Export for ES modules
-export default VovkPLC_class;
+export default VovkPLC_class
