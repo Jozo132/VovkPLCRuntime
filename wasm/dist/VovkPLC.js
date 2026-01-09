@@ -41,15 +41,16 @@ class VovkPLC_class {
     /** @type { WebAssembly.Instance | null } */
     wasm = null
     /** @type { VovkPLCExportTypes | null } */
-    wasm_exports
+    wasm_exports = null
+    /** @type { any } */
     wasmImports
     running = false
     silent = false
     console_message = ''
     error_message = ''
     stream_message = ''
-    /** @type { Performance } */
-    perf
+    /** @type { Performance | null } */
+    perf = null
 
     /** @type { Uint8Array } */
     crc8_table = new Uint8Array(256)
@@ -68,7 +69,7 @@ class VovkPLC_class {
         if (this.running && this.wasm) return this
         this.running = true
         if (debug) console.log('Starting up...')
-        /** @type { ArrayBuffer | Buffer } */
+        /** @type { BufferSource } */
         let wasmBuffer
         // Browser environment
         if (typeof window !== 'undefined') {
@@ -89,8 +90,8 @@ class VovkPLC_class {
             env: {
                 stdout: this.console_print,
                 stderr: this.console_error,
-                streamOut: this.console_stream,
-                millis: () => Math.round(this.perf.now()),
+                streamOut: this.console_stream, // @ts-ignore
+                millis: () => Math.round(this.perf.now()), // @ts-ignore
                 micros: () => Math.round(this.perf.now() * 1000),
                 // memory: new WebAssembly.Memory({ initial: 256, maximum: 512 }),
             },
@@ -107,7 +108,7 @@ class VovkPLC_class {
         this.wasm_exports.extractProgram = () => this.extractProgram()
         const required_methods = ['printInfo', 'run_unit_test', 'run_custom_test', 'get_free_memory', 'doNothing', 'compileAssembly', 'loadCompiledProgram', 'runFullProgramDebug', 'runFullProgram', 'uploadProgram', 'getMemoryArea', 'writeMemoryByte']
         for (let i = 0; i < required_methods.length; i++) {
-            const method = required_methods[i]
+            const method = required_methods[i] // @ts-ignore
             if (!this.wasm_exports[method]) throw new Error(`${method} function not found`)
         }
         return this
@@ -253,36 +254,6 @@ class VovkPLC_class {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         if (!this.wasm_exports.streamIn) throw new Error("'streamIn' function not found")
         if (!this.wasm_exports.loadAssembly) throw new Error("'loadAssembly' function not found")
-        const translate = {
-            // P_On: "u8.const 1",
-            // P_Off: "u8.const 0",
-            // P_100ms: "u8.readBit 1.0",
-            // P_200ms: "u8.readBit 1.1",
-            // P_300ms: "u8.readBit 1.2",
-            // P_500ms: "u8.readBit 1.3",
-            // P_1s: "u8.readBit 1.4",
-            // P_2s: "u8.readBit 1.5",
-            // P_5s: "u8.readBit 1.6",
-            // P_10s: "u8.readBit 1.7",
-            // P_30s: "u8.readBit 2.0",
-            // P_1min: "u8.readBit 2.1",
-            // P_2min: "u8.readBit 2.2",
-            // P_5min: "u8.readBit 2.3",
-            // P_10min: "u8.readBit 2.4",
-            // P_30min: "u8.readBit 2.5",
-            // P_1hr: "u8.readBit 2.6",
-            // P_2hr: "u8.readBit 2.7",
-            // P_3hr: "u8.readBit 3.0",
-            // P_4hr: "u8.readBit 3.1",
-            // P_5hr: "u8.readBit 3.2",
-            // P_6hr: "u8.readBit 3.3",
-            // P_12hr: "u8.readBit 3.4",
-            // P_1day: "u8.readBit 3.5",
-        }
-        for (const key in translate) {
-            const value = translate[key]
-            assembly = assembly.replace(new RegExp(key, 'g'), value)
-        }
         let ok = true
         for (let i = 0; i < assembly.length && ok; i++) {
             const char = assembly[i]
@@ -382,6 +353,7 @@ class VovkPLC_class {
         return this.wasm_exports
     }
 
+    /** @type { (charcode: number) => void } */
     console_print = c => {
         const char = String.fromCharCode(c)
         if (char === '\n') {
@@ -393,7 +365,7 @@ class VovkPLC_class {
         }
     }
 
-    /** @param { number | number[] | string } charcode */
+    /** @type { (charcode: number | number[] | string) => void } */
     console_error = charcode => {
         if (typeof charcode === 'string') {
             if (charcode.length === 0) return
@@ -419,7 +391,7 @@ class VovkPLC_class {
         this.stderr_callback = callback
     }
 
-    /** @param { number | number[] | string } charcode */
+    /** @type { (charcode: number | number[] | string) => void } */
     console_stream = charcode => {
         if (typeof charcode === 'string') {
             if (charcode.length === 0) return
@@ -452,6 +424,7 @@ class VovkPLC_class {
         const size = data.length
         for (let i = 0; i < size; i++) if (!(data[i] >= 0 && data[i] <= 255)) throw new Error(`Invalid data byte at index ${i}: ${data[i]}`)
         for (let i = 0; i < size; i++) {
+            /** @type { number } */
             let index = (crc ^ data[i]) & 0xff
             crc = this.crc8_table[index] & 0xff
         }
