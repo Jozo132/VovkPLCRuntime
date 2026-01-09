@@ -17,14 +17,12 @@ const run = async () => {
         process.exit(1)
     }
 
-    const runtime = new VovkPLC(wasmPath)
-    await runtime.initialize()
+    const runtime = await VovkPLC.createWorker(wasmPath)
+    try {
+        console.log('Runtime initialized. Testing linting with buggy assembly...')
 
-
-    console.log('Runtime initialized. Testing linting with buggy assembly...')
-
-    // Buggy Assembly Test (from test_9_simulator_linter.cpp)
-    const assembly = `
+        // Buggy Assembly Test (from test_9_simulator_linter.cpp)
+        const assembly = `
 ################# Linter Test Assembly
 
 # Error 1: Typo in instruction
@@ -39,24 +37,26 @@ jmp undefined_label
 
 `
 
-    console.log('----------------------------------------')
-    console.log('Assembly Code to Lint (with intentional errors):')
-    console.log(assembly)
-    console.log('----------------------------------------')
+        console.log('----------------------------------------')
+        console.log('Assembly Code to Lint (with intentional errors):')
+        console.log(assembly)
+        console.log('----------------------------------------')
 
-    // Lint the assembly
-    console.log('Linting assembly...')
-    const problems = runtime.lint(assembly)
+        // Lint the assembly
+        console.log('Linting assembly...')
+        const problems = await runtime.lint(assembly)
 
-    if (problems.length > 0) {
-        console.log('Linting detected errors:')
-        problems.forEach((problem, index) => {
-            console.log(`  ${index + 1}. [${problem.type.toUpperCase()}] Line ${problem.line}, Column ${problem.column}: ${problem.message} (${problem.token})`)
-        })
-        console.log('SUCCESS: Linter detected errors in buggy assembly.')
-    } else {
-        console.error('Linting unexpectedly found no errors!')
-        process.exit(1)
+        if (problems.length > 0) {
+            console.log('Linting detected errors:')
+            problems.forEach((problem, index) => {
+                console.log(`  ${index + 1}. [${problem.type.toUpperCase()}] Line ${problem.line}, Column ${problem.column}: ${problem.message} (${problem.token_text})`)
+            })
+            console.log('SUCCESS: Linter detected errors in buggy assembly.')
+        } else {
+            throw new Error('Linting unexpectedly found no errors!')
+        }
+    } finally {
+        await runtime.terminate()
     }
 }
 

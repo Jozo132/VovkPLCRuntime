@@ -15,10 +15,10 @@ enum LinterProblemType {
 };
 
 struct LinterProblem {
-    int type;      // 0=Info, 1=Warning, 2=Error
-    int line;      // Line number (1-based)
-    int column;    // Column number (1-based)
-    int length;    // Length of the token causing the issue
+    uint32_t type;      // 0=Info, 1=Warning, 2=Error
+    uint32_t line;      // Line number (1-based)
+    uint32_t column;    // Column number (1-based)
+    uint32_t length;    // Length of the token causing the issue
     char message[64]; // Text description
     char* token_text; // Text of the token (only useful for internal debugging)
 };

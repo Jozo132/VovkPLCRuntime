@@ -1,6 +1,8 @@
 // @ts-check
 'use strict'
 
+const isNodeRuntime = typeof process !== 'undefined' && !!(process.versions && process.versions.node)
+
 /**
  * @typedef {{
  *     initialize: () => void
@@ -69,22 +71,30 @@ class VovkPLC_class {
         if (this.running && this.wasm) return this
         this.running = true
         if (debug) console.log('Starting up...')
-        /** @type { BufferSource } */
-        let wasmBuffer
-        // Browser environment
-        if (typeof window !== 'undefined') {
-            this.perf = window.performance
+        /** @type { BufferSource | null } */
+        let wasmBuffer = null
+        if (!isNodeRuntime) {
+            this.perf = globalThis.performance || null
             const wasmFile = await fetch(wasm_path)
             wasmBuffer = await wasmFile.arrayBuffer()
         } else {
-            // Node.js environment
             // @ts-ignore
-            this.perf = (await import('perf_hooks')).performance
+            this.perf = globalThis.performance || (await import('perf_hooks')).performance
             const fs = await import('fs')
             const path = await import('path')
-            const __dirname = path.resolve(path.dirname(''), '../')
-            const wp = path.join(__dirname, 'dist/VovkPLC.wasm')
-            wasmBuffer = fs.readFileSync(wp)
+            const {fileURLToPath} = await import('url')
+            let resolvedPath = wasm_path
+            if (!resolvedPath || resolvedPath === '/dist/VovkPLC.wasm') {
+                resolvedPath = fileURLToPath(new URL('./VovkPLC.wasm', import.meta.url))
+            } else if (resolvedPath.startsWith('file:')) {
+                resolvedPath = fileURLToPath(resolvedPath)
+            } else if (resolvedPath.startsWith('http://') || resolvedPath.startsWith('https://')) {
+                const wasmFile = await fetch(resolvedPath)
+                wasmBuffer = await wasmFile.arrayBuffer()
+            }
+            if (!wasmBuffer) {
+                wasmBuffer = fs.readFileSync(path.resolve(resolvedPath))
+            }
         }
         this.wasmImports = {
             env: {
@@ -121,7 +131,7 @@ class VovkPLC_class {
      *     column: number,
      *     length: number,
      *     message: string,
-     *     token: string
+     *     token_text: string
      * }} LinterProblem
      */
 
@@ -171,12 +181,12 @@ class VovkPLC_class {
 
             for (let i = 0; i < count; i++) {
                 const offset = pointer + i * struct_size
-                const type_int = view.getInt32(offset + 0, true)
-                const line = view.getInt32(offset + 4, true)
-                const column = view.getInt32(offset + 8, true)
-                const length = view.getInt32(offset + 12, true)
+                const type_int = view.getUint32(offset + 0, true)
+                const line = view.getUint32(offset + 4, true)
+                const column = view.getUint32(offset + 8, true)
+                const length = view.getUint32(offset + 12, true)
 
-                // message is 64 bytes at offset 16
+                // token_text is 64 bytes at offset 16
                 let message = ''
                 for (let j = 0; j < 64; j++) {
                     const charCode = view.getUint8(offset + 16 + j)
@@ -184,11 +194,11 @@ class VovkPLC_class {
                     message += String.fromCharCode(charCode)
                 }
 
-                const token_ptr = view.getInt32(offset + 80, true)
-                let token = ''
+                const token_ptr = view.getUint32(offset + 80, true)
+                let token_text = ''
                 if (token_ptr !== 0 && length > 0) {
                     const token_buf = new Uint8Array(memoryBuffer, token_ptr, length)
-                    token = new TextDecoder().decode(token_buf)
+                    token_text = new TextDecoder().decode(token_buf)
                 }
 
                 problems.push({
@@ -197,7 +207,7 @@ class VovkPLC_class {
                     column,
                     length,
                     message,
-                    token,
+                    token_text,
                 })
             }
 
@@ -351,6 +361,14 @@ class VovkPLC_class {
     getExports = () => {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         return this.wasm_exports
+    }
+
+    /** @type { (name: string, ...args: any[]) => any } */
+    callExport = (name, ...args) => {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized') // @ts-ignore
+        const fn = this.wasm_exports[name]
+        if (typeof fn !== 'function') throw new Error(`'${name}' export not found`)
+        return fn(...args)
     }
 
     /** @type { (charcode: number) => void } */
@@ -591,6 +609,254 @@ class VovkPLC_class {
     }
 }
 
+/**
+ * @typedef {{
+ *   postMessage: (message: any) => void,
+ *   terminate?: () => any,
+ *   addEventListener?: (type: string, listener: (event: any) => void) => void,
+ *   removeEventListener?: (type: string, listener: (event: any) => void) => void,
+ *   on?: (type: string, listener: (event: any) => void) => void,
+ *   off?: (type: string, listener: (event: any) => void) => void,
+ *   removeListener?: (type: string, listener: (event: any) => void) => void,
+ * }} VovkPLCWorkerLike
+ */
+
+/**
+ * @typedef {(url: URL | string) => VovkPLCWorkerLike | Promise<VovkPLCWorkerLike>} VovkPLCWorkerFactory
+ */
+
+/**
+ * @typedef {{ workerUrl?: URL | string, workerFactory?: VovkPLCWorkerFactory, debug?: boolean }} VovkPLCWorkerOptions
+ */
+
+/**
+ * @typedef {{ resolve: (value: any) => void, reject: (reason?: any) => void }} VovkPLCPendingRequest
+ */
+
+class VovkPLCWorkerInstance {
+    /** @type { VovkPLCWorkerClient } */
+    client
+    /** @type { number } */
+    id
+    /** @param { VovkPLCWorkerClient } client * @param { number } id */
+    constructor(client, id) {
+        this.client = client
+        this.id = id
+    }
+    /** @type { (method: string, ...args: any[]) => Promise<any> } */
+    call = (method, ...args) => this.client.callInstance(this.id, method, ...args)
+    /** @type { (name: string, ...args: any[]) => Promise<any> } */
+    callExport = (name, ...args) => this.client.callInstance(this.id, 'callExport', name, ...args)
+    /** @type { () => Promise<string[]> } */
+    getExports = () => this.client.callInstance(this.id, 'getExports')
+    /** @type { (callback: (message: string, instanceId?: number) => void) => Promise<any> } */
+    onStdout = callback => this.client.onStdout(callback, this.id)
+    /** @type { (callback: (message: string, instanceId?: number) => void) => Promise<any> } */
+    onStderr = callback => this.client.onStderr(callback, this.id)
+    /** @type { () => Promise<any> } */
+    dispose = () => this.client.disposeInstance(this.id)
+}
+
+class VovkPLCWorkerClient {
+    /** @type { VovkPLCWorkerLike } */
+    worker
+    /** @type { number } */
+    nextId = 1
+    /** @type { Map<number, VovkPLCPendingRequest> } */
+    pending = new Map()
+    /** @type { Map<string | number, (message: string, instanceId?: number) => void> } */
+    stdoutHandlers = new Map()
+    /** @type { Map<string | number, (message: string, instanceId?: number) => void> } */
+    stderrHandlers = new Map()
+    /** @type { (message: any) => void } */
+    _onMessage
+    /** @type { (error: any) => void } */
+    _onError
+    /** @param { VovkPLCWorkerLike } worker */
+    constructor(worker) {
+        this.worker = worker
+        this._onMessage = this._handleMessage.bind(this)
+        this._onError = this._handleError.bind(this)
+        if (typeof worker.addEventListener === 'function') {
+            worker.addEventListener('message', this._onMessage)
+            worker.addEventListener('error', this._onError)
+        } else if (typeof worker.on === 'function') {
+            worker.on('message', this._onMessage)
+            worker.on('error', this._onError)
+        }
+    }
+
+    /** @type { (message: any) => void } */
+    _handleMessage = message => {
+        const data = message && message.data !== undefined ? message.data : message
+        if (!data || typeof data !== 'object') return
+        if (data.type === 'event') {
+            this._handleEvent(data)
+            return
+        }
+        if (typeof data.id !== 'number') return
+        const pending = this.pending.get(data.id)
+        if (!pending) return
+        this.pending.delete(data.id)
+        if (data.ok) pending.resolve(data.result)
+        else pending.reject(new Error(data.error || 'Worker call failed'))
+    }
+
+    /** @type { (data: any) => void } */
+    _handleEvent = data => {
+        if (!data || typeof data.event !== 'string') return
+        const key = data.instanceId == null ? 'default' : data.instanceId
+        if (data.event === 'stdout') {
+            const handler = this.stdoutHandlers.get(key) || this.stdoutHandlers.get('default')
+            if (handler) handler(data.message, data.instanceId)
+            return
+        }
+        if (data.event === 'stderr') {
+            const handler = this.stderrHandlers.get(key) || this.stderrHandlers.get('default')
+            if (handler) handler(data.message, data.instanceId)
+        }
+    }
+
+    /** @type { (error: any) => void } */
+    _handleError = error => {
+        const message = error && error.message ? error.message : String(error)
+        const err = error instanceof Error ? error : new Error(message)
+        for (const pending of this.pending.values()) pending.reject(err)
+        this.pending.clear()
+    }
+
+    /** @type { (type: string, payload?: Record<string, any>) => Promise<any> } */
+    _send = (type, payload = {}) => {
+        const id = this.nextId++
+        return new Promise((resolve, reject) => {
+            this.pending.set(id, {resolve, reject})
+            this.worker.postMessage({id, type, ...payload})
+        })
+    }
+
+    /** @type { (stream: 'stdout' | 'stderr', callback: (message: string, instanceId?: number) => void, instanceId?: number | null) => Promise<any> } */
+    _setStreamHandler = (stream, callback, instanceId) => {
+        if (typeof callback !== 'function') throw new Error('Stream callback must be a function')
+        const key = instanceId == null ? 'default' : instanceId
+        if (stream === 'stdout') this.stdoutHandlers.set(key, callback)
+        else if (stream === 'stderr') this.stderrHandlers.set(key, callback)
+        else throw new Error(`Unknown stream type: ${stream}`)
+        return this._send('subscribe', {stream, instanceId})
+    }
+
+    /** @type { (wasmPath?: string, debug?: boolean) => Promise<any> } */
+    initialize = (wasmPath = '', debug = false) => this._send('init', {wasmPath, debug})
+    /** @type { (method: string, ...args: any[]) => Promise<any> } */
+    call = (method, ...args) => this._send('call', {method, args})
+    /** @type { (instanceId: number | null | undefined, method: string, ...args: any[]) => Promise<any> } */
+    callInstance = (instanceId, method, ...args) => this._send('call', {instanceId, method, args})
+    /** @type { (wasmPath?: string, debug?: boolean) => Promise<VovkPLCWorkerInstance> } */
+    createInstance = (wasmPath = '', debug = false) => this._send('create', {wasmPath, debug}).then(id => new VovkPLCWorkerInstance(this, id))
+    /** @type { (instanceId: number | null | undefined) => Promise<any> } */
+    disposeInstance = instanceId => this._send('dispose', {instanceId})
+    /** @type { (callback: (message: string, instanceId?: number) => void, instanceId?: number | null) => Promise<any> } */
+    onStdout = (callback, instanceId = null) => this._setStreamHandler('stdout', callback, instanceId)
+    /** @type { (callback: (message: string, instanceId?: number) => void, instanceId?: number | null) => Promise<any> } */
+    onStderr = (callback, instanceId = null) => this._setStreamHandler('stderr', callback, instanceId)
+
+    /** @type { () => Promise<any> } */
+    terminate = async () => {
+        for (const pending of this.pending.values()) pending.reject(new Error('Worker terminated'))
+        this.pending.clear()
+        this.stdoutHandlers.clear()
+        this.stderrHandlers.clear()
+        if (typeof this.worker.removeEventListener === 'function') {
+            this.worker.removeEventListener('message', this._onMessage)
+            this.worker.removeEventListener('error', this._onError)
+        } else if (typeof this.worker.off === 'function') {
+            this.worker.off('message', this._onMessage)
+            this.worker.off('error', this._onError)
+        } else if (typeof this.worker.removeListener === 'function') {
+            this.worker.removeListener('message', this._onMessage)
+            this.worker.removeListener('error', this._onError)
+        }
+        if (typeof this.worker.terminate === 'function') return this.worker.terminate()
+    }
+}
+
+class VovkPLCWorker extends VovkPLCWorkerClient {
+    /** @type { VovkPLC_class } */
+    helper
+    /** @type { VovkPLC_class['buildCommand'] } */
+    buildCommand
+    /** @param { VovkPLCWorkerLike } worker */
+    constructor(worker) {
+        super(worker)
+        this.helper = new VovkPLC_class()
+        this.buildCommand = this.helper.buildCommand
+    }
+
+    /** @type { (wasmPath?: string, options?: VovkPLCWorkerOptions) => Promise<VovkPLCWorker> } */
+    static create = async (wasmPath = '', {workerUrl, workerFactory, debug = false} = {}) => {
+        const resolvedUrl = workerUrl || new URL('./VovkPLC.worker.js', import.meta.url)
+        const factory = workerFactory || (await getDefaultWorkerFactory())
+        const worker = await createWorker(factory, resolvedUrl)
+        const client = new VovkPLCWorker(worker)
+        await client.initialize(wasmPath, debug)
+        return client
+    }
+
+    /** @type { (assembly: string, debug?: boolean) => Promise<any> } */
+    lint = (assembly, debug = false) => this.call('lint', assembly, debug)
+    /** @type { (value?: boolean) => Promise<any> } */
+    setSilent = value => this.call('setSilent', value)
+    /** @type { () => Promise<any> } */
+    printInfo = () => this.call('printInfo')
+    /** @type { (assembly: string) => Promise<any> } */
+    downloadAssembly = assembly => this.call('downloadAssembly', assembly)
+    /** @type { (assembly: string, run?: boolean) => Promise<any> } */
+    compile = (assembly, run = false) => this.call('compile', assembly, run)
+    /** @type { (program: string | number[]) => Promise<any> } */
+    downloadBytecode = program => this.call('downloadBytecode', program)
+    /** @type { () => Promise<any> } */
+    run = () => this.call('run')
+    /** @type { () => Promise<any> } */
+    runDebug = () => this.call('runDebug')
+    /** @type { () => Promise<{ size: number, output: string }> } */
+    extractProgram = () => this.call('extractProgram')
+    /** @type { (address: number, size?: number) => Promise<Uint8Array> } */
+    readMemoryArea = (address, size = 1) => this.call('readMemoryArea', address, size)
+    /** @type { (address: number, data: number[]) => Promise<string> } */
+    writeMemoryArea = (address, data) => this.call('writeMemoryArea', address, data)
+    /** @type { () => Promise<string> } */
+    readStream = () => this.call('readStream')
+    /** @type { () => Promise<string[]> } */
+    getExports = () => this.call('getExports')
+    /** @type { (name: string, ...args: any[]) => Promise<any> } */
+    callExport = (name, ...args) => this.call('callExport', name, ...args)
+
+    /** @type { (data: number | number[], crc?: number) => number } */
+    crc8 = (data, crc = 0) => this.helper.crc8(data, crc)
+    /** @type { (hex: string) => number[] } */
+    parseHex = hex => this.helper.parseHex(hex)
+    /** @type { (str: string) => string } */
+    stringToHex = str => this.helper.stringToHex(str)
+}
+
+/** @type { () => Promise<VovkPLCWorkerFactory> } */
+const getDefaultWorkerFactory = async () => {
+    if (isNodeRuntime) {
+        const {Worker} = await import('worker_threads') // @ts-ignore
+        return url => new Worker(url, {type: 'module'})
+    }
+    if (typeof Worker !== 'undefined') return url => new Worker(url, {type: 'module'})
+    throw new Error('Workers are not supported in this environment')
+}
+
+/** @type { (factory: VovkPLCWorkerFactory, url: URL | string) => Promise<VovkPLCWorkerLike> } */
+const createWorker = async (factory, url) => {
+    const worker = factory(url) // @ts-ignore
+    return worker && typeof worker.then === 'function' ? await worker : worker
+}
+
+/** @type { (wasmPath?: string, options?: VovkPLCWorkerOptions) => Promise<VovkPLCWorker> } */// @ts-ignore
+VovkPLC_class.createWorker = (wasmPath = '', options = {}) => VovkPLCWorker.create(wasmPath, options)
+
 // Export the module if we are in a browser
 if (typeof window !== 'undefined') {
     // console.log(`WASM exported as window object`)
@@ -604,3 +870,4 @@ if (typeof module !== 'undefined') {
 }
 // Export for ES modules
 export default VovkPLC_class
+export {VovkPLCWorker, VovkPLCWorkerClient, VovkPLCWorkerInstance}

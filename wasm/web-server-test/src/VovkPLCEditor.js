@@ -1432,10 +1432,10 @@ const draw_ladder = (editor, program, ladder) => {
 const getMemoryBit = (editor, offset, bit) => !!((editor.memory[offset] >> bit) & 1)
 /** @type { (editor: VovkPLCEditor, offset: number, bit: number, value: boolean) => void } */
 const setMemoryBit = (editor, offset, bit, value) => {
-    if (editor.runtime_ready) {
+    if (editor.runtime_ready && editor.runtime) {
         let byte = editor.memory[offset]
         byte = byte & ~(1 << bit) | (+value << bit)
-        editor.runtime.writeMemoryArea(offset, [byte])
+        editor.runtime.writeMemoryArea(offset, [byte]).catch(console.error)
     } else {
         const byte = editor.memory[offset]
         editor.memory[offset] = byte & ~(1 << bit) | (+value << bit)
@@ -1775,8 +1775,9 @@ export class VovkPLCEditor {
     workspace_context_menu = new Menu
 
     /** @type { number[] } */ memory = new Array(100).fill(0)
-    runtime = new PLCRuntimeWasm()
+    /** @type { import("../../dist/VovkPLC.js").VovkPLCWorker | null } */ runtime = null
     runtime_ready = false
+    runtime_busy = false
 
     /** @type { 'edit' | 'online' } */
     active_mode = 'edit'
@@ -2026,10 +2027,12 @@ export class VovkPLCEditor {
      * }} options 
     */
     constructor({ workspace, debug_css, initial_program }) {
-        this.runtime.initialize('/dist/VovkPLC.wasm').then(() => {
-            // console.log('PLC Runtime initialized')
-            this.runtime_ready = true
-        })
+        PLCRuntimeWasm.createWorker('/dist/VovkPLC.wasm')
+            .then(runtime => {
+                this.runtime = runtime
+                this.runtime_ready = true
+            })
+            .catch(console.error)
         this.initial_program = initial_program || null
         workspace = workspace || this.workspace
         if (typeof workspace === 'string') workspace = document.getElementById(workspace)
@@ -2351,10 +2354,17 @@ export class VovkPLCEditor {
     draw() {
         const simulation = this.active_mode === 'online' && this.active_device === 'simulation'
         const production = this.active_mode === 'online' && this.active_device === 'device'
-        if (simulation && this.runtime_ready && this.runtime.wasm_exports) {
+        if (simulation && this.runtime_ready && this.runtime && !this.runtime_busy) {
+            this.runtime_busy = true
             this.runtime.run()
-            const u8array = this.runtime.readMemoryArea(0, 64)
-            this.memory = [...u8array]
+                .then(() => this.runtime.readMemoryArea(0, 64))
+                .then(u8array => {
+                    this.memory = Array.from(u8array)
+                })
+                .catch(console.error)
+                .finally(() => {
+                    this.runtime_busy = false
+                })
         }
         this.active_program?.editor?.draw()
         update_navigation_tree(this)
