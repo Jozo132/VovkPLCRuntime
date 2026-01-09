@@ -81,8 +81,7 @@ app.use(express.static("./src"))
 app.use(express.static("./dist"))
 
 app.get("/", (req, res) => {
-    // res.sendFile("index.html", { root: "../" })
-    res.status(404).end()
+    res.sendFile("ladder.html", { root: "./" })
 })
 
 app.get("/custom/unique_users", (req, res) => {
