@@ -65,7 +65,8 @@ WASM_IMPORT void stderr(char c);
 WASM_IMPORT void streamOut(char c);
 
 #ifndef __WASM_STREAM_SIZE_IN__
-#define __WASM_STREAM_SIZE_IN__ 64536
+constexpr unsigned long __WASM_STREAM_SIZE_IN__SIZE_CONSTEXPR = 32 * (1024 * 1024); // 32 MB
+#define __WASM_STREAM_SIZE_IN__ __WASM_STREAM_SIZE_IN__SIZE_CONSTEXPR
 #endif // __WASM_STREAM_SIZE_IN__
 
 // Circular buffer
