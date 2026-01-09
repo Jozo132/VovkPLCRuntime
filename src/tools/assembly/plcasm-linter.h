@@ -87,10 +87,24 @@ public:
     
     // Override logBytecode to do nothing during linting
     // void logBytecode() { } // Actually not virtual in base class yet, but compiler methods call defaultCompiler wrapper? No, compiler methods inside 'build' don't call logBytecode.
+
+    // Override compileAssembly to return error if any problems found
+    bool compileAssembly(bool debug = true, bool lintMode = false) {
+        bool result = PLCASMCompiler::compileAssembly(debug, lintMode);
+        if (problem_count > 0) return true;
+        return result;
+    }
 };
 
 // Global Linter Instance
-PLCASMLinter defaultLinter;
+// Singleton wrapper to prevent re-initialization
+PLCASMLinter& getDefaultLinter() {
+    static PLCASMLinter instance;
+    return instance;
+}
+#define defaultLinter getDefaultLinter()
+
+// PLCASMLinter defaultLinter;
 
 // ### WASM Exports for Linter ###
 
@@ -104,14 +118,24 @@ extern "C" {
     // Runs the linter (compilation with debug=false, using the linter instance)
     WASM_EXPORT void lint_run() {
         defaultLinter.clearArray();
-        defaultLinter.compileAssembly(false, true); // false = no debug printing (though reportError is overridden anyway)
+        defaultLinter.compileAssembly(false, true); // false = no debug printing, true = lintMode
+    }
+    
+    // Reads assembly from the stream buffer into the linter
+    WASM_EXPORT void lint_load_assembly() {
+        defaultLinter.loadAssembly();
     }
 
-    // Returns a pointer to the problems array. JS reads 'count' from the int pointer argument.
-    WASM_EXPORT LinterProblem* getLinterProblems(int* count) {
-        *count = defaultLinter.problem_count;
+    WASM_EXPORT int lint_get_problem_count() {
+        return defaultLinter.problem_count;
+    }
+
+    WASM_EXPORT LinterProblem* lint_get_problems_pointer() {
         return defaultLinter.problems;
     }
+
+    // Deprecated or simplified wrapper if needed
+    // WASM_EXPORT LinterProblem* getLinterProblems(int* count) { ... }
 }
 
 #endif // __WASM__

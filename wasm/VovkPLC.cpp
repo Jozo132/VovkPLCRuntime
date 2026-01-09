@@ -57,6 +57,7 @@ void custom_test() {
 
 
         // Hand-coded RPN instructions:
+        runtime.program.format();
         runtime.program.push_f32(10);
         runtime.program.push_f32(1);
         runtime.program.push_f32(a);
@@ -90,6 +91,8 @@ void custom_test() {
           runtime.loadProgram(bytecode, size, checksum);
           // runtime.loadProgramUnsafe(bytecode, size);
         */
+
+        runtime.clear();
 
         RuntimeError status = UnitTest::fullProgramDebug(runtime);
 

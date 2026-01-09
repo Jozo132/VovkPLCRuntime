@@ -1,0 +1,66 @@
+// test_lint.js
+import VovkPLC from '../dist/VovkPLC.js'
+import path from 'path'
+import fs from 'fs'
+import {fileURLToPath} from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+const run = async () => {
+    // Path to WASM file
+    const wasmPath = path.resolve(__dirname, '../dist/VovkPLC.wasm')
+    console.log(`Loading WASM from: ${wasmPath}`)
+
+    if (!fs.existsSync(wasmPath)) {
+        console.error('WASM file not found!')
+        process.exit(1)
+    }
+
+    const runtime = new VovkPLC(wasmPath)
+    await runtime.initialize()
+
+
+    console.log('Runtime initialized. Testing linting with buggy assembly...')
+
+    // Buggy Assembly Test (from test_9_simulator_linter.cpp)
+    const assembly = `
+################# Linter Test Assembly
+
+# Error 1: Typo in instruction
+u8.const 10
+u8.typomistake 
+
+# Error 2: Missing operand
+u8.const 
+
+# Error 3: Jump to undefined label
+jmp undefined_label
+
+`
+
+    console.log('----------------------------------------')
+    console.log('Assembly Code to Lint (with intentional errors):')
+    console.log(assembly)
+    console.log('----------------------------------------')
+
+    // Lint the assembly
+    console.log('Linting assembly...')
+    const problems = runtime.lint(assembly)
+
+    if (problems.length > 0) {
+        console.log('Linting detected errors:')
+        problems.forEach((problem, index) => {
+            console.log(`  ${index + 1}. [${problem.type.toUpperCase()}] Line ${problem.line}, Column ${problem.column}: ${problem.message} (${problem.token})`)
+        })
+        console.log('SUCCESS: Linter detected errors in buggy assembly.')
+    } else {
+        console.error('Linting unexpectedly found no errors!')
+        process.exit(1)
+    }
+}
+
+run().catch(err => {
+    console.error('Unhandled Error:', err)
+    process.exit(1)
+})

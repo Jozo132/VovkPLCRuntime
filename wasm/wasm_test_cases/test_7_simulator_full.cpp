@@ -41,6 +41,7 @@ void custom_test() {
 
 
         // Hand-coded RPN instructions:
+        runtime.program.format();
         runtime.program.push_f32(10);
         runtime.program.push_f32(1);
         runtime.program.push_f32(a);

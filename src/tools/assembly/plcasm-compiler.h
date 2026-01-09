@@ -527,6 +527,9 @@ const int data_type_keywords_count = sizeof(data_type_keywords) / sizeof(data_ty
 
 class PLCASMCompiler {
 public:
+    int built_bytecode_length = 0;
+    u8 built_bytecode_checksum = 0;
+
     char assembly_string[MAX_ASSEMBLY_STRING_SIZE];
     char auto_exit_string[5]; // Stores "exit" for auto-append
     
@@ -544,8 +547,6 @@ public:
     int LUT_const_count = 0;
 
     u8 built_bytecode[PLCRUNTIME_MAX_PROGRAM_SIZE];
-    int built_bytecode_length = 0;
-    u8 built_bytecode_checksum = 0;
 
     ProgramLine programLines[PLCRUNTIME_MAX_PROGRAM_SIZE];
     int programLineCount = 0;
@@ -558,6 +559,7 @@ public:
     int downloaded_program_size = 0;
 
     PLCASMCompiler() {
+
         memset(tokens, 0, sizeof(tokens));
         memset(LUT_labels, 0, sizeof(LUT_labels));
         memset(LUT_consts, 0, sizeof(LUT_consts));
@@ -567,6 +569,8 @@ public:
         // Initialize auto_exit_string
         auto_exit_string[0] = 'e'; auto_exit_string[1] = 'x'; auto_exit_string[2] = 'i'; auto_exit_string[3] = 't'; auto_exit_string[4] = '\0';
         // Default assembly string
+        char default_asm[] = "DEFAULT_ASM_STRING_MARKER";
+/*
         char default_asm[] = R"(
 # This is a comment
     f32.const 0.1
@@ -575,6 +579,7 @@ public:
     f32.const -1
     f32.mul
 )";
+*/
         set_assembly_string(default_asm);
     }
 
@@ -745,11 +750,13 @@ public:
     }
 
     bool tokenize() {
+        token_count = 0; // Fix: Reset token count
         LUT_label_count = 0;
         LUT_const_count = 0;
         char* token_start = assembly_string;
         int token_length = 0;
         int assembly_string_length = string_len(assembly_string);
+
         bool in_string = false;
         bool error = false;
         for (int i = 0; i < assembly_string_length; i++) {
@@ -1325,7 +1332,6 @@ public:
         streamRead(assembly_string, size, MAX_ASSEMBLY_STRING_SIZE);
     }
 
-
     void logBytecode() {
         Serial.print(F("Bytecode checksum ")); print_hex(built_bytecode_checksum); Serial.print(F(", ")); Serial.print(built_bytecode_length); Serial.println(F(" bytes:"));
         for (int i = 0; i < built_bytecode_length; i++) {
@@ -1336,6 +1342,7 @@ public:
         }
         Serial.println();
     }
+
     
     // Check if I missed functions: uploadProgram, downloadProgram
 
@@ -1423,18 +1430,32 @@ public:
 
             logBytecode();
         }
+
         return false;
     }
 };
 
-VovkPLCRuntime runtime;
+// Include linter after compiler class is defined
+#include "plcasm-linter.h"
+
+// Singleton wrapper for runtime
+VovkPLCRuntime& getDefaultRuntime() {
+
+    static VovkPLCRuntime instance;
+    return instance;
+}
+#define runtime getDefaultRuntime()
+
+// VovkPLCRuntime runtime;
 
 // Implementation of methods relying on 'runtime'
+
 bool PLCASMCompiler::loadCompiledProgram() {
     Serial.printf("Loading program with %d bytes and checksum 0x%02X ...\n", built_bytecode_length, built_bytecode_checksum);
     runtime.loadProgram(built_bytecode, built_bytecode_length, built_bytecode_checksum);
     return false;
 }
+
 
 int PLCASMCompiler::downloadProgram(int size, int crc) {
     streamRead(downloaded_program, downloaded_program_size, MAX_DOWNLOADED_PROGRAM_SIZE);
@@ -1449,10 +1470,34 @@ int PLCASMCompiler::downloadProgram(int size, int crc) {
     return 0;
 }
 
-PLCASMCompiler defaultCompiler;
+// Singleton wrapper to prevent re-initialization
+PLCASMCompiler& getDefaultCompiler() {
+    static PLCASMCompiler instance;
+    return instance;
+}
+#define defaultCompiler getDefaultCompiler()
+
+// PLCASMCompiler defaultCompiler;
+
 
 WASM_EXPORT void loadAssembly() {
     defaultCompiler.loadAssembly();
+}
+
+WASM_EXPORT void loadAssemblyForLint() {
+    getDefaultLinter().loadAssembly();
+}
+
+WASM_EXPORT void clearLinter() {
+    getDefaultLinter().clearArray();
+}
+
+WASM_EXPORT void setLinterAssembly(char* s) {
+    getDefaultLinter().set_assembly_string(s);
+}
+
+WASM_EXPORT void copyAssemblyToLinter() {
+    getDefaultLinter().set_assembly_string(defaultCompiler.assembly_string);
 }
 
 WASM_EXPORT void logBytecode() {
@@ -1461,6 +1506,10 @@ WASM_EXPORT void logBytecode() {
 
 WASM_EXPORT bool compileAssembly(bool debug = true) {
     return defaultCompiler.compileAssembly(debug, false);
+}
+
+WASM_EXPORT bool lintAssembly(bool debug = true) {
+    return getDefaultLinter().compileAssembly(debug, true);
 }
 
 WASM_EXPORT void initialize() {

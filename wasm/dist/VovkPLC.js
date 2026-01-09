@@ -29,6 +29,10 @@
  *     downloadAssembly: (assembly: string) => boolean
  *     extractProgram: () => { size: number, output: string }
  *     memory: WebAssembly.Memory
+ *     lint_load_assembly: () => void
+ *     lint_run: () => void
+ *     lint_get_problem_count: () => number
+ *     lint_get_problems_pointer: () => number
  * }} VovkPLCExportTypes
 */
 
@@ -103,6 +107,87 @@ class VovkPLC_class {
             if (!this.wasm_exports[method]) throw new Error(`${method} function not found`)
         }
         return this
+    }
+
+    /** 
+     * @typedef {{ 
+     *     type: 'error' | 'warning' | 'info',
+     *     line: number,
+     *     column: number,
+     *     length: number,
+     *     message: string,
+     *     token: string
+     * }} LinterProblem
+     */
+
+    /** @param { string } assembly * @returns { LinterProblem[] } */
+    lint = (assembly) => {
+        if (!this.wasm_exports) throw new Error("WebAssembly module not initialized")
+        if (!this.wasm_exports.lint_load_assembly) throw new Error("'lint_load_assembly' function not found")
+        if (!this.wasm_exports.lint_run) throw new Error("'lint_run' function not found")
+        if (!this.wasm_exports.lint_get_problem_count) throw new Error("'lint_get_problem_count' function not found")
+        if (!this.wasm_exports.lint_get_problems_pointer) throw new Error("'lint_get_problems_pointer' function not found")
+
+        // 1. Download assembly to Linter
+        let ok = true
+        for (let i = 0; i < assembly.length && ok; i++) {
+            const char = assembly[i]
+            const c = char.charCodeAt(0)
+            ok = this.wasm_exports.streamIn(c)
+        }
+        if (!ok) throw new Error("Failed to stream assembly")
+        this.wasm_exports.lint_load_assembly()
+        
+        // 2. Run Linter
+        this.wasm_exports.lint_run()
+        
+        // 3. Get results
+        const count = this.wasm_exports.lint_get_problem_count()
+        if (count === 0) return []
+        
+        const pointer = this.wasm_exports.lint_get_problems_pointer()
+        const problems = []
+        
+        // Struct size = 84 bytes  (4+4+4+4+64+4)
+        const struct_size = 84
+        
+        // Access memory directly
+        const memoryBuffer = this.wasm_exports.memory.buffer
+        const view = new DataView(memoryBuffer)
+        
+        for (let i = 0; i < count; i++) {
+            const offset = pointer + (i * struct_size)
+            const type_int = view.getInt32(offset + 0, true)
+            const line = view.getInt32(offset + 4, true)
+            const column = view.getInt32(offset + 8, true)
+            const length = view.getInt32(offset + 12, true)
+            
+            // message is 64 bytes at offset 16
+            let message = ""
+            for (let j = 0; j < 64; j++) {
+                const charCode = view.getUint8(offset + 16 + j)
+                if (charCode === 0) break;
+                message += String.fromCharCode(charCode)
+            }
+            
+            const token_ptr = view.getInt32(offset + 80, true)
+            let token = ""
+            if (token_ptr !== 0 && length > 0) {
+                 const token_buf = new Uint8Array(memoryBuffer, token_ptr, length)
+                 token = new TextDecoder().decode(token_buf)
+            }
+            
+            problems.push({
+                type: type_int === 2 ? 'error' : (type_int === 1 ? 'warning' : 'info'),
+                line,
+                column,
+                length,
+                message,
+                token
+            })
+        }
+        
+        return problems
     }
 
     printInfo = () => {
