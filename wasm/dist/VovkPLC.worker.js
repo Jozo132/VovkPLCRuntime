@@ -9,7 +9,7 @@ const isNodeRuntime = typeof process !== 'undefined' && !!(process.versions && p
  * @typedef {{ post: (message: any) => void, on: (handler: (message: any) => void) => void }} VovkPLCWorkerPort
  * @typedef {Map<number, VovkPLC>} VovkPLCInstanceMap
  * @typedef {Map<string | number, Promise<any>>} VovkPLCQueueMap
- * @typedef {{ id: number, type: string, instanceId?: number, method?: string, args?: any[], stream?: string, wasmPath?: string, debug?: boolean }} VovkPLCWorkerRequest
+ * @typedef {{ id: number, type: string, instanceId?: number, method?: string, args?: any[], stream?: string, wasmPath?: string, debug?: boolean, silent?: boolean }} VovkPLCWorkerRequest
  * @typedef {{ id: number, ok: boolean, result?: any, error?: string }} VovkPLCWorkerResponse
  * @typedef {{ type: 'event', event: 'stdout' | 'stderr', instanceId?: number, message: string }} VovkPLCWorkerEvent
  */
@@ -56,19 +56,19 @@ const enqueue = (key, fn) => {
 /** @type { (instanceId?: number | null) => string | number } */
 const getInstanceKey = instanceId => (instanceId == null ? 'default' : instanceId)
 
-/** @type { (wasmPath?: string, debug?: boolean) => Promise<boolean> } */
-const ensureDefault = async (wasmPath, debug) => {
+/** @type { (wasmPath?: string, debug?: boolean, silent?: boolean) => Promise<boolean> } */
+const ensureDefault = async (wasmPath, debug, silent = false) => {
     if (!defaultInstance) defaultInstance = new VovkPLC(wasmPath)
-    await defaultInstance.initialize(wasmPath, debug)
+    await defaultInstance.initialize(wasmPath, debug, silent)
     return true
 }
 
-/** @type { (wasmPath?: string, debug?: boolean) => Promise<number> } */
-const createInstance = async (wasmPath, debug) => {
+/** @type { (wasmPath?: string, debug?: boolean, silent?: boolean) => Promise<number> } */
+const createInstance = async (wasmPath, debug, silent = false) => {
     const instanceId = nextId++
     const instance = new VovkPLC(wasmPath)
     instances.set(instanceId, instance)
-    await instance.initialize(wasmPath, debug)
+    await instance.initialize(wasmPath, debug, silent)
     return instanceId
 }
 
@@ -120,11 +120,11 @@ const handleMessage = async (post, message) => {
     try {
         let result
         if (type === 'init') {
-            const {wasmPath = '', debug = false} = message
-            result = await enqueue('default', () => ensureDefault(wasmPath, debug))
+            const {wasmPath = '', debug = false, silent = false} = message
+            result = await enqueue('default', () => ensureDefault(wasmPath, debug, silent))
         } else if (type === 'create') {
-            const {wasmPath = '', debug = false} = message
-            result = await createInstance(wasmPath, debug)
+            const {wasmPath = '', debug = false, silent = false} = message
+            result = await createInstance(wasmPath, debug, silent)
         } else if (type === 'dispose') {
             result = disposeInstance(message.instanceId)
         } else if (type === 'call') {

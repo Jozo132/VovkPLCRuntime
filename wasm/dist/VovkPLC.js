@@ -65,11 +65,12 @@ class VovkPLC_class {
         this.wasm_path = wasm_path
     }
 
-    initialize = async (wasm_path = '', debug = false) => {
+    initialize = async (wasm_path = '', debug = false, silent = false) => {
         wasm_path = wasm_path || this.wasm_path || '/dist/VovkPLC.wasm' // "/wasm_test_cases/string_alloc.wasm"
         this.wasm_path = wasm_path
         if (this.running && this.wasm) return this
         this.running = true
+        this.setSilent(!!silent)
         if (debug) console.log('Starting up...')
         /** @type { BufferSource | null } */
         let wasmBuffer = null
@@ -626,7 +627,7 @@ class VovkPLC_class {
  */
 
 /**
- * @typedef {{ workerUrl?: URL | string, workerFactory?: VovkPLCWorkerFactory, debug?: boolean }} VovkPLCWorkerOptions
+ * @typedef {{ workerUrl?: URL | string, workerFactory?: VovkPLCWorkerFactory, debug?: boolean, silent?: boolean }} VovkPLCWorkerOptions
  */
 
 /**
@@ -744,8 +745,8 @@ class VovkPLCWorkerClient {
         return this._send('subscribe', {stream, instanceId})
     }
 
-    /** @type { (wasmPath?: string, debug?: boolean) => Promise<any> } */
-    initialize = (wasmPath = '', debug = false) => this._send('init', {wasmPath, debug})
+    /** @type { (wasmPath?: string, debug?: boolean, silent?: boolean) => Promise<any> } */
+    initialize = (wasmPath = '', debug = false, silent = false) => this._send('init', {wasmPath, debug, silent})
     /** @type { (method: string, ...args: any[]) => Promise<any> } */
     call = (method, ...args) => this._send('call', {method, args})
     /** @type { (instanceId: number | null | undefined, method: string, ...args: any[]) => Promise<any> } */
@@ -792,12 +793,12 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
     }
 
     /** @type { (wasmPath?: string, options?: VovkPLCWorkerOptions) => Promise<VovkPLCWorker> } */
-    static create = async (wasmPath = '', {workerUrl, workerFactory, debug = false} = {}) => {
+    static create = async (wasmPath = '', {workerUrl, workerFactory, debug = false, silent = false} = {}) => {
         const resolvedUrl = workerUrl || new URL('./VovkPLC.worker.js', import.meta.url)
         const factory = workerFactory || (await getDefaultWorkerFactory())
         const worker = await createWorker(factory, resolvedUrl)
         const client = new VovkPLCWorker(worker)
-        await client.initialize(wasmPath, debug)
+        await client.initialize(wasmPath, debug, silent)
         return client
     }
 
@@ -854,7 +855,7 @@ const createWorker = async (factory, url) => {
     return worker && typeof worker.then === 'function' ? await worker : worker
 }
 
-/** @type { (wasmPath?: string, options?: VovkPLCWorkerOptions) => Promise<VovkPLCWorker> } */// @ts-ignore
+/** @type { (wasmPath?: string, options?: VovkPLCWorkerOptions) => Promise<VovkPLCWorker> } */ // @ts-ignore
 VovkPLC_class.createWorker = (wasmPath = '', options = {}) => VovkPLCWorker.create(wasmPath, options)
 
 // Export the module if we are in a browser

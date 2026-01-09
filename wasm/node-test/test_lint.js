@@ -17,7 +17,7 @@ const run = async () => {
         process.exit(1)
     }
 
-    const runtime = await VovkPLC.createWorker(wasmPath)
+    const runtime = await VovkPLC.createWorker(wasmPath, { silent: true })
     try {
         console.log('Runtime initialized. Testing linting with buggy assembly...')
 
