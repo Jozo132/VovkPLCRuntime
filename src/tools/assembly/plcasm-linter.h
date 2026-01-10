@@ -44,11 +44,20 @@ public:
     // Returns true to indicate an error occurred (which stops the build in the current compiler logic)
     bool reportError(Token& token, const char* message) override {
         int replace_index = -1;
+        int same_line_index = -1;
         for (int j = 0; j < problem_count; j++) {
-            if (problems[j].line == token.line && problems[j].column == token.column) {
-                replace_index = j;
-                break;
+            if (problems[j].line == token.line) {
+                if (same_line_index < 0) same_line_index = j;
+                if (problems[j].column == token.column) {
+                    replace_index = j;
+                    break;
+                }
             }
+        }
+
+        if (replace_index < 0 && same_line_index >= 0) {
+            if (token.column < problems[same_line_index].column) replace_index = same_line_index;
+            else return false;
         }
 
         if (replace_index < 0 && problem_count >= MAX_LINT_PROBLEMS) return true;
