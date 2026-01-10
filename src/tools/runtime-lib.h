@@ -358,7 +358,6 @@ public:
                 printInfo();
 
             } else if (plc_reset) {
-                Serial.print(F("PLC RESET - "));
 
                 // Read the checksum
                 checksum = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
@@ -369,12 +368,11 @@ public:
                     return;
                 }
 
-                Serial.println(F("Complete"));
+                Serial.println(F("OK PLC RESET"));
                 processExit();
                 return;
 
             } else if (program_download) {
-                Serial.print(F("PROGRAM DOWNLOAD - "));
                 // Read the size
                 size = (u32) serialReadHexByteTimeout();  SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, (size & 0xff));
@@ -408,9 +406,8 @@ public:
                 }
                 program.resetLine();
 
-                Serial.println(F("Complete"));
+                Serial.println(F("PROGRAM DOWNLOAD COMPLETE"));
             } else if (program_upload) {
-                Serial.print(F("PROGRAM UPLOAD - "));
                 // Read the checksum
                 checksum = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
 
@@ -420,12 +417,11 @@ public:
                     return;
                 }
 
+                Serial.print(F("OK "));
                 // Print the program
                 program.println();
 
-                Serial.println(F("Complete"));
             } else if (program_run) {
-                Serial.print(F("PROGRAM RUN - "));
                 // Read the checksum
                 checksum = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
 
@@ -435,9 +431,8 @@ public:
                     return;
                 }
 
-                Serial.println(F("Complete"));
+                Serial.println(F("OK PROGRAM RUN"));
             } else if (program_stop) {
-                Serial.print(F("PROGRAM STOP - "));
                 // Read the checksum
                 checksum = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
 
@@ -447,9 +442,8 @@ public:
                     return;
                 }
 
-                Serial.println(F("Complete"));
+                Serial.println(F("OK PROGRAM STOP"));
             } else if (memory_read) {
-                Serial.print(F("MEMORY READ - "));
                 // Read the address
                 address = (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, (address & 0xff));
@@ -479,6 +473,13 @@ public:
                     return;
                 }
 
+                // Check if the address and size are valid
+                if (address + size > PLCRUNTIME_MAX_MEMORY_SIZE) {
+                    Serial.println(F("Invalid address or size"));
+                    return;
+                }
+
+                Serial.print(F("OK "));
                 // Read the data
                 u8 value;
                 for (u32 i = 0; i < size; i++) {
@@ -491,15 +492,12 @@ public:
                     else c2 += 'A' - 10;
                     Serial.print(c1);
                     Serial.print(c2);
-                    Serial.print(' ');
+                    Serial.print('');
                 }
 
                 // Print the data
                 Serial.println();
-
-                Serial.println(F("Complete"));
             } else if (memory_write) {
-                Serial.print(F("MEMORY WRITE - "));
                 // Read the address
                 address = (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, (address & 0xff));
@@ -536,13 +534,18 @@ public:
                     return;
                 }
 
+                // Check if the address and size are valid
+                if (address + size > PLCRUNTIME_MAX_MEMORY_SIZE) {
+                    Serial.println(F("Invalid address or size"));
+                    return;
+                }
+
                 // Write the data
                 for (u32 i = 0; i < size; i++)
                     set_u8(memory, address + i, data[i]);
 
-                Serial.println(F("Complete"));
+                Serial.println(F("OK MEMORY WRITE"));
             } else if (memory_format) {
-                Serial.print(F("MEMORY FORMAT - "));
                 // Read the address
                 address = (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
                 crc8_simple(checksum_calc, (address & 0xff));
@@ -576,11 +579,18 @@ public:
                     return;
                 }
 
+                // Check if the address and size are valid
+                if (address + size > PLCRUNTIME_MAX_MEMORY_SIZE) {
+                    Serial.println(F("Invalid address or size"));
+                    return;
+                }
+
                 // Format the memory
                 for (u32 i = 0; i < size; i++)
                     set_u8(memory, address + i, value);
 
-                Serial.println(F("Complete"));
+
+                Serial.println(F("OK MEMORY FORMAT"));
             } else if (source_download) {
                 Serial.println(F("SOURCE DOWNLOAD - Not implemented"));
             } else if (source_upload) {
