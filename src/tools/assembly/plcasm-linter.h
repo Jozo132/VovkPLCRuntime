@@ -43,25 +43,17 @@ public:
     // Override the reportError method to capture errors instead of printing to Serial
     // Returns true to indicate an error occurred (which stops the build in the current compiler logic)
     bool reportError(Token& token, const char* message) override {
-        // Stop if we reached the limit
-        if (problem_count >= MAX_LINT_PROBLEMS) return true;
-
-        // Check for duplicates (same line, column, and message) before adding
+        int replace_index = -1;
         for (int j = 0; j < problem_count; j++) {
-             if (problems[j].line == token.line && problems[j].column == token.column) {
-                 const char* s1 = problems[j].message;
-                 const char* s2 = message;
-                 bool same = true;
-                 // Compare messages (up to 63 chars as stored)
-                 for(int k=0; k<63; k++) {
-                     if (s1[k] != s2[k]) { same = false; break; }
-                     if (s1[k] == 0) break; // End of string
-                 }
-                 if (same) return false; // Duplicate: Don't add, continue building
-             }
+            if (problems[j].line == token.line && problems[j].column == token.column) {
+                replace_index = j;
+                break;
+            }
         }
 
-        LinterProblem& p = problems[problem_count];
+        if (replace_index < 0 && problem_count >= MAX_LINT_PROBLEMS) return true;
+
+        LinterProblem& p = replace_index >= 0 ? problems[replace_index] : problems[problem_count];
         p.type = LINT_ERROR;
         p.line = token.line;
         p.column = token.column;
@@ -81,7 +73,7 @@ public:
         }
         p.message[i] = '\0';
 
-        problem_count++;
+        if (replace_index < 0) problem_count++;
         return problem_count >= MAX_LINT_PROBLEMS;
     }
     
