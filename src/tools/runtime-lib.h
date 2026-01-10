@@ -492,7 +492,6 @@ public:
                     else c2 += 'A' - 10;
                     Serial.print(c1);
                     Serial.print(c2);
-                    Serial.print('');
                 }
 
                 // Print the data
