@@ -477,6 +477,7 @@ public:
             // Possible commands:
             //  - PLC reset:        'RS<u8>' (checksum)
             //  - PLC health:       'PH<u8>' (checksum)
+            //  - Health reset:     'RH<u8>' (checksum)
             //  - Program download: 'PD<u32><u8[]><u8>' (size, data, checksum)
             //  - Program upload:   'PU<u8>' (checksum)
             //  - Program run:      'PR<u8>' (checksum)
@@ -506,6 +507,7 @@ public:
             bool ping = cmd[0] == '?';
             bool plc_info = cmd[0] == 'P' && cmd[1] == 'I';
             bool plc_health = cmd[0] == 'P' && cmd[1] == 'H';
+            bool plc_health_reset = cmd[0] == 'R' && cmd[1] == 'H';
             bool plc_reset = cmd[0] == 'R' && cmd[1] == 'S';
             bool program_download = cmd[0] == 'P' && cmd[1] == 'D';
             bool program_upload = cmd[0] == 'P' && cmd[1] == 'U';
@@ -549,6 +551,19 @@ public:
                 printHexU32(getRamUsed());
                 printHexU32(getMaxRamUsed());
                 Serial.println();
+
+            } else if (plc_health_reset) {
+                // Read the checksum
+                checksum = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+
+                // Verify the checksum
+                if (checksum != checksum_calc) {
+                    Serial.println(F("Invalid checksum"));
+                    return;
+                }
+
+                resetDeviceHealth();
+                Serial.println(F("OK HEALTH RESET"));
 
             } else if (plc_reset) {
 
