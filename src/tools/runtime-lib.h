@@ -310,6 +310,7 @@ public:
             //  - Program stop:     'PS<u8>' (checksum)
             //  - Memory read:      'MR<u32><u32><u8>' (address, size, checksum)
             //  - Memory write:     'MW<u32><u32><u8[]><u8>' (address, size, data, checksum)
+            //  - Memory write mask:'MM<u32><u32><u8[]><u8[]><u8>' (address, size, data, mask, checksum)
             //  - Memory format:    'MF<u32><u32><u8><u8>' (address, size, value, checksum)
             //  - Source download:  'SD<u32><u8[]><u8>' (size, data, checksum) // Only available if PLCRUNTIME_SOURCE_ENABLED is defined
             //  - Source upload:    'SU<u32><u8>' (size, checksum) // Only available if PLCRUNTIME_SOURCE_ENABLED is defined
@@ -338,6 +339,7 @@ public:
             bool program_stop = cmd[0] == 'P' && cmd[1] == 'S';
             bool memory_read = cmd[0] == 'M' && cmd[1] == 'R';
             bool memory_write = cmd[0] == 'M' && cmd[1] == 'W';
+            bool memory_write_mask = cmd[0] == 'M' && cmd[1] == 'M';
             bool memory_format = cmd[0] == 'M' && cmd[1] == 'F';
             bool source_download = cmd[0] == 'S' && cmd[1] == 'D';
             bool source_upload = cmd[0] == 'S' && cmd[1] == 'U';
@@ -544,6 +546,59 @@ public:
                     set_u8(memory, address + i, data[i]);
 
                 Serial.println(F("OK MEMORY WRITE"));
+            } else if (memory_write_mask) {
+                // Read the address
+                address = (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (address & 0xff));
+                address = address << 8 | (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (address & 0xff));
+                address = address << 8 | (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (address & 0xff));
+                address = address << 8 | (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (address & 0xff));
+
+                // Read the size
+                size = (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (size & 0xff));
+                size = size << 8 | (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (size & 0xff));
+                size = size << 8 | (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (size & 0xff));
+                size = size << 8 | (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (size & 0xff));
+
+                // Read the data + mask (double length)
+                data = new u8[size * 2];
+                for (u32 i = 0; i < size * 2; i++) {
+                    data[i] = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                    crc8_simple(checksum_calc, data[i]);
+                }
+
+                // Read the checksum
+                checksum = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+
+                // Verify the checksum
+                if (checksum != checksum_calc) {
+                    Serial.println(F("Invalid checksum"));
+                    return;
+                }
+
+                // Check if the address and size are valid
+                if (address + size > PLCRUNTIME_MAX_MEMORY_SIZE) {
+                    Serial.println(F("Invalid address or size"));
+                    return;
+                }
+
+                // Write the masked data
+                for (u32 i = 0; i < size; i++) {
+                    u8 current;
+                    get_u8(memory, address + i, current);
+                    u8 value = data[i];
+                    u8 mask = data[size + i];
+                    set_u8(memory, address + i, (current & ~mask) | (value & mask));
+                }
+
+                Serial.println(F("OK MEMORY WRITE MASK"));
             } else if (memory_format) {
                 // Read the address
                 address = (u32) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;

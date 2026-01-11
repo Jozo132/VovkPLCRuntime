@@ -18,6 +18,7 @@ const isNodeRuntime = typeof process !== 'undefined' && !!(process.versions && p
  *     getMemoryLocation: () => number
  *     getMemoryArea: (address: number, size: number) => number
  *     writeMemoryByte: (address: number, byte: number) => number
+ *     writeMemoryByteMasked: (address: number, byte: number, mask: number) => number
  *     get_free_memory: () => number
  *     doNothing: () => void
  *     setMillis: (millis: number) => void
@@ -359,6 +360,21 @@ class VovkPLC_class {
         return output
     }
 
+    /** @type { (address: number, data: number[], mask: number[]) => string } */
+    writeMemoryAreaMasked = (address, data, mask) => {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        if (!this.wasm_exports.writeMemoryByteMasked) throw new Error("'writeMemoryByteMasked' function not found")
+        if (data.length !== mask.length) throw new Error('Mask length must match data length')
+        for (let i = 0; i < data.length; i++) {
+            const byte = data[i] & 0xff
+            const maskByte = mask[i] & 0xff
+            const success = this.wasm_exports.writeMemoryByteMasked(address + i, byte, maskByte)
+            if (!success) throw new Error(`Failed to write byte ${byte} at address ${address + i}`)
+        }
+        const output = this.readStream()
+        return output
+    }
+
     getExports = () => {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         return this.wasm_exports
@@ -480,6 +496,7 @@ class VovkPLC_class {
     //  - Program stop:     'PS<u8>' (checksum)
     //  - Memory read:      'MR<u32><u32><u8>' (address, size, checksum)
     //  - Memory write:     'MW<u32><u32><u8[]><u8>' (address, size, data, checksum)
+    //  - Memory write mask:'MM<u32><u32><u8[]><u8[]><u8>' (address, size, data, mask, checksum)
     //  - Memory format:    'MF<u32><u32><u8><u8>' (address, size, value, checksum)
     //  - Source download:  'SD<u32><u8[]><u8>' (size, data, checksum) // Only available if PLCRUNTIME_SOURCE_ENABLED is defined
     //  - Source upload:    'SU<u32><u8>' (size, checksum) // Only available if PLCRUNTIME_SOURCE_ENABLED is defined
@@ -589,6 +606,47 @@ class VovkPLC_class {
             checksum = this.crc8(data, checksum)
             const checksum_hex = checksum.toString(16).padStart(2, '0')
             const command = cmd + address_hex_u32 + size_hex_u32 + data_hex + checksum_hex
+            return command
+        },
+
+        /** @type { (address: number, data: number[] | [number[]] | [string], mask: number[] | [number[]] | [string]) => string } */
+        memoryWriteMask: (address, data, mask) => {
+            const cmd = 'MM'
+            const cmd_hex = this.stringToHex(cmd)
+            let checksum = this.crc8(this.parseHex(cmd_hex))
+            const address_hex_u32 = address.toString(16).padStart(8, '0')
+            checksum = this.crc8(this.parseHex(address_hex_u32), checksum)
+            data = Array.isArray(data[0]) ? data[0] : data
+            mask = Array.isArray(mask[0]) ? mask[0] : mask
+            const allowedChars = '0123456789abcdefABCDEF'
+            if (typeof data[0] === 'string')
+                data = this.parseHex(
+                    data[0]
+                        .split('')
+                        .filter(c => allowedChars.includes(c))
+                        .join('') || ''
+                )
+            if (typeof mask[0] === 'string')
+                mask = this.parseHex(
+                    mask[0]
+                        .split('')
+                        .filter(c => allowedChars.includes(c))
+                        .join('') || ''
+                )
+            /** @type { number[] } */ // @ts-ignore
+            const data_bytes = data
+            /** @type { number[] } */ // @ts-ignore
+            const mask_bytes = mask
+            if (data_bytes.length !== mask_bytes.length) throw new Error('Mask length must match data length')
+            const size = data_bytes.length
+            const size_hex_u32 = size.toString(16).padStart(8, '0')
+            checksum = this.crc8(this.parseHex(size_hex_u32), checksum)
+            checksum = this.crc8(data_bytes, checksum)
+            checksum = this.crc8(mask_bytes, checksum)
+            const data_hex = data_bytes.map(d => d.toString(16).padStart(2, '0')).join('')
+            const mask_hex = mask_bytes.map(d => d.toString(16).padStart(2, '0')).join('')
+            const checksum_hex = checksum.toString(16).padStart(2, '0')
+            const command = cmd + address_hex_u32 + size_hex_u32 + data_hex + mask_hex + checksum_hex
             return command
         },
 
@@ -824,6 +882,8 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
     readMemoryArea = (address, size = 1) => this.call('readMemoryArea', address, size)
     /** @type { (address: number, data: number[]) => Promise<string> } */
     writeMemoryArea = (address, data) => this.call('writeMemoryArea', address, data)
+    /** @type { (address: number, data: number[], mask: number[]) => Promise<string> } */
+    writeMemoryAreaMasked = (address, data, mask) => this.call('writeMemoryAreaMasked', address, data, mask)
     /** @type { () => Promise<string> } */
     readStream = () => this.call('readStream')
     /** @type { () => Promise<string[]> } */

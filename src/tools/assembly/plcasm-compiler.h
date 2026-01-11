@@ -1662,6 +1662,16 @@ WASM_EXPORT u32 writeMemoryByte(u32 address, u8 byte) {
     return 1;
 }
 
+WASM_EXPORT u32 writeMemoryByteMasked(u32 address, u8 byte, u8 mask) {
+    u8 current = 0;
+    bool error = get_u8(runtime.memory, address, current);
+    if (error) return 0;
+    u8 next = (current & ~mask) | (byte & mask);
+    error = set_u8(runtime.memory, address, next);
+    if (error) return 0;
+    return 1;
+}
+
 WASM_EXPORT void external_print(const char* string) {
     Serial.print(string);
 }
@@ -1676,5 +1686,6 @@ void runFullProgramDebug() {}
 u32 uploadProgram() { return 0; }
 u32 getMemoryArea(u32 address, u32 size) { return 0; }
 u32 writeMemoryByte(u32 address, u8 byte) { return 0; }
+u32 writeMemoryByteMasked(u32 address, u8 byte, u8 mask) { return 0; }
 
 #endif // __WASM__
