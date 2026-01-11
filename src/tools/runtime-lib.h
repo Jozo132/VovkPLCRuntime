@@ -122,7 +122,7 @@ public:
     u32 last_cycle_time_us = 0;
     u32 max_cycle_time_us = 0;
     u32 last_ram_free = 0;
-    u32 min_ram_free = 0;
+    u32 min_ram_free = 99999999999;
 
     static void splash() {
         Serial.println();
@@ -206,10 +206,8 @@ public:
         return min_ram_free;
     }
     void resetDeviceHealth() {
-        last_cycle_time_us = 0;
         max_cycle_time_us = 0;
-        last_ram_free = 0;
-        min_ram_free = 0;
+        min_ram_free = last_ram_free;
     }
     // Read a custom type T value from the stack. This will pop the stack by sizeof(T) bytes and return the value.
     template <typename T> T read() {
