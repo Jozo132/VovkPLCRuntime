@@ -162,12 +162,12 @@ WASM_EXPORT u32 getMaxCycleTimeUs() {
     return runtime.getMaxCycleTimeUs();
 }
 
-WASM_EXPORT u32 getRamUsed() {
-    return runtime.getRamUsed();
+WASM_EXPORT u32 getRamFree() {
+    return runtime.getRamFree();
 }
 
-WASM_EXPORT u32 getMaxRamUsed() {
-    return runtime.getMaxRamUsed();
+WASM_EXPORT u32 getMinRamFree() {
+    return runtime.getMinRamFree();
 }
 
 WASM_EXPORT void resetDeviceHealth() {

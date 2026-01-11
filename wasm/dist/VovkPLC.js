@@ -21,8 +21,8 @@ const isNodeRuntime = typeof process !== 'undefined' && !!(process.versions && p
  *     writeMemoryByteMasked: (address: number, byte: number, mask: number) => number
  *     getLastCycleTimeUs: () => number
  *     getMaxCycleTimeUs: () => number
- *     getRamUsed: () => number
- *     getMaxRamUsed: () => number
+ *     getRamFree: () => number
+ *     getMinRamFree: () => number
  *     resetDeviceHealth: () => void
  *     get_free_memory: () => number
  *     doNothing: () => void
@@ -48,8 +48,8 @@ const isNodeRuntime = typeof process !== 'undefined' && !!(process.versions && p
  * @typedef {{
  *     last_cycle_time_us: number,
  *     max_cycle_time_us: number,
- *     ram_used: number,
- *     max_ram_used: number,
+ *     ram_free: number,
+ *     min_ram_free: number,
  * }} DeviceHealth
  */
 
@@ -296,13 +296,13 @@ class VovkPLC_class {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         if (!this.wasm_exports.getLastCycleTimeUs) throw new Error("'getLastCycleTimeUs' function not found")
         if (!this.wasm_exports.getMaxCycleTimeUs) throw new Error("'getMaxCycleTimeUs' function not found")
-        if (!this.wasm_exports.getRamUsed) throw new Error("'getRamUsed' function not found")
-        if (!this.wasm_exports.getMaxRamUsed) throw new Error("'getMaxRamUsed' function not found")
+        if (!this.wasm_exports.getRamFree) throw new Error("'getRamFree' function not found")
+        if (!this.wasm_exports.getMinRamFree) throw new Error("'getMinRamFree' function not found")
         return {
             last_cycle_time_us: this.wasm_exports.getLastCycleTimeUs(),
             max_cycle_time_us: this.wasm_exports.getMaxCycleTimeUs(),
-            ram_used: this.wasm_exports.getRamUsed(),
-            max_ram_used: this.wasm_exports.getMaxRamUsed(),
+            ram_free: this.wasm_exports.getRamFree(),
+            min_ram_free: this.wasm_exports.getMinRamFree(),
         }
     }
 

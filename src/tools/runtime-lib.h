@@ -91,10 +91,10 @@ class VovkPLCRuntime {
 private:
     bool started_up = false;
     void updateRamStats() {
-        int used = get_used_memory();
-        u32 used_u32 = used < 0 ? 0u : (u32) used;
-        last_ram_used = used_u32;
-        if (used_u32 > max_ram_used) max_ram_used = used_u32;
+        int free_mem = freeMemory();
+        u32 free_u32 = free_mem < 0 ? 0u : (u32) free_mem;
+        last_ram_free = free_u32;
+        if (free_u32 < min_ram_free) min_ram_free = free_u32;
     }
     void updateCycleStats(u32 cycle_time_us) {
         last_cycle_time_us = cycle_time_us;
@@ -121,8 +121,8 @@ public:
     RuntimeProgram program = RuntimeProgram(); // Active PLC program
     u32 last_cycle_time_us = 0;
     u32 max_cycle_time_us = 0;
-    u32 last_ram_used = 0;
-    u32 max_ram_used = 0;
+    u32 last_ram_free = 0;
+    u32 min_ram_free = 0;
 
     static void splash() {
         Serial.println();
@@ -197,19 +197,19 @@ public:
     }
     u32 getLastCycleTimeUs() const { return last_cycle_time_us; }
     u32 getMaxCycleTimeUs() const { return max_cycle_time_us; }
-    u32 getRamUsed() {
+    u32 getRamFree() {
         updateRamStats();
-        return last_ram_used;
+        return last_ram_free;
     }
-    u32 getMaxRamUsed() {
+    u32 getMinRamFree() {
         updateRamStats();
-        return max_ram_used;
+        return min_ram_free;
     }
     void resetDeviceHealth() {
         last_cycle_time_us = 0;
         max_cycle_time_us = 0;
-        last_ram_used = 0;
-        max_ram_used = 0;
+        last_ram_free = 0;
+        min_ram_free = 0;
     }
     // Read a custom type T value from the stack. This will pop the stack by sizeof(T) bytes and return the value.
     template <typename T> T read() {
@@ -548,8 +548,8 @@ public:
                 Serial.print(F("PH"));
                 printHexU32(getLastCycleTimeUs());
                 printHexU32(getMaxCycleTimeUs());
-                printHexU32(getRamUsed());
-                printHexU32(getMaxRamUsed());
+                printHexU32(getRamFree());
+                printHexU32(getMinRamFree());
                 Serial.println();
 
             } else if (plc_health_reset) {
