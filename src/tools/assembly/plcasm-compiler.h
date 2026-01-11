@@ -599,6 +599,7 @@ public:
 
     bool last_token_is_exit = false;
     int num_of_compile_runs = 0;
+    bool emit_warnings = false;
 
     #define MAX_DOWNLOADED_PROGRAM_SIZE 64535
     u8 downloaded_program[MAX_DOWNLOADED_PROGRAM_SIZE];
@@ -1031,6 +1032,31 @@ public:
         }
     }
 
+    bool memorySizeFromPrefix(char prefix, int& size, const char*& name) {
+        switch (prefix) {
+            case 'C': case 'c': size = PLCRUNTIME_NUM_OF_CONTROLS; name = "controls"; return true;
+            case 'X': case 'x': size = PLCRUNTIME_NUM_OF_INPUTS; name = "inputs"; return true;
+            case 'Y': case 'y': size = PLCRUNTIME_NUM_OF_OUTPUTS; name = "outputs"; return true;
+            case 'S': case 's': size = PLCRUNTIME_NUM_OF_SYSTEMS; name = "systems"; return true;
+            case 'M': case 'm': size = PLCRUNTIME_NUM_OF_MARKERS; name = "markers"; return true;
+            default: return false;
+        }
+    }
+
+    void warnPrefixedAddressOutOfRange(Token& token, char prefix, int address) {
+        if (!emit_warnings) return;
+        int size = 0;
+        const char* name = "";
+        if (!memorySizeFromPrefix(prefix, size, name)) return;
+        if (address >= 0 && address < size) return;
+        Serial.print(F(" WARNING: ")); Serial.print(name);
+        Serial.print(F(" address ")); Serial.print(address);
+        Serial.print(F(" is outside size ")); Serial.print(size);
+        Serial.print(F(" -> ")); token.print();
+        Serial.print(F(" at line ")); Serial.print(token.line); Serial.print(F(":")); Serial.println(token.column);
+        token.highlight(assembly_string);
+    }
+
     bool parsePrefixedAddressToken(Token& token, StringView& number, int& offset) {
         if (token.length < 2) return false;
         if (!memoryOffsetFromPrefix(token.string[0], offset)) return false;
@@ -1045,8 +1071,17 @@ public:
         if (parsePrefixedAddressToken(token, number, offset)) {
             int value_int = 0;
             float value_float = 0;
-            if (isInteger(number, value_int)) { output = offset + value_int; return false; }
-            if (isReal(number, value_float)) { output = offset + (int) value_float; return false; }
+            if (isInteger(number, value_int)) {
+                warnPrefixedAddressOutOfRange(token, token.string[0], value_int);
+                output = offset + value_int;
+                return false;
+            }
+            if (isReal(number, value_float)) {
+                int addr = (int) value_float;
+                warnPrefixedAddressOutOfRange(token, token.string[0], addr);
+                output = offset + addr;
+                return false;
+            }
             return true;
         }
         return intFromToken(token, output);
@@ -1096,12 +1131,14 @@ public:
             int value_int = 0;
             float value = 0;
             if (isInteger(number, value_int)) {
+                warnPrefixedAddressOutOfRange(token, token.string[0], value_int);
                 address = offset + value_int;
                 bit = 0;
                 return false;
             }
             if (isReal(number, value)) {
                 float addr = (int) value;
+                warnPrefixedAddressOutOfRange(token, token.string[0], (int) addr);
                 address = (int) addr + offset;
                 bit = (int) ((value - addr) * 100.0);
                 bit = bit > 65 ? 7 :
@@ -1182,6 +1219,7 @@ public:
         programLineCount = 0;
         built_bytecode_length = 0;
         built_bytecode_checksum = 0;
+        emit_warnings = finalPass && !lintMode;
         
         #define _line_push \
             address_end = built_bytecode_length + line.size; \
