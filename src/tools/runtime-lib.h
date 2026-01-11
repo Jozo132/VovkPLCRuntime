@@ -122,7 +122,7 @@ public:
     u32 last_cycle_time_us = 0;
     u32 max_cycle_time_us = 0;
     u32 last_ram_free = 0;
-    u32 min_ram_free = 99999999999;
+    u32 min_ram_free = 1000000000;
 
     static void splash() {
         Serial.println();
