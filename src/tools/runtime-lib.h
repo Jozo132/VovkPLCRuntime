@@ -27,6 +27,10 @@
 #define PLCRUNTIME_MAX_PROGRAM_SIZE 104857
 #endif // __WASM__
 
+#ifndef PLCRUNTIME_NUM_OF_CONTROLS
+#define PLCRUNTIME_NUM_OF_CONTROLS 16
+#endif // PLCRUNTIME_NUM_OF_CONTROLS
+
 #ifndef PLCRUNTIME_NUM_OF_INPUTS
 #define PLCRUNTIME_NUM_OF_INPUTS 16
 #endif // PLCRUNTIME_NUM_OF_INPUTS
@@ -35,26 +39,33 @@
 #define PLCRUNTIME_NUM_OF_OUTPUTS 16
 #endif // PLCRUNTIME_NUM_OF_OUTPUTS
 
-#ifndef PLCRUNTIME_INPUT_OFFSET 
-#define PLCRUNTIME_INPUT_OFFSET 16
+#ifndef PLCRUNTIME_NUM_OF_MARKERS
+#define PLCRUNTIME_NUM_OF_MARKERS 16
+#endif // PLCRUNTIME_NUM_OF_MARKERS
+
+#ifndef PLCRUNTIME_NUM_OF_SYSTEMS
+#define PLCRUNTIME_NUM_OF_SYSTEMS 16
+#endif // PLCRUNTIME_NUM_OF_SYSTEMS
+
+#ifndef PLCRUNTIME_CONTROL_OFFSET
+#define PLCRUNTIME_CONTROL_OFFSET 0
+#endif // PLCRUNTIME_CONTROL_OFFSET
+
+#ifndef PLCRUNTIME_INPUT_OFFSET
+#define PLCRUNTIME_INPUT_OFFSET (PLCRUNTIME_CONTROL_OFFSET + PLCRUNTIME_NUM_OF_CONTROLS)
 #endif // PLCRUNTIME_INPUT_OFFSET
 
 #ifndef PLCRUNTIME_OUTPUT_OFFSET
-#define PLCRUNTIME_OUTPUT_OFFSET PLCRUNTIME_INPUT_OFFSET + PLCRUNTIME_NUM_OF_INPUTS
+#define PLCRUNTIME_OUTPUT_OFFSET (PLCRUNTIME_INPUT_OFFSET + PLCRUNTIME_NUM_OF_INPUTS)
 #endif // PLCRUNTIME_OUTPUT_OFFSET
 
-#ifndef PLCRUNTIME_MAX_STACK_SIZE
-#define PLCRUNTIME_MAX_STACK_SIZE 16
-#endif // PLCRUNTIME_MAX_STACK_SIZE
+#ifndef PLCRUNTIME_SYSTEM_OFFSET
+#define PLCRUNTIME_SYSTEM_OFFSET (PLCRUNTIME_OUTPUT_OFFSET + PLCRUNTIME_NUM_OF_OUTPUTS)
+#endif // PLCRUNTIME_SYSTEM_OFFSET
 
-#ifndef PLCRUNTIME_MAX_MEMORY_SIZE
-#define PLCRUNTIME_MAX_MEMORY_SIZE 64
-#endif // PLCRUNTIME_MAX_MEMORY_SIZE
-
-#ifndef PLCRUNTIME_MAX_PROGRAM_SIZE
-#define PLCRUNTIME_MAX_PROGRAM_SIZE 1024
-#endif // PLCRUNTIME_MAX_PROGRAM_SIZE
-
+#ifndef PLCRUNTIME_MARKER_OFFSET
+#define PLCRUNTIME_MARKER_OFFSET (PLCRUNTIME_SYSTEM_OFFSET + PLCRUNTIME_NUM_OF_SYSTEMS)
+#endif // PLCRUNTIME_MARKER_OFFSET
 #ifdef __WASM__
 #include "assembly/wasm/wasm.h"
 #define STDOUT_PRINT Stream
@@ -80,8 +91,11 @@ class VovkPLCRuntime {
 private:
     bool started_up = false;
 public:
-    const u32 input_offset = PLCRUNTIME_INPUT_OFFSET; // Output offset in memory
-    const u32 output_offset = PLCRUNTIME_OUTPUT_OFFSET; // Output offset in memory
+    u32 control_offset = PLCRUNTIME_CONTROL_OFFSET; // Control offset in memory
+    u32 input_offset = PLCRUNTIME_INPUT_OFFSET; // Output offset in memory
+    u32 output_offset = PLCRUNTIME_OUTPUT_OFFSET; // Output offset in memory
+    u32 system_offset = PLCRUNTIME_SYSTEM_OFFSET; // System offset in memory
+    u32 marker_offset = PLCRUNTIME_MARKER_OFFSET; // Marker offset in memory
 
     RuntimeStack stack = RuntimeStack(); // Active memory stack for PLC execution
     u8 memory[PLCRUNTIME_MAX_MEMORY_SIZE]; // PLC memory to manipulate
@@ -106,8 +120,11 @@ public:
 
     void printProperties() {
 #ifdef __WASM__
+        Serial.printf("Controls [%d] at offset %d\n", PLCRUNTIME_NUM_OF_CONTROLS, control_offset);
         Serial.printf("Inputs [%d] at offset %d\n", PLCRUNTIME_NUM_OF_INPUTS, input_offset);
         Serial.printf("Outputs [%d] at offset %d\n", PLCRUNTIME_NUM_OF_OUTPUTS, output_offset);
+        Serial.printf("Systems [%d] at offset %d\n", PLCRUNTIME_NUM_OF_SYSTEMS, system_offset);
+        Serial.printf("Markers [%d] at offset %d\n", PLCRUNTIME_NUM_OF_MARKERS, marker_offset);
         Serial.printf("Stack: %d (%d)\n", stack.size(), PLCRUNTIME_MAX_STACK_SIZE);
         Serial.printf("Memory: %d\n", PLCRUNTIME_MAX_MEMORY_SIZE);
         Serial.printf("Program: %d (%d)\n", program.prog_size, PLCRUNTIME_MAX_PROGRAM_SIZE);
@@ -168,6 +185,50 @@ public:
     // Print the stack buffer to the serial port
     int printStack();
 
+    void setControl(u32 index, byte value) {
+        memory[index + control_offset] = value;
+    }
+
+    void setControlBit(u32 index, u8 bit, bool value) {
+        byte temp = 0;
+        bool error = get_u8(memory, index + control_offset, temp);
+        if (error) return;
+        if (value) temp |= (1 << bit);
+        else temp &= ~(1 << bit);
+        memory[index + control_offset] = temp;
+    }
+
+#ifndef __AVR__
+    void setControlBit(float index, bool value) {
+        u32 i = (u32) index;
+        u32 b = (u32) ((index - ((float) i)) * 10);
+        b = b > 7 ? 7 : b;
+        setControlBit(i, b, value);
+    }
+#endif // __AVR__
+
+    byte getControl(u32 index) {
+        byte value = 0;
+        get_u8(memory, index + control_offset, value);
+        return value;
+    }
+
+    bool getControlBit(u32 index, u8 bit) {
+        byte temp = 0;
+        bool error = get_u8(memory, index + control_offset, temp);
+        if (error) return false;
+        return temp & (1 << bit);
+    }
+
+#ifndef __AVR__
+    bool getControlBit(float index) {
+        u32 i = (u32) index;
+        u32 b = (u32) ((index - ((float) i)) * 10);
+        b = b > 7 ? 7 : b;
+        return getControlBit(i, b);
+    }
+#endif // __AVR__
+
     void setInput(u32 index, byte value) {
         // memory.set(index + input_offset, value);
         memory[index + input_offset] = value;
@@ -214,6 +275,72 @@ public:
         u32 b = (u32) ((index - ((float) i)) * 10);
         b = b > 7 ? 7 : b;
         return getOutputBit(i, b);
+    }
+#endif // __AVR__
+
+    byte getSystem(u32 index) {
+        byte value = 0;
+        get_u8(memory, index + system_offset, value);
+        return value;
+    }
+
+    bool getSystemBit(u32 index, u8 bit) {
+        byte temp = 0;
+        bool error = get_u8(memory, index + system_offset, temp);
+        if (error) return false;
+        return temp & (1 << bit);
+    }
+
+#ifndef __AVR__
+    bool getSystemBit(float index) {
+        u32 i = (u32) index;
+        u32 b = (u32) ((index - ((float) i)) * 10);
+        b = b > 7 ? 7 : b;
+        return getSystemBit(i, b);
+    }
+#endif // __AVR__
+
+    void setMarker(u32 index, byte value) {
+        memory[index + marker_offset] = value;
+    }
+
+    void setMarkerBit(u32 index, u8 bit, bool value) {
+        byte temp = 0;
+        bool error = get_u8(memory, index + marker_offset, temp);
+        if (error) return;
+        if (value) temp |= (1 << bit);
+        else temp &= ~(1 << bit);
+        memory[index + marker_offset] = temp;
+    }
+
+#ifndef __AVR__
+    void setMarkerBit(float index, bool value) {
+        u32 i = (u32) index;
+        u32 b = (u32) ((index - ((float) i)) * 10);
+        b = b > 7 ? 7 : b;
+        setMarkerBit(i, b, value);
+    }
+#endif // __AVR__
+
+    byte getMarker(u32 index) {
+        byte value = 0;
+        get_u8(memory, index + marker_offset, value);
+        return value;
+    }
+
+    bool getMarkerBit(u32 index, u8 bit) {
+        byte temp = 0;
+        bool error = get_u8(memory, index + marker_offset, temp);
+        if (error) return false;
+        return temp & (1 << bit);
+    }
+
+#ifndef __AVR__
+    bool getMarkerBit(float index) {
+        u32 i = (u32) index;
+        u32 b = (u32) ((index - ((float) i)) * 10);
+        b = b > 7 ? 7 : b;
+        return getMarkerBit(i, b);
     }
 #endif // __AVR__
 
@@ -270,11 +397,17 @@ public:
         STDOUT_PRINT.print(PLCRUNTIME_MAX_STACK_SIZE); STDOUT_PRINT.print(F(","));
         STDOUT_PRINT.print(PLCRUNTIME_MAX_MEMORY_SIZE); STDOUT_PRINT.print(F(","));
         STDOUT_PRINT.print(PLCRUNTIME_MAX_PROGRAM_SIZE); STDOUT_PRINT.print(F(","));
-        // IO map
-        STDOUT_PRINT.print(PLCRUNTIME_INPUT_OFFSET); STDOUT_PRINT.print(F(","));
+        // IO map (Controls, Inputs, Outputs, Systems, Markers)
+        STDOUT_PRINT.print(control_offset); STDOUT_PRINT.print(F(","));
+        STDOUT_PRINT.print(PLCRUNTIME_NUM_OF_CONTROLS); STDOUT_PRINT.print(F(","));
+        STDOUT_PRINT.print(input_offset); STDOUT_PRINT.print(F(","));
         STDOUT_PRINT.print(PLCRUNTIME_NUM_OF_INPUTS); STDOUT_PRINT.print(F(","));
-        STDOUT_PRINT.print(PLCRUNTIME_OUTPUT_OFFSET); STDOUT_PRINT.print(F(","));
+        STDOUT_PRINT.print(output_offset); STDOUT_PRINT.print(F(","));
         STDOUT_PRINT.print(PLCRUNTIME_NUM_OF_OUTPUTS); STDOUT_PRINT.print(F(","));
+        STDOUT_PRINT.print(system_offset); STDOUT_PRINT.print(F(","));
+        STDOUT_PRINT.print(PLCRUNTIME_NUM_OF_SYSTEMS); STDOUT_PRINT.print(F(","));
+        STDOUT_PRINT.print(marker_offset); STDOUT_PRINT.print(F(","));
+        STDOUT_PRINT.print(PLCRUNTIME_NUM_OF_MARKERS); STDOUT_PRINT.print(F(","));
         // Device name
         STDOUT_PRINT.print(F(VOVKPLC_DEVICE_NAME));
 
@@ -679,6 +812,7 @@ void VovkPLCRuntime::clear(RuntimeProgram& program) {
 int VovkPLCRuntime::printStack() { return stack.print(); }
 
 void VovkPLCRuntime::updateGlobals() {
+    u32 base = control_offset;
     u8 state = 0;
     state = state << 1 | P_10s; // 2.7
     state = state << 1 | P_5s; // 2.6
@@ -688,7 +822,7 @@ void VovkPLCRuntime::updateGlobals() {
     state = state << 1 | P_300ms; // 2.2
     state = state << 1 | P_200ms; // 2.1
     state = state << 1 | P_100ms; // 2.0
-    memory[2] = state;
+    memory[base + 2] = state;
 
     state = 0;
     state = state << 1 | P_1hr; // 3.7
@@ -699,7 +833,7 @@ void VovkPLCRuntime::updateGlobals() {
     state = state << 1 | P_2min; // 3.2
     state = state << 1 | P_1min; // 3.1
     state = state << 1 | P_30s; // 3.0
-    memory[3] = state;
+    memory[base + 3] = state;
 
     state = 0;
     state = state << 1 | P_1day; // 4.6
@@ -709,7 +843,7 @@ void VovkPLCRuntime::updateGlobals() {
     state = state << 1 | P_4hr; // 4.2
     state = state << 1 | P_3hr; // 4.1
     state = state << 1 | P_2hr; // 4.0
-    memory[4] = state;
+    memory[base + 4] = state;
 
     state = 0;
     state = state << 1 | S_10s; // 5.7
@@ -720,7 +854,7 @@ void VovkPLCRuntime::updateGlobals() {
     state = state << 1 | S_300ms; // 5.2 
     state = state << 1 | S_200ms; // 5.1
     state = state << 1 | S_100ms; // 5.0
-    memory[5] = state;
+    memory[base + 5] = state;
 
     state = 0;
     state = state << 1 | S_1hr; // 6.7
@@ -731,14 +865,14 @@ void VovkPLCRuntime::updateGlobals() {
     state = state << 1 | S_2min; // 6.2
     state = state << 1 | S_1min; // 6.1
     state = state << 1 | S_30s; // 6.0
-    memory[6] = state;
+    memory[base + 6] = state;
 
-    memory[8] = interval_time_seconds;
-    memory[9] = interval_time_minutes;
-    memory[10] = interval_time_hours;
-    memory[11] = interval_time_days;
+    memory[base + 8] = interval_time_seconds;
+    memory[base + 9] = interval_time_minutes;
+    memory[base + 10] = interval_time_hours;
+    memory[base + 11] = interval_time_days;
 
-    writeMemory(12, (u8*) &uptime_seconds, sizeof(u32));
+    writeMemory(base + 12, (u8*) &uptime_seconds, sizeof(u32));
 }
 
 // Execute the whole PLC program, returns an erro code (0 on success)

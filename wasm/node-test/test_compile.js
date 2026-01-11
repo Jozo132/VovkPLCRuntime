@@ -31,6 +31,14 @@ const run = async () => {
 
         // Simple Assembly Test
         const assembly = `
+            u8.readBit C0.0
+            u8.readBit X0.1
+            u8.readBit Y0.2
+            u8.readBit S0.3
+            u8.readBit M0.4
+            u8.readBit 0.5
+            u32.drop
+            u16.drop
             u8.const 10
             u8.const 20
             u8.add

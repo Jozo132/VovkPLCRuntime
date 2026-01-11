@@ -28,6 +28,52 @@
 
 #include "./../runtime-types.h"
 
+#ifndef PLCRUNTIME_NUM_OF_CONTROLS
+#define PLCRUNTIME_NUM_OF_CONTROLS 16
+#endif // PLCRUNTIME_NUM_OF_CONTROLS
+
+#ifndef PLCRUNTIME_NUM_OF_INPUTS
+#define PLCRUNTIME_NUM_OF_INPUTS 16
+#endif // PLCRUNTIME_NUM_OF_INPUTS
+
+#ifndef PLCRUNTIME_NUM_OF_OUTPUTS
+#define PLCRUNTIME_NUM_OF_OUTPUTS 16
+#endif // PLCRUNTIME_NUM_OF_OUTPUTS
+
+#ifndef PLCRUNTIME_NUM_OF_MARKERS
+#define PLCRUNTIME_NUM_OF_MARKERS 16
+#endif // PLCRUNTIME_NUM_OF_MARKERS
+
+#ifndef PLCRUNTIME_NUM_OF_SYSTEMS
+#define PLCRUNTIME_NUM_OF_SYSTEMS 16
+#endif // PLCRUNTIME_NUM_OF_SYSTEMS
+
+#ifndef PLCRUNTIME_CONTROL_OFFSET
+#define PLCRUNTIME_CONTROL_OFFSET 0
+#endif // PLCRUNTIME_CONTROL_OFFSET
+
+#ifndef PLCRUNTIME_INPUT_OFFSET
+#define PLCRUNTIME_INPUT_OFFSET (PLCRUNTIME_CONTROL_OFFSET + PLCRUNTIME_NUM_OF_CONTROLS)
+#endif // PLCRUNTIME_INPUT_OFFSET
+
+#ifndef PLCRUNTIME_OUTPUT_OFFSET
+#define PLCRUNTIME_OUTPUT_OFFSET (PLCRUNTIME_INPUT_OFFSET + PLCRUNTIME_NUM_OF_INPUTS)
+#endif // PLCRUNTIME_OUTPUT_OFFSET
+
+#ifndef PLCRUNTIME_SYSTEM_OFFSET
+#define PLCRUNTIME_SYSTEM_OFFSET (PLCRUNTIME_OUTPUT_OFFSET + PLCRUNTIME_NUM_OF_OUTPUTS)
+#endif // PLCRUNTIME_SYSTEM_OFFSET
+
+#ifndef PLCRUNTIME_MARKER_OFFSET
+#define PLCRUNTIME_MARKER_OFFSET (PLCRUNTIME_SYSTEM_OFFSET + PLCRUNTIME_NUM_OF_SYSTEMS)
+#endif // PLCRUNTIME_MARKER_OFFSET
+
+static u32 plcasm_control_offset = PLCRUNTIME_CONTROL_OFFSET;
+static u32 plcasm_input_offset = PLCRUNTIME_INPUT_OFFSET;
+static u32 plcasm_output_offset = PLCRUNTIME_OUTPUT_OFFSET;
+static u32 plcasm_system_offset = PLCRUNTIME_SYSTEM_OFFSET;
+static u32 plcasm_marker_offset = PLCRUNTIME_MARKER_OFFSET;
+
 #define MAX_ASSEMBLY_STRING_SIZE 64535
 #define MAX_NUM_OF_TOKENS 10000
 
@@ -974,6 +1020,38 @@ public:
         return true;
     }
 
+    bool memoryOffsetFromPrefix(char prefix, int& offset) {
+        switch (prefix) {
+            case 'C': case 'c': offset = (int) plcasm_control_offset; return true;
+            case 'X': case 'x': offset = (int) plcasm_input_offset; return true;
+            case 'Y': case 'y': offset = (int) plcasm_output_offset; return true;
+            case 'M': case 'm': offset = (int) plcasm_marker_offset; return true;
+            case 'S': case 's': offset = (int) plcasm_system_offset; return true;
+            default: return false;
+        }
+    }
+
+    bool parsePrefixedAddressToken(Token& token, StringView& number, int& offset) {
+        if (token.length < 2) return false;
+        if (!memoryOffsetFromPrefix(token.string[0], offset)) return false;
+        number.data = token.string.data + 1;
+        number.length = token.length - 1;
+        return true;
+    }
+
+    bool addressFromToken(Token& token, int& output) {
+        int offset = 0;
+        StringView number;
+        if (parsePrefixedAddressToken(token, number, offset)) {
+            int value_int = 0;
+            float value_float = 0;
+            if (isInteger(number, value_int)) { output = offset + value_int; return false; }
+            if (isReal(number, value_float)) { output = offset + (int) value_float; return false; }
+            return true;
+        }
+        return intFromToken(token, output);
+    }
+
     bool realFromToken(Token& token, float& output) {
         if (token.type == TOKEN_INTEGER) {
             output = token.value_int;
@@ -1011,6 +1089,32 @@ public:
 
     // Parse "2.7" into address and bit, where we separate the two with a dot. The bits range from 0 to 7
     bool memoryBitFromToken(Token& token, int& address, int& bit) {
+        int offset = 0;
+        StringView number = token.string;
+        bool has_prefix = parsePrefixedAddressToken(token, number, offset);
+        if (has_prefix) {
+            int value_int = 0;
+            float value = 0;
+            if (isInteger(number, value_int)) {
+                address = offset + value_int;
+                bit = 0;
+                return false;
+            }
+            if (isReal(number, value)) {
+                float addr = (int) value;
+                address = (int) addr + offset;
+                bit = (int) ((value - addr) * 100.0);
+                bit = bit > 65 ? 7 :
+                    bit > 55 ? 6 :
+                    bit > 45 ? 5 :
+                    bit > 35 ? 4 :
+                    bit > 25 ? 3 :
+                    bit > 15 ? 2 :
+                    bit > 5 ? 1 : 0;
+                return false;
+            }
+            return true;
+        }
         if (token.type == TOKEN_INTEGER) { // Expect token "2" to be address 2 at the index 0 by default 
             address = token.value_int;
             bit = 0;
@@ -1233,18 +1337,20 @@ public:
                             if (!mem_bit_task && token.includes(".writeBit")) mem_bit_task = WRITE_X8_B0; // WRITE_X8
                             if (!mem_bit_task && token.includes(".readBit")) mem_bit_task = READ_X8_B0; // READ_X8
                             if (mem_bit_task) {
-                                if (e_int) {
-                                    bool rewind = false;
-                                    if (buildErrorExpectedIntSameLine(token, token_p1, rewind)) return true;
-                                    if (rewind) continue;
+                                int address = 0;
+                                int bit = 0;
+                                bool e_membit = memoryBitFromToken(token_p1, address, bit);
+                                if (e_membit) {
+                                    if (token_p1.line != token.line) {
+                                        if (buildError(token, "missing a number in the same line")) return true;
+                                        continue;
+                                    }
+                                    if (buildError(token_p1, "unexpected token, expected bit representation")) return true;
                                 }
                                 i++;
-                                int address, bit;
-                                bool e_membit = memoryBitFromToken(token_p1, address, bit);
-                                if (e_membit) { if (buildError(token_p1, "unexpected token, expected bit representation")) return true; }
                                 if (bit < 0 || bit > 7) { if (buildError(token_p1, "bit value out of range for 8-bit type")) return true; }
                                 mem_bit_task = (PLCRuntimeInstructionSet) ((int) mem_bit_task + bit);
-                                line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, mem_bit_task, value_int); _line_push;
+                                line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, mem_bit_task, address); _line_push;
                             }
                         }
                     }
@@ -1255,12 +1361,14 @@ public:
                         PLCRuntimeInstructionSet type = (PLCRuntimeInstructionSet) data_type;
                         if (hasNext && token.endsWith(".const")) {
                             if (type == type_pointer) {
-                                if (e_int) {
+                                int address_value = 0;
+                                bool e_addr = addressFromToken(token_p1, address_value);
+                                if (e_addr) {
                                     bool rewind = false;
                                     if (buildErrorExpectedIntSameLine(token, token_p1, rewind)) return true;
                                     if (rewind) continue;
                                 }
-                                i++; line.size = InstructionCompiler::push_pointer(bytecode, value_int); _line_push;
+                                i++; line.size = InstructionCompiler::push_pointer(bytecode, address_value); _line_push;
                             }
                             if (type == type_bool) {
                                 if (e_int) {
@@ -1340,20 +1448,24 @@ public:
                             if (buildErrorUnknownToken(token)) return true; continue;
                         }
                         if (hasNext && token.endsWith(".load_from")) {
-                            if (e_int) {
+                            int address_value = 0;
+                            bool e_addr = addressFromToken(token_p1, address_value);
+                            if (e_addr) {
                                 bool rewind = false;
                                 if (buildErrorExpectedIntSameLine(token, token_p1, rewind)) return true;
                                 if (rewind) continue;
                             }
-                            i++; line.size = InstructionCompiler::push_load_from(bytecode, type, value_int); _line_push;
+                            i++; line.size = InstructionCompiler::push_load_from(bytecode, type, address_value); _line_push;
                         }
                         if (hasNext && token.endsWith(".move_to")) {
-                            if (e_int) {
+                            int address_value = 0;
+                            bool e_addr = addressFromToken(token_p1, address_value);
+                            if (e_addr) {
                                 bool rewind = false;
                                 if (buildErrorExpectedIntSameLine(token, token_p1, rewind)) return true;
                                 if (rewind) continue;
                             }
-                            i++; line.size = InstructionCompiler::push_move_to(bytecode, type, value_int); _line_push;
+                            i++; line.size = InstructionCompiler::push_move_to(bytecode, type, address_value); _line_push;
                         }
                         // if (hasNext && token.endsWith(".load")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::pushGET(bytecode, value_int, type); _line_push; }
                         // if (hasNext && token.endsWith(".store")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::pushPUT(bytecode, value_int, type); _line_push; }
@@ -1625,6 +1737,19 @@ WASM_EXPORT void printProperties() {
 }
 WASM_EXPORT void printInfo() {
     runtime.printInfo();
+}
+
+WASM_EXPORT void setRuntimeOffsets(u32 controlOffset, u32 inputOffset, u32 outputOffset, u32 systemOffset, u32 markerOffset) {
+    plcasm_control_offset = controlOffset;
+    plcasm_input_offset = inputOffset;
+    plcasm_output_offset = outputOffset;
+    plcasm_system_offset = systemOffset;
+    plcasm_marker_offset = markerOffset;
+    runtime.control_offset = controlOffset;
+    runtime.input_offset = inputOffset;
+    runtime.output_offset = outputOffset;
+    runtime.system_offset = systemOffset;
+    runtime.marker_offset = markerOffset;
 }
 
 WASM_EXPORT bool loadCompiledProgram() {
