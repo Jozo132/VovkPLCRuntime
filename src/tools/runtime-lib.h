@@ -784,6 +784,8 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
         case LOAD: return PLCMethods::LOAD(this->stack, this->memory, program, prog_size, index);
         case MOVE: return PLCMethods::MOVE(this->stack, this->memory, program, prog_size, index);
         case MOVE_COPY: return PLCMethods::MOVE_COPY(this->stack, this->memory, program, prog_size, index);
+        case LOAD_FROM: return PLCMethods::LOAD_FROM(this->stack, this->memory, program, prog_size, index);
+        case MOVE_TO: return PLCMethods::MOVE_TO(this->stack, this->memory, program, prog_size, index);
         case COPY: return PLCMethods::COPY(this->stack, program, prog_size, index);
         case SWAP: return PLCMethods::SWAP(this->stack, program, prog_size, index);
         case DROP: return PLCMethods::DROP(this->stack, program, prog_size, index);

@@ -69,6 +69,8 @@ bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
         case LOAD:
         case MOVE:
         case MOVE_COPY:
+        case LOAD_FROM:
+        case MOVE_TO:
         case COPY:
         case SWAP:
         case DROP:
@@ -251,6 +253,8 @@ const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
         case LOAD: return F("LOAD");
         case MOVE: return F("MOVE");
         case MOVE_COPY: return F("MOVE_COPY");
+        case LOAD_FROM: return F("LOAD_FROM");
+        case MOVE_TO: return F("MOVE_TO");
         case COPY: return F("COPY");
         case SWAP: return F("SWAP");
         case DROP: return F("DROP");
@@ -438,6 +442,8 @@ u8 OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
         case LOAD: return 2;
         case MOVE: return 2;
         case MOVE_COPY: return 2;
+        case LOAD_FROM: return 2 + MY_PTR_SIZE_BYTES;
+        case MOVE_TO: return 2 + MY_PTR_SIZE_BYTES;
         case COPY: return 2;
         case SWAP: return 3;
         case DROP: return 2;

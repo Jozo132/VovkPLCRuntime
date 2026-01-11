@@ -128,14 +128,16 @@ enum PLCRuntimeInstructionSet {
     type_f64,           // Constant f64 value
 
     CVT = 0x10,         // Convert value from one type to another. Example: [ u8 CVT, u8 source_type, u8 destination_type ]
-    LOAD,               // Load value from memory to stack. Example: [ u8 LOAD, u8 type, u16 address ]
-    MOVE,               // Move value from stack to memory. Example: [ u8 MOVE, u8 type, u16 address ]
-    MOVE_COPY,          // Move value from stack to memory and keep the value on the stack. Example: [ u8 MOVE_COPY, u8 type, u16 address ]
+    LOAD,               // Load value from memory to stack using pointer from the stack. Example: [ u8 LOAD, u8 type ]
+    MOVE,               // Move value from stack to memory using pointer from the stack. Example: [ u8 MOVE, u8 type ]
+    MOVE_COPY,          // Move value from stack to memory using pointer from the stack and keep the value on the stack. Example: [ u8 MOVE_COPY, u8 type ]
 
     COPY,               // Make a duplicate of the top of the stack
     SWAP,               // Swap the top two values on the stack
     DROP,               // Remove the top of the stack
     CLEAR,              // Clear the stack
+    LOAD_FROM,          // Load value from memory to stack using immediate address. Example: [ u8 LOAD_FROM, u8 type, u16 address ]
+    MOVE_TO,            // Move value from stack to memory using immediate address. Example: [ u8 MOVE_TO, u8 type, u16 address ]
 
     // Arithmetic operations
     ADD = 0x20,         // Addition, requires data type as argument

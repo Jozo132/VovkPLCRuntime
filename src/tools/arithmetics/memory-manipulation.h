@@ -388,6 +388,83 @@ namespace PLCMethods {
         return status;
     }
 
+    template <typename T> RuntimeError load_from_memory_to_stack_at(RuntimeStack& stack, u8* memory, MY_PTR_t address) {
+        if (address + sizeof(T) > PLCRUNTIME_MAX_MEMORY_SIZE) return RuntimeError::INVALID_MEMORY_ADDRESS;
+        T value = 0;
+        bool error = readArea_u8(memory, address, reinterpret_cast<u8*>(&value), sizeof(T));
+        if (error) return RuntimeError::INVALID_MEMORY_ADDRESS;
+        error = stack.push_custom(value);
+        return error ? RuntimeError::STACK_OVERFLOW : RuntimeError::STATUS_SUCCESS;
+    }
+
+    template <typename T> RuntimeError store_from_stack_to_memory_at(RuntimeStack& stack, u8* memory, MY_PTR_t address) {
+        if (stack.size() < sizeof(T)) return RuntimeError::STACK_UNDERFLOW;
+        T value = stack.pop_custom<T>();
+        if (address + sizeof(T) > PLCRUNTIME_MAX_MEMORY_SIZE) return RuntimeError::INVALID_MEMORY_ADDRESS;
+        bool error = writeArea_u8(memory, address, reinterpret_cast<u8*>(&value), sizeof(T));
+        return error ? RuntimeError::INVALID_MEMORY_ADDRESS : RuntimeError::STATUS_SUCCESS;
+    }
+
+    // Load value from memory to stack using immediate address
+    RuntimeError LOAD_FROM(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
+        u32 size = 1 + sizeof(MY_PTR_t);
+        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        u8 data_type = 0;
+        extract_status = ProgramExtract.type_u8(program, prog_size, index, &data_type);
+        if (extract_status != STATUS_SUCCESS) return extract_status;
+        MY_PTR_t address = 0;
+        extract_status = ProgramExtract.type_pointer(program, prog_size, index, &address);
+        if (extract_status != STATUS_SUCCESS) return extract_status;
+        address = reverse_byte_order(address);
+        switch (data_type) {
+            case type_pointer: return load_from_memory_to_stack_at<MY_PTR_t>(stack, memory, address);
+            case type_bool:
+            case type_u8:
+            case type_i8: return load_from_memory_to_stack_at<u8>(stack, memory, address);
+            case type_u16:
+            case type_i16: return load_from_memory_to_stack_at<u16>(stack, memory, address);
+            case type_u32:
+            case type_i32:
+            case type_f32: return load_from_memory_to_stack_at<u32>(stack, memory, address);
+#ifdef USE_X64_OPS
+            case type_u64:
+            case type_i64:
+            case type_f64: return load_from_memory_to_stack_at<u64>(stack, memory, address);
+#endif // USE_X64_OPS
+            default: return INVALID_DATA_TYPE;
+        }
+    }
+
+    // Move value from stack to memory using immediate address
+    RuntimeError MOVE_TO(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
+        u32 size = 1 + sizeof(MY_PTR_t);
+        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        u8 data_type = 0;
+        extract_status = ProgramExtract.type_u8(program, prog_size, index, &data_type);
+        if (extract_status != STATUS_SUCCESS) return extract_status;
+        MY_PTR_t address = 0;
+        extract_status = ProgramExtract.type_pointer(program, prog_size, index, &address);
+        if (extract_status != STATUS_SUCCESS) return extract_status;
+        address = reverse_byte_order(address);
+        switch (data_type) {
+            case type_pointer: return store_from_stack_to_memory_at<MY_PTR_t>(stack, memory, address);
+            case type_bool:
+            case type_u8:
+            case type_i8: return store_from_stack_to_memory_at<u8>(stack, memory, address);
+            case type_u16:
+            case type_i16: return store_from_stack_to_memory_at<u16>(stack, memory, address);
+            case type_u32:
+            case type_i32:
+            case type_f32: return store_from_stack_to_memory_at<u32>(stack, memory, address);
+#ifdef USE_X64_OPS
+            case type_u64:
+            case type_i64:
+            case type_f64: return store_from_stack_to_memory_at<u64>(stack, memory, address);
+#endif // USE_X64_OPS
+            default: return INVALID_DATA_TYPE;
+        }
+    }
+
 
     // Duplicate the value on top of the stack
     RuntimeError COPY(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {

@@ -272,6 +272,22 @@ public:
         return 2;
     }
 
+    // Load value from memory to stack using immediate address
+    static u8 push_load_from(u8* location, PLCRuntimeInstructionSet type, MY_PTR_t address) {
+        location[0] = LOAD_FROM;
+        location[1] = type;
+        for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[i + 2] = (address >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
+        return 2 + sizeof(MY_PTR_t);
+    }
+
+    // Move value from stack to memory using immediate address
+    static u8 push_move_to(u8* location, PLCRuntimeInstructionSet type, MY_PTR_t address) {
+        location[0] = MOVE_TO;
+        location[1] = type;
+        for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[i + 2] = (address >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
+        return 2 + sizeof(MY_PTR_t);
+    }
+
     // Make a duplica of the top of the stack
     static u8 push_copy(u8* location, PLCRuntimeInstructionSet type = type_u8) {
         location[0] = COPY;
@@ -760,6 +776,26 @@ public:
             return status;
         }
         prog_size += InstructionCompiler::push_move_copy(program + prog_size, type);
+        status = STATUS_SUCCESS;
+        return status;
+    }
+
+    RuntimeError push_load_from(MY_PTR_t address, PLCRuntimeInstructionSet type = type_u8) {
+        if (prog_size + 2 + sizeof(MY_PTR_t) > MAX_PROGRAM_SIZE) {
+            status = PROGRAM_SIZE_EXCEEDED;
+            return status;
+        }
+        prog_size += InstructionCompiler::push_load_from(program + prog_size, type, address);
+        status = STATUS_SUCCESS;
+        return status;
+    }
+
+    RuntimeError push_move_to(MY_PTR_t address, PLCRuntimeInstructionSet type = type_u8) {
+        if (prog_size + 2 + sizeof(MY_PTR_t) > MAX_PROGRAM_SIZE) {
+            status = PROGRAM_SIZE_EXCEEDED;
+            return status;
+        }
+        prog_size += InstructionCompiler::push_move_to(program + prog_size, type, address);
         status = STATUS_SUCCESS;
         return status;
     }
