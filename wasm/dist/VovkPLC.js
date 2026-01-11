@@ -19,6 +19,11 @@ const isNodeRuntime = typeof process !== 'undefined' && !!(process.versions && p
  *     getMemoryArea: (address: number, size: number) => number
  *     writeMemoryByte: (address: number, byte: number) => number
  *     writeMemoryByteMasked: (address: number, byte: number, mask: number) => number
+ *     getLastCycleTimeUs: () => number
+ *     getMaxCycleTimeUs: () => number
+ *     getRamUsed: () => number
+ *     getMaxRamUsed: () => number
+ *     resetDeviceHealth: () => void
  *     get_free_memory: () => number
  *     doNothing: () => void
  *     setMillis: (millis: number) => void
@@ -37,6 +42,15 @@ const isNodeRuntime = typeof process !== 'undefined' && !!(process.versions && p
  *     lint_get_problem_count: () => number
  *     lint_get_problems_pointer: () => number
  * }} VovkPLCExportTypes
+ */
+
+/**
+ * @typedef {{
+ *     last_cycle_time_us: number,
+ *     max_cycle_time_us: number,
+ *     ram_used: number,
+ *     max_ram_used: number,
+ * }} DeviceHealth
  */
 
 /** @typedef */ // @ts-ignore
@@ -275,6 +289,28 @@ class VovkPLC_class {
         console.error(`Invalid info response:`, raw)
         return raw
         // return raw
+    }
+
+    /** @type { () => DeviceHealth } */
+    getDeviceHealth = () => {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        if (!this.wasm_exports.getLastCycleTimeUs) throw new Error("'getLastCycleTimeUs' function not found")
+        if (!this.wasm_exports.getMaxCycleTimeUs) throw new Error("'getMaxCycleTimeUs' function not found")
+        if (!this.wasm_exports.getRamUsed) throw new Error("'getRamUsed' function not found")
+        if (!this.wasm_exports.getMaxRamUsed) throw new Error("'getMaxRamUsed' function not found")
+        return {
+            last_cycle_time_us: this.wasm_exports.getLastCycleTimeUs(),
+            max_cycle_time_us: this.wasm_exports.getMaxCycleTimeUs(),
+            ram_used: this.wasm_exports.getRamUsed(),
+            max_ram_used: this.wasm_exports.getMaxRamUsed(),
+        }
+    }
+
+    /** @type { () => void } */
+    resetDeviceHealth = () => {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        if (!this.wasm_exports.resetDeviceHealth) throw new Error("'resetDeviceHealth' function not found")
+        this.wasm_exports.resetDeviceHealth()
     }
 
     /** @param { string } assembly */
@@ -884,6 +920,10 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
     setSilent = value => this.call('setSilent', value)
     /** @type { () => Promise<any> } */
     printInfo = () => this.call('printInfo')
+    /** @type { () => Promise<DeviceHealth> } */
+    getDeviceHealth = () => this.call('getDeviceHealth')
+    /** @type { () => Promise<void> } */
+    resetDeviceHealth = () => this.call('resetDeviceHealth')
     /** @type { (assembly: string) => Promise<any> } */
     downloadAssembly = assembly => this.call('downloadAssembly', assembly)
     /** @type { (assembly: string, run?: boolean) => Promise<any> } */

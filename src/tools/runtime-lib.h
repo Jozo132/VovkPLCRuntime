@@ -90,6 +90,25 @@
 class VovkPLCRuntime {
 private:
     bool started_up = false;
+    void updateRamStats() {
+        int used = get_used_memory();
+        u32 used_u32 = used < 0 ? 0u : (u32) used;
+        last_ram_used = used_u32;
+        if (used_u32 > max_ram_used) max_ram_used = used_u32;
+    }
+    void updateCycleStats(u32 cycle_time_us) {
+        last_cycle_time_us = cycle_time_us;
+        if (cycle_time_us > max_cycle_time_us) max_cycle_time_us = cycle_time_us;
+        updateRamStats();
+    }
+    void printHexU32(u32 value) {
+        char c1, c2;
+        for (int shift = 24; shift >= 0; shift -= 8) {
+            byteToHex((value >> shift) & 0xff, c1, c2);
+            Serial.print(c1);
+            Serial.print(c2);
+        }
+    }
 public:
     u32 control_offset = PLCRUNTIME_CONTROL_OFFSET; // Control offset in memory
     u32 input_offset = PLCRUNTIME_INPUT_OFFSET; // Output offset in memory
@@ -100,6 +119,10 @@ public:
     RuntimeStack stack = RuntimeStack(); // Active memory stack for PLC execution
     u8 memory[PLCRUNTIME_MAX_MEMORY_SIZE]; // PLC memory to manipulate
     RuntimeProgram program = RuntimeProgram(); // Active PLC program
+    u32 last_cycle_time_us = 0;
+    u32 max_cycle_time_us = 0;
+    u32 last_ram_used = 0;
+    u32 max_ram_used = 0;
 
     static void splash() {
         Serial.println();
@@ -171,6 +194,22 @@ public:
     RuntimeError run() {
         clear();
         return run(program.program, program.prog_size);
+    }
+    u32 getLastCycleTimeUs() const { return last_cycle_time_us; }
+    u32 getMaxCycleTimeUs() const { return max_cycle_time_us; }
+    u32 getRamUsed() {
+        updateRamStats();
+        return last_ram_used;
+    }
+    u32 getMaxRamUsed() {
+        updateRamStats();
+        return max_ram_used;
+    }
+    void resetDeviceHealth() {
+        last_cycle_time_us = 0;
+        max_cycle_time_us = 0;
+        last_ram_used = 0;
+        max_ram_used = 0;
     }
     // Read a custom type T value from the stack. This will pop the stack by sizeof(T) bytes and return the value.
     template <typename T> T read() {
@@ -437,6 +476,7 @@ public:
             // Where the command is always 2 characters and the rest is %02x encoded
             // Possible commands:
             //  - PLC reset:        'RS<u8>' (checksum)
+            //  - PLC health:       'PH<u8>' (checksum)
             //  - Program download: 'PD<u32><u8[]><u8>' (size, data, checksum)
             //  - Program upload:   'PU<u8>' (checksum)
             //  - Program run:      'PR<u8>' (checksum)
@@ -465,6 +505,7 @@ public:
 
             bool ping = cmd[0] == '?';
             bool plc_info = cmd[0] == 'P' && cmd[1] == 'I';
+            bool plc_health = cmd[0] == 'P' && cmd[1] == 'H';
             bool plc_reset = cmd[0] == 'R' && cmd[1] == 'S';
             bool program_download = cmd[0] == 'P' && cmd[1] == 'D';
             bool program_upload = cmd[0] == 'P' && cmd[1] == 'U';
@@ -491,6 +532,23 @@ public:
                     return;
                 }
                 printInfo();
+
+            } else if (plc_health) {
+                // Read the checksum
+                checksum = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+
+                // Verify the checksum
+                if (checksum != checksum_calc) {
+                    Serial.println(F("Invalid checksum"));
+                    return;
+                }
+
+                Serial.print(F("PH"));
+                printHexU32(getLastCycleTimeUs());
+                printHexU32(getMaxCycleTimeUs());
+                printHexU32(getRamUsed());
+                printHexU32(getMaxRamUsed());
+                Serial.println();
 
             } else if (plc_reset) {
 
@@ -883,17 +941,21 @@ RuntimeError VovkPLCRuntime::run(u8* program, u32 prog_size) {
 #ifndef __WASM__ // WASM can optionally execute the global loop check, embedded systems must always call this
     IntervalGlobalLoopCheck();
 #endif // __WASM__
+    u32 start_us = (u32) micros();
     updateGlobals();
     u32 index = 0;
+    RuntimeError status = STATUS_SUCCESS;
     while (index < prog_size) {
-        RuntimeError status = step(program, prog_size, index);
+        status = step(program, prog_size, index);
         if (status != STATUS_SUCCESS) {
             if (status == PROGRAM_EXITED)
-                return STATUS_SUCCESS;
-            return status;
+                status = STATUS_SUCCESS;
+            break;
         }
     }
-    return STATUS_SUCCESS;
+    if (status == STATUS_SUCCESS) updateCycleStats((u32) (micros() - start_us));
+    else updateRamStats();
+    return status;
 }
 
 

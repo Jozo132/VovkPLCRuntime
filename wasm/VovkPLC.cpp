@@ -154,6 +154,26 @@ WASM_EXPORT u32 getMemoryLocation() {
     return (u32) runtime.memory;
 }
 
+WASM_EXPORT u32 getLastCycleTimeUs() {
+    return runtime.getLastCycleTimeUs();
+}
+
+WASM_EXPORT u32 getMaxCycleTimeUs() {
+    return runtime.getMaxCycleTimeUs();
+}
+
+WASM_EXPORT u32 getRamUsed() {
+    return runtime.getRamUsed();
+}
+
+WASM_EXPORT u32 getMaxRamUsed() {
+    return runtime.getMaxRamUsed();
+}
+
+WASM_EXPORT void resetDeviceHealth() {
+    runtime.resetDeviceHealth();
+}
+
 
 // template <typename T> struct OutputBuffer {
 //     T* data = nullptr;
