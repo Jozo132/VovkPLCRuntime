@@ -1082,7 +1082,7 @@ public:
                 output = offset + addr;
                 return false;
             }
-            return true;
+            // If prefixed parsing fails, fall back to named constants or plain ints.
         }
         return intFromToken(token, output);
     }
@@ -1150,7 +1150,7 @@ public:
                     bit > 5 ? 1 : 0;
                 return false;
             }
-            return true;
+            // If prefixed parsing fails, fall back to named constants or plain ints.
         }
         if (token.type == TOKEN_INTEGER) { // Expect token "2" to be address 2 at the index 0 by default 
             address = token.value_int;
