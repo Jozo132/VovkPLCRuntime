@@ -20,9 +20,11 @@ const isNodeRuntime = typeof process !== 'undefined' && !!(process.versions && p
  *     writeMemoryByte: (address: number, byte: number) => number
  *     writeMemoryByteMasked: (address: number, byte: number, mask: number) => number
  *     getLastCycleTimeUs: () => number
+ *     getMinCycleTimeUs: () => number
  *     getMaxCycleTimeUs: () => number
  *     getRamFree: () => number
  *     getMinRamFree: () => number
+ *     getMaxRamFree: () => number
  *     resetDeviceHealth: () => void
  *     get_free_memory: () => number
  *     doNothing: () => void
@@ -47,9 +49,11 @@ const isNodeRuntime = typeof process !== 'undefined' && !!(process.versions && p
 /**
  * @typedef {{
  *     last_cycle_time_us: number,
+ *     min_cycle_time_us: number,
  *     max_cycle_time_us: number,
  *     ram_free: number,
  *     min_ram_free: number,
+ *     max_ram_free: number,
  * }} DeviceHealth
  */
 
@@ -295,14 +299,18 @@ class VovkPLC_class {
     getDeviceHealth = () => {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         if (!this.wasm_exports.getLastCycleTimeUs) throw new Error("'getLastCycleTimeUs' function not found")
+        if (!this.wasm_exports.getMinCycleTimeUs) throw new Error("'getMinCycleTimeUs' function not found")
         if (!this.wasm_exports.getMaxCycleTimeUs) throw new Error("'getMaxCycleTimeUs' function not found")
         if (!this.wasm_exports.getRamFree) throw new Error("'getRamFree' function not found")
         if (!this.wasm_exports.getMinRamFree) throw new Error("'getMinRamFree' function not found")
+        if (!this.wasm_exports.getMaxRamFree) throw new Error("'getMaxRamFree' function not found")
         return {
             last_cycle_time_us: this.wasm_exports.getLastCycleTimeUs(),
+            min_cycle_time_us: this.wasm_exports.getMinCycleTimeUs(),
             max_cycle_time_us: this.wasm_exports.getMaxCycleTimeUs(),
             ram_free: this.wasm_exports.getRamFree(),
             min_ram_free: this.wasm_exports.getMinRamFree(),
+            max_ram_free: this.wasm_exports.getMaxRamFree(),
         }
     }
 
