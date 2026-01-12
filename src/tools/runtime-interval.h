@@ -97,6 +97,55 @@ volatile u32 P_10s_sec_cnt = 0;
 volatile u32 P_5s_sec_cnt = 0;
 volatile u32 P_2s_sec_cnt = 0;
 
+
+void IntervalReset() {
+    interval_millis_now = 0;
+    interval_millis_last = 0;
+    interval_counter_50ms = 0;
+    uptime_seconds = 0;
+    
+    P_50ms = false;
+    P_100ms = false;
+    // ... (rest of flags are cleared in loop check anyway, but good to be safe)
+    // Actually LoopCheck clears P_ flags. But S_ flags are stateful.
+    
+    S_100ms = false;
+    S_200ms = false;
+    S_300ms = false;
+    S_500ms = false;
+    S_1s = false;
+    S_2s = false;
+    S_5s = false;
+    S_10s = false;
+    S_30s = false;
+    S_1min = false;
+    S_2min = false;
+    S_5min = false;
+    S_10min = false;
+    S_15min = false;
+    S_30min = false;
+    S_1hr = false;
+    S_2hr = false;
+
+    // Reset counters
+    P_1day_hour_cnt = 0;
+    P_12hr_hour_cnt = 0;
+    P_6hr_hour_cnt = 0;
+    P_3hr_hour_cnt = 0;
+    P_2hr_hour_cnt = 0;
+    P_1hr_min_cnt = 0;
+    P_30min_min_cnt = 0;
+    P_15min_min_cnt = 0;
+    P_10min_min_cnt = 0;
+    P_5min_min_cnt = 0;
+    P_2min_sec_cnt = 0;
+    P_1min_sec_cnt = 0;
+    P_30s_sec_cnt = 0;
+    P_10s_sec_cnt = 0;
+    P_5s_sec_cnt = 0;
+    P_2s_sec_cnt = 0;
+}
+
 void IntervalGlobalLoopCheck() {
     P_1day = false;
     P_12hr = false;

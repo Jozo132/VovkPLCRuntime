@@ -1811,6 +1811,7 @@ WASM_EXPORT bool lintAssembly(bool debug = true) {
 
 WASM_EXPORT void initialize() {
     runtime.initialize();
+    IntervalReset();
 }
 
 WASM_EXPORT void printProperties() {

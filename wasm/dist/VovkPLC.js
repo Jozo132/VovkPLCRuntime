@@ -95,7 +95,7 @@ class VovkPLC_class {
         let wasmBuffer = null
         if (!isNodeRuntime) {
             this.perf = globalThis.performance || null
-            const wasmFile = await fetch(wasm_path)
+            const wasmFile = await fetch(wasm_path + '?t=' + Date.now()) // Force clean cache
             wasmBuffer = await wasmFile.arrayBuffer()
         } else {
             // @ts-ignore

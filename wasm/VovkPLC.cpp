@@ -159,6 +159,24 @@ WASM_EXPORT u32 getMemoryLocation() {
     return (u32) runtime.memory;
 }
 
+WASM_EXPORT u32 getMillis() {
+    return millis();
+}
+
+WASM_EXPORT u32 getMicros() {
+    return micros();
+}
+
+WASM_EXPORT void setMillis(u32 ms) {
+    // const millis = () => +performance.now().toFixed(0);
+    // millis is imported from JS and cannot be set
+}
+
+WASM_EXPORT void setMicros(u32 us) {
+    // const micros = () => +(performance.now() * 1000).toFixed(0);
+    // micros is imported from JS and cannot be set
+}
+
 WASM_EXPORT u32 getLastCycleTimeUs() {
     return runtime.getLastCycleTimeUs();
 }
