@@ -135,6 +135,86 @@ namespace PLCMethods {
         return STATUS_SUCCESS;
     }
 
+    RuntimeError handle_JMP_REL(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
+        IGNORE_UNUSED u32 index_start = index;
+        u32 size = 2;
+        if (index + size > prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
+        i16 offset = (i16)((program[index] << 8) | program[index + 1]);
+        i32 new_index = (i32)index + size + offset;
+        if (new_index < 0 || new_index >= (i32)prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
+        index = (u32)new_index;
+        return STATUS_SUCCESS;
+    }
+
+    RuntimeError handle_JMP_IF_REL(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
+        IGNORE_UNUSED u32 index_start = index;
+        u32 size = 2;
+        if (index + size > prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
+        if (stack.pop_bool()) {
+            i16 offset = (i16)((program[index] << 8) | program[index + 1]);
+            i32 new_index = (i32)index + size + offset;
+            if (new_index < 0 || new_index >= (i32)prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
+            index = (u32)new_index;
+        } else index += size;
+        return STATUS_SUCCESS;
+    }
+
+    RuntimeError handle_JMP_IF_NOT_REL(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
+        IGNORE_UNUSED u32 index_start = index;
+        u32 size = 2;
+        if (index + size > prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
+        if (!stack.pop_bool()) {
+            i16 offset = (i16)((program[index] << 8) | program[index + 1]);
+            i32 new_index = (i32)index + size + offset;
+            if (new_index < 0 || new_index >= (i32)prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
+            index = (u32)new_index;
+        } else index += size;
+        return STATUS_SUCCESS;
+    }
+
+    RuntimeError handle_CALL_REL(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
+        IGNORE_UNUSED u32 index_start = index;
+        u32 size = 2;
+        if (index + size > prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
+        RuntimeError call_store_status = stack.pushCall(index + size);
+        if (call_store_status != STATUS_SUCCESS) return call_store_status;
+        i16 offset = (i16)((program[index] << 8) | program[index + 1]);
+        i32 new_index = (i32)index + size + offset;
+        if (new_index < 0 || new_index >= (i32)prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
+        index = (u32)new_index;
+        return STATUS_SUCCESS;
+    }
+
+    RuntimeError handle_CALL_IF_REL(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
+        IGNORE_UNUSED u32 index_start = index;
+        u32 size = 2;
+        if (index + size > prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
+        if (stack.pop_bool()) {
+            RuntimeError call_store_status = stack.pushCall(index + size);
+            if (call_store_status != STATUS_SUCCESS) return call_store_status;
+            i16 offset = (i16)((program[index] << 8) | program[index + 1]);
+            i32 new_index = (i32)index + size + offset;
+            if (new_index < 0 || new_index >= (i32)prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
+            index = (u32)new_index;
+        } else index += size;
+        return STATUS_SUCCESS;
+    }
+
+    RuntimeError handle_CALL_IF_NOT_REL(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
+        IGNORE_UNUSED u32 index_start = index;
+        u32 size = 2;
+        if (index + size > prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
+        if (!stack.pop_bool()) {
+            RuntimeError call_store_status = stack.pushCall(index + size);
+            if (call_store_status != STATUS_SUCCESS) return call_store_status;
+            i16 offset = (i16)((program[index] << 8) | program[index + 1]);
+            i32 new_index = (i32)index + size + offset;
+            if (new_index < 0 || new_index >= (i32)prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
+            index = (u32)new_index;
+        } else index += size;
+        return STATUS_SUCCESS;
+    }
+
 
     RuntimeError handle_EXIT(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
         if (index >= prog_size) return STATUS_SUCCESS;

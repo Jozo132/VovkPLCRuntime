@@ -239,6 +239,12 @@ bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
         case RET:
         case RET_IF:
         case RET_IF_NOT:
+        case JMP_REL:
+        case JMP_IF_REL:
+        case JMP_IF_NOT_REL:
+        case CALL_REL:
+        case CALL_IF_REL:
+        case CALL_IF_NOT_REL:
         case EXIT: return true;
         default: break;
     }
@@ -434,6 +440,12 @@ const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
         case RET: return F("RET");
         case RET_IF: return F("RET_IF");
         case RET_IF_NOT: return F("RET_IF_NOT");
+        case JMP_REL: return F("JMP_REL");
+        case JMP_IF_REL: return F("JMP_IF_REL");
+        case JMP_IF_NOT_REL: return F("JMP_IF_NOT_REL");
+        case CALL_REL: return F("CALL_REL");
+        case CALL_IF_REL: return F("CALL_IF_REL");
+        case CALL_IF_NOT_REL: return F("CALL_IF_NOT_REL");
         case EXIT: return F("EXIT");
         default: break;
     }
@@ -643,6 +655,13 @@ u8 OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
         case CALL:
         case CALL_IF:
         case CALL_IF_NOT: return 1 + MY_PTR_SIZE_BYTES;
+
+        case JMP_REL:
+        case JMP_IF_REL:
+        case JMP_IF_NOT_REL:
+        case CALL_REL:
+        case CALL_IF_REL:
+        case CALL_IF_NOT_REL: return 3;
 
         case RET:
         case RET_IF:

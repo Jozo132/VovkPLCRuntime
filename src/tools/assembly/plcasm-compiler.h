@@ -1266,7 +1266,7 @@ public:
             bool hasNext = i + 1 < token_count;
             // [ u8.const , 3 ]
             Token& token_p1 = hasNext ? tokens[i + 1] : tokens[i];
-            bool e_label = finalPass ? labelFromToken(token_p1, label_address) : false;
+            bool e_label = finalPass ? labelFromToken(token_p1, label_address) : true;
             // bool e_bool = boolFromToken(token_p1, value_bool);
             bool e_int = intFromToken(token_p1, value_int);
             bool e_real = realFromToken(token_p1, value_float);
@@ -1284,6 +1284,14 @@ public:
                     if (hasNext && token == "call") { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } i++; line.size = InstructionCompiler::pushCALL(bytecode, label_address); _line_push; }
                     if (hasNext && token == "call_if") { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } i++; line.size = InstructionCompiler::pushCALL_IF(bytecode, label_address); _line_push; }
                     if (hasNext && token == "call_if_not") { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } i++; line.size = InstructionCompiler::pushCALL_IF_NOT(bytecode, label_address); _line_push; }
+
+                    if (hasNext && (token == "jmp_rel" || token == "jump_rel")) { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } int off = !e_label ? (label_address - (int)(line.index + 3)) : (!e_int ? value_int : 0); i++; line.size = InstructionCompiler::push_jmp_rel(bytecode, (i16)off); _line_push; }
+                    if (hasNext && (token == "jmp_if_rel" || token == "jump_if_rel")) { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } int off = !e_label ? (label_address - (int)(line.index + 3)) : (!e_int ? value_int : 0); i++; line.size = InstructionCompiler::push_jmp_if_rel(bytecode, (i16)off); _line_push; }
+                    if (hasNext && (token == "jmp_if_not_rel" || token == "jump_if_not_rel")) { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } int off = !e_label ? (label_address - (int)(line.index + 3)) : (!e_int ? value_int : 0); i++; line.size = InstructionCompiler::push_jmp_if_not_rel(bytecode, (i16)off); _line_push; }
+
+                    if (hasNext && token == "call_rel") { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } int off = !e_label ? (label_address - (int)(line.index + 3)) : (!e_int ? value_int : 0); i++; line.size = InstructionCompiler::pushCALL_REL(bytecode, (i16)off); _line_push; }
+                    if (hasNext && token == "call_if_rel") { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } int off = !e_label ? (label_address - (int)(line.index + 3)) : (!e_int ? value_int : 0); i++; line.size = InstructionCompiler::pushCALL_IF_REL(bytecode, (i16)off); _line_push; }
+                    if (hasNext && token == "call_if_not_rel") { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } int off = !e_label ? (label_address - (int)(line.index + 3)) : (!e_int ? value_int : 0); i++; line.size = InstructionCompiler::pushCALL_IF_NOT_REL(bytecode, (i16)off); _line_push; }
                     if (token == "ret" || token == "return") { line.size = InstructionCompiler::push(bytecode, RET); _line_push; }
                     if (token == "ret_if" || token == "return_if") { line.size = InstructionCompiler::push(bytecode, RET_IF); _line_push; }
                     if (token == "ret_if_not" || token == "return_if_not") { line.size = InstructionCompiler::push(bytecode, RET_IF_NOT); _line_push; }

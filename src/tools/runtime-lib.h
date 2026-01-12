@@ -1005,6 +1005,12 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
         case CALL: return PLCMethods::handle_CALL(this->stack, program, prog_size, index);
         case CALL_IF: return PLCMethods::handle_CALL_IF(this->stack, program, prog_size, index);
         case CALL_IF_NOT: return PLCMethods::handle_CALL_IF_NOT(this->stack, program, prog_size, index);
+        case JMP_REL: return PLCMethods::handle_JMP_REL(this->stack, program, prog_size, index);
+        case JMP_IF_REL: return PLCMethods::handle_JMP_IF_REL(this->stack, program, prog_size, index);
+        case JMP_IF_NOT_REL: return PLCMethods::handle_JMP_IF_NOT_REL(this->stack, program, prog_size, index);
+        case CALL_REL: return PLCMethods::handle_CALL_REL(this->stack, program, prog_size, index);
+        case CALL_IF_REL: return PLCMethods::handle_CALL_IF_REL(this->stack, program, prog_size, index);
+        case CALL_IF_NOT_REL: return PLCMethods::handle_CALL_IF_NOT_REL(this->stack, program, prog_size, index);
         case RET: return PLCMethods::handle_RET(this->stack, program, prog_size, index);
         case RET_IF: return PLCMethods::handle_RET_IF(this->stack, program, prog_size, index);
         case RET_IF_NOT: return PLCMethods::handle_RET_IF_NOT(this->stack, program, prog_size, index);

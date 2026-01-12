@@ -10,6 +10,7 @@
     "test_compile": "cd wasm/node-test && node test_compile.js",
     "test_edge": "cd wasm/node-test && node test_edge_detection.js",
     "test_edge_ext": "cd wasm/node-test && node test_edge_extensions.js",
+    "test_flow_rel": "cd wasm/node-test && node test_flow_rel.js",
     "test_lint": "cd wasm/node-test && node test_lint.js",
     "memory_leak_test": "node wasm/memory_leak_test.js",
     "memory_leak_test:verbose": "node wasm/memory_leak_test.js --verbose",

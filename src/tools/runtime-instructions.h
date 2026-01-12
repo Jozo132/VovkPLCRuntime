@@ -326,6 +326,13 @@ enum PLCRuntimeInstructionSet {
     RET_IF,             // Return from a function call if the top of the stack is true
     RET_IF_NOT,         // Return from a function call if the top of the stack is false
 
+    JMP_REL,            // Jump relative to the next instruction address (i16)
+    JMP_IF_REL,         // Jump relative to the next instruction address if the top of the stack is true (i16)
+    JMP_IF_NOT_REL,     // Jump relative to the next instruction address if the top of the stack is false (i16)
+    CALL_REL,           // Call a function relative to the next instruction address (i16)
+    CALL_IF_REL,        // Call a function relative to the next instruction address if the top of the stack is true (i16)
+    CALL_IF_NOT_REL,    // Call a function relative to the next instruction address if the top of the stack is false (i16)
+
     EXIT = 0xFF         // Exit the program. This will cease the execution of the program and return an optional exit error code (u8)
 };
 

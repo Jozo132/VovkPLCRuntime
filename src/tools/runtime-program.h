@@ -266,6 +266,50 @@ public:
         return 3;
     }
 
+    static u8 push_jmp_rel(u8* location, i16 offset) {
+        location[0] = JMP_REL;
+        u16 u_offset = (u16)offset;
+        location[1] = u_offset >> 8;
+        location[2] = u_offset & 0xFF;
+        return 3;
+    }
+    static u8 push_jmp_if_rel(u8* location, i16 offset) {
+        location[0] = JMP_IF_REL;
+        u16 u_offset = (u16)offset;
+        location[1] = u_offset >> 8;
+        location[2] = u_offset & 0xFF;
+        return 3;
+    }
+    static u8 push_jmp_if_not_rel(u8* location, i16 offset) {
+        location[0] = JMP_IF_NOT_REL;
+        u16 u_offset = (u16)offset;
+        location[1] = u_offset >> 8;
+        location[2] = u_offset & 0xFF;
+        return 3;
+    }
+
+    static u8 pushCALL_REL(u8* location, i16 offset) {
+        location[0] = CALL_REL;
+        u16 u_offset = (u16)offset;
+        location[1] = u_offset >> 8;
+        location[2] = u_offset & 0xFF;
+        return 3;
+    }
+    static u8 pushCALL_IF_REL(u8* location, i16 offset) {
+        location[0] = CALL_IF_REL;
+        u16 u_offset = (u16)offset;
+        location[1] = u_offset >> 8;
+        location[2] = u_offset & 0xFF;
+        return 3;
+    }
+    static u8 pushCALL_IF_NOT_REL(u8* location, i16 offset) {
+        location[0] = CALL_IF_NOT_REL;
+        u16 u_offset = (u16)offset;
+        location[1] = u_offset >> 8;
+        location[2] = u_offset & 0xFF;
+        return 3;
+    }
+
 
     // Convert a data type to another data type
     static u8 push_cvt(u8* location, PLCRuntimeInstructionSet from, PLCRuntimeInstructionSet to) {
