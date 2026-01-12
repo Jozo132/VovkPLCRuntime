@@ -131,6 +131,11 @@ WASM_EXPORT int runDirty() {
     return runtime.runDirty();
 }
 
+WASM_EXPORT int runExplain() {
+    IntervalGlobalLoopCheck();
+    return UnitTest::fullProgramDebug(runtime);
+}
+
 WASM_EXPORT void run_unit_test() {
     IntervalGlobalLoopCheck();
     runtime_unit_test(runtime);

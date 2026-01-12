@@ -172,8 +172,9 @@ RuntimeError UnitTest::fullProgramDebug(VovkPLCRuntime& runtime) {
         if (program.finished()) finished = true;
     }
     u32 t = micros();
-    runtime.run(program);
+    // runtime.run(program); // Don't run again in debug mode as it was already executed step-by-step
     t = micros() - t;
+    if (status == PROGRAM_EXITED) status = STATUS_SUCCESS;
 #else
     u32 t = micros();
     RuntimeError status = runtime.run(program);

@@ -1367,6 +1367,41 @@ public:
                             if (token == "u8.xor") { line.size = InstructionCompiler::push(bytecode, LOGIC_XOR); _line_push; }
                             if (token == "u8.not") { line.size = InstructionCompiler::push(bytecode, LOGIC_NOT); _line_push; }
 
+                            // Edge detection
+                            PLCRuntimeInstructionSet edge_task = (PLCRuntimeInstructionSet) 0;
+                            if (token.endsWith(".readBitDU")) edge_task = READ_BIT_DU;
+                            else if (token.endsWith(".readBitDD")) edge_task = READ_BIT_DD;
+                            else if (token.endsWith(".readBitInvDU")) edge_task = READ_BIT_INV_DU;
+                            else if (token.endsWith(".readBitInvDD")) edge_task = READ_BIT_INV_DD;
+                            else if (token.endsWith(".writeBitDU")) edge_task = WRITE_BIT_DU;
+                            else if (token.endsWith(".writeBitDD")) edge_task = WRITE_BIT_DD;
+                            else if (token.endsWith(".writeBitInvDU")) edge_task = WRITE_BIT_INV_DU;
+                            else if (token.endsWith(".writeBitInvDD")) edge_task = WRITE_BIT_INV_DD;
+                            else if (token.endsWith(".writeBitOnDU")) edge_task = WRITE_SET_DU;
+                            else if (token.endsWith(".writeBitOnDD")) edge_task = WRITE_SET_DD;
+                            else if (token.endsWith(".writeBitOffDU")) edge_task = WRITE_RSET_DU;
+                            else if (token.endsWith(".writeBitOffDD")) edge_task = WRITE_RSET_DD;
+                            
+                            if (edge_task) {
+                                int addr1 = 0, bit1 = 0;
+                                int addr2 = 0, bit2 = 0;
+                                if (memoryBitFromToken(token_p1, addr1, bit1)) { if (buildError(token_p1, "expected address.bit")) return true; }
+                                i++;
+                                if (!hasThird) { if (buildError(token, "missing state address")) return true; }
+                                if (memoryBitFromToken(token_p2, addr2, bit2)) { if (buildError(token_p2, "expected state address.bit")) return true; }
+                                i++;
+                                line.size = InstructionCompiler::push_InstructionWithTwoPointers(bytecode, edge_task, addr1, bit1, addr2, bit2);
+                                _line_push;
+                            } else if (token.endsWith(".du") || token.endsWith(".dd")) {
+                                PLCRuntimeInstructionSet stack_edge_task = token.endsWith(".du") ? STACK_DU : STACK_DD;
+                                int addr_state = 0, bit_state = 0;
+                                // Expect [State]
+                                if (memoryBitFromToken(token_p1, addr_state, bit_state)) { if (buildError(token_p1, "expected state address.bit")) return true; }
+                                i++;
+                                line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, stack_edge_task, addr_state, bit_state);
+                                _line_push;
+                            }
+
                             // Direct memory read/write
                             PLCRuntimeInstructionSet mem_bit_task = (PLCRuntimeInstructionSet) 0;
                             if (!mem_bit_task && token.includes(".writeBitInv")) mem_bit_task = WRITE_INV_X8_B0; // WRITE_INV_X8 (INVERT)

@@ -200,6 +200,30 @@ public:
     }
 #endif
 
+    static u8 push_InstructionWithPointer(u8* location, PLCRuntimeInstructionSet instruction, MY_PTR_t value, u8 bit_offset) {
+        u8 offset = push_InstructionWithPointer(location, instruction, value);
+        location[offset++] = bit_offset;
+        return offset;
+    }
+
+    static u8 push_InstructionWithTwoPointers(u8* location, PLCRuntimeInstructionSet instruction, MY_PTR_t addr1, u8 bit1, MY_PTR_t addr2, u8 bit2) {
+        return push_read_bit_edge(location, instruction, addr1, bit1, addr2, bit2);
+    }
+
+    static u8 push_read_bit_edge(u8* location, PLCRuntimeInstructionSet instruction, MY_PTR_t addr1, u8 bit1, MY_PTR_t addr2, u8 bit2) {
+        location[0] = instruction;
+        u8 offset = 1;
+        // Addr1
+        for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[offset++] = (addr1 >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
+        // Bit1
+        location[offset++] = bit1;
+        // Addr2
+        for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[offset++] = (addr2 >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
+        // Bit2
+        location[offset++] = bit2;
+        return offset;
+    }
+
 
 
 

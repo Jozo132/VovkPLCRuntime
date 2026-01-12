@@ -1099,6 +1099,23 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
         case WRITE_INV_X8_B6: return PLCMethods::handle_WRITE_INV_X8_B6(this->stack, this->memory, program, prog_size, index);
         case WRITE_INV_X8_B7: return PLCMethods::handle_WRITE_INV_X8_B7(this->stack, this->memory, program, prog_size, index);
 
+        case READ_BIT_DU: return PLCMethods::handle_READ_BIT_DU(this->stack, this->memory, program, prog_size, index);
+        case READ_BIT_DD: return PLCMethods::handle_READ_BIT_DD(this->stack, this->memory, program, prog_size, index);
+        case READ_BIT_INV_DU: return PLCMethods::handle_READ_BIT_INV_DU(this->stack, this->memory, program, prog_size, index);
+        case READ_BIT_INV_DD: return PLCMethods::handle_READ_BIT_INV_DD(this->stack, this->memory, program, prog_size, index);
+
+        case WRITE_BIT_DU: return PLCMethods::handle_WRITE_BIT_DU(this->stack, this->memory, program, prog_size, index);
+        case WRITE_BIT_DD: return PLCMethods::handle_WRITE_BIT_DD(this->stack, this->memory, program, prog_size, index);
+        case WRITE_BIT_INV_DU: return PLCMethods::handle_WRITE_BIT_INV_DU(this->stack, this->memory, program, prog_size, index);
+        case WRITE_BIT_INV_DD: return PLCMethods::handle_WRITE_BIT_INV_DD(this->stack, this->memory, program, prog_size, index);
+        case WRITE_SET_DU: return PLCMethods::handle_WRITE_SET_DU(this->stack, this->memory, program, prog_size, index);
+        case WRITE_SET_DD: return PLCMethods::handle_WRITE_SET_DD(this->stack, this->memory, program, prog_size, index);
+        case WRITE_RSET_DU: return PLCMethods::handle_WRITE_RSET_DU(this->stack, this->memory, program, prog_size, index);
+        case WRITE_RSET_DD: return PLCMethods::handle_WRITE_RSET_DD(this->stack, this->memory, program, prog_size, index);
+        
+        case STACK_DU: return PLCMethods::handle_STACK_DU(this->stack, this->memory, program, prog_size, index);
+        case STACK_DD: return PLCMethods::handle_STACK_DD(this->stack, this->memory, program, prog_size, index);
+
         case BW_AND_X8: return PLCMethods::handle_BW_AND_X8(this->stack);
         case BW_AND_X16: return PLCMethods::handle_BW_AND_X16(this->stack);
         case BW_AND_X32: return PLCMethods::handle_BW_AND_X32(this->stack);

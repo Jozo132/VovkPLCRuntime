@@ -249,6 +249,27 @@ enum PLCRuntimeInstructionSet {
     WRITE_INV_X8_B6,    // Write the seventh bit of the 1 byte at the given address (x) to inverted value (INVERT)
     WRITE_INV_X8_B7,    // Write the eighth bit of the 1 byte at the given address (x) to inverted value (INVERT)
 
+    READ_BIT_DU = 0x80,      // Read the Rising Edge of a bit at the given address (x) and bit (y) and check against the old state at address (z) and bit (w)
+    READ_BIT_DD,             // Read the Falling Edge of a bit at the given address (x) and bit (y) and check against the old state at address (z) and bit (w)
+
+    READ_BIT_INV_DU,
+    READ_BIT_INV_DD,
+
+    WRITE_BIT_DU,
+    WRITE_BIT_DD,
+
+    WRITE_BIT_INV_DU,
+    WRITE_BIT_INV_DD,
+
+    WRITE_SET_DU,
+    WRITE_SET_DD,
+
+    WRITE_RSET_DU,
+    WRITE_RSET_DD,
+
+    STACK_DU,
+    STACK_DD,
+
     // Bitwise operations
     BW_AND_X8 = 0xA0,   // Bitwise AND for 1 byte size values (x, y)
     BW_AND_X16,         // Bitwise AND for 2 byte size values (x, y)

@@ -179,6 +179,20 @@ bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
         case WRITE_INV_X8_B5:
         case WRITE_INV_X8_B6:
         case WRITE_INV_X8_B7:
+        case READ_BIT_DU:
+        case READ_BIT_DD:
+        case READ_BIT_INV_DU:
+        case READ_BIT_INV_DD:
+        case WRITE_BIT_DU:
+        case WRITE_BIT_DD:
+        case WRITE_BIT_INV_DU:
+        case WRITE_BIT_INV_DD:
+        case WRITE_SET_DU:
+        case WRITE_SET_DD:
+        case WRITE_RSET_DU:
+        case WRITE_RSET_DD:
+        case STACK_DU:
+        case STACK_DD:
 
         case BW_AND_X8:
         case BW_AND_X16:
@@ -357,6 +371,23 @@ const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
         case WRITE_INV_X8_B5: return F("WRITE_INV_X8_B5");
         case WRITE_INV_X8_B6: return F("WRITE_INV_X8_B6");
         case WRITE_INV_X8_B7: return F("WRITE_INV_X8_B7");
+
+        case READ_BIT_DU: return F("READ_BIT_DU");
+        case READ_BIT_DD: return F("READ_BIT_DD");
+        case READ_BIT_INV_DU: return F("READ_BIT_INV_DU");
+        case READ_BIT_INV_DD: return F("READ_BIT_INV_DD");
+
+        case WRITE_BIT_DU: return F("WRITE_BIT_DU");
+        case WRITE_BIT_DD: return F("WRITE_BIT_DD");
+        case WRITE_BIT_INV_DU: return F("WRITE_BIT_INV_DU");
+        case WRITE_BIT_INV_DD: return F("WRITE_BIT_INV_DD");
+        case WRITE_SET_DU: return F("WRITE_SET_DU");
+        case WRITE_SET_DD: return F("WRITE_SET_DD");
+        case WRITE_RSET_DU: return F("WRITE_RSET_DU");
+        case WRITE_RSET_DD: return F("WRITE_RSET_DD");
+
+        case STACK_DU: return F("STACK_DU");
+        case STACK_DD: return F("STACK_DD");
 
         case BW_AND_X8: return F("BW_AND_X8");
         case BW_AND_X16: return F("BW_AND_X16");
@@ -552,6 +583,22 @@ u8 OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
         case WRITE_INV_X8_B5:
         case WRITE_INV_X8_B6:
         case WRITE_INV_X8_B7: return 1 + MY_PTR_SIZE_BYTES;
+        case READ_BIT_DU:
+        case READ_BIT_DD:
+        case READ_BIT_INV_DU:
+        case READ_BIT_INV_DD:
+        
+        case WRITE_BIT_DU:
+        case WRITE_BIT_DD:
+        case WRITE_BIT_INV_DU:
+        case WRITE_BIT_INV_DD:
+        case WRITE_SET_DU:
+        case WRITE_SET_DD:
+        case WRITE_RSET_DU:
+        case WRITE_RSET_DD: return 7;
+
+        case STACK_DU:
+        case STACK_DD: return 4;
 
         case BW_AND_X8:
         case BW_AND_X16:
