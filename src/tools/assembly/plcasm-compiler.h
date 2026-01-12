@@ -1216,6 +1216,7 @@ public:
     bool buildErrorUnknownLabel(Token token) { return buildError(token, "unknown label"); }
 
     bool build(bool finalPass, bool lintMode = false) {
+        int auto_assigned_bit_counter = 0;
         programLineCount = 0;
         built_bytecode_length = 0;
         built_bytecode_checksum = 0;
@@ -1395,17 +1396,43 @@ public:
                                 int addr2 = 0, bit2 = 0;
                                 if (memoryBitFromToken(token_p1, addr1, bit1)) { if (buildError(token_p1, "expected address.bit")) return true; }
                                 i++;
-                                if (!hasThird) { if (buildError(token, "missing state address")) return true; }
-                                if (memoryBitFromToken(token_p2, addr2, bit2)) { if (buildError(token_p2, "expected state address.bit")) return true; }
-                                i++;
+                                
+                                bool has_second_addr = false;
+                                if (hasThird) if (!memoryBitFromToken(token_p2, addr2, bit2)) has_second_addr = true;
+
+                                if (has_second_addr) {
+                                    i++;
+                                } else {
+                                    // Automatically assign bits in the system address space offset
+                                    int bit_index = auto_assigned_bit_counter++;
+                                    addr2 = plcasm_system_offset + bit_index / 8;
+                                    bit2 = bit_index % 8;
+                                    if (addr2 >= plcasm_system_offset + PLCRUNTIME_NUM_OF_SYSTEMS) {
+                                        if (buildError(token, "System memory exhausted for auto-assigned bits")) return true;
+                                    }
+                                }
+
                                 line.size = InstructionCompiler::push_InstructionWithTwoPointers(bytecode, edge_task, addr1, bit1, addr2, bit2);
                                 _line_push;
                             } else if (token.endsWith(".du") || token.endsWith(".dd")) {
                                 PLCRuntimeInstructionSet stack_edge_task = token.endsWith(".du") ? STACK_DU : STACK_DD;
                                 int addr_state = 0, bit_state = 0;
-                                // Expect [State]
-                                if (memoryBitFromToken(token_p1, addr_state, bit_state)) { if (buildError(token_p1, "expected state address.bit")) return true; }
-                                i++;
+                                // Expect [State] for static linking
+                                bool has_state_addr = false;
+                                if (hasNext) if (!memoryBitFromToken(token_p1, addr_state, bit_state)) has_state_addr = true;
+
+                                if (has_state_addr) {
+                                    i++;
+                                } else {
+                                    // Automatically assign bits in the system address space offset
+                                    int bit_index = auto_assigned_bit_counter++;
+                                    addr_state = plcasm_system_offset + bit_index / 8;
+                                    bit_state = bit_index % 8;
+                                    if (addr_state >= plcasm_system_offset + PLCRUNTIME_NUM_OF_SYSTEMS) {
+                                        if (buildError(token, "System memory exhausted for auto-assigned bits")) return true;
+                                    }
+                                }
+
                                 line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, stack_edge_task, addr_state, bit_state);
                                 _line_push;
                             }
