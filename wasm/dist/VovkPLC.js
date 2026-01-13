@@ -796,8 +796,8 @@ class VovkPLCWorkerClient {
     /** @param { VovkPLCWorkerLike } worker */
     constructor(worker) {
         this.worker = worker
-        this._onMessage = this._handleMessage.bind(this)
-        this._onError = this._handleError.bind(this)
+        this._onMessage = this._handleMessage
+        this._onError = this._handleError
         if (typeof worker.addEventListener === 'function') {
             worker.addEventListener('message', this._onMessage)
             worker.addEventListener('error', this._onError)
