@@ -39,6 +39,7 @@
 #include "methods-logic.h"
 #include "methods-comparison.h"
 #include "methods-flow.h"
+#include "methods-timer.h"
 
 namespace PLCMethods {
 

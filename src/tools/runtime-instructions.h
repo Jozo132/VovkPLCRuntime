@@ -164,17 +164,14 @@ enum PLCRuntimeInstructionSet {
     // EXP,                // Exponential
     SIN,                // Sine
     COS,                // Cosine
-    // TAN,                // Tangent
-    // ASIN,               // Arc sine
-    // ACOS,               // Arc cosine
-    // ATAN,               // Arc tangent
-    // ATAN2,              // Arc tangent 2
-    // SINH,               // Hyperbolic sine
-    // COSH,               // Hyperbolic cosine
-    // TANH,               // Hyperbolic tangent
-    // ASINH,              // Hyperbolic arc sine
-    // ACOSH,              // Hyperbolic arc cosine
-    // ATANH,              // Hyperbolic arc tangent
+
+    // Timer operations
+    TON_CONST = 0x30,   // Timer On-Delay (IN, PT: Constant u32) -> Q
+    TON_MEM,            // Timer On-Delay (IN, PT: Memory u32) -> Q
+    TOF_CONST,          // Timer Off-Delay (IN, PT: Constant u32) -> Q
+    TOF_MEM,            // Timer Off-Delay (IN, PT: Memory u32) -> Q
+    TP_CONST,           // Timer Pulse (IN, PT: Constant u32) -> Q
+    TP_MEM,             // Timer Pulse (IN, PT: Memory u32) -> Q
 
     // Bit operations (PLC specific for simpler bytecode generation)
     GET_X8_B0 = 0x40,   // Get the first bit of the 1 byte size value (x)

@@ -28,23 +28,23 @@
 #endif // __WASM__
 
 #ifndef PLCRUNTIME_NUM_OF_CONTROLS
-#define PLCRUNTIME_NUM_OF_CONTROLS 16
+#define PLCRUNTIME_NUM_OF_CONTROLS 64
 #endif // PLCRUNTIME_NUM_OF_CONTROLS
 
 #ifndef PLCRUNTIME_NUM_OF_INPUTS
-#define PLCRUNTIME_NUM_OF_INPUTS 16
+#define PLCRUNTIME_NUM_OF_INPUTS 64
 #endif // PLCRUNTIME_NUM_OF_INPUTS
 
 #ifndef PLCRUNTIME_NUM_OF_OUTPUTS
-#define PLCRUNTIME_NUM_OF_OUTPUTS 16
+#define PLCRUNTIME_NUM_OF_OUTPUTS 64
 #endif // PLCRUNTIME_NUM_OF_OUTPUTS
 
 #ifndef PLCRUNTIME_NUM_OF_MARKERS
-#define PLCRUNTIME_NUM_OF_MARKERS 16
+#define PLCRUNTIME_NUM_OF_MARKERS 256
 #endif // PLCRUNTIME_NUM_OF_MARKERS
 
 #ifndef PLCRUNTIME_NUM_OF_SYSTEMS
-#define PLCRUNTIME_NUM_OF_SYSTEMS 16
+#define PLCRUNTIME_NUM_OF_SYSTEMS 256
 #endif // PLCRUNTIME_NUM_OF_SYSTEMS
 
 #ifndef PLCRUNTIME_CONTROL_OFFSET
@@ -1052,6 +1052,13 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
         case SQRT: return PLCMethods::handle_SQRT(this->stack, program, prog_size, index);
         case SIN: return PLCMethods::handle_SIN(this->stack, program, prog_size, index);
         case COS: return PLCMethods::handle_COS(this->stack, program, prog_size, index);
+
+        case TON_CONST: return PLCMethods::handle_TON_CONST(this->stack, this->memory, program, prog_size, index);
+        case TON_MEM: return PLCMethods::handle_TON_MEM(this->stack, this->memory, program, prog_size, index);
+        case TOF_CONST: return PLCMethods::handle_TOF_CONST(this->stack, this->memory, program, prog_size, index);
+        case TOF_MEM: return PLCMethods::handle_TOF_MEM(this->stack, this->memory, program, prog_size, index);
+        case TP_CONST: return PLCMethods::handle_TP_CONST(this->stack, this->memory, program, prog_size, index);
+        case TP_MEM: return PLCMethods::handle_TP_MEM(this->stack, this->memory, program, prog_size, index);
 
         case GET_X8_B0: return PLCMethods::handle_GET_X8_B0(this->stack);
         case GET_X8_B1: return PLCMethods::handle_GET_X8_B1(this->stack);

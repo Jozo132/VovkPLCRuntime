@@ -29,23 +29,23 @@
 #include "./../runtime-types.h"
 
 #ifndef PLCRUNTIME_NUM_OF_CONTROLS
-#define PLCRUNTIME_NUM_OF_CONTROLS 16
+#define PLCRUNTIME_NUM_OF_CONTROLS 64
 #endif // PLCRUNTIME_NUM_OF_CONTROLS
 
 #ifndef PLCRUNTIME_NUM_OF_INPUTS
-#define PLCRUNTIME_NUM_OF_INPUTS 16
+#define PLCRUNTIME_NUM_OF_INPUTS 64
 #endif // PLCRUNTIME_NUM_OF_INPUTS
 
 #ifndef PLCRUNTIME_NUM_OF_OUTPUTS
-#define PLCRUNTIME_NUM_OF_OUTPUTS 16
+#define PLCRUNTIME_NUM_OF_OUTPUTS 64
 #endif // PLCRUNTIME_NUM_OF_OUTPUTS
 
 #ifndef PLCRUNTIME_NUM_OF_MARKERS
-#define PLCRUNTIME_NUM_OF_MARKERS 16
+#define PLCRUNTIME_NUM_OF_MARKERS 256
 #endif // PLCRUNTIME_NUM_OF_MARKERS
 
 #ifndef PLCRUNTIME_NUM_OF_SYSTEMS
-#define PLCRUNTIME_NUM_OF_SYSTEMS 16
+#define PLCRUNTIME_NUM_OF_SYSTEMS 256
 #endif // PLCRUNTIME_NUM_OF_SYSTEMS
 
 #ifndef PLCRUNTIME_CONTROL_OFFSET
@@ -564,8 +564,8 @@ struct ProgramLine {
 const char* illegal_keywords [] = { "const", "var", "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "string", "true", "false", "if", "else", "while", "for", "do", "break", "continue", "return", "function" };
 const int illegal_keywords_count = sizeof(illegal_keywords) / sizeof(illegal_keywords[0]);
 
-const char lex_ignored [] = { ' ', ';', '\t', '\r', '\n', '\0' };
-const char lex_dividers [] = { '(', ')', '=', '+', '-', '*', '/', '%', '&', '|', '^', '~', '!', '<', '>', '?', ':', ',', ';', '[', ']', '{', '}', '\'', '"', '`', '\\', '\0' };
+const char lex_ignored [] = { ' ', ';', ',', '\t', '\r', '\n', '\0' };
+const char lex_dividers [] = { '(', ')', '=', '+', '-', '*', '/', '%', '&', '|', '^', '~', '!', '<', '>', '?', ':', ';', '[', ']', '{', '}', '\'', '"', '`', '\\', '\0' };
 
 const char* data_type_keywords [] = { "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "string", "bit", "byte", "ptr", "pointer", "*" };
 const int data_type_keywords_count = sizeof(data_type_keywords) / sizeof(data_type_keywords[0]);
@@ -619,7 +619,7 @@ public:
         char default_asm[] = "DEFAULT_ASM_STRING_MARKER";
 /*
         char default_asm[] = R"(
-# This is a comment
+// This is a comment
     f32.const 0.1
     f32.const 0.2
     f32.add
@@ -847,16 +847,20 @@ public:
                 continue;
             }
 
-            // c == # || c == /
-            if (c == '#' || c == '/') {
-                error = add_token_optional(token_start, token_length);
-                if (error) return error;
-                while (i < assembly_string_length && assembly_string[i] != '\n') i++;
-                token_start = assembly_string + i + 1;
-                token_length = 0;
-                line++;
-                column = 1;
-                continue;
+            // c == //
+            if (c == '/') {
+                 // Check for double slash
+                 bool hasNext = i + 1 < assembly_string_length;
+                 if (hasNext && assembly_string[i + 1] == '/') {
+                    error = add_token_optional(token_start, token_length);
+                    if (error) return error;
+                    while (i < assembly_string_length && assembly_string[i] != '\n') i++;
+                    token_start = assembly_string + i + 1;
+                    token_length = 0;
+                    line++;
+                    column = 1;
+                    continue;
+                 }
             }
             // c == \n
             if (c == '\n') {
@@ -1278,6 +1282,69 @@ public:
             Token& token_p2 = hasThird ? tokens[i + 2] : tokens[i];
 
             if (type == TOKEN_KEYWORD) {
+                // Handle timers
+                {
+                    bool is_ton = token == "ton";
+                    bool is_tof = token == "tof";
+                    bool is_tp = token == "tp";
+                    
+                    if (is_ton || is_tof || is_tp) {
+                        if (!hasNext || !hasThird) { if (buildError(token, "Timer instruction requires 2 arguments")) return true; }
+                        
+                        int timer_addr = 0;
+                        if (!addressFromToken(token_p1, timer_addr)) {
+                                bool is_const_param = false;
+                                if (token_p2.length > 1 && token_p2.string[0] == '#') {
+                                    is_const_param = true;
+                                }
+
+                                if (is_const_param) {
+                                    StringView valStr;
+                                    valStr.data = token_p2.string.data + 1;
+                                    valStr.length = token_p2.string.length - 1;
+                                    int pt_val = 0;
+                                    if (isInteger(valStr, pt_val)) {
+                                        // Constant
+                                        PLCRuntimeInstructionSet op = (PLCRuntimeInstructionSet)(is_ton ? TON_CONST : (is_tof ? TOF_CONST : TP_CONST));
+                                        i+=2;
+                                        line.size = InstructionCompiler::push(bytecode, op);
+                                        // Raw pointer push (u16 big endian)
+                                        bytecode[line.size++] = (timer_addr >> 8) & 0xFF;
+                                        bytecode[line.size++] = timer_addr & 0xFF;
+                                        // Raw u32 push (big endian) (pt_val is int, cast to u32)
+                                        u32 val = (u32)pt_val;
+                                        bytecode[line.size++] = (val >> 24) & 0xFF;
+                                        bytecode[line.size++] = (val >> 16) & 0xFF;
+                                        bytecode[line.size++] = (val >> 8) & 0xFF;
+                                        bytecode[line.size++] = val & 0xFF;
+                                        _line_push;
+                                    } else {
+                                        if (buildError(token_p2, "expected integer after #")) return true;
+                                    }
+                                } else {
+                                    int pt_addr = 0;
+                                    if (!addressFromToken(token_p2, pt_addr)) {
+                                        // Mem
+                                        PLCRuntimeInstructionSet op = (PLCRuntimeInstructionSet)(is_ton ? TON_MEM : (is_tof ? TOF_MEM : TP_MEM));
+                                        i+=2;
+                                        line.size = InstructionCompiler::push(bytecode, op);
+                                        // Raw pointer 1
+                                        bytecode[line.size++] = (timer_addr >> 8) & 0xFF;
+                                        bytecode[line.size++] = timer_addr & 0xFF;
+                                        // Raw pointer 2
+                                        bytecode[line.size++] = (pt_addr >> 8) & 0xFF;
+                                        bytecode[line.size++] = pt_addr & 0xFF;
+                                        _line_push;
+                                    } else {
+                                        if (buildError(token_p2, "expected PT value (start with #) or address")) return true;
+                                    }
+                                }
+                        } else {
+                            if (buildError(token_p1, "expected timer address")) return true;
+                        }
+                    }
+                }
+
                 { // Handle flow
                     if (hasNext && (token == "jmp" || token == "jump")) { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } i++; line.size = InstructionCompiler::push_jmp(bytecode, label_address); _line_push; }
                     if (hasNext && (token == "jmp_if" || token == "jump_if")) { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } i++; line.size = InstructionCompiler::push_jmp_if(bytecode, label_address); _line_push; }

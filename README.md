@@ -104,8 +104,7 @@ Notes:
 
 #### Hand written PLC assembly code with pointers, for-loops, functions and recursion:
 ```text
-# This is a comment
-// This is also a comment
+// This is a comment
 
 /* 
     This is the same program written in JavaScript:
@@ -116,12 +115,12 @@ Notes:
     return sum;
 */
 
-################# Define constant values
+//################ Define constant values
 const   sum = 0     // set "sum" to memory index 0
 const   index = 1   // set "i"   to memory index 1
 const   incr = 10
 
-################# Set initial values
+//################ Set initial values
 ptr.const  sum
 u8.const  0
 u8.move
@@ -129,9 +128,9 @@ ptr.const  index // set u8 at address 1 to value 0
 u8.const  0
 u8.move
 
-################# Run test for loop
+//################ Run test for loop
 loop:
-    ################# jump to end if "i" >= 10
+    //################ jump to end if "i" >= 10
     ptr.const  index
     u8.load
     u8.const   10
@@ -139,7 +138,7 @@ loop:
     jmp_if_not end 
     jmp end
 
-    ################# sum += 10
+    //################ sum += 10
     ptr.const  sum
     ptr.copy
     u8.load
@@ -147,7 +146,7 @@ loop:
     u8.add
     u8.move
 
-    ################# i++
+    //################ i++
     ptr.const  index
     ptr.copy
     u8.load
@@ -157,7 +156,7 @@ loop:
 
     jmp loop 
 
-################# exit the program and return the remaining stack
+//################ exit the program and return the remaining stack
 end:  
     ptr.const sum
     u8.load
@@ -185,7 +184,7 @@ u8.get 7
 
 // Expected leftover stack after test: [64 82 FF 01]
 
-########## Run recursive function test with a parameter (count down from 5)
+//######### Run recursive function test with a parameter (count down from 5)
 
 u8.const 5
 call FunctionTest
