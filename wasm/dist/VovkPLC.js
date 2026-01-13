@@ -798,7 +798,13 @@ class VovkPLCWorkerClient {
         this.worker = worker
         this._onMessage = this._handleMessage
         this._onError = this._handleError
-        if (typeof worker.addEventListener === 'function') {
+        
+        // Performance optimization: Prefer direct property assignment for Browser Workers
+        // This bypasses the EventTarget dispatch chain overhead significantly in high-frequency scenarios
+        if ('onmessage' in worker) {
+            worker.onmessage = this._onMessage
+            worker.onerror = this._onError
+        } else if (typeof worker.addEventListener === 'function') {
             worker.addEventListener('message', this._onMessage)
             worker.addEventListener('error', this._onError)
         } else if (typeof worker.on === 'function') {
