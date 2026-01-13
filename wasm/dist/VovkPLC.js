@@ -809,18 +809,19 @@ class VovkPLCWorkerClient {
 
     /** @type { (message: any) => void } */
     _handleMessage = message => {
-        const data = message && message.data !== undefined ? message.data : message
-        if (!data || typeof data !== 'object') return
+        const data = message.data || message
+        if (data.id) {
+            const pending = this.pending.get(data.id)
+            if (pending) {
+                this.pending.delete(data.id)
+                if (data.ok) pending.resolve(data.result)
+                else pending.reject(new Error(data.error || 'Worker call failed'))
+                return
+            }
+        }
         if (data.type === 'event') {
             this._handleEvent(data)
-            return
         }
-        if (typeof data.id !== 'number') return
-        const pending = this.pending.get(data.id)
-        if (!pending) return
-        this.pending.delete(data.id)
-        if (data.ok) pending.resolve(data.result)
-        else pending.reject(new Error(data.error || 'Worker call failed'))
     }
 
     /** @type { (data: any) => void } */
