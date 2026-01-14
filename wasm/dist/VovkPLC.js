@@ -1002,7 +1002,14 @@ const OFFSETS = {
  */
 
 /**
- * @typedef {{ workerUrl?: URL | string, workerFactory?: VovkPLCWorkerFactory, debug?: boolean, silent?: boolean, batchFlushDelay?: number }} VovkPLCWorkerOptions
+ * @typedef {{
+ *   workerUrl?: URL | string,
+ *   workerFactory?: VovkPLCWorkerFactory,
+ *   debug?: boolean,
+ *   silent?: boolean,
+ *   batchFlushDelay?: number,
+ *   forcePostMessage?: boolean
+ * }} VovkPLCWorkerOptions
  */
 
 /**
@@ -1067,9 +1074,11 @@ class VovkPLCWorkerClient {
     /** @type { boolean } */
     batchScheduled = false
     /** @type { number } */
-    batchFlushDelay = 100 // ms - batching window for collecting requests (tune for latency vs throughput)
+    batchFlushDelay = 200 // ms - batching window for collecting requests (tune for latency vs throughput)
     /** @type { boolean } */
     useBatchedFallback = false
+    /** @type { boolean } When true, disables SAB and forces batched postMessage mode */
+    forcePostMessage = false
 
     /** @param { VovkPLCWorkerLike } worker */
     constructor(worker) {
@@ -1240,8 +1249,8 @@ class VovkPLCWorkerClient {
         return new Promise((resolve, reject) => {
             this.pending.set(id, {resolve, reject})
             
-            // If Shared Memory is active, use Ring Buffer
-            if (this.sab && this.sabI32 && this.sabU8) {
+            // If Shared Memory is active and not forced to use postMessage, use Ring Buffer
+            if (!this.forcePostMessage && this.sab && this.sabI32 && this.sabU8) {
                 try {
                     this._writeToRing({id, type, ...payload})
                 } catch (e) {
@@ -1413,8 +1422,8 @@ class VovkPLCWorkerClient {
 
     /** @type { (wasmPath?: string, debug?: boolean, silent?: boolean) => Promise<any> } */
     initialize = (wasmPath = '', debug = false, silent = false) => {
-        // Initialize Shared Buffer if supported
-        if (SUPPORT.sab && SUPPORT.atomics) {
+        // Initialize Shared Buffer if supported and not forced to use postMessage
+        if (!this.forcePostMessage && SUPPORT.sab && SUPPORT.atomics) {
             try {
                 this.sab = new SharedArrayBuffer(SHARED_BUFFER_SIZE)
                 this.sabI32 = new Int32Array(this.sab)
@@ -1444,8 +1453,8 @@ class VovkPLCWorkerClient {
         }
         // Use batched fallback for high-throughput after init completes
         return this._send('init', {wasmPath, debug, silent}).then(res => {
-            // Enable batched mode after successful init (only if SAB not available)
-            if (!this.sab) {
+            // Enable batched mode after successful init (when SAB not available or forcePostMessage is set)
+            if (!this.sab || this.forcePostMessage) {
                 this.useBatchedFallback = true
             }
             return res
@@ -1499,13 +1508,15 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
     }
 
     /** @type { (wasmPath?: string, options?: VovkPLCWorkerOptions) => Promise<VovkPLCWorker> } */
-    static create = async (wasmPath = '', {workerUrl, workerFactory, debug = false, silent = false, batchFlushDelay = 200} = {}) => {
+    static create = async (wasmPath = '', {workerUrl, workerFactory, debug = false, silent = false, batchFlushDelay = 200, forcePostMessage = false} = {}) => {
         const resolvedUrl = workerUrl || new URL('./VovkPLC.worker.js', import.meta.url)
         const factory = workerFactory || (await getDefaultWorkerFactory())
         const worker = await createWorker(factory, resolvedUrl)
         const client = new VovkPLCWorker(worker)
         // Allow tuning batch flush delay (0 = immediate via microtask, >0 = collect requests for N ms)
         client.batchFlushDelay = batchFlushDelay
+        // Force postMessage mode (disable SAB even if available)
+        client.forcePostMessage = forcePostMessage
         await client.initialize(wasmPath, debug, silent)
         return client
     }
