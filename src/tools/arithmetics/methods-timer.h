@@ -163,6 +163,7 @@ namespace PLCMethods {
         MY_PTR_t timer_ptr = 0;
         RuntimeError err = ProgramExtract.type_pointer(program, prog_size, index, &timer_ptr);
         if (err != STATUS_SUCCESS) return err;
+        timer_ptr = reverse_byte_order(timer_ptr);
 
         u32 PT = 0;
         err = ProgramExtract.type_u32(program, prog_size, index, &PT);
@@ -182,6 +183,7 @@ namespace PLCMethods {
         MY_PTR_t timer_ptr = 0;
         RuntimeError err = ProgramExtract.type_pointer(program, prog_size, index, &timer_ptr);
         if (err != STATUS_SUCCESS) return err;
+        timer_ptr = reverse_byte_order(timer_ptr);
 
         MY_PTR_t pt_ptr = 0;
         err = ProgramExtract.type_pointer(program, prog_size, index, &pt_ptr);
@@ -189,6 +191,7 @@ namespace PLCMethods {
         
         if (pt_ptr + 4 > PLCRUNTIME_MAX_MEMORY_SIZE) return MEMORY_ACCESS_ERROR;
         u32 PT = read_u32_from_mem(memory, pt_ptr);
+        pt_ptr = reverse_byte_order(pt_ptr);
 
         if (stack.size() == 0) return EMPTY_STACK;
         bool IN = stack.pop_bool();
@@ -204,6 +207,7 @@ namespace PLCMethods {
         MY_PTR_t timer_ptr = 0;
         RuntimeError err = ProgramExtract.type_pointer(program, prog_size, index, &timer_ptr);
         if (err != STATUS_SUCCESS) return err;
+        timer_ptr = reverse_byte_order(timer_ptr);
 
         u32 PT = 0;
         err = ProgramExtract.type_u32(program, prog_size, index, &PT);
@@ -223,10 +227,12 @@ namespace PLCMethods {
         MY_PTR_t timer_ptr = 0;
         RuntimeError err = ProgramExtract.type_pointer(program, prog_size, index, &timer_ptr);
         if (err != STATUS_SUCCESS) return err;
+        timer_ptr = reverse_byte_order(timer_ptr);
 
         MY_PTR_t pt_ptr = 0;
         err = ProgramExtract.type_pointer(program, prog_size, index, &pt_ptr);
         if (err != STATUS_SUCCESS) return err;
+        pt_ptr = reverse_byte_order(pt_ptr);
         
         if (pt_ptr + 4 > PLCRUNTIME_MAX_MEMORY_SIZE) return MEMORY_ACCESS_ERROR;
         u32 PT = read_u32_from_mem(memory, pt_ptr);
@@ -245,6 +251,7 @@ namespace PLCMethods {
         MY_PTR_t timer_ptr = 0;
         RuntimeError err = ProgramExtract.type_pointer(program, prog_size, index, &timer_ptr);
         if (err != STATUS_SUCCESS) return err;
+        timer_ptr = reverse_byte_order(timer_ptr);
 
         u32 PT = 0;
         err = ProgramExtract.type_u32(program, prog_size, index, &PT);
@@ -264,6 +271,7 @@ namespace PLCMethods {
         MY_PTR_t timer_ptr = 0;
         RuntimeError err = ProgramExtract.type_pointer(program, prog_size, index, &timer_ptr);
         if (err != STATUS_SUCCESS) return err;
+        timer_ptr = reverse_byte_order(timer_ptr);
 
         MY_PTR_t pt_ptr = 0;
         err = ProgramExtract.type_pointer(program, prog_size, index, &pt_ptr);
@@ -271,6 +279,7 @@ namespace PLCMethods {
         
         if (pt_ptr + 4 > PLCRUNTIME_MAX_MEMORY_SIZE) return MEMORY_ACCESS_ERROR;
         u32 PT = read_u32_from_mem(memory, pt_ptr);
+        pt_ptr = reverse_byte_order(pt_ptr);
 
         if (stack.size() == 0) return EMPTY_STACK;
         bool IN = stack.pop_bool();
