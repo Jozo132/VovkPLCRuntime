@@ -1067,7 +1067,7 @@ class VovkPLCWorkerClient {
     /** @type { boolean } */
     batchScheduled = false
     /** @type { number } */
-    batchFlushDelay = 1 // ms - tune for latency vs throughput tradeoff
+    batchFlushDelay = 100 // ms - batching window for collecting requests (tune for latency vs throughput)
     /** @type { boolean } */
     useBatchedFallback = false
 
@@ -1499,12 +1499,12 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
     }
 
     /** @type { (wasmPath?: string, options?: VovkPLCWorkerOptions) => Promise<VovkPLCWorker> } */
-    static create = async (wasmPath = '', {workerUrl, workerFactory, debug = false, silent = false, batchFlushDelay = 1} = {}) => {
+    static create = async (wasmPath = '', {workerUrl, workerFactory, debug = false, silent = false, batchFlushDelay = 200} = {}) => {
         const resolvedUrl = workerUrl || new URL('./VovkPLC.worker.js', import.meta.url)
         const factory = workerFactory || (await getDefaultWorkerFactory())
         const worker = await createWorker(factory, resolvedUrl)
         const client = new VovkPLCWorker(worker)
-        // Allow tuning batch flush delay (0 = immediate via microtask, >0 = collect for N ms)
+        // Allow tuning batch flush delay (0 = immediate via microtask, >0 = collect requests for N ms)
         client.batchFlushDelay = batchFlushDelay
         await client.initialize(wasmPath, debug, silent)
         return client
