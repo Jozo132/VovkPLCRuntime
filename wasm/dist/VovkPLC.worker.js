@@ -5,6 +5,31 @@ import VovkPLC from './VovkPLC.js'
 
 const isNodeRuntime = typeof process !== 'undefined' && !!(process.versions && process.versions.node)
 
+/**
+ * Robust detection for shared memory and decoding capabilities.
+ */
+const checkSupport = () => {
+    const support = {
+        sab: typeof SharedArrayBuffer !== 'undefined',
+        atomics: typeof Atomics !== 'undefined',
+        decodeShared: false
+    }
+    
+    if (support.sab) {
+        try {
+            const sab = new SharedArrayBuffer(1)
+            const view = new Uint8Array(sab)
+            new TextDecoder().decode(view)
+            support.decodeShared = true
+        } catch (e) {
+            // Keep defaults
+        }
+    }
+    return support
+}
+
+const SUPPORT = checkSupport()
+
 const SHARED_BUFFER_SIZE = 64 * 1024 * 1024 // 64MB
 const RING_SIZE = 1024 * 1024 // 1MB for each ring
 const OFFSETS = {
@@ -131,7 +156,6 @@ const subscribeInstance = (post, instanceId, stream) => {
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
-const hasSAB = typeof SharedArrayBuffer !== 'undefined'
 
 /** @type { SharedArrayBuffer | null } */
 let sab = null
@@ -151,7 +175,7 @@ const handleMessage = async (post, message) => {
             const {wasmPath = '', debug = false, silent = false, sharedBuffer} = message
             
             // Handle Shared Buffer Setup
-            if (hasSAB && sharedBuffer instanceof SharedArrayBuffer) {
+            if (SUPPORT.sab && SUPPORT.atomics && sharedBuffer instanceof SharedArrayBuffer) {
                 sab = sharedBuffer
                 sabI32 = new Int32Array(sab)
                 sabU8 = new Uint8Array(sab)
@@ -324,7 +348,7 @@ const startQueueLoop = async (/** @type {(msg: any) => void} */ post) => {
                         
                         if (payloadEnd > payloadStart) {
                             const view = new Uint8Array(sab, start + payloadStart, payloadLen)
-                            const str = decoder.decode(view)
+                            const str = decoder.decode(SUPPORT.decodeShared ? view : new Uint8Array(view))
                             if (str) payload = JSON.parse(str)
                         } else {
                             // Wrapping
@@ -368,8 +392,8 @@ const setupSharedInstance = (instanceId, buffer) => {
     const instance = instanceId == null ? defaultInstance : instances.get(instanceId)
     if (!instance) throw new Error('WebAssembly module not initialized')
 
-    if (!hasSAB || !(buffer instanceof SharedArrayBuffer)) {
-        throw new Error('SharedArrayBuffer not supported or provided buffer is not shared')
+    if (!SUPPORT.sab || !SUPPORT.atomics || !(buffer instanceof SharedArrayBuffer)) {
+        throw new Error('SharedArrayBuffer/Atomics not supported or provided buffer is not shared')
     }
 
     const i32 = new Int32Array(buffer)

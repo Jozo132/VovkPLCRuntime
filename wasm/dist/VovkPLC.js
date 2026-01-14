@@ -17,6 +17,37 @@
 const isNodeRuntime = typeof process !== 'undefined' && !!(process.versions && process.versions.node)
 
 /**
+ * Robust detection for shared memory and decoding capabilities.
+ */
+const checkSupport = () => {
+    const support = {
+        sab: typeof SharedArrayBuffer !== 'undefined',
+        atomics: typeof Atomics !== 'undefined',
+        decodeShared: false
+    }
+    
+    if (support.sab) {
+        try {
+            // Verify SAB is actually usable (might be blocked by COOP/COEP)
+            new SharedArrayBuffer(8)
+            
+            // Check if TextDecoder can decode from SharedBufferView directly
+            // This avoids an extra copy where supported (e.g. some browsers)
+            const sab = new SharedArrayBuffer(1)
+            const view = new Uint8Array(sab)
+            new TextDecoder().decode(view)
+            support.decodeShared = true
+        } catch (e) {
+            // If new SharedArrayBuffer throws, it's effectively unsupported
+            if (e.name === 'ReferenceError' || e.name === 'TypeError') support.sab = false
+        }
+    }
+    return support
+}
+
+const SUPPORT = checkSupport()
+
+/**
  * @typedef {{
  *     initialize: () => void, // Initializes the runtime environment and resets internal state.
  *     printInfo: () => void, // Prints runtime configuration and version info to stdout.
@@ -1095,7 +1126,8 @@ class VovkPLCWorkerClient {
                     if (this.sab && this.sabU8) {
                         if (payloadEnd > payloadStart) {
                             const view = new Uint8Array(this.sab, start + payloadStart, payloadLen)
-                            const str = this.decoder.decode(view)
+                            // Use copy-less decode if supported, otherwise fallback to copy
+                            const str = this.decoder.decode(SUPPORT.decodeShared ? view : new Uint8Array(view))
                             if (str) payload = JSON.parse(str)
                         } else {
                             // Wrapping
@@ -1269,7 +1301,7 @@ class VovkPLCWorkerClient {
     /** @type { (wasmPath?: string, debug?: boolean, silent?: boolean) => Promise<any> } */
     initialize = (wasmPath = '', debug = false, silent = false) => {
         // Initialize Shared Buffer if supported
-        if (typeof SharedArrayBuffer !== 'undefined') {
+        if (SUPPORT.sab && SUPPORT.atomics) {
             try {
                 this.sab = new SharedArrayBuffer(SHARED_BUFFER_SIZE)
                 this.sabI32 = new Int32Array(this.sab)
