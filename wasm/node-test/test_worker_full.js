@@ -277,7 +277,9 @@ const main = async () => {
         process.exit(1)
     } finally {
         worker.setSharedMode('stop')
-        await worker.terminate()
+        worker.terminate()
+        await new Promise(res => setTimeout(res, 100)) // Allow any final logs
+        process.exit(0)
     }
 }
 

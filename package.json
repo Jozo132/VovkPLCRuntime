@@ -13,6 +13,7 @@
     "test_flow_rel": "cd wasm/node-test && node test_flow_rel.js",
     "test_timers": "cd wasm/node-test && node test_timers.js",
     "test_lint": "cd wasm/node-test && node test_lint.js",
+    "test_worker_full": "cd wasm/node-test && node test_worker_full.js",  
     "memory_leak_test": "node wasm/memory_leak_test.js",
     "memory_leak_test:verbose": "node wasm/memory_leak_test.js --verbose",
     "test": "npm run unit_test && npm run memory_leak_test"

@@ -110,7 +110,9 @@ const run = async () => {
             console.error('Cannot run empty program.')
         }
     } finally {
-        await runtime.terminate()
+        // await runtime.terminate()
+        await new Promise(res => setTimeout(res, 100)) // Allow any final logs
+        process.exit(0)
     }
 }
 

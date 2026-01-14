@@ -131,6 +131,7 @@ const subscribeInstance = (post, instanceId, stream) => {
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
+const hasSAB = typeof SharedArrayBuffer !== 'undefined'
 
 /** @type { SharedArrayBuffer | null } */
 let sab = null
@@ -150,15 +151,15 @@ const handleMessage = async (post, message) => {
             const {wasmPath = '', debug = false, silent = false, sharedBuffer} = message
             
             // Handle Shared Buffer Setup
-            if (sharedBuffer instanceof SharedArrayBuffer) {
+            if (hasSAB && sharedBuffer instanceof SharedArrayBuffer) {
                 sab = sharedBuffer
                 sabI32 = new Int32Array(sab)
                 sabU8 = new Uint8Array(sab)
                 // Don't start loop yet to avoid blocking async init completion
             }
             
-            result = await enqueue('default', () => ensureDefault(wasmPath, debug, silent))
-            result = 'init_ack' // Return special ack to trigger shared mode on client
+            const ok = await enqueue('default', () => ensureDefault(wasmPath, debug, silent))
+            result = sab ? 'init_ack' : ok // Return special ack to trigger shared mode on client if SAB active
         } else if (type === 'create') {
             const {wasmPath = '', debug = false, silent = false} = message
             result = await createInstance(wasmPath, debug, silent)
@@ -217,7 +218,7 @@ const handleMessage = async (post, message) => {
         if (sab && type !== 'init') {
              writeResponseToRing({id, ok: true, result})
         } else {
-             post({id, ok: true, result, type: type === 'init' ? 'init_ack' : undefined})
+             post({id, ok: true, result, type: (type === 'init' && sab) ? 'init_ack' : undefined})
         }
         
         // Start polling loop AFTER sending response if this was init
@@ -366,6 +367,10 @@ const setupSharedInstance = (instanceId, buffer) => {
     const key = getInstanceKey(instanceId)
     const instance = instanceId == null ? defaultInstance : instances.get(instanceId)
     if (!instance) throw new Error('WebAssembly module not initialized')
+
+    if (!hasSAB || !(buffer instanceof SharedArrayBuffer)) {
+        throw new Error('SharedArrayBuffer not supported or provided buffer is not shared')
+    }
 
     const i32 = new Int32Array(buffer)
     // Structure: [0: CMD, 1: STATUS, 2: IN_OFF, 3: IN_SZ, 4: OUT_OFF, 5: OUT_SZ, 6: CYCLES, 7: TIME]
