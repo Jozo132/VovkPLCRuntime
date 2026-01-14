@@ -985,13 +985,15 @@ const OFFSETS = {
 
 /**
  * @typedef {{
- *   postMessage: (message: any) => void,
+ *   postMessage: (message: any, transfer?: Transferable[]) => void,
  *   terminate?: () => any,
  *   addEventListener?: (type: string, listener: (event: any) => void) => void,
  *   removeEventListener?: (type: string, listener: (event: any) => void) => void,
  *   on?: (type: string, listener: (event: any) => void) => void,
  *   off?: (type: string, listener: (event: any) => void) => void,
  *   removeListener?: (type: string, listener: (event: any) => void) => void,
+ *   onmessage?: ((event: any) => void) | null,
+ *   onerror?: ((error: any) => void) | null,
  * }} VovkPLCWorkerLike
  */
 
@@ -1000,7 +1002,7 @@ const OFFSETS = {
  */
 
 /**
- * @typedef {{ workerUrl?: URL | string, workerFactory?: VovkPLCWorkerFactory, debug?: boolean, silent?: boolean }} VovkPLCWorkerOptions
+ * @typedef {{ workerUrl?: URL | string, workerFactory?: VovkPLCWorkerFactory, debug?: boolean, silent?: boolean, batchFlushDelay?: number }} VovkPLCWorkerOptions
  */
 
 /**
@@ -1058,6 +1060,16 @@ class VovkPLCWorkerClient {
     decoder = new TextDecoder()
     
     isPolling = false
+    
+    // Batched postMessage fallback for high-throughput when SAB unavailable
+    /** @type { Array<{id: number, type: string, payload: Record<string, any>}> } */
+    batchQueue = []
+    /** @type { boolean } */
+    batchScheduled = false
+    /** @type { number } */
+    batchFlushDelay = 1 // ms - tune for latency vs throughput tradeoff
+    /** @type { boolean } */
+    useBatchedFallback = false
 
     /** @param { VovkPLCWorkerLike } worker */
     constructor(worker) {
@@ -1171,6 +1183,13 @@ class VovkPLCWorkerClient {
     /** @type { (message: any) => void } */
     _handleMessage = message => {
         const data = message.data || message
+        
+        // Check for batched ArrayBuffer response
+        if (data instanceof ArrayBuffer) {
+            this._parseBatchResponse(data)
+            return
+        }
+        
         // Handle Init Response special case if needed, or fallback for non-shared setup
         if (data.id) {
             const pending = this.pending.get(data.id)
@@ -1228,11 +1247,105 @@ class VovkPLCWorkerClient {
                 } catch (e) {
                     reject(e)
                 }
+            } else if (this.useBatchedFallback) {
+                // High-throughput batched fallback
+                this._enqueueBatch(id, type, payload)
             } else {
-                // Fallback to postMessage (Init, or if SAB failed)
+                // Simple postMessage (Init only, before batching is enabled)
                 this.worker.postMessage({id, type, ...payload})
             }
         })
+    }
+    
+    /** @type { (id: number, type: string, payload: Record<string, any>) => void } */
+    _enqueueBatch = (id, type, payload) => {
+        this.batchQueue.push({id, type, payload})
+        if (!this.batchScheduled) {
+            this.batchScheduled = true
+            // Use queueMicrotask for minimal latency, or setTimeout for batching window
+            if (this.batchFlushDelay <= 0) {
+                queueMicrotask(() => this._flushBatch())
+            } else {
+                setTimeout(() => this._flushBatch(), this.batchFlushDelay)
+            }
+        }
+    }
+    
+    /** @type { () => void } */
+    _flushBatch = () => {
+        this.batchScheduled = false
+        if (this.batchQueue.length === 0) return
+        
+        const ops = this.batchQueue.splice(0, this.batchQueue.length)
+        
+        // Calculate total size needed
+        // Format: [u32 count][...ops]
+        // Each op: [u32 id][u8 typeLen][type bytes][u32 payloadLen][payload bytes]
+        let totalSize = 4 // count
+        const encodedOps = ops.map(op => {
+            const typeBytes = this.encoder.encode(op.type)
+            const payloadBytes = this.encoder.encode(JSON.stringify(op.payload))
+            totalSize += 4 + 1 + typeBytes.length + 4 + payloadBytes.length
+            return { id: op.id, typeBytes, payloadBytes }
+        })
+        
+        // Build the buffer
+        const buf = new ArrayBuffer(totalSize)
+        const dv = new DataView(buf)
+        const u8 = new Uint8Array(buf)
+        let off = 0
+        
+        dv.setUint32(off, encodedOps.length, true); off += 4
+        
+        for (const op of encodedOps) {
+            dv.setUint32(off, op.id, true); off += 4
+            dv.setUint8(off, op.typeBytes.length); off += 1
+            u8.set(op.typeBytes, off); off += op.typeBytes.length
+            dv.setUint32(off, op.payloadBytes.length, true); off += 4
+            u8.set(op.payloadBytes, off); off += op.payloadBytes.length
+        }
+        
+        // Transfer the buffer (zero-copy)
+        this.worker.postMessage(buf, [buf])
+    }
+    
+    /** @type { (buffer: ArrayBuffer) => void } */
+    _parseBatchResponse = (buffer) => {
+        // Format: [u32 count][...responses]
+        // Each response: [u32 id][u8 ok][u32 payloadLen][payload bytes]
+        const dv = new DataView(buffer)
+        const u8 = new Uint8Array(buffer)
+        let off = 0
+        
+        const count = dv.getUint32(off, true); off += 4
+        
+        for (let i = 0; i < count; i++) {
+            const id = dv.getUint32(off, true); off += 4
+            const ok = dv.getUint8(off) === 1; off += 1
+            const payloadLen = dv.getUint32(off, true); off += 4
+            
+            let result = undefined
+            let error = undefined
+            if (payloadLen > 0) {
+                const payloadBytes = u8.subarray(off, off + payloadLen)
+                const payloadStr = this.decoder.decode(payloadBytes)
+                try {
+                    const parsed = JSON.parse(payloadStr)
+                    if (ok) result = parsed.result
+                    else error = parsed.error
+                } catch (e) {
+                    error = payloadStr
+                }
+            }
+            off += payloadLen
+            
+            const pending = this.pending.get(id)
+            if (pending) {
+                this.pending.delete(id)
+                if (ok) pending.resolve(result)
+                else pending.reject(new Error(error || 'Worker call failed'))
+            }
+        }
     }
 
     /** @param { Record<string, any> } msg */
@@ -1326,10 +1439,17 @@ class VovkPLCWorkerClient {
                     return res
                 })
             } catch(e) {
-                console.warn('Failed to create SharedArrayBuffer, falling back to postMessage', e)
+                console.warn('Failed to create SharedArrayBuffer, falling back to batched postMessage', e)
             }
         }
-        return this._send('init', {wasmPath, debug, silent})
+        // Use batched fallback for high-throughput after init completes
+        return this._send('init', {wasmPath, debug, silent}).then(res => {
+            // Enable batched mode after successful init (only if SAB not available)
+            if (!this.sab) {
+                this.useBatchedFallback = true
+            }
+            return res
+        })
     }
     /** @type { (method: string, ...args: any[]) => Promise<any> } */
     call = (method, ...args) => this._send('call', {method, args})
@@ -1379,11 +1499,13 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
     }
 
     /** @type { (wasmPath?: string, options?: VovkPLCWorkerOptions) => Promise<VovkPLCWorker> } */
-    static create = async (wasmPath = '', {workerUrl, workerFactory, debug = false, silent = false} = {}) => {
+    static create = async (wasmPath = '', {workerUrl, workerFactory, debug = false, silent = false, batchFlushDelay = 1} = {}) => {
         const resolvedUrl = workerUrl || new URL('./VovkPLC.worker.js', import.meta.url)
         const factory = workerFactory || (await getDefaultWorkerFactory())
         const worker = await createWorker(factory, resolvedUrl)
         const client = new VovkPLCWorker(worker)
+        // Allow tuning batch flush delay (0 = immediate via microtask, >0 = collect for N ms)
+        client.batchFlushDelay = batchFlushDelay
         await client.initialize(wasmPath, debug, silent)
         return client
     }

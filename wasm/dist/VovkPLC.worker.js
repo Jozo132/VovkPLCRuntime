@@ -47,7 +47,7 @@ const OFFSETS = {
 }
 
 /**
- * @typedef {{ post: (message: any) => void, on: (handler: (message: any) => void) => void }} VovkPLCWorkerPort
+ * @typedef {{ post: (message: any, transfer?: Transferable[]) => void, on: (handler: (message: any) => void) => void }} VovkPLCWorkerPort
  * @typedef {Map<number, VovkPLC>} VovkPLCInstanceMap
  * @typedef {Map<string | number, Promise<any>>} VovkPLCQueueMap
  * @typedef {{ id: number, type: string, instanceId?: number, method?: string, args?: any[], stream?: string, wasmPath?: string, debug?: boolean, silent?: boolean }} VovkPLCWorkerRequest
@@ -61,13 +61,14 @@ const getPort = async () => {
         const {parentPort} = await import('worker_threads')
         if (!parentPort) throw new Error('worker_threads parentPort not available')
         return {
-            post: message => parentPort.postMessage(message),
+            post: (message, transfer) => parentPort.postMessage(message, transfer),
             on: handler => parentPort.on('message', handler),
         }
     }
     if (typeof self === 'undefined') throw new Error('Worker global scope not available')
     return {
-        post: message => self.postMessage(message),
+        // @ts-ignore - postMessage with transfer list
+        post: (message, transfer) => transfer ? self.postMessage(message, transfer) : self.postMessage(message),
         on: handler => {
             self.onmessage = event => handler(event.data)
         },
@@ -164,97 +165,180 @@ let sabI32 = null
 /** @type { Uint8Array | null } */
 let sabU8 = null
 
-/** @type { (post: (message: VovkPLCWorkerResponse | VovkPLCWorkerEvent) => void, message: VovkPLCWorkerRequest) => Promise<void> } */
-const handleMessage = async (post, message) => {
-    if (!message || typeof message !== 'object') return
-    const {id, type} = message
-    if (typeof id !== 'number') return
-    try {
-        let result
-        if (type === 'init') {
-            const {wasmPath = '', debug = false, silent = false, sharedBuffer} = message
-            
-            // Handle Shared Buffer Setup
-            if (SUPPORT.sab && SUPPORT.atomics && sharedBuffer instanceof SharedArrayBuffer) {
-                sab = sharedBuffer
-                sabI32 = new Int32Array(sab)
-                sabU8 = new Uint8Array(sab)
-                // Don't start loop yet to avoid blocking async init completion
-            }
-            
-            const ok = await enqueue('default', () => ensureDefault(wasmPath, debug, silent))
-            result = sab ? 'init_ack' : ok // Return special ack to trigger shared mode on client if SAB active
-        } else if (type === 'create') {
-            const {wasmPath = '', debug = false, silent = false} = message
-            result = await createInstance(wasmPath, debug, silent)
-        } else if (type === 'dispose') {
-            result = disposeInstance(message.instanceId)
-        } else if (type === 'call') {
-            const {instanceId, method, args = []} = message
-            if (!method) throw new Error('Method name is required')
-            const key = getInstanceKey(instanceId)
-            result = await enqueue(key, () => callInstance(instanceId, method, args))
-        } else if (type === 'subscribe') {
-            const {instanceId, stream} = message
-            if (!stream) throw new Error('Stream name is required')
-            result = subscribeInstance(post, instanceId, stream)
-        } else if (type === 'setup_shared_io') {
-             // Map IO area in the big buffer
-             // We process this directly in handleMessage for simplicity
-             result = setupSharedIO()
-        } else if (type === 'startRuntime') {
-             // Just force CMD to RUN (1)
-             // But client usually does this via setSharedMode. 
-             // We can do it here too to support 'call' based control.
-             if (sabI32) {
-                 const offset = sabI32[OFFSETS.IO_OFFSET / 4]
-                 const i32 = new Int32Array(sab, offset)
-                 Atomics.store(i32, 0, 1) // CMD=1
-                 result = true
-             }
-        } else if (type === 'stopRuntime') {
-             if (sabI32) {
-                 const offset = sabI32[OFFSETS.IO_OFFSET / 4]
-                 const i32 = new Int32Array(sab, offset)
-                 Atomics.store(i32, 0, 0) // CMD=0
-                 result = true
-             }
-        } else if (type === 'resetStats') {
-             if (sabI32) {
-                 const offset = sabI32[OFFSETS.IO_OFFSET / 4]
-                 const i32 = new Int32Array(sab, offset)
-                 Atomics.store(i32, 6, 0) // Reset Cycles
-                 // Also reset min/max tracking state in the loop context if possible
-                 // But we can just reset shared values and let loop overwrite them
-                 Atomics.store(i32, 8, 2147483647) // Min Time (Init High)
-                 Atomics.store(i32, 9, 0) // Max Time
-                 result = true
-             }
-        } else if (type === 'setup_shared_memory') {
-            // Legacy / Specific buffer setup - ignore or adapt
-            const {instanceId, sharedBuffer} = message // @ts-ignore
-            result = setupSharedInstance(instanceId, sharedBuffer)
-        } else {
-            throw new Error(`Unknown worker request: ${type}`)
+/**
+ * Handles a batched ArrayBuffer request from the main thread.
+ * Format: [u32 count][...ops]
+ * Each op: [u32 id][u8 typeLen][type bytes][u32 payloadLen][payload bytes]
+ * @param { (message: any, transfer?: Transferable[]) => void } post
+ * @param { ArrayBuffer } buffer
+ */
+const handleBatchRequest = async (post, buffer) => {
+    const dv = new DataView(buffer)
+    const u8 = new Uint8Array(buffer)
+    let off = 0
+    
+    const count = dv.getUint32(off, true); off += 4
+    
+    // Parse all requests
+    /** @type { Array<{id: number, type: string, payload: any}> } */
+    const requests = []
+    for (let i = 0; i < count; i++) {
+        const id = dv.getUint32(off, true); off += 4
+        const typeLen = dv.getUint8(off); off += 1
+        const type = decoder.decode(u8.subarray(off, off + typeLen)); off += typeLen
+        const payloadLen = dv.getUint32(off, true); off += 4
+        let payload = {}
+        if (payloadLen > 0) {
+            const payloadStr = decoder.decode(u8.subarray(off, off + payloadLen))
+            try { payload = JSON.parse(payloadStr) } catch (e) { /* ignore */ }
         }
+        off += payloadLen
+        requests.push({ id, type, payload })
+    }
+    
+    // Process all requests and collect responses
+    /** @type { Array<{id: number, ok: boolean, result?: any, error?: string}> } */
+    const responses = []
+    
+    for (const req of requests) {
+        try {
+            const result = await processRequest(post, req.id, req.type, req.payload)
+            responses.push({ id: req.id, ok: true, result })
+        } catch (e) {
+            responses.push({ id: req.id, ok: false, error: String(e instanceof Error ? e.message : e) })
+        }
+    }
+    
+    // Build response buffer
+    // Format: [u32 count][...responses]
+    // Each response: [u32 id][u8 ok][u32 payloadLen][payload bytes]
+    let totalSize = 4
+    const encodedResponses = responses.map(r => {
+        const payloadBytes = encoder.encode(JSON.stringify(r.ok ? { result: r.result } : { error: r.error }))
+        totalSize += 4 + 1 + 4 + payloadBytes.length
+        return { id: r.id, ok: r.ok, payloadBytes }
+    })
+    
+    const respBuf = new ArrayBuffer(totalSize)
+    const respDv = new DataView(respBuf)
+    const respU8 = new Uint8Array(respBuf)
+    let respOff = 0
+    
+    respDv.setUint32(respOff, encodedResponses.length, true); respOff += 4
+    
+    for (const r of encodedResponses) {
+        respDv.setUint32(respOff, r.id, true); respOff += 4
+        respDv.setUint8(respOff, r.ok ? 1 : 0); respOff += 1
+        respDv.setUint32(respOff, r.payloadBytes.length, true); respOff += 4
+        respU8.set(r.payloadBytes, respOff); respOff += r.payloadBytes.length
+    }
+    
+    // Transfer response buffer back (zero-copy)
+    post(respBuf, [respBuf])
+}
+
+/**
+ * Process a single request (shared logic for both batched and individual messages).
+ * @param { (message: any, transfer?: Transferable[]) => void } post
+ * @param { number } id
+ * @param { string } type
+ * @param { any } payload
+ * @returns { Promise<any> }
+ */
+const processRequest = async (post, id, type, payload) => {
+    if (type === 'init') {
+        const { wasmPath = '', debug = false, silent = false, sharedBuffer } = payload
+        
+        // Handle Shared Buffer Setup
+        if (SUPPORT.sab && SUPPORT.atomics && sharedBuffer instanceof SharedArrayBuffer) {
+            sab = sharedBuffer
+            sabI32 = new Int32Array(sab)
+            sabU8 = new Uint8Array(sab)
+        }
+        
+        const ok = await enqueue('default', () => ensureDefault(wasmPath, debug, silent))
+        return sab ? 'init_ack' : ok
+    } else if (type === 'create') {
+        const { wasmPath = '', debug = false, silent = false } = payload
+        return await createInstance(wasmPath, debug, silent)
+    } else if (type === 'dispose') {
+        return disposeInstance(payload.instanceId)
+    } else if (type === 'call') {
+        const { instanceId, method, args = [] } = payload
+        if (!method) throw new Error('Method name is required')
+        const key = getInstanceKey(instanceId)
+        return await enqueue(key, () => callInstance(instanceId, method, args))
+    } else if (type === 'subscribe') {
+        const { instanceId, stream } = payload
+        if (!stream) throw new Error('Stream name is required')
+        return subscribeInstance(post, instanceId, stream)
+    } else if (type === 'setup_shared_io') {
+        return setupSharedIO()
+    } else if (type === 'startRuntime') {
+        if (sabI32) {
+            const offset = sabI32[OFFSETS.IO_OFFSET / 4]
+            const i32 = new Int32Array(sab, offset)
+            Atomics.store(i32, 0, 1)
+            return true
+        }
+        return false
+    } else if (type === 'stopRuntime') {
+        if (sabI32) {
+            const offset = sabI32[OFFSETS.IO_OFFSET / 4]
+            const i32 = new Int32Array(sab, offset)
+            Atomics.store(i32, 0, 0)
+            return true
+        }
+        return false
+    } else if (type === 'resetStats') {
+        if (sabI32) {
+            const offset = sabI32[OFFSETS.IO_OFFSET / 4]
+            const i32 = new Int32Array(sab, offset)
+            Atomics.store(i32, 6, 0)
+            Atomics.store(i32, 8, 2147483647)
+            Atomics.store(i32, 9, 0)
+            return true
+        }
+        return false
+    } else if (type === 'setup_shared_memory') {
+        const { instanceId, sharedBuffer } = payload
+        return setupSharedInstance(instanceId, sharedBuffer)
+    } else {
+        throw new Error(`Unknown worker request: ${type}`)
+    }
+}
+
+/** @type { (post: (message: VovkPLCWorkerResponse | VovkPLCWorkerEvent) => void, message: VovkPLCWorkerRequest | ArrayBuffer) => Promise<void> } */
+const handleMessage = async (post, message) => {
+    // Handle batched ArrayBuffer requests
+    if (message instanceof ArrayBuffer) {
+        await handleBatchRequest(post, message)
+        return
+    }
+    
+    if (!message || typeof message !== 'object') return
+    const { id, type } = message
+    if (typeof id !== 'number') return
+    
+    try {
+        const result = await processRequest(post, id, type, message)
         
         // If using Shared Ring, write response there (Except for init which uses postMessage handshake)
         if (sab && type !== 'init') {
-             writeResponseToRing({id, ok: true, result})
+            writeResponseToRing({ id, ok: true, result })
         } else {
-             post({id, ok: true, result, type: (type === 'init' && sab) ? 'init_ack' : undefined})
+            post({ id, ok: true, result, type: (type === 'init' && sab) ? 'init_ack' : undefined })
         }
         
         // Start polling loop AFTER sending response if this was init
         if (type === 'init' && sab) {
-             startQueueLoop(post)
+            startQueueLoop(post)
         }
-
     } catch (error) {
         if (sab && type !== 'init') {
-            writeResponseToRing({id, ok: false, error: String(error instanceof Error ? error.message || error : error)})
+            writeResponseToRing({ id, ok: false, error: String(error instanceof Error ? error.message || error : error) })
         } else {
-            post({id, ok: false, error: String(error instanceof Error ? error.message || error : error)})
+            post({ id, ok: false, error: String(error instanceof Error ? error.message || error : error) })
         }
     }
 }
