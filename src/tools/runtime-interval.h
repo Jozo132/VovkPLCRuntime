@@ -195,10 +195,11 @@ void IntervalGlobalLoopCheck() {
     P_1s = interval_counter_50ms % 20 == 0;
     
     S_100ms = !S_100ms; // The 50ms pulse is the half period of 100ms square wave
-    if (interval_counter_50ms % 2 == 0) S_200ms = !S_200ms;
+    if (P_100ms) S_200ms = !S_200ms;
     if (interval_counter_50ms % 3 == 0) S_300ms = !S_300ms;
     if (interval_counter_50ms % 5 == 0) S_500ms = !S_500ms;
     if (interval_counter_50ms % 10 == 0) S_1s = !S_1s;
+    if (P_1s) S_2s = !S_2s;
     if (interval_counter_50ms % 50 == 0) S_5s = !S_5s;
     if (interval_counter_50ms % 100 == 0) S_10s = !S_10s;
     if (interval_counter_50ms % 300 == 0) S_30s = !S_30s;
@@ -212,7 +213,6 @@ void IntervalGlobalLoopCheck() {
     if (interval_counter_50ms % 72000 == 0) S_2hr = !S_2hr;
 
     if (P_1s) {
-        S_2s = !S_2s;
         uptime_seconds++;
         interval_time_seconds = (interval_time_seconds + 1) % 60;
         if (interval_time_seconds == 0) {
@@ -232,7 +232,6 @@ void IntervalGlobalLoopCheck() {
             P_2s = true;
         }
         if (P_5s_sec_cnt >= 5) {
-            S_10s = !S_10s;
             P_5s_sec_cnt = 0;
             P_5s = true;
         }
