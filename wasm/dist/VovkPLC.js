@@ -76,6 +76,7 @@ const SUPPORT = checkSupport()
  *     setMicros: (micros: number) => void, // Sets the system microsecond counter.
  *     getMillis: () => number, // Gets the system millisecond counter.
  *     getMicros: () => number, // Gets the system microsecond counter.
+ *     setRuntimeOffsets: (controlOffset: number, inputOffset: number, outputOffset: number, systemOffset: number, markerOffset: number) => void, // Sets the memory offsets for control, input, output, system, and marker areas.
  *     run: () => number, // Executes a single program scan cycle. Returns status code.
  *     runDirty: () => number, // Executed a single cycle without cleaning certain flags (Dirty).
  *     run_unit_test: () => void, // Runs the internal unit test suite.
@@ -445,6 +446,22 @@ class VovkPLC_class {
     }
 
     /**
+     * Sets the memory offsets for the PLC runtime memory areas.
+     * This allows custom memory layout configuration for control, input, output, system, and marker areas.
+     *
+     * @param {number} controlOffset - Offset for the control area.
+     * @param {number} inputOffset - Offset for the input area.
+     * @param {number} outputOffset - Offset for the output area.
+     * @param {number} systemOffset - Offset for the system area.
+     * @param {number} markerOffset - Offset for the marker area.
+     */
+    setRuntimeOffsets = (controlOffset, inputOffset, outputOffset, systemOffset, markerOffset) => {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        if (!this.wasm_exports.setRuntimeOffsets) throw new Error("'setRuntimeOffsets' function not found")
+        this.wasm_exports.setRuntimeOffsets(controlOffset, inputOffset, outputOffset, systemOffset, markerOffset)
+    }
+
+    /**
      * Downloads assembly code to the PLC runtime line-by-line via the stream interface.
      * Does not compile, just loads the text into the internal buffer.
      *
@@ -565,6 +582,52 @@ class VovkPLC_class {
      */
     stopRuntime = () => {
         this.mainLoopActive = false
+    }
+
+    /**
+     * Sets the system millisecond counter.
+     * Useful for testing timer-based logic with deterministic time values.
+     *
+     * @param {number} millis - The millisecond value to set.
+     */
+    setMillis = millis => {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        if (!this.wasm_exports.setMillis) throw new Error("'setMillis' function not found")
+        this.wasm_exports.setMillis(millis)
+    }
+
+    /**
+     * Sets the system microsecond counter.
+     * Useful for testing timer-based logic with deterministic time values.
+     *
+     * @param {number} micros - The microsecond value to set.
+     */
+    setMicros = micros => {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        if (!this.wasm_exports.setMicros) throw new Error("'setMicros' function not found")
+        this.wasm_exports.setMicros(micros)
+    }
+
+    /**
+     * Gets the current system millisecond counter value.
+     *
+     * @returns {number} - The current millisecond counter value.
+     */
+    getMillis = () => {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        if (!this.wasm_exports.getMillis) throw new Error("'getMillis' function not found")
+        return this.wasm_exports.getMillis()
+    }
+
+    /**
+     * Gets the current system microsecond counter value.
+     *
+     * @returns {number} - The current microsecond counter value.
+     */
+    getMicros = () => {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        if (!this.wasm_exports.getMicros) throw new Error("'getMicros' function not found")
+        return this.wasm_exports.getMicros()
     }
 
     /**
@@ -1531,6 +1594,8 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
     getDeviceHealth = () => this.call('getDeviceHealth')
     /** @type { () => Promise<void> } */
     resetDeviceHealth = () => this.call('resetDeviceHealth')
+    /** @type { (controlOffset: number, inputOffset: number, outputOffset: number, systemOffset: number, markerOffset: number) => Promise<void> } */
+    setRuntimeOffsets = (controlOffset, inputOffset, outputOffset, systemOffset, markerOffset) => this.call('setRuntimeOffsets', controlOffset, inputOffset, outputOffset, systemOffset, markerOffset)
     /** @type { (assembly: string) => Promise<any> } */
     downloadAssembly = assembly => this.call('downloadAssembly', assembly)
     /** @type { (assembly: string, run?: boolean) => Promise<any> } */
@@ -1555,6 +1620,14 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
     getExports = () => this.call('getExports')
     /** @type { (name: string, ...args: any[]) => Promise<any> } */
     callExport = (name, ...args) => this.call('callExport', name, ...args)
+    /** @type { (millis: number) => Promise<void> } */
+    setMillis = millis => this.call('setMillis', millis)
+    /** @type { (micros: number) => Promise<void> } */
+    setMicros = micros => this.call('setMicros', micros)
+    /** @type { () => Promise<number> } */
+    getMillis = () => this.call('getMillis')
+    /** @type { () => Promise<number> } */
+    getMicros = () => this.call('getMicros')
 
     /** @type { SharedArrayBuffer | null } */
     _sharedBuffer = null
