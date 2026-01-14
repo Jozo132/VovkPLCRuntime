@@ -204,7 +204,9 @@ const run = async () => {
         console.error(e)
         process.exitCode = 1
     } finally {
-        await runtime.terminate()
+        runtime.terminate()
+        await new Promise(res => setTimeout(res, 200)) // Allow any final logs
+        process.exit(process.exitCode || 0)
     }
 }
 

@@ -1304,19 +1304,10 @@ public:
                                     valStr.length = token_p2.string.length - 1;
                                     int pt_val = 0;
                                     if (isInteger(valStr, pt_val)) {
-                                        // Constant
+                                        // Constant timer: [opcode][timer_addr][pt_value]
                                         PLCRuntimeInstructionSet op = (PLCRuntimeInstructionSet)(is_ton ? TON_CONST : (is_tof ? TOF_CONST : TP_CONST));
                                         i+=2;
-                                        line.size = InstructionCompiler::push(bytecode, op);
-                                        // Raw pointer push (u16 big endian)
-                                        bytecode[line.size++] = (timer_addr >> 8) & 0xFF;
-                                        bytecode[line.size++] = timer_addr & 0xFF;
-                                        // Raw u32 push (big endian) (pt_val is int, cast to u32)
-                                        u32 val = (u32)pt_val;
-                                        bytecode[line.size++] = (val >> 24) & 0xFF;
-                                        bytecode[line.size++] = (val >> 16) & 0xFF;
-                                        bytecode[line.size++] = (val >> 8) & 0xFF;
-                                        bytecode[line.size++] = val & 0xFF;
+                                        line.size = InstructionCompiler::push_timer_const(bytecode, op, (MY_PTR_t)timer_addr, (u32)pt_val);
                                         _line_push;
                                     } else {
                                         if (buildError(token_p2, "expected integer after #")) return true;
@@ -1324,16 +1315,10 @@ public:
                                 } else {
                                     int pt_addr = 0;
                                     if (!addressFromToken(token_p2, pt_addr)) {
-                                        // Mem
+                                        // Memory timer: [opcode][timer_addr][pt_addr]
                                         PLCRuntimeInstructionSet op = (PLCRuntimeInstructionSet)(is_ton ? TON_MEM : (is_tof ? TOF_MEM : TP_MEM));
                                         i+=2;
-                                        line.size = InstructionCompiler::push(bytecode, op);
-                                        // Raw pointer 1
-                                        bytecode[line.size++] = (timer_addr >> 8) & 0xFF;
-                                        bytecode[line.size++] = timer_addr & 0xFF;
-                                        // Raw pointer 2
-                                        bytecode[line.size++] = (pt_addr >> 8) & 0xFF;
-                                        bytecode[line.size++] = pt_addr & 0xFF;
+                                        line.size = InstructionCompiler::push_timer_mem(bytecode, op, (MY_PTR_t)timer_addr, (MY_PTR_t)pt_addr);
                                         _line_push;
                                     } else {
                                         if (buildError(token_p2, "expected PT value (start with #) or address")) return true;

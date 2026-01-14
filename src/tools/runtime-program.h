@@ -375,6 +375,33 @@ public:
         location[1] = type;
         return 2;
     }
+
+    // Push timer instruction with pointer (timer address) and constant u32 (preset time)
+    // Format: [opcode][timer_addr (MY_PTR_t)][pt_value (u32)]
+    static u8 push_timer_const(u8* location, PLCRuntimeInstructionSet instruction, MY_PTR_t timer_addr, u32 pt_value) {
+        location[0] = instruction;
+        u8 offset = 1;
+        // Timer address (uses MY_PTR_t for portability)
+        for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[offset++] = (timer_addr >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
+        // Preset time value (u32 big endian)
+        location[offset++] = (pt_value >> 24) & 0xFF;
+        location[offset++] = (pt_value >> 16) & 0xFF;
+        location[offset++] = (pt_value >> 8) & 0xFF;
+        location[offset++] = pt_value & 0xFF;
+        return offset;
+    }
+
+    // Push timer instruction with two pointers (timer address and preset time address)
+    // Format: [opcode][timer_addr (MY_PTR_t)][pt_addr (MY_PTR_t)]
+    static u8 push_timer_mem(u8* location, PLCRuntimeInstructionSet instruction, MY_PTR_t timer_addr, MY_PTR_t pt_addr) {
+        location[0] = instruction;
+        u8 offset = 1;
+        // Timer address
+        for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[offset++] = (timer_addr >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
+        // Preset time address
+        for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[offset++] = (pt_addr >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
+        return offset;
+    }
 };
 
 class RuntimeProgram {

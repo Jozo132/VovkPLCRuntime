@@ -186,7 +186,7 @@ const main = async () => {
             const rows = 4
             const memory_bytes = await runtime.readMemoryArea(0, columns * rows)
             memory_snapshot = memory_bytes
-            const memory = Array.from(memory_bytes)
+            const memory = Object.values(memory_bytes)
                 .map(x => [x, x.toString(16).padStart(2, '0').toUpperCase()])
                 .map(([x, hex]) => `<span style="color: #${+x > 0 ? 'DDD' : '000'}">${hex}</span>`)
             const addresses = memory.map((_, i) => i.toString().padStart(2, '0').toUpperCase())
