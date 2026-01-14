@@ -1137,7 +1137,7 @@ class VovkPLCWorkerClient {
     /** @type { boolean } */
     batchScheduled = false
     /** @type { number } */
-    batchFlushDelay = 200 // ms - batching window for collecting requests (tune for latency vs throughput)
+    batchFlushDelay = 20 // ms - batching window for collecting requests (tune for latency vs throughput)
     /** @type { boolean } */
     useBatchedFallback = false
     /** @type { boolean } When true, disables SAB and forces batched postMessage mode */
@@ -1571,7 +1571,7 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
     }
 
     /** @type { (wasmPath?: string, options?: VovkPLCWorkerOptions) => Promise<VovkPLCWorker> } */
-    static create = async (wasmPath = '', {workerUrl, workerFactory, debug = false, silent = false, batchFlushDelay = 200, forcePostMessage = false} = {}) => {
+    static create = async (wasmPath = '', {workerUrl, workerFactory, debug = false, silent = false, batchFlushDelay = 20, forcePostMessage = false} = {}) => {
         const resolvedUrl = workerUrl || new URL('./VovkPLC.worker.js', import.meta.url)
         const factory = workerFactory || (await getDefaultWorkerFactory())
         const worker = await createWorker(factory, resolvedUrl)
