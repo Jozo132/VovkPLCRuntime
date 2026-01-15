@@ -353,6 +353,201 @@ class VovkPLC_class {
         }
     }
 
+    /**
+     * IR Flag constants for instruction classification.
+     */
+    static IR_FLAGS = {
+        NONE: 0x00,
+        READ: 0x01,          // Instruction reads from memory
+        WRITE: 0x02,         // Instruction writes to memory
+        CONST: 0x04,         // Instruction uses an embedded constant
+        JUMP: 0x08,          // Instruction is a jump/call
+        TIMER: 0x10,         // Instruction is a timer
+        LABEL_TARGET: 0x20,  // This address is a jump target (label)
+        EDITABLE: 0x40,      // Constant can be edited in-place
+    }
+
+    /**
+     * IR Operand Type constants.
+     */
+    static IR_OP_TYPES = {
+        NONE: 0, BOOL: 1, I8: 2, U8: 3, I16: 4, U16: 5,
+        I32: 6, U32: 7, I64: 8, U64: 9, F32: 10, F64: 11,
+        PTR: 12, LABEL: 13
+    }
+
+    /**
+     * @typedef {{
+     *     type: number,        // IR_OP_TYPES value
+     *     bytecode_pos: number, // Position within instruction where this operand starts
+     *     value: number | bigint  // The operand value (number for 32-bit, bigint for 64-bit)
+     * }} IR_Operand
+     */
+
+    /**
+     * @typedef {{
+     *     bytecode_offset: number,  // Offset in bytecode where this instruction starts
+     *     source_line: number,       // Source line number (1-based)
+     *     source_column: number,     // Source column number (1-based)
+     *     bytecode_size: number,     // Size of this instruction in bytes
+     *     opcode: number,            // The instruction opcode
+     *     flags: number,             // IR_FLAGS combination
+     *     operand_count: number,     // Number of operands (0-3)
+     *     operands: IR_Operand[]     // Array of operands
+     * }} IR_Entry
+     */
+
+    /**
+     * Gets the Intermediate Representation (IR) for the last compiled assembly.
+     * The IR contains metadata about each compiled instruction including:
+     * - Bytecode offset and size
+     * - Source location (line, column)
+     * - Operand information (addresses, constants)
+     * - Flags indicating if instruction reads/writes memory, uses constants, etc.
+     *
+     * This is useful for front-end editors to provide:
+     * - Live value monitoring (track which memory addresses are used)
+     * - Constant editing (modify embedded constants)
+     * - Jump visualization (see control flow)
+     *
+     * @returns {IR_Entry[]} - Array of IR entries for each compiled instruction.
+     */
+    getIR = () => {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        if (!this.wasm_exports.ir_get_count) throw new Error("'ir_get_count' function not found")
+        if (!this.wasm_exports.ir_get_pointer) throw new Error("'ir_get_pointer' function not found")
+        if (!this.wasm_exports.ir_get_entry_size) throw new Error("'ir_get_entry_size' function not found")
+
+        const count = this.wasm_exports.ir_get_count()
+        if (count === 0) return []
+
+        const pointer = this.wasm_exports.ir_get_pointer()
+        const struct_size = this.wasm_exports.ir_get_entry_size()
+
+        /** @type {IR_Entry[]} */
+        const entries = []
+
+        // Access memory directly
+        const memoryBuffer = this.wasm_exports.memory.buffer
+        const view = new DataView(memoryBuffer)
+
+        // IR_Entry layout (72 bytes with alignment):
+        // u32 bytecode_offset (0-3)
+        // u16 source_line (4-5)
+        // u16 source_column (6-7)
+        // u8  bytecode_size (8)
+        // u8  opcode (9)
+        // u8  flags (10)
+        // u8  operand_count (11)
+        // [4 bytes padding for 8-byte alignment of operands] (12-15)
+        // Operands[3] at offset 16, each operand is 16 bytes (8-byte aligned):
+        //   u8 type (0)
+        //   u8 bytecode_pos (1)
+        //   u8 _pad[2] (2-3)
+        //   [4 bytes padding for 8-byte alignment] (4-7)
+        //   u64 value (8-15) - union
+        // Reserved[4] + padding at end
+
+        for (let i = 0; i < count; i++) {
+            const offset = pointer + i * struct_size
+
+            const bytecode_offset = view.getUint32(offset + 0, true)
+            const source_line = view.getUint16(offset + 4, true)
+            const source_column = view.getUint16(offset + 6, true)
+            const bytecode_size = view.getUint8(offset + 8)
+            const opcode = view.getUint8(offset + 9)
+            const flags = view.getUint8(offset + 10)
+            const operand_count = view.getUint8(offset + 11)
+
+            /** @type {IR_Operand[]} */
+            const operands = []
+
+            for (let j = 0; j < operand_count && j < 3; j++) {
+                const op_offset = offset + 16 + (j * 16) // Each operand is 16 bytes (8-byte aligned)
+                const op_type = view.getUint8(op_offset + 0)
+                const op_bytecode_pos = view.getUint8(op_offset + 1)
+
+                // Read value based on type - value starts at offset 8 within operand (8-byte aligned)
+                let op_value
+                const IR_OP = VovkPLC_class.IR_OP_TYPES
+                switch (op_type) {
+                    case IR_OP.BOOL:
+                    case IR_OP.U8:
+                        op_value = view.getUint8(op_offset + 8)
+                        break
+                    case IR_OP.I8:
+                        op_value = view.getInt8(op_offset + 8)
+                        break
+                    case IR_OP.U16:
+                        op_value = view.getUint16(op_offset + 8, true)
+                        break
+                    case IR_OP.I16:
+                        op_value = view.getInt16(op_offset + 8, true)
+                        break
+                    case IR_OP.U32:
+                    case IR_OP.PTR:
+                    case IR_OP.LABEL:
+                        op_value = view.getUint32(op_offset + 8, true)
+                        break
+                    case IR_OP.I32:
+                        op_value = view.getInt32(op_offset + 4, true)
+                        break
+                    case IR_OP.F32:
+                        op_value = view.getFloat32(op_offset + 8, true)
+                        break
+                    case IR_OP.F64:
+                        op_value = view.getFloat64(op_offset + 8, true)
+                        break
+                    case IR_OP.U64:
+                        op_value = view.getBigUint64(op_offset + 8, true)
+                        break
+                    case IR_OP.I64:
+                        op_value = view.getBigInt64(op_offset + 8, true)
+                        break
+                    default:
+                        op_value = view.getUint32(op_offset + 8, true)
+                }
+
+                operands.push({
+                    type: op_type,
+                    bytecode_pos: op_bytecode_pos,
+                    value: op_value
+                })
+            }
+
+            entries.push({
+                bytecode_offset,
+                source_line,
+                source_column,
+                bytecode_size,
+                opcode,
+                flags,
+                operand_count,
+                operands
+            })
+        }
+
+        return entries
+    }
+
+    /**
+     * Gets the count of labels defined in the last compilation.
+     * @returns {number}
+     */
+    getLabelsCount = () => {
+        if (!this.wasm_exports?.ir_get_labels_count) return 0
+        return this.wasm_exports.ir_get_labels_count()
+    }
+
+    /**
+     * Gets the count of named constants defined in the last compilation.
+     * @returns {number}
+     */
+    getConstsCount = () => {
+        if (!this.wasm_exports?.ir_get_consts_count) return 0
+        return this.wasm_exports.ir_get_consts_count()
+    }
+
     setSilent = (value = true) => {
         this.silent = value
     }
@@ -1628,6 +1823,14 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
     getMillis = () => this.call('getMillis')
     /** @type { () => Promise<number> } */
     getMicros = () => this.call('getMicros')
+    
+    // IR (Intermediate Representation) accessors
+    /** @type { () => Promise<import('./VovkPLC.js').IR_Entry[]> } */
+    getIR = () => this.call('getIR')
+    /** @type { () => Promise<number> } */
+    getLabelsCount = () => this.call('getLabelsCount')
+    /** @type { () => Promise<number> } */
+    getConstsCount = () => this.call('getConstsCount')
 
     /** @type { SharedArrayBuffer | null } */
     _sharedBuffer = null

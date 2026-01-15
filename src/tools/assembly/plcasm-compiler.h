@@ -560,6 +560,77 @@ struct ProgramLine {
     Token* refToken;
 };
 
+// ################################################################################################
+// ### IR (Intermediate Representation) for Front-End Editor ###
+// ################################################################################################
+// This IR is exported after compilation for live monitoring and constant editing.
+// Each IR entry corresponds to one compiled instruction.
+
+// IR Entry Flags
+#define IR_FLAG_NONE          0x00
+#define IR_FLAG_READ          0x01  // Instruction reads from memory
+#define IR_FLAG_WRITE         0x02  // Instruction writes to memory
+#define IR_FLAG_CONST         0x04  // Instruction uses an embedded constant
+#define IR_FLAG_JUMP          0x08  // Instruction is a jump/call
+#define IR_FLAG_TIMER         0x10  // Instruction is a timer
+#define IR_FLAG_LABEL_TARGET  0x20  // This address is a jump target (label)
+#define IR_FLAG_EDITABLE      0x40  // Constant can be edited in-place
+
+// IR Operand Types
+enum IR_OperandType : u8 {
+    IR_OP_NONE = 0,
+    IR_OP_BOOL,
+    IR_OP_I8,
+    IR_OP_U8,
+    IR_OP_I16,
+    IR_OP_U16,
+    IR_OP_I32,
+    IR_OP_U32,
+    IR_OP_I64,
+    IR_OP_U64,
+    IR_OP_F32,
+    IR_OP_F64,
+    IR_OP_PTR,       // Pointer/address
+    IR_OP_LABEL,     // Jump target label
+};
+
+// Single IR entry (fixed 48 bytes for easy memory access)
+struct IR_Entry {
+    // Location info (12 bytes)
+    u32 bytecode_offset;    // Offset in bytecode where this instruction starts
+    u16 source_line;        // Source line number (1-based)
+    u16 source_column;      // Source column number (1-based)
+    u8  bytecode_size;      // Size of this instruction in bytes
+    u8  opcode;             // The instruction opcode
+    u8  flags;              // IR_FLAG_* combination
+    u8  operand_count;      // Number of operands (0-3)
+    
+    // Operand info (32 bytes - up to 3 operands)
+    // Each operand: type (1) + value (8) + bytecode_pos (1) = 10 bytes, padded to 10
+    struct {
+        u8  type;           // IR_OperandType
+        u8  bytecode_pos;   // Position within instruction where this value starts
+        u8  _pad[2];        // Padding for alignment
+        union {
+            u8  val_u8;
+            i8  val_i8;
+            u16 val_u16;
+            i16 val_i16;
+            u32 val_u32;
+            i32 val_i32;
+            u64 val_u64;
+            i64 val_i64;
+            float val_f32;
+            double val_f64;
+        };
+    } operands[3];          // Max 3 operands per instruction
+    
+    // Reserved (4 bytes)
+    u8 _reserved[4];
+};
+
+#define MAX_IR_ENTRIES 2048
+
 // Global config lists
 const char* illegal_keywords [] = { "const", "var", "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "string", "true", "false", "if", "else", "while", "for", "do", "break", "continue", "return", "function" };
 const int illegal_keywords_count = sizeof(illegal_keywords) / sizeof(illegal_keywords[0]);
@@ -601,6 +672,10 @@ public:
     int num_of_compile_runs = 0;
     bool emit_warnings = false;
 
+    // IR (Intermediate Representation) output
+    IR_Entry ir_entries[MAX_IR_ENTRIES];
+    int ir_entry_count = 0;
+
     #define MAX_DOWNLOADED_PROGRAM_SIZE 64535
     u8 downloaded_program[MAX_DOWNLOADED_PROGRAM_SIZE];
     int downloaded_program_size = 0;
@@ -613,6 +688,7 @@ public:
         memset(built_bytecode, 0, sizeof(built_bytecode));
         memset(programLines, 0, sizeof(programLines));
         memset(downloaded_program, 0, sizeof(downloaded_program));
+        memset(ir_entries, 0, sizeof(ir_entries));
         // Initialize auto_exit_string
         auto_exit_string[0] = 'e'; auto_exit_string[1] = 'x'; auto_exit_string[2] = 'i'; auto_exit_string[3] = 't'; auto_exit_string[4] = '\0';
         // Default assembly string
@@ -1219,12 +1295,97 @@ public:
     bool buildErrorExpectedFloat(Token token) { return buildError(token, "unexpected token, expected float"); }
     bool buildErrorUnknownLabel(Token token) { return buildError(token, "unknown label"); }
 
+    // Helper to add an IR entry
+    void addIREntry(u32 offset, Token& token, u8 size, u8 opcode, u8 flags, 
+                    u8 op_count = 0, 
+                    IR_OperandType op1_type = IR_OP_NONE, u8 op1_pos = 0, u64 op1_val = 0,
+                    IR_OperandType op2_type = IR_OP_NONE, u8 op2_pos = 0, u64 op2_val = 0,
+                    IR_OperandType op3_type = IR_OP_NONE, u8 op3_pos = 0, u64 op3_val = 0) {
+        if (ir_entry_count >= MAX_IR_ENTRIES) return;
+        IR_Entry& e = ir_entries[ir_entry_count++];
+        e.bytecode_offset = offset;
+        e.source_line = (u16)token.line;
+        e.source_column = (u16)token.column;
+        e.bytecode_size = size;
+        e.opcode = opcode;
+        e.flags = flags;
+        e.operand_count = op_count;
+        
+        if (op_count >= 1) {
+            e.operands[0].type = op1_type;
+            e.operands[0].bytecode_pos = op1_pos;
+            e.operands[0].val_u64 = op1_val;
+        }
+        if (op_count >= 2) {
+            e.operands[1].type = op2_type;
+            e.operands[1].bytecode_pos = op2_pos;
+            e.operands[1].val_u64 = op2_val;
+        }
+        if (op_count >= 3) {
+            e.operands[2].type = op3_type;
+            e.operands[2].bytecode_pos = op3_pos;
+            e.operands[2].val_u64 = op3_val;
+        }
+    }
+    
+    // Simplified IR entry for simple opcodes with no operands
+    void addIRSimple(u32 offset, Token& token, u8 size, u8 opcode) {
+        addIREntry(offset, token, size, opcode, IR_FLAG_NONE);
+    }
+
     bool build(bool finalPass, bool lintMode = false) {
         int auto_assigned_bit_counter = 0;
         programLineCount = 0;
         built_bytecode_length = 0;
         built_bytecode_checksum = 0;
         emit_warnings = finalPass && !lintMode;
+        if (finalPass) ir_entry_count = 0; // Clear IR on final pass
+        
+        // IR flags and operand info to be set before _line_push
+        u8 _ir_flags = IR_FLAG_NONE;
+        u8 _ir_op_count = 0;
+        IR_OperandType _ir_op1_type = IR_OP_NONE; u8 _ir_op1_pos = 0; u64 _ir_op1_val = 0;
+        IR_OperandType _ir_op2_type = IR_OP_NONE; u8 _ir_op2_pos = 0; u64 _ir_op2_val = 0;
+        IR_OperandType _ir_op3_type = IR_OP_NONE; u8 _ir_op3_pos = 0; u64 _ir_op3_val = 0;
+        
+        #define _ir_reset() \
+            _ir_flags = IR_FLAG_NONE; \
+            _ir_op_count = 0; \
+            _ir_op1_type = IR_OP_NONE; _ir_op1_pos = 0; _ir_op1_val = 0; \
+            _ir_op2_type = IR_OP_NONE; _ir_op2_pos = 0; _ir_op2_val = 0; \
+            _ir_op3_type = IR_OP_NONE; _ir_op3_pos = 0; _ir_op3_val = 0;
+        
+        #define _ir_set_const(typ, pos, val) \
+            _ir_flags |= IR_FLAG_CONST | IR_FLAG_EDITABLE; \
+            _ir_op_count = 1; \
+            _ir_op1_type = typ; _ir_op1_pos = pos; _ir_op1_val = val;
+            
+        #define _ir_set_ptr(pos, val) \
+            _ir_flags |= IR_FLAG_READ; \
+            _ir_op_count = 1; \
+            _ir_op1_type = IR_OP_PTR; _ir_op1_pos = pos; _ir_op1_val = val;
+            
+        #define _ir_set_write_ptr(pos, val) \
+            _ir_flags |= IR_FLAG_WRITE; \
+            _ir_op_count = 1; \
+            _ir_op1_type = IR_OP_PTR; _ir_op1_pos = pos; _ir_op1_val = val;
+            
+        #define _ir_set_jump(pos, val) \
+            _ir_flags |= IR_FLAG_JUMP; \
+            _ir_op_count = 1; \
+            _ir_op1_type = IR_OP_LABEL; _ir_op1_pos = pos; _ir_op1_val = val;
+            
+        #define _ir_set_timer_const(timer_pos, timer_val, pt_pos, pt_val) \
+            _ir_flags |= IR_FLAG_TIMER | IR_FLAG_CONST | IR_FLAG_EDITABLE; \
+            _ir_op_count = 2; \
+            _ir_op1_type = IR_OP_PTR; _ir_op1_pos = timer_pos; _ir_op1_val = timer_val; \
+            _ir_op2_type = IR_OP_U32; _ir_op2_pos = pt_pos; _ir_op2_val = pt_val;
+            
+        #define _ir_set_timer_mem(timer_pos, timer_val, pt_pos, pt_val) \
+            _ir_flags |= IR_FLAG_TIMER; \
+            _ir_op_count = 2; \
+            _ir_op1_type = IR_OP_PTR; _ir_op1_pos = timer_pos; _ir_op1_val = timer_val; \
+            _ir_op2_type = IR_OP_PTR; _ir_op2_pos = pt_pos; _ir_op2_val = pt_val;
         
         #define _line_push \
             address_end = built_bytecode_length + line.size; \
@@ -1235,6 +1396,13 @@ public:
                     crc8_simple(built_bytecode_checksum, bytecode[j]); \
                 } \
             } \
+            if (finalPass && !lintMode) { \
+                addIREntry(built_bytecode_length, token, line.size, bytecode[0], _ir_flags, \
+                    _ir_op_count, _ir_op1_type, _ir_op1_pos, _ir_op1_val, \
+                    _ir_op2_type, _ir_op2_pos, _ir_op2_val, \
+                    _ir_op3_type, _ir_op3_pos, _ir_op3_val); \
+            } \
+            _ir_reset(); \
             built_bytecode_length = address_end; \
             continue;
 
@@ -1308,6 +1476,7 @@ public:
                                         PLCRuntimeInstructionSet op = (PLCRuntimeInstructionSet)(is_ton ? TON_CONST : (is_tof ? TOF_CONST : TP_CONST));
                                         i+=2;
                                         line.size = InstructionCompiler::push_timer_const(bytecode, op, (MY_PTR_t)timer_addr, (u32)pt_val);
+                                        _ir_set_timer_const(1, timer_addr, 1 + sizeof(MY_PTR_t), pt_val);
                                         _line_push;
                                     } else {
                                         if (buildError(token_p2, "expected integer after #")) return true;
@@ -1319,6 +1488,7 @@ public:
                                         PLCRuntimeInstructionSet op = (PLCRuntimeInstructionSet)(is_ton ? TON_MEM : (is_tof ? TOF_MEM : TP_MEM));
                                         i+=2;
                                         line.size = InstructionCompiler::push_timer_mem(bytecode, op, (MY_PTR_t)timer_addr, (MY_PTR_t)pt_addr);
+                                        _ir_set_timer_mem(1, timer_addr, 1 + sizeof(MY_PTR_t), pt_addr);
                                         _line_push;
                                     } else {
                                         if (buildError(token_p2, "expected PT value (start with #) or address")) return true;
@@ -1331,18 +1501,18 @@ public:
                 }
 
                 { // Handle flow
-                    if (hasNext && (token == "jmp" || token == "jump")) { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } i++; line.size = InstructionCompiler::push_jmp(bytecode, label_address); _line_push; }
-                    if (hasNext && (token == "jmp_if" || token == "jump_if")) { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } i++; line.size = InstructionCompiler::push_jmp_if(bytecode, label_address); _line_push; }
-                    if (hasNext && (token == "jmp_if_not" || token == "jump_if_not")) { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } i++; line.size = InstructionCompiler::push_jmp_if_not(bytecode, label_address); _line_push; }
-                    if (hasNext && token == "call") { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } i++; line.size = InstructionCompiler::pushCALL(bytecode, label_address); _line_push; }
-                    if (hasNext && token == "call_if") { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } i++; line.size = InstructionCompiler::pushCALL_IF(bytecode, label_address); _line_push; }
-                    if (hasNext && token == "call_if_not") { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } i++; line.size = InstructionCompiler::pushCALL_IF_NOT(bytecode, label_address); _line_push; }
+                    if (hasNext && (token == "jmp" || token == "jump")) { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } i++; line.size = InstructionCompiler::push_jmp(bytecode, label_address); _ir_set_jump(1, label_address); _line_push; }
+                    if (hasNext && (token == "jmp_if" || token == "jump_if")) { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } i++; line.size = InstructionCompiler::push_jmp_if(bytecode, label_address); _ir_set_jump(1, label_address); _line_push; }
+                    if (hasNext && (token == "jmp_if_not" || token == "jump_if_not")) { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } i++; line.size = InstructionCompiler::push_jmp_if_not(bytecode, label_address); _ir_set_jump(1, label_address); _line_push; }
+                    if (hasNext && token == "call") { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } i++; line.size = InstructionCompiler::pushCALL(bytecode, label_address); _ir_set_jump(1, label_address); _line_push; }
+                    if (hasNext && token == "call_if") { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } i++; line.size = InstructionCompiler::pushCALL_IF(bytecode, label_address); _ir_set_jump(1, label_address); _line_push; }
+                    if (hasNext && token == "call_if_not") { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } i++; line.size = InstructionCompiler::pushCALL_IF_NOT(bytecode, label_address); _ir_set_jump(1, label_address); _line_push; }
 
-                    if (hasNext && (token == "jmp_rel" || token == "jump_rel")) { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } int off = !e_label ? (label_address - (int)(line.index + 3)) : (!e_int ? value_int : 0); i++; line.size = InstructionCompiler::push_jmp_rel(bytecode, (i16)off); _line_push; }
-                    if (hasNext && (token == "jmp_if_rel" || token == "jump_if_rel")) { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } int off = !e_label ? (label_address - (int)(line.index + 3)) : (!e_int ? value_int : 0); i++; line.size = InstructionCompiler::push_jmp_if_rel(bytecode, (i16)off); _line_push; }
-                    if (hasNext && (token == "jmp_if_not_rel" || token == "jump_if_not_rel")) { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } int off = !e_label ? (label_address - (int)(line.index + 3)) : (!e_int ? value_int : 0); i++; line.size = InstructionCompiler::push_jmp_if_not_rel(bytecode, (i16)off); _line_push; }
+                    if (hasNext && (token == "jmp_rel" || token == "jump_rel")) { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } int off = !e_label ? (label_address - (int)(line.index + 3)) : (!e_int ? value_int : 0); i++; line.size = InstructionCompiler::push_jmp_rel(bytecode, (i16)off); _ir_set_jump(1, off); _line_push; }
+                    if (hasNext && (token == "jmp_if_rel" || token == "jump_if_rel")) { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } int off = !e_label ? (label_address - (int)(line.index + 3)) : (!e_int ? value_int : 0); i++; line.size = InstructionCompiler::push_jmp_if_rel(bytecode, (i16)off); _ir_set_jump(1, off); _line_push; }
+                    if (hasNext && (token == "jmp_if_not_rel" || token == "jump_if_not_rel")) { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } int off = !e_label ? (label_address - (int)(line.index + 3)) : (!e_int ? value_int : 0); i++; line.size = InstructionCompiler::push_jmp_if_not_rel(bytecode, (i16)off); _ir_set_jump(1, off); _line_push; }
 
-                    if (hasNext && token == "call_rel") { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } int off = !e_label ? (label_address - (int)(line.index + 3)) : (!e_int ? value_int : 0); i++; line.size = InstructionCompiler::pushCALL_REL(bytecode, (i16)off); _line_push; }
+                    if (hasNext && token == "call_rel") { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } int off = !e_label ? (label_address - (int)(line.index + 3)) : (!e_int ? value_int : 0); i++; line.size = InstructionCompiler::pushCALL_REL(bytecode, (i16)off); _ir_set_jump(1, off); _line_push; }
                     if (hasNext && token == "call_if_rel") { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } int off = !e_label ? (label_address - (int)(line.index + 3)) : (!e_int ? value_int : 0); i++; line.size = InstructionCompiler::pushCALL_IF_REL(bytecode, (i16)off); _line_push; }
                     if (hasNext && token == "call_if_not_rel") { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } int off = !e_label ? (label_address - (int)(line.index + 3)) : (!e_int ? value_int : 0); i++; line.size = InstructionCompiler::pushCALL_IF_NOT_REL(bytecode, (i16)off); _line_push; }
                     if (token == "ret" || token == "return") { line.size = InstructionCompiler::push(bytecode, RET); _line_push; }
@@ -1544,7 +1714,9 @@ public:
                                     if (buildErrorExpectedIntSameLine(token, token_p1, rewind)) return true;
                                     if (rewind) continue;
                                 }
-                                i++; line.size = InstructionCompiler::push_u8(bytecode, value_int); _line_push;
+                                i++; line.size = InstructionCompiler::push_u8(bytecode, value_int);
+                                _ir_set_const(IR_OP_U8, 1, value_int);
+                                _line_push;
                             }
                             if (type == type_u16) {
                                 if (e_int) {
@@ -1552,7 +1724,9 @@ public:
                                     if (buildErrorExpectedIntSameLine(token, token_p1, rewind)) return true;
                                     if (rewind) continue;
                                 }
-                                i++; line.size = InstructionCompiler::push_u16(bytecode, value_int); _line_push;
+                                i++; line.size = InstructionCompiler::push_u16(bytecode, value_int);
+                                _ir_set_const(IR_OP_U16, 1, value_int);
+                                _line_push;
                             }
                             if (type == type_u32) {
                                 if (e_int) {
@@ -1560,7 +1734,9 @@ public:
                                     if (buildErrorExpectedIntSameLine(token, token_p1, rewind)) return true;
                                     if (rewind) continue;
                                 }
-                                i++; line.size = InstructionCompiler::push_u32(bytecode, value_int); _line_push;
+                                i++; line.size = InstructionCompiler::push_u32(bytecode, value_int);
+                                _ir_set_const(IR_OP_U32, 1, value_int);
+                                _line_push;
                             }
                             if (type == type_u64) {
                                 if (e_int) {
@@ -1602,8 +1778,21 @@ public:
                                 }
                                 i++; line.size = InstructionCompiler::push_i64(bytecode, value_int); _line_push;
                             }
-                            if (type == type_f32) { if (e_real) { if (buildErrorExpectedFloat(token_p1)) return true; } i++; line.size = InstructionCompiler::push_f32(bytecode, value_float); _line_push; }
-                            if (type == type_f64) { if (e_real) { if (buildErrorExpectedFloat(token_p1)) return true; } i++; line.size = InstructionCompiler::push_f64(bytecode, value_float); _line_push; }
+                            if (type == type_f32) { 
+                                if (e_real) { if (buildErrorExpectedFloat(token_p1)) return true; } 
+                                i++; line.size = InstructionCompiler::push_f32(bytecode, value_float);
+                                u32 f32_bits = 0; memcpy(&f32_bits, &value_float, 4);
+                                _ir_set_const(IR_OP_F32, 1, f32_bits);
+                                _line_push; 
+                            }
+                            if (type == type_f64) { 
+                                if (e_real) { if (buildErrorExpectedFloat(token_p1)) return true; } 
+                                i++; line.size = InstructionCompiler::push_f64(bytecode, value_float);
+                                double f64_val = (double)value_float;
+                                u64 f64_bits = 0; memcpy(&f64_bits, &f64_val, 8);
+                                _ir_set_const(IR_OP_F64, 1, f64_bits);
+                                _line_push; 
+                            }
                             Serial.print(F("Error: unknown data type ")); token.print(); Serial.print(F(" at ")); Serial.print(token.line); Serial.print(F(":")); Serial.println(token.column);
                             if (buildErrorUnknownToken(token)) return true; continue;
                         }
@@ -1882,6 +2071,27 @@ WASM_EXPORT void logBytecode() {
 
 WASM_EXPORT bool compileAssembly(bool debug = true) {
     return defaultCompiler.compileAssembly(debug, false);
+}
+
+// IR (Intermediate Representation) exports for Front-End editor
+WASM_EXPORT int ir_get_count() {
+    return defaultCompiler.ir_entry_count;
+}
+
+WASM_EXPORT IR_Entry* ir_get_pointer() {
+    return defaultCompiler.ir_entries;
+}
+
+WASM_EXPORT int ir_get_entry_size() {
+    return sizeof(IR_Entry);
+}
+
+WASM_EXPORT int ir_get_labels_count() {
+    return defaultCompiler.LUT_label_count;
+}
+
+WASM_EXPORT int ir_get_consts_count() {
+    return defaultCompiler.LUT_const_count;
 }
 
 WASM_EXPORT bool lintAssembly(bool debug = true) {
