@@ -1457,7 +1457,12 @@ public:
                     bool is_tp = token == "tp";
                     
                     if (is_ton || is_tof || is_tp) {
-                        if (!hasNext || !hasThird) { if (buildError(token, "Timer instruction requires 2 arguments")) return true; }
+                        if (!hasNext) {
+                            if (buildError(token, "Timer instruction requires 2 arguments: timer_address and preset_time")) return true;
+                        }
+                        if (!hasThird) {
+                            if (buildError(token_p1, "Timer instruction requires a second argument: preset_time (use #value for constant or address for memory)")) return true;
+                        }
                         
                         int timer_addr = 0;
                         if (!addressFromToken(token_p1, timer_addr)) {
@@ -1479,7 +1484,7 @@ public:
                                         _ir_set_timer_const(1, timer_addr, 1 + sizeof(MY_PTR_t), pt_val);
                                         _line_push;
                                     } else {
-                                        if (buildError(token_p2, "expected integer after #")) return true;
+                                        if (buildError(token_p2, "expected integer value after #")) return true;
                                     }
                                 } else {
                                     int pt_addr = 0;
@@ -1491,11 +1496,11 @@ public:
                                         _ir_set_timer_mem(1, timer_addr, 1 + sizeof(MY_PTR_t), pt_addr);
                                         _line_push;
                                     } else {
-                                        if (buildError(token_p2, "expected PT value (start with #) or address")) return true;
+                                        if (buildError(token_p2, "expected preset time value (use #123 for constant) or memory address (like M20)")) return true;
                                     }
                                 }
                         } else {
-                            if (buildError(token_p1, "expected timer address")) return true;
+                            if (buildError(token_p1, "expected timer address (like S0, T1, etc)")) return true;
                         }
                     }
                 }
