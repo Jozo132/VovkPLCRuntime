@@ -23,7 +23,7 @@ union u8A_to_u32 { u8 u8A[4]; u32 val; };
 #define TIMER_STRUCT_SIZE 9
 
 namespace PLCMethods {
-    
+
     // Helper to read u32 from memory array
     inline u32 read_u32_from_mem(u8* memory, MY_PTR_t address) {
         u8A_to_u32 converter;
@@ -78,12 +78,12 @@ namespace PLCMethods {
 
     void logic_TOF(u8* memory, MY_PTR_t timer_ptr, u32 PT, bool IN, bool& Q_out) {
         u8 flags = memory[timer_ptr + TIMER_OFFSET_FLAGS];
-        
+
         bool prev_IN = (flags & TIMER_FLAG_IN_OLD) ? true : false;
         bool running = (flags & TIMER_FLAG_RUNNING) ? true : false;
         u32 start_time = read_u32_from_mem(memory, timer_ptr + TIMER_OFFSET_START);
         u32 et = 0;
-        
+
         if (IN) {
             Q_out = true;
             running = false;
@@ -94,7 +94,7 @@ namespace PLCMethods {
                 start_time = interval_millis_now;
                 write_u32_to_mem(memory, timer_ptr + TIMER_OFFSET_START, start_time);
             }
-            
+
             if (running) {
                 et = interval_millis_now - start_time;
                 if (et >= PT) {
@@ -121,16 +121,16 @@ namespace PLCMethods {
 
     void logic_TP(u8* memory, MY_PTR_t timer_ptr, u32 PT, bool IN, bool& Q_out) {
         u8 flags = memory[timer_ptr + TIMER_OFFSET_FLAGS];
-        
+
         bool prev_IN = (flags & TIMER_FLAG_IN_OLD) ? true : false;
         bool running = (flags & TIMER_FLAG_RUNNING) ? true : false;
         u32 start_time = read_u32_from_mem(memory, timer_ptr + TIMER_OFFSET_START);
         u32 et = 0;
 
         if (!prev_IN && IN && !running) {
-             running = true;
-             start_time = interval_millis_now;
-             write_u32_to_mem(memory, timer_ptr + TIMER_OFFSET_START, start_time);
+            running = true;
+            start_time = interval_millis_now;
+            write_u32_to_mem(memory, timer_ptr + TIMER_OFFSET_START, start_time);
         }
 
         if (running) {
@@ -177,7 +177,7 @@ namespace PLCMethods {
         logic_TON(memory, timer_ptr, PT, IN, Q);
         return stack.push_bool(Q);
     }
-    
+
     // TON_MEM
     RuntimeError handle_TON_MEM(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
         MY_PTR_t timer_ptr = 0;
@@ -188,10 +188,10 @@ namespace PLCMethods {
         MY_PTR_t pt_ptr = 0;
         err = ProgramExtract.type_pointer(program, prog_size, index, &pt_ptr);
         if (err != STATUS_SUCCESS) return err;
-        
+        pt_ptr = reverse_byte_order(pt_ptr);
+
         if (pt_ptr + 4 > PLCRUNTIME_MAX_MEMORY_SIZE) return MEMORY_ACCESS_ERROR;
         u32 PT = read_u32_from_mem(memory, pt_ptr);
-        pt_ptr = reverse_byte_order(pt_ptr);
 
         if (stack.size() == 0) return EMPTY_STACK;
         bool IN = stack.pop_bool();
@@ -233,7 +233,7 @@ namespace PLCMethods {
         err = ProgramExtract.type_pointer(program, prog_size, index, &pt_ptr);
         if (err != STATUS_SUCCESS) return err;
         pt_ptr = reverse_byte_order(pt_ptr);
-        
+
         if (pt_ptr + 4 > PLCRUNTIME_MAX_MEMORY_SIZE) return MEMORY_ACCESS_ERROR;
         u32 PT = read_u32_from_mem(memory, pt_ptr);
 
@@ -276,10 +276,10 @@ namespace PLCMethods {
         MY_PTR_t pt_ptr = 0;
         err = ProgramExtract.type_pointer(program, prog_size, index, &pt_ptr);
         if (err != STATUS_SUCCESS) return err;
-        
+        pt_ptr = reverse_byte_order(pt_ptr);
+
         if (pt_ptr + 4 > PLCRUNTIME_MAX_MEMORY_SIZE) return MEMORY_ACCESS_ERROR;
         u32 PT = read_u32_from_mem(memory, pt_ptr);
-        pt_ptr = reverse_byte_order(pt_ptr);
 
         if (stack.size() == 0) return EMPTY_STACK;
         bool IN = stack.pop_bool();
