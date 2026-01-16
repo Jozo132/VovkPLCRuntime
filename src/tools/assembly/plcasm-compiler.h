@@ -1457,50 +1457,51 @@ public:
                     bool is_tp = token == "tp";
                     
                     if (is_ton || is_tof || is_tp) {
+                        // Timer instruction found - consume it and process parameters
                         if (!hasNext) {
-                            if (buildError(token, "Timer instruction requires 2 arguments: timer_address and preset_time")) return true;
+                            return buildError(token, "Timer instruction requires 2 arguments: timer_address and preset_time");
                         }
                         if (!hasThird) {
-                            if (buildError(token_p1, "Timer instruction requires a second argument: preset_time (use #value for constant or address for memory)")) return true;
+                            return buildError(token_p1, "Timer instruction requires a second argument: preset_time (use #value for constant or address for memory)");
                         }
                         
                         int timer_addr = 0;
-                        if (!addressFromToken(token_p1, timer_addr)) {
-                                bool is_const_param = false;
-                                if (token_p2.length > 1 && token_p2.string[0] == '#') {
-                                    is_const_param = true;
-                                }
-
-                                if (is_const_param) {
-                                    StringView valStr;
-                                    valStr.data = token_p2.string.data + 1;
-                                    valStr.length = token_p2.string.length - 1;
-                                    int pt_val = 0;
-                                    if (isInteger(valStr, pt_val)) {
-                                        // Constant timer: [opcode][timer_addr][pt_value]
-                                        PLCRuntimeInstructionSet op = (PLCRuntimeInstructionSet)(is_ton ? TON_CONST : (is_tof ? TOF_CONST : TP_CONST));
-                                        i+=2;
-                                        line.size = InstructionCompiler::push_timer_const(bytecode, op, (MY_PTR_t)timer_addr, (u32)pt_val);
-                                        _ir_set_timer_const(1, timer_addr, 1 + sizeof(MY_PTR_t), pt_val);
-                                        _line_push;
-                                    } else {
-                                        if (buildError(token_p2, "expected integer value after #")) return true;
-                                    }
-                                } else {
-                                    int pt_addr = 0;
-                                    if (!addressFromToken(token_p2, pt_addr)) {
-                                        // Memory timer: [opcode][timer_addr][pt_addr]
-                                        PLCRuntimeInstructionSet op = (PLCRuntimeInstructionSet)(is_ton ? TON_MEM : (is_tof ? TOF_MEM : TP_MEM));
-                                        i+=2;
-                                        line.size = InstructionCompiler::push_timer_mem(bytecode, op, (MY_PTR_t)timer_addr, (MY_PTR_t)pt_addr);
-                                        _ir_set_timer_mem(1, timer_addr, 1 + sizeof(MY_PTR_t), pt_addr);
-                                        _line_push;
-                                    } else {
-                                        if (buildError(token_p2, "expected preset time value (use #123 for constant) or memory address (like M20)")) return true;
-                                    }
-                                }
+                        if (addressFromToken(token_p1, timer_addr)) {
+                            // First parameter is not a valid address
+                            return buildError(token_p1, "expected timer address (like S0, M0, etc)");
+                        }
+                        
+                        // First parameter is valid, now check second parameter
+                        bool is_const_param = token_p2.length > 1 && token_p2.string[0] == '#';
+                        
+                        if (is_const_param) {
+                            // Constant timer preset
+                            StringView valStr;
+                            valStr.data = token_p2.string.data + 1;
+                            valStr.length = token_p2.string.length - 1;
+                            int pt_val = 0;
+                            if (!isInteger(valStr, pt_val)) {
+                                return buildError(token_p2, "expected integer value after #");
+                            }
+                            // Constant timer: [opcode][timer_addr][pt_value]
+                            PLCRuntimeInstructionSet op = (PLCRuntimeInstructionSet)(is_ton ? TON_CONST : (is_tof ? TOF_CONST : TP_CONST));
+                            i += 2;
+                            line.size = InstructionCompiler::push_timer_const(bytecode, op, (MY_PTR_t)timer_addr, (u32)pt_val);
+                            _ir_set_timer_const(1, timer_addr, 1 + sizeof(MY_PTR_t), pt_val);
+                            _line_push;
                         } else {
-                            if (buildError(token_p1, "expected timer address (like S0, T1, etc)")) return true;
+                            // Memory-based timer preset
+                            int pt_addr = 0;
+                            if (addressFromToken(token_p2, pt_addr)) {
+                                // Second parameter is not a valid address or constant
+                                return buildError(token_p2, "expected preset time value (use #123 for constant) or memory address (like M0)");
+                            }
+                            // Memory timer: [opcode][timer_addr][pt_addr]
+                            PLCRuntimeInstructionSet op = (PLCRuntimeInstructionSet)(is_ton ? TON_MEM : (is_tof ? TOF_MEM : TP_MEM));
+                            i += 2;
+                            line.size = InstructionCompiler::push_timer_mem(bytecode, op, (MY_PTR_t)timer_addr, (MY_PTR_t)pt_addr);
+                            _ir_set_timer_mem(1, timer_addr, 1 + sizeof(MY_PTR_t), pt_addr);
+                            _line_push;
                         }
                     }
                 }
