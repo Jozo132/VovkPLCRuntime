@@ -99,6 +99,12 @@ const SUPPORT = checkSupport()
  *     ram_free: number,
  *     min_ram_free: number,
  *     max_ram_free: number,
+ *     last_period_us: number,
+ *     min_period_us: number,
+ *     max_period_us: number,
+ *     last_jitter_us: number,
+ *     min_jitter_us: number,
+ *     max_jitter_us: number,
  * }} DeviceHealth
  */
 
@@ -609,25 +615,31 @@ class VovkPLC_class {
 
     /**
      * Retrieves current health statistics of the virtual device.
-     * Includes cycle times (last, min, max) and RAM usage.
+     * Includes cycle times (last, min, max), RAM usage, period, and jitter.
+     * Efficiently reads all stats in a single WASM call via structure pointer.
      *
      * @returns {DeviceHealth} - Object containing performance and memory metrics.
      */
     getDeviceHealth = () => {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
-        if (!this.wasm_exports.getLastCycleTimeUs) throw new Error("'getLastCycleTimeUs' function not found")
-        if (!this.wasm_exports.getMinCycleTimeUs) throw new Error("'getMinCycleTimeUs' function not found")
-        if (!this.wasm_exports.getMaxCycleTimeUs) throw new Error("'getMaxCycleTimeUs' function not found")
-        if (!this.wasm_exports.getRamFree) throw new Error("'getRamFree' function not found")
-        if (!this.wasm_exports.getMinRamFree) throw new Error("'getMinRamFree' function not found")
-        if (!this.wasm_exports.getMaxRamFree) throw new Error("'getMaxRamFree' function not found")
+        if (!this.wasm_exports.getDeviceHealthPtr) throw new Error("'getDeviceHealthPtr' function not found")
+        
+        const ptr = this.wasm_exports.getDeviceHealthPtr()
+        const view = new Uint32Array(this.wasm_memory.buffer, ptr, 12)
+        
         return {
-            last_cycle_time_us: this.wasm_exports.getLastCycleTimeUs(),
-            min_cycle_time_us: this.wasm_exports.getMinCycleTimeUs(),
-            max_cycle_time_us: this.wasm_exports.getMaxCycleTimeUs(),
-            ram_free: this.wasm_exports.getRamFree(),
-            min_ram_free: this.wasm_exports.getMinRamFree(),
-            max_ram_free: this.wasm_exports.getMaxRamFree(),
+            last_cycle_time_us: view[0],
+            min_cycle_time_us: view[1],
+            max_cycle_time_us: view[2],
+            ram_free: view[3],
+            min_ram_free: view[4],
+            max_ram_free: view[5],
+            last_period_us: view[6],
+            min_period_us: view[7],
+            max_period_us: view[8],
+            last_jitter_us: view[9],
+            min_jitter_us: view[10],
+            max_jitter_us: view[11],
         }
     }
 

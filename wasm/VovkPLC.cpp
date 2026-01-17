@@ -177,6 +177,14 @@ WASM_EXPORT void setMicros(u32 us) {
     // micros is imported from JS and cannot be set
 }
 
+// Get pointer to device health structure (efficient single-call access to all stats)
+WASM_EXPORT u32 getDeviceHealthPtr() {
+    static DeviceHealth health;
+    runtime.getDeviceHealth(health);
+    return (u32) &health;
+}
+
+// Legacy individual getters for backward compatibility
 WASM_EXPORT u32 getLastCycleTimeUs() {
     return runtime.getLastCycleTimeUs();
 }
@@ -199,6 +207,30 @@ WASM_EXPORT u32 getMinRamFree() {
 
 WASM_EXPORT u32 getMaxRamFree() {
     return runtime.getMaxRamFree();
+}
+
+WASM_EXPORT u32 getLastPeriodUs() {
+    return runtime.getLastPeriodUs();
+}
+
+WASM_EXPORT u32 getMinPeriodUs() {
+    return runtime.getMinPeriodUs();
+}
+
+WASM_EXPORT u32 getMaxPeriodUs() {
+    return runtime.getMaxPeriodUs();
+}
+
+WASM_EXPORT u32 getLastJitterUs() {
+    return runtime.getLastJitterUs();
+}
+
+WASM_EXPORT u32 getMinJitterUs() {
+    return runtime.getMinJitterUs();
+}
+
+WASM_EXPORT u32 getMaxJitterUs() {
+    return runtime.getMaxJitterUs();
 }
 
 WASM_EXPORT void resetDeviceHealth() {

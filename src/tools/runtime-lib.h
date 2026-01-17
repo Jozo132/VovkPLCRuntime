@@ -87,6 +87,21 @@
 #define SERIAL_TIMEOUT_RETURN if (serial_timeout) return;
 #define SERIAL_TIMEOUT_JOB(task) if (serial_timeout) { task; return; };
 
+struct DeviceHealth {
+    u32 last_cycle_time_us;
+    u32 min_cycle_time_us;
+    u32 max_cycle_time_us;
+    u32 last_ram_free;
+    u32 min_ram_free;
+    u32 max_ram_free;
+    u32 last_period_us;
+    u32 min_period_us;
+    u32 max_period_us;
+    u32 last_jitter_us;
+    u32 min_jitter_us;
+    u32 max_jitter_us;
+};
+
 class VovkPLCRuntime {
 private:
     bool started_up = false;
@@ -127,6 +142,14 @@ public:
     u32 last_ram_free = 0;
     u32 min_ram_free = 1000000000;
     u32 max_ram_free = 0;
+    u32 last_period_us = 0;
+    u32 min_period_us = 1000000000;
+    u32 max_period_us = 0;
+    u32 last_jitter_us = 0;
+    u32 min_jitter_us = 1000000000;
+    u32 max_jitter_us = 0;
+    u32 last_run_timestamp_us = 0;
+    u32 previous_period_us = 0;
 
     static void splash() {
         Serial.println();
@@ -199,6 +222,23 @@ public:
         clear();
         return run(program.program, program.prog_size);
     }
+    // Get all device health statistics in a single call
+    void getDeviceHealth(DeviceHealth& health) {
+        updateRamStats();
+        health.last_cycle_time_us = last_cycle_time_us;
+        health.min_cycle_time_us = min_cycle_time_us;
+        health.max_cycle_time_us = max_cycle_time_us;
+        health.last_ram_free = last_ram_free;
+        health.min_ram_free = min_ram_free;
+        health.max_ram_free = max_ram_free;
+        health.last_period_us = last_period_us;
+        health.min_period_us = min_period_us;
+        health.max_period_us = max_period_us;
+        health.last_jitter_us = last_jitter_us;
+        health.min_jitter_us = min_jitter_us;
+        health.max_jitter_us = max_jitter_us;
+    }
+    // Legacy individual getters for backward compatibility
     u32 getLastCycleTimeUs() const { return last_cycle_time_us; }
     u32 getMinCycleTimeUs() const { return min_cycle_time_us; }
     u32 getMaxCycleTimeUs() const { return max_cycle_time_us; }
@@ -214,11 +254,21 @@ public:
         updateRamStats();
         return max_ram_free;
     }
+    u32 getLastPeriodUs() const { return last_period_us; }
+    u32 getMinPeriodUs() const { return min_period_us; }
+    u32 getMaxPeriodUs() const { return max_period_us; }
+    u32 getLastJitterUs() const { return last_jitter_us; }
+    u32 getMinJitterUs() const { return min_jitter_us; }
+    u32 getMaxJitterUs() const { return max_jitter_us; }
     void resetDeviceHealth() {
         max_cycle_time_us = last_cycle_time_us;
         min_cycle_time_us = last_cycle_time_us;
         min_ram_free = last_ram_free;
         max_ram_free = last_ram_free;
+        max_period_us = last_period_us;
+        min_period_us = last_period_us;
+        max_jitter_us = last_jitter_us;
+        min_jitter_us = last_jitter_us;
     }
     // Read a custom type T value from the stack. This will pop the stack by sizeof(T) bytes and return the value.
     template <typename T> T read() {
@@ -554,13 +604,22 @@ public:
                     return;
                 }
 
+                DeviceHealth health;
+                getDeviceHealth(health);
+                
                 Serial.print(F("PH"));
-                printHexU32(getLastCycleTimeUs());
-                printHexU32(getMinCycleTimeUs());
-                printHexU32(getMaxCycleTimeUs());
-                printHexU32(getRamFree());
-                printHexU32(getMinRamFree());
-                printHexU32(getMaxRamFree());
+                printHexU32(health.last_cycle_time_us);
+                printHexU32(health.min_cycle_time_us);
+                printHexU32(health.max_cycle_time_us);
+                printHexU32(health.last_ram_free);
+                printHexU32(health.min_ram_free);
+                printHexU32(health.max_ram_free);
+                printHexU32(health.last_period_us);
+                printHexU32(health.min_period_us);
+                printHexU32(health.max_period_us);
+                printHexU32(health.last_jitter_us);
+                printHexU32(health.min_jitter_us);
+                printHexU32(health.max_jitter_us);
                 Serial.println();
 
             } else if (plc_health_reset) {
@@ -968,6 +1027,25 @@ RuntimeError VovkPLCRuntime::run(u8* program, u32 prog_size) {
     IntervalGlobalLoopCheck();
 #endif // __WASM__
     u32 start_us = (u32) micros();
+    
+    // Calculate period (time between run() calls)
+    if (last_run_timestamp_us != 0) {
+        last_period_us = start_us - last_run_timestamp_us;
+        if (last_period_us < min_period_us) min_period_us = last_period_us;
+        if (last_period_us > max_period_us) max_period_us = last_period_us;
+        
+        // Calculate jitter (variation in period)
+        if (previous_period_us != 0) {
+            last_jitter_us = last_period_us > previous_period_us ? 
+                            (last_period_us - previous_period_us) : 
+                            (previous_period_us - last_period_us);
+            if (last_jitter_us < min_jitter_us) min_jitter_us = last_jitter_us;
+            if (last_jitter_us > max_jitter_us) max_jitter_us = last_jitter_us;
+        }
+        previous_period_us = last_period_us;
+    }
+    last_run_timestamp_us = start_us;
+    
     updateGlobals();
     u32 index = 0;
     RuntimeError status = STATUS_SUCCESS;
