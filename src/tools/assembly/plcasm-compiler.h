@@ -1257,6 +1257,65 @@ public:
         return true;
     }
 
+    // Parse duration string like "T#5s", "T#200ms", "T#4m10s500ms" into milliseconds
+    // Returns false on success, true on error
+    bool parseDuration(StringView& str, u32& milliseconds) {
+        if (str.length < 3) return true; // Must be at least "T#x"
+        if (str.data[0] != 'T' || str.data[1] != '#') return true;
+        
+        milliseconds = 0;
+        int i = 2; // Start after "T#"
+        
+        while (i < str.length) {
+            // Parse number
+            int num_start = i;
+            while (i < str.length && str.data[i] >= '0' && str.data[i] <= '9') {
+                i++;
+            }
+            if (i == num_start) return true; // No number found
+            
+            // Convert number substring to integer
+            u32 value = 0;
+            for (int j = num_start; j < i; j++) {
+                value = value * 10 + (str.data[j] - '0');
+            }
+            
+            // Parse unit
+            if (i >= str.length) return true; // No unit found
+            
+            char unit1 = str.data[i];
+            char unit2 = (i + 1 < str.length) ? str.data[i + 1] : '\0';
+            
+            u32 multiplier = 0;
+            int unit_len = 0;
+            
+            // Check for two-character units first
+            if (unit1 == 'm' && unit2 == 's') {
+                multiplier = 1; // milliseconds
+                unit_len = 2;
+            } else if (unit1 == 's') {
+                multiplier = 1000; // seconds
+                unit_len = 1;
+            } else if (unit1 == 'm') {
+                multiplier = 60000; // minutes
+                unit_len = 1;
+            } else if (unit1 == 'h') {
+                multiplier = 3600000; // hours
+                unit_len = 1;
+            } else if (unit1 == 'd') {
+                multiplier = 86400000; // days
+                unit_len = 1;
+            } else {
+                return true; // Unknown unit
+            }
+            
+            milliseconds += value * multiplier;
+            i += unit_len;
+        }
+        
+        return false; // Success
+    }
+
     bool labelFromToken(Token& token, int& output) {
         if (token.type == TOKEN_KEYWORD) {
             for (int i = 0; i < LUT_label_count; i++) {
@@ -1472,17 +1531,29 @@ public:
                         }
                         
                         // First parameter is valid, now check second parameter
-                        bool is_const_param = token_p2.length > 1 && token_p2.string[0] == '#';
+                        bool is_const_param = token_p2.length > 1 && (token_p2.string[0] == '#' || (token_p2.length > 2 && token_p2.string[0] == 'T' && token_p2.string[1] == '#'));
                         
                         if (is_const_param) {
-                            // Constant timer preset
-                            StringView valStr;
-                            valStr.data = token_p2.string.data + 1;
-                            valStr.length = token_p2.string.length - 1;
-                            int pt_val = 0;
-                            if (!isInteger(valStr, pt_val)) {
-                                return buildError(token_p2, "expected integer value after #");
+                            // Constant timer preset (either #123 or T#5s format)
+                            u32 pt_val = 0;
+                            
+                            if (token_p2.string[0] == 'T' && token_p2.string[1] == '#') {
+                                // Duration format: T#5s, T#200ms, T#4m10s500ms
+                                if (parseDuration(token_p2.string, pt_val)) {
+                                    return buildError(token_p2, "invalid duration format (expected T#<number><unit> like T#5s, T#200ms, T#1m30s)");
+                                }
+                            } else {
+                                // Simple integer format: #123
+                                StringView valStr;
+                                valStr.data = token_p2.string.data + 1;
+                                valStr.length = token_p2.string.length - 1;
+                                int pt_val_int = 0;
+                                if (!isInteger(valStr, pt_val_int)) {
+                                    return buildError(token_p2, "expected integer value after # or use duration format T#<number><unit>");
+                                }
+                                pt_val = (u32)pt_val_int;
                             }
+                            
                             // Constant timer: [opcode][timer_addr][pt_value]
                             PLCRuntimeInstructionSet op = (PLCRuntimeInstructionSet)(is_ton ? TON_CONST : (is_tof ? TOF_CONST : TP_CONST));
                             i += 2;
