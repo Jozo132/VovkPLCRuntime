@@ -419,7 +419,285 @@ public:
 // ============================================================================
 #if defined(STM32) || defined(ARDUINO_ARCH_STM32)
 
-// STM32 flash page configuration - auto-detect or allow override
+// ---- STM32F4 Sector Layout (non-uniform!) ----
+// Sector 0-3:  16KB each  (0x08000000 - 0x0800FFFF)
+// Sector 4:    64KB       (0x08010000 - 0x0801FFFF)
+// Sector 5-7:  128KB each (0x08020000 - 0x0807FFFF) for 512KB flash
+// Sector 5-11: 128KB each (0x08020000 - 0x080FFFFF) for 1MB flash
+//
+// Flash size detection: STM32 stores flash size at 0x1FFF7A22 (F4) or defined by FLASH_SIZE macro
+// FLASH_END is typically defined in the CMSIS device header (e.g., stm32f401xe.h)
+
+#if defined(STM32F4) || defined(STM32F4xx)
+
+// Auto-detect flash size using CMSIS FLASH_SIZE_DATA_REGISTER or fallback
+// On STM32F4, flash size (in KB) is stored at address 0x1FFF7A22
+#ifndef PLCRUNTIME_STM32_FLASH_SIZE_KB
+  #if defined(FLASH_SIZE)
+    // FLASH_SIZE is typically in bytes in some HAL versions
+    #if FLASH_SIZE > 0x10000
+      #define PLCRUNTIME_STM32_FLASH_SIZE_KB (FLASH_SIZE / 1024)
+    #else
+      #define PLCRUNTIME_STM32_FLASH_SIZE_KB FLASH_SIZE
+    #endif
+  #elif defined(FLASHSIZE_BASE)
+    // Read from flash size register (16-bit value in KB at FLASHSIZE_BASE)
+    #define PLCRUNTIME_STM32_FLASH_SIZE_KB (*(volatile uint16_t*)FLASHSIZE_BASE)
+  #else
+    // Fallback: read from known F4 flash size register address
+    #define PLCRUNTIME_STM32_FLASH_SIZE_KB (*(volatile uint16_t*)0x1FFF7A22)
+  #endif
+#endif
+
+// For F4, auto-detect the last sector based on flash size
+// User can override with PLCRUNTIME_STM32_FLASH_SECTOR
+#ifndef PLCRUNTIME_STM32_FLASH_SECTOR
+  // Use compile-time detection if available, otherwise runtime detection is needed
+  // Flash sizes: 128KB=sector 3, 256KB=sector 5, 384KB=sector 6, 512KB=sector 7
+  //              768KB=sector 9, 1024KB=sector 11, 1536KB=sector 17, 2048KB=sector 23
+  #if defined(FLASH_SIZE) && (FLASH_SIZE <= 131072 || (defined(FLASH_SIZE) && FLASH_SIZE <= 128))
+    // 128KB or less - last sector is sector 3 (16KB at 0x0800C000)
+    #define PLCRUNTIME_STM32_FLASH_SECTOR FLASH_SECTOR_3
+    #define PLCRUNTIME_STM32_FLASH_ADDRESS 0x0800C000
+    #define PLCRUNTIME_STM32_FLASH_PAGE_SIZE 16384  // 16KB
+  #elif defined(FLASH_SIZE) && (FLASH_SIZE <= 262144 || (defined(FLASH_SIZE) && FLASH_SIZE <= 256))
+    // 256KB - last sector is sector 5 (128KB at 0x08020000)
+    #define PLCRUNTIME_STM32_FLASH_SECTOR FLASH_SECTOR_5
+    #define PLCRUNTIME_STM32_FLASH_ADDRESS 0x08020000
+    #define PLCRUNTIME_STM32_FLASH_PAGE_SIZE 131072  // 128KB
+  #elif defined(FLASH_SIZE) && (FLASH_SIZE <= 524288 || (defined(FLASH_SIZE) && FLASH_SIZE <= 512))
+    // 512KB - last sector is sector 7 (128KB at 0x08060000)
+    #define PLCRUNTIME_STM32_FLASH_SECTOR FLASH_SECTOR_7
+    #define PLCRUNTIME_STM32_FLASH_ADDRESS 0x08060000
+    #define PLCRUNTIME_STM32_FLASH_PAGE_SIZE 131072  // 128KB
+  #elif defined(FLASH_SECTOR_11)
+    // 1MB - last sector is sector 11
+    #define PLCRUNTIME_STM32_FLASH_SECTOR FLASH_SECTOR_11
+    #define PLCRUNTIME_STM32_FLASH_ADDRESS 0x080E0000
+    #define PLCRUNTIME_STM32_FLASH_PAGE_SIZE 131072  // 128KB
+  #elif defined(FLASH_SECTOR_7)
+    // Fallback to sector 7
+    #define PLCRUNTIME_STM32_FLASH_SECTOR FLASH_SECTOR_7
+    #define PLCRUNTIME_STM32_FLASH_ADDRESS 0x08060000
+    #define PLCRUNTIME_STM32_FLASH_PAGE_SIZE 131072  // 128KB
+  #elif defined(FLASH_SECTOR_5)
+    // Fallback to sector 5
+    #define PLCRUNTIME_STM32_FLASH_SECTOR FLASH_SECTOR_5
+    #define PLCRUNTIME_STM32_FLASH_ADDRESS 0x08020000
+    #define PLCRUNTIME_STM32_FLASH_PAGE_SIZE 131072  // 128KB
+  #else
+    // Minimum fallback to sector 4 (64KB)
+    #define PLCRUNTIME_STM32_FLASH_SECTOR FLASH_SECTOR_4
+    #define PLCRUNTIME_STM32_FLASH_ADDRESS 0x08010000
+    #define PLCRUNTIME_STM32_FLASH_PAGE_SIZE 65536   // 64KB
+  #endif
+#endif
+
+// Allow user to override flash address and page size if sector is defined
+#ifndef PLCRUNTIME_STM32_FLASH_ADDRESS
+  #if defined(FLASH_END) && defined(PLCRUNTIME_STM32_FLASH_PAGE_SIZE)
+    // Use FLASH_END to calculate last sector address
+    #define PLCRUNTIME_STM32_FLASH_ADDRESS ((FLASH_END + 1) - PLCRUNTIME_STM32_FLASH_PAGE_SIZE)
+  #endif
+#endif
+
+#ifndef PLCRUNTIME_STM32_NUM_SECTORS
+#define PLCRUNTIME_STM32_NUM_SECTORS 1
+#endif
+
+#define PLCRUNTIME_STM32_NUM_PAGES PLCRUNTIME_STM32_NUM_SECTORS
+#define PLCRUNTIME_STM32_ACTUAL_SIZE PLCRUNTIME_STM32_FLASH_PAGE_SIZE
+
+#ifndef PLCRUNTIME_EEPROM_SIZE
+#define PLCRUNTIME_EEPROM_SIZE PLCRUNTIME_STM32_FLASH_PAGE_SIZE
+#endif
+
+namespace EEPROMStorage {
+    
+    static const u8* const _flash_base = (const u8*)PLCRUNTIME_STM32_FLASH_ADDRESS;
+    
+    inline u32 getAvailableSpace() {
+        return PLCRUNTIME_STM32_ACTUAL_SIZE - PLCRUNTIME_EEPROM_START_ADDRESS;
+    }
+    
+    inline u32 getPageSize() { return PLCRUNTIME_STM32_FLASH_PAGE_SIZE; }
+    inline u32 getNumPages() { return PLCRUNTIME_STM32_NUM_SECTORS; }
+    inline u32 getFlashAddress() { return PLCRUNTIME_STM32_FLASH_ADDRESS; }
+    
+    inline bool _unlockFlash() {
+        HAL_FLASH_Unlock();
+        __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_EOP | FLASH_FLAG_OPERR | FLASH_FLAG_WRPERR | 
+                               FLASH_FLAG_PGAERR | FLASH_FLAG_PGPERR | FLASH_FLAG_PGSERR);
+        return true;
+    }
+    
+    inline void _lockFlash() {
+        HAL_FLASH_Lock();
+    }
+    
+    inline bool _eraseAllPages() {
+        FLASH_EraseInitTypeDef eraseInit;
+        uint32_t sectorError = 0;
+        
+        eraseInit.TypeErase = FLASH_TYPEERASE_SECTORS;
+        eraseInit.Banks = FLASH_BANK_1;
+        eraseInit.Sector = PLCRUNTIME_STM32_FLASH_SECTOR;
+        eraseInit.NbSectors = PLCRUNTIME_STM32_NUM_SECTORS;
+        eraseInit.VoltageRange = FLASH_VOLTAGE_RANGE_3; // 2.7V - 3.6V
+        
+        HAL_StatusTypeDef status = HAL_FLASHEx_Erase(&eraseInit, &sectorError);
+        if (status != HAL_OK) {
+            Serial.print(F("Erase error: "));
+            Serial.print(status);
+            Serial.print(F(" at sector "));
+            Serial.println(sectorError);
+            return false;
+        }
+        return true;
+    }
+    
+    inline bool _programWord(u32 address, u32 data) {
+        HAL_StatusTypeDef status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, address, data);
+        if (status != HAL_OK) {
+            Serial.print(F("Write error at 0x"));
+            Serial.print(address, HEX);
+            Serial.print(F(": "));
+            Serial.println(status);
+            return false;
+        }
+        return true;
+    }
+    
+    inline bool saveProgram(const u8* program, u32 prog_size, u8 checksum) {
+        u32 required_space = 4 + prog_size + 1;
+        if (required_space > getAvailableSpace()) {
+            Serial.print(F("Flash storage error: need "));
+            Serial.print(required_space);
+            Serial.print(F(" bytes, available: "));
+            Serial.println(getAvailableSpace());
+            return false;
+        }
+        
+        if (!_unlockFlash()) {
+            Serial.println(F("Flash unlock failed"));
+            return false;
+        }
+        
+        if (!_eraseAllPages()) {
+            _lockFlash();
+            Serial.println(F("Flash erase failed"));
+            return false;
+        }
+        
+        u32 addr = PLCRUNTIME_STM32_FLASH_ADDRESS + PLCRUNTIME_EEPROM_START_ADDRESS;
+        bool success = true;
+        
+        // Write size (4 bytes as one 32-bit word)
+        if (!_programWord(addr, prog_size)) success = false;
+        addr += 4;
+        
+        // Write bytecode - 4 bytes at a time as 32-bit words
+        for (u32 i = 0; i < prog_size && success; i += 4) {
+            u32 word = program[i];
+            if (i + 1 < prog_size) word |= ((u32)program[i + 1]) << 8;
+            if (i + 2 < prog_size) word |= ((u32)program[i + 2]) << 16;
+            if (i + 3 < prog_size) word |= ((u32)program[i + 3]) << 24;
+            if (!_programWord(addr, word)) success = false;
+            addr += 4;
+        }
+        
+        // Write CRC (as 32-bit word with padding)
+        if (success) {
+            if (!_programWord(addr, (u32)checksum)) success = false;
+        }
+        
+        _lockFlash();
+        
+        if (success) {
+            Serial.print(F("Program saved to flash: "));
+            Serial.print(prog_size);
+            Serial.print(F(" bytes in sector "));
+            Serial.println(PLCRUNTIME_STM32_FLASH_SECTOR);
+        }
+        
+        return success;
+    }
+    
+    inline bool loadProgram(u8* program, u32& prog_size, u8& stored_checksum) {
+        const u8* flash_ptr = _flash_base + PLCRUNTIME_EEPROM_START_ADDRESS;
+        
+        prog_size = *((const u32*)flash_ptr);
+        flash_ptr += 4;
+        
+        if (prog_size == 0 || prog_size == 0xFFFFFFFF || prog_size > PLCRUNTIME_MAX_PROGRAM_SIZE) {
+            prog_size = 0;
+            return false;
+        }
+        
+        if (4 + prog_size + 1 > getAvailableSpace()) {
+            prog_size = 0;
+            return false;
+        }
+        
+        for (u32 i = 0; i < prog_size; i++) {
+            program[i] = flash_ptr[i];
+        }
+        flash_ptr += prog_size;
+        
+        // Align to 4-byte boundary for CRC read
+        u32 offset = prog_size % 4;
+        if (offset != 0) flash_ptr += (4 - offset);
+        
+        stored_checksum = *flash_ptr;
+        
+        u8 calculated_checksum = 0;
+        crc8_simple(calculated_checksum, program, prog_size);
+        
+        if (calculated_checksum != stored_checksum) {
+            prog_size = 0;
+            return false;
+        }
+        
+        return true;
+    }
+    
+    inline bool hasValidProgram() {
+        const u8* flash_ptr = _flash_base + PLCRUNTIME_EEPROM_START_ADDRESS;
+        u32 prog_size = *((const u32*)flash_ptr);
+        
+        return (prog_size > 0 && prog_size != 0xFFFFFFFF && 
+                prog_size <= PLCRUNTIME_MAX_PROGRAM_SIZE &&
+                4 + prog_size + 1 <= getAvailableSpace());
+    }
+    
+    inline void printConfig() {
+        Serial.println(F("=== STM32F4 Flash Storage Config ==="));
+        // Print detected flash size (read from OTP at runtime)
+        uint16_t flashSizeKB = *(volatile uint16_t*)0x1FFF7A22;
+        Serial.print(F("Device flash size: "));
+        Serial.print(flashSizeKB);
+        Serial.println(F(" KB"));
+#ifdef FLASH_END
+        Serial.print(F("FLASH_END: 0x"));
+        Serial.println(FLASH_END, HEX);
+#endif
+        Serial.print(F("Storage address: 0x"));
+        Serial.println(PLCRUNTIME_STM32_FLASH_ADDRESS, HEX);
+        Serial.print(F("Sector: "));
+        Serial.println(PLCRUNTIME_STM32_FLASH_SECTOR);
+        Serial.print(F("Sector size: "));
+        Serial.print(PLCRUNTIME_STM32_FLASH_PAGE_SIZE / 1024);
+        Serial.println(F(" KB"));
+        Serial.print(F("Available for program: "));
+        Serial.print((getAvailableSpace() - 5) / 1024);
+        Serial.println(F(" KB"));
+        Serial.println(F("===================================="));
+    }
+}
+
+// ---- STM32F1 and other STM32 families (uniform page layout) ----
+#else // Not STM32F4
+
 #ifndef PLCRUNTIME_STM32_FLASH_PAGE_SIZE
   #if defined(STM32F1) || defined(STM32F1xx)
     #if defined(STM32F103xB) || defined(STM32F103x8)
@@ -427,57 +705,40 @@ public:
     #else
       #define PLCRUNTIME_STM32_FLASH_PAGE_SIZE 2048  // High density: 2KB pages
     #endif
-  #elif defined(STM32F4) || defined(STM32F4xx)
-    #define PLCRUNTIME_STM32_FLASH_PAGE_SIZE 16384   // F4 has sectors, smallest is 16KB
   #else
     #define PLCRUNTIME_STM32_FLASH_PAGE_SIZE 2048    // Default fallback
   #endif
 #endif
 
-// Total reserved EEPROM size - can span multiple pages
-// User can define this to reserve more space for larger programs
 #ifndef PLCRUNTIME_EEPROM_SIZE
-#define PLCRUNTIME_EEPROM_SIZE PLCRUNTIME_STM32_FLASH_PAGE_SIZE // Default: 1 page
+#define PLCRUNTIME_EEPROM_SIZE PLCRUNTIME_STM32_FLASH_PAGE_SIZE
 #endif
 
-// Calculate number of pages needed (rounded up)
 #define PLCRUNTIME_STM32_NUM_PAGES ((PLCRUNTIME_EEPROM_SIZE + PLCRUNTIME_STM32_FLASH_PAGE_SIZE - 1) / PLCRUNTIME_STM32_FLASH_PAGE_SIZE)
 
-// Auto-calculate flash start address (grows backwards from end of flash)
 #ifndef PLCRUNTIME_STM32_FLASH_ADDRESS
   #if defined(FLASH_BANK1_END)
     #define PLCRUNTIME_STM32_FLASH_ADDRESS (FLASH_BANK1_END - (PLCRUNTIME_STM32_NUM_PAGES * PLCRUNTIME_STM32_FLASH_PAGE_SIZE) + 1)
   #elif defined(FLASH_END)
     #define PLCRUNTIME_STM32_FLASH_ADDRESS (FLASH_END - (PLCRUNTIME_STM32_NUM_PAGES * PLCRUNTIME_STM32_FLASH_PAGE_SIZE) + 1)
   #else
-    // Fallback for 64KB flash (STM32F103C8 "Blue Pill") - reserve from end
     #define PLCRUNTIME_STM32_FLASH_ADDRESS (0x08010000 - (PLCRUNTIME_STM32_NUM_PAGES * PLCRUNTIME_STM32_FLASH_PAGE_SIZE))
   #endif
 #endif
 
-// Actual available space (may be larger than requested due to page alignment)
 #define PLCRUNTIME_STM32_ACTUAL_SIZE (PLCRUNTIME_STM32_NUM_PAGES * PLCRUNTIME_STM32_FLASH_PAGE_SIZE)
 
 namespace EEPROMStorage {
     
-    // Direct pointer to flash memory (memory-mapped, readable like RAM)
     static const u8* const _flash_base = (const u8*)PLCRUNTIME_STM32_FLASH_ADDRESS;
     
     inline u32 getAvailableSpace() {
         return PLCRUNTIME_STM32_ACTUAL_SIZE - PLCRUNTIME_EEPROM_START_ADDRESS;
     }
     
-    inline u32 getPageSize() {
-        return PLCRUNTIME_STM32_FLASH_PAGE_SIZE;
-    }
-    
-    inline u32 getNumPages() {
-        return PLCRUNTIME_STM32_NUM_PAGES;
-    }
-    
-    inline u32 getFlashAddress() {
-        return PLCRUNTIME_STM32_FLASH_ADDRESS;
-    }
+    inline u32 getPageSize() { return PLCRUNTIME_STM32_FLASH_PAGE_SIZE; }
+    inline u32 getNumPages() { return PLCRUNTIME_STM32_NUM_PAGES; }
+    inline u32 getFlashAddress() { return PLCRUNTIME_STM32_FLASH_ADDRESS; }
     
     inline bool _unlockFlash() {
         HAL_FLASH_Unlock();
@@ -492,27 +753,14 @@ namespace EEPROMStorage {
         FLASH_EraseInitTypeDef eraseInit;
         uint32_t pageError = 0;
         
-#if defined(STM32F1) || defined(STM32F1xx)
         eraseInit.TypeErase = FLASH_TYPEERASE_PAGES;
         eraseInit.PageAddress = PLCRUNTIME_STM32_FLASH_ADDRESS;
         eraseInit.NbPages = PLCRUNTIME_STM32_NUM_PAGES;
-#elif defined(STM32F4) || defined(STM32F4xx)
-        // F4 uses sectors - calculate starting sector
-        eraseInit.TypeErase = FLASH_TYPEERASE_SECTORS;
-        eraseInit.Sector = FLASH_SECTOR_TOTAL - PLCRUNTIME_STM32_NUM_PAGES;
-        eraseInit.NbSectors = PLCRUNTIME_STM32_NUM_PAGES;
-        eraseInit.VoltageRange = FLASH_VOLTAGE_RANGE_3;
-#else
-        eraseInit.TypeErase = FLASH_TYPEERASE_PAGES;
-        eraseInit.Page = (PLCRUNTIME_STM32_FLASH_ADDRESS - FLASH_BASE) / PLCRUNTIME_STM32_FLASH_PAGE_SIZE;
-        eraseInit.NbPages = PLCRUNTIME_STM32_NUM_PAGES;
-#endif
         
         return HAL_FLASHEx_Erase(&eraseInit, &pageError) == HAL_OK;
     }
     
     inline bool saveProgram(const u8* program, u32 prog_size, u8 checksum) {
-        // Check if program fits in flash (size + bytecode + crc)
         u32 required_space = 4 + prog_size + 1;
         if (required_space > getAvailableSpace()) {
             Serial.print(F("Flash storage error: need "));
@@ -530,7 +778,6 @@ namespace EEPROMStorage {
             return false;
         }
         
-        // Erase all reserved pages
         if (!_eraseAllPages()) {
             _lockFlash();
             Serial.println(F("Flash erase failed"));
@@ -549,7 +796,7 @@ namespace EEPROMStorage {
         if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, addr, size_hi) != HAL_OK) success = false;
         addr += 2;
         
-        // Write bytecode - two bytes at a time as 16-bit values (handles page boundaries automatically)
+        // Write bytecode - two bytes at a time as 16-bit values
         for (u32 i = 0; i < prog_size && success; i += 2) {
             uint16_t halfword = program[i];
             if (i + 1 < prog_size) {
@@ -584,38 +831,30 @@ namespace EEPROMStorage {
     }
     
     inline bool loadProgram(u8* program, u32& prog_size, u8& stored_checksum) {
-        // Read directly from memory-mapped flash (no RAM buffer needed!)
         const u8* flash_ptr = _flash_base + PLCRUNTIME_EEPROM_START_ADDRESS;
         
-        // Read size (4 bytes, little-endian - direct memory access)
         prog_size = *((const u32*)flash_ptr);
         flash_ptr += 4;
         
-        // Validate size
         if (prog_size == 0 || prog_size == 0xFFFFFFFF || prog_size > PLCRUNTIME_MAX_PROGRAM_SIZE) {
             prog_size = 0;
             return false;
         }
         
-        // Check if stored program fits
         if (4 + prog_size + 1 > getAvailableSpace()) {
             prog_size = 0;
             return false;
         }
         
-        // Copy bytecode from flash to RAM (direct read, crosses page boundaries seamlessly)
         for (u32 i = 0; i < prog_size; i++) {
             program[i] = flash_ptr[i];
         }
         flash_ptr += prog_size;
         
-        // Align to next 16-bit boundary for CRC read
         if (prog_size & 1) flash_ptr++;
         
-        // Read CRC
         stored_checksum = *flash_ptr;
         
-        // Verify CRC
         u8 calculated_checksum = 0;
         crc8_simple(calculated_checksum, program, prog_size);
         
@@ -629,8 +868,6 @@ namespace EEPROMStorage {
     
     inline bool hasValidProgram() {
         const u8* flash_ptr = _flash_base + PLCRUNTIME_EEPROM_START_ADDRESS;
-        
-        // Direct read from flash (memory-mapped)
         u32 prog_size = *((const u32*)flash_ptr);
         
         return (prog_size > 0 && prog_size != 0xFFFFFFFF && 
@@ -638,7 +875,6 @@ namespace EEPROMStorage {
                 4 + prog_size + 1 <= getAvailableSpace());
     }
     
-    // Debug helper to print storage configuration
     inline void printConfig() {
         Serial.println(F("=== STM32 Flash Storage Config ==="));
         Serial.print(F("Flash address: 0x"));
@@ -652,11 +888,13 @@ namespace EEPROMStorage {
         Serial.print(PLCRUNTIME_STM32_ACTUAL_SIZE);
         Serial.println(F(" bytes"));
         Serial.print(F("Available for program: "));
-        Serial.print(getAvailableSpace() - 5); // minus header overhead
+        Serial.print(getAvailableSpace() - 5);
         Serial.println(F(" bytes"));
         Serial.println(F("=================================="));
     }
 }
+
+#endif // STM32F4 vs other STM32
 
 // ============================================================================
 // ESP8266/ESP32 and AVR Implementation (uses EEPROM library)
