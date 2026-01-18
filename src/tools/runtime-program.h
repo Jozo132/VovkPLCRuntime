@@ -404,6 +404,149 @@ public:
     }
 };
 
+// ==================== EEPROM Program Storage Support ====================
+#ifdef PLCRUNTIME_EEPROM_STORAGE
+
+#include <EEPROM.h>
+
+// EEPROM storage format: [u32 size][u8[] bytecode][u8 crc]
+// Total storage overhead: 5 bytes (4 for size + 1 for crc)
+
+#ifndef PLCRUNTIME_EEPROM_START_ADDRESS
+#define PLCRUNTIME_EEPROM_START_ADDRESS 0 // Default start address in EEPROM
+#endif
+
+// Define EEPROM size for platforms that require EEPROM.begin(size)
+// STM32, ESP8266, ESP32 require this. AVR does not.
+#ifndef PLCRUNTIME_EEPROM_SIZE
+#define PLCRUNTIME_EEPROM_SIZE 2048 // Default EEPROM size (adjust based on your platform)
+#endif
+
+namespace EEPROMStorage {
+    
+    static bool _eeprom_initialized = false;
+    
+    inline void ensureInitialized() {
+        if (_eeprom_initialized) return;
+        _eeprom_initialized = true;
+#if defined(ESP8266) || defined(ESP32) || defined(STM32) || defined(ARDUINO_ARCH_STM32)
+        EEPROM.begin(PLCRUNTIME_EEPROM_SIZE);
+#endif
+    }
+    
+    inline u32 getAvailableSpace() {
+        ensureInitialized();
+#if defined(ESP8266) || defined(ESP32) || defined(STM32) || defined(ARDUINO_ARCH_STM32)
+        return PLCRUNTIME_EEPROM_SIZE - PLCRUNTIME_EEPROM_START_ADDRESS;
+#else
+        return EEPROM.length() - PLCRUNTIME_EEPROM_START_ADDRESS;
+#endif
+    }
+    
+    inline bool saveProgram(const u8* program, u32 prog_size, u8 checksum) {
+        ensureInitialized();
+        
+        // Check if program fits in EEPROM (size + bytecode + crc)
+        u32 required_space = 4 + prog_size + 1; // 4 bytes for size, prog_size bytes for bytecode, 1 byte for crc
+        if (required_space > getAvailableSpace()) {
+            Serial.print(F("EEPROM storage error: need "));
+            Serial.print(required_space);
+            Serial.print(F(" bytes, available: "));
+            Serial.println(getAvailableSpace());
+            return false;
+        }
+        
+        u32 addr = PLCRUNTIME_EEPROM_START_ADDRESS;
+        
+        // Write size (4 bytes, little-endian)
+        EEPROM.write(addr++, (u8)(prog_size & 0xFF));
+        EEPROM.write(addr++, (u8)((prog_size >> 8) & 0xFF));
+        EEPROM.write(addr++, (u8)((prog_size >> 16) & 0xFF));
+        EEPROM.write(addr++, (u8)((prog_size >> 24) & 0xFF));
+        
+        // Write bytecode
+        for (u32 i = 0; i < prog_size; i++) {
+            EEPROM.write(addr++, program[i]);
+        }
+        
+        // Write CRC
+        EEPROM.write(addr, checksum);
+        
+        // Commit changes to flash (required for STM32, ESP8266, ESP32)
+#if defined(ESP8266) || defined(ESP32) || defined(STM32) || defined(ARDUINO_ARCH_STM32)
+        bool success = EEPROM.commit();
+        if (!success) {
+            Serial.println(F("EEPROM commit failed"));
+            return false;
+        }
+#endif
+        
+        return true;
+    }
+    
+    inline bool loadProgram(u8* program, u32& prog_size, u8& stored_checksum) {
+        ensureInitialized();
+        
+        u32 addr = PLCRUNTIME_EEPROM_START_ADDRESS;
+        
+        // Read size (4 bytes, little-endian)
+        prog_size = (u32)EEPROM.read(addr++);
+        prog_size |= ((u32)EEPROM.read(addr++) << 8);
+        prog_size |= ((u32)EEPROM.read(addr++) << 16);
+        prog_size |= ((u32)EEPROM.read(addr++) << 24);
+        
+        // Validate size
+        if (prog_size == 0 || prog_size == 0xFFFFFFFF || prog_size > PLCRUNTIME_MAX_PROGRAM_SIZE) {
+            prog_size = 0;
+            return false;
+        }
+        
+        // Check if stored program fits in available EEPROM
+        if (4 + prog_size + 1 > getAvailableSpace()) {
+            prog_size = 0;
+            return false;
+        }
+        
+        // Read bytecode
+        for (u32 i = 0; i < prog_size; i++) {
+            program[i] = EEPROM.read(addr++);
+        }
+        
+        // Read CRC
+        stored_checksum = EEPROM.read(addr);
+        
+        // Verify CRC
+        u8 calculated_checksum = 0;
+        crc8_simple(calculated_checksum, program, prog_size);
+        
+        if (calculated_checksum != stored_checksum) {
+            prog_size = 0;
+            return false;
+        }
+        
+        return true;
+    }
+    
+    inline bool hasValidProgram() {
+        ensureInitialized();
+        
+        u32 addr = PLCRUNTIME_EEPROM_START_ADDRESS;
+        
+        // Read size (4 bytes, little-endian)
+        u32 prog_size = (u32)EEPROM.read(addr++);
+        prog_size |= ((u32)EEPROM.read(addr++) << 8);
+        prog_size |= ((u32)EEPROM.read(addr++) << 16);
+        prog_size |= ((u32)EEPROM.read(addr++) << 24);
+        
+        return (prog_size > 0 && prog_size != 0xFFFFFFFF && 
+                prog_size <= PLCRUNTIME_MAX_PROGRAM_SIZE &&
+                4 + prog_size + 1 <= getAvailableSpace());
+    }
+}
+
+#endif // PLCRUNTIME_EEPROM_STORAGE
+// =====================================================================
+
 class RuntimeProgram {
 private:
     u32 MAX_PROGRAM_SIZE = PLCRUNTIME_MAX_PROGRAM_SIZE; // Max program size in bytes
@@ -459,8 +602,45 @@ public:
             Serial.println(F("Failed to load program: CHECKSUM MISMATCH"));
             return status;
         }
-        return loadUnsafe(program, prog_size);
+        RuntimeError result = loadUnsafe(program, prog_size);
+#ifdef PLCRUNTIME_EEPROM_STORAGE
+        // Save valid program to EEPROM for persistence
+        if (result == STATUS_SUCCESS) {
+            if (!EEPROMStorage::saveProgram(program, prog_size, checksum)) {
+                Serial.println(F("Warning: Failed to save program to EEPROM"));
+            }
+        }
+#endif // PLCRUNTIME_EEPROM_STORAGE
+        return result;
     }
+
+#ifdef PLCRUNTIME_EEPROM_STORAGE
+    // Load program from EEPROM storage
+    // Returns STATUS_SUCCESS if a valid program was loaded, INVALID_CHECKSUM if CRC failed, UNDEFINED_STATE if no program stored
+    RuntimeError loadFromEEPROM() {
+        u8 stored_checksum = 0;
+        u32 eeprom_prog_size = 0;
+        
+        if (!EEPROMStorage::hasValidProgram()) {
+            status = UNDEFINED_STATE;
+            return status;
+        }
+        
+        if (!EEPROMStorage::loadProgram(this->program, eeprom_prog_size, stored_checksum)) {
+            status = INVALID_CHECKSUM;
+            Serial.println(F("Failed to load program from EEPROM: CHECKSUM MISMATCH"));
+            return status;
+        }
+        
+        this->prog_size = eeprom_prog_size;
+        this->program_line = 0;
+        status = STATUS_SUCCESS;
+        Serial.print(F("Loaded program from EEPROM: "));
+        Serial.print(eeprom_prog_size);
+        Serial.println(F(" bytes"));
+        return status;
+    }
+#endif // PLCRUNTIME_EEPROM_STORAGE
 
     // Get the size of used program memory
     u32 size() { return prog_size; }

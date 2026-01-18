@@ -166,6 +166,9 @@ public:
         stack.format();
         program.format();
         formatMemory();
+#ifdef PLCRUNTIME_EEPROM_STORAGE
+        program.loadFromEEPROM();
+#endif // PLCRUNTIME_EEPROM_STORAGE
     }
 
 
