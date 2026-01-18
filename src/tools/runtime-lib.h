@@ -83,6 +83,7 @@
 #include "stack/runtime-stack.h"
 #include "arithmetics/runtime-arithmetics.h"
 #include "runtime-program.h"
+#include "runtime-thread.h"
 
 #define SERIAL_TIMEOUT_RETURN if (serial_timeout) return;
 #define SERIAL_TIMEOUT_JOB(task) if (serial_timeout) { task; return; };
