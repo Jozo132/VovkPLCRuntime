@@ -1194,7 +1194,7 @@ public:
             // If [keyword , - , number] then change to [keyword , -number]
 
             bool skip = false;
-            if (p1_type == TOKEN_OPERATOR && p2_type == TOKEN_KEYWORD) {
+            if (p1_type == TOKEN_OPERATOR && p2_type == TOKEN_KEYWORD && p1_token == "-") {
                 if (token.type == TOKEN_INTEGER) {
                     p1_token.value_int = -token.value_int;
                     p1_token.type = TOKEN_INTEGER;
