@@ -695,6 +695,15 @@ public:
                 }
                 program.resetLine();
 
+#ifdef PLCRUNTIME_EEPROM_STORAGE
+                // Save program to flash storage
+                u8 prog_checksum = 0;
+                crc8_simple(prog_checksum, program.program, program.prog_size);
+                if (!EEPROMStorage::saveProgram(program.program, program.prog_size, prog_checksum)) {
+                    Serial.println(F("FLASH SAVE FAILED"));
+                }
+#endif // PLCRUNTIME_EEPROM_STORAGE
+
                 Serial.println(F("PROGRAM DOWNLOAD COMPLETE"));
             } else if (program_upload) {
                 // Read the checksum
