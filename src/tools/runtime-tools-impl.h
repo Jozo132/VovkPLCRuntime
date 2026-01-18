@@ -78,6 +78,77 @@ static uint32_t getFreeHeap() {
 }
 #endif
 
+// Get total SRAM size for the device
+int getTotalMemory() {
+#ifdef __WASM__
+    return heap_size;
+#elif defined(ARDUINO_ARCH_RP2040)
+    return getTotalHeap();
+#elif defined(RA4M1)
+    return getTotalHeap();
+#elif defined(STM32H743xx)
+    return 1048576; // 1MB SRAM
+#elif defined(STM32F411xE)
+    return 131072; // 128KB SRAM
+#elif defined(STM32F401xC)
+    return 65536; // 64KB SRAM
+#elif defined(STM32F401xE)
+    return 98304; // 96KB SRAM
+#elif defined(STM32G431xx) || defined(STM32G441xx)
+    return 32768; // 32KB SRAM
+#elif defined(STM32WB55xx)
+    return 262144; // 256KB SRAM (SRAM1 + SRAM2)
+#elif defined(STM32F103xB)
+    return 20480; // 20KB SRAM
+#elif defined(STM32F103x8)
+    return 20480; // 20KB SRAM
+#elif defined(NRF52840_XXAA) || defined(ARDUINO_ARCH_NRF52)
+    return 262144; // 256KB RAM
+#elif defined(ESP32)
+    // ESP32 variants have different amounts, this is approximate
+    #if defined(CONFIG_ESP32S3_DATA_CACHE_16KB)
+        return 524288; // 512KB (ESP32-S3)
+    #elif defined(CONFIG_IDF_TARGET_ESP32S2)
+        return 327680; // 320KB (ESP32-S2)
+    #elif defined(CONFIG_IDF_TARGET_ESP32C3)
+        return 409600; // 400KB (ESP32-C3)
+    #else
+        return 327680; // 320KB (ESP32 classic approximate)
+    #endif
+#elif defined(ESP8266)
+    return 81920; // ~80KB user RAM
+#elif defined(__AVR_ATmega328P__) || defined(__AVR_ATmega328__)
+    return 2048; // 2KB SRAM
+#elif defined(__AVR_ATmega2560__)
+    return 8192; // 8KB SRAM
+#elif defined(__AVR_ATmega32U4__)
+    return 2560; // 2.5KB SRAM
+#elif defined(CORE_TEENSY)
+    #if defined(__MK20DX256__)
+        return 65536; // 64KB (Teensy 3.1/3.2)
+    #elif defined(__MK64FX512__)
+        return 196608; // 192KB (Teensy 3.5)
+    #elif defined(__MK66FX1M0__)
+        return 262144; // 256KB (Teensy 3.6)
+    #elif defined(__IMXRT1062__)
+        return 1048576; // 1MB (Teensy 4.0/4.1)
+    #else
+        return 16384; // 16KB (Teensy 2.0/LC)
+    #endif
+#elif defined(__SIMULATOR__)
+    return 1000000; // Simulated memory
+#else
+    // Generic ARM or unknown - try to estimate from heap/stack pointers
+    #ifdef __arm__
+        extern char __HeapLimit;
+        extern char __StackLimit;
+        return (int)(&__StackLimit - &__HeapLimit);
+    #else
+        return 0; // Unknown
+    #endif
+#endif
+}
+
 int freeMemory() {
 #ifdef __WASM__
     return heap_size - heap_used;

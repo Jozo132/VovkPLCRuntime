@@ -233,6 +233,10 @@ WASM_EXPORT u32 getMaxJitterUs() {
     return runtime.getMaxJitterUs();
 }
 
+WASM_EXPORT u32 getTotalRam() {
+    return runtime.getTotalRam();
+}
+
 WASM_EXPORT void resetDeviceHealth() {
     runtime.resetDeviceHealth();
 }

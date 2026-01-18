@@ -185,6 +185,7 @@ extern "C" char* sbrk(int incr);
 extern char* __brkval;
 #endif  // __arm__
 
+int getTotalMemory();
 int freeMemory();
 void processExit();
 

@@ -99,6 +99,7 @@ const SUPPORT = checkSupport()
  *     ram_free: number,
  *     min_ram_free: number,
  *     max_ram_free: number,
+ *     total_ram_size: number,
  *     last_period_us: number,
  *     min_period_us: number,
  *     max_period_us: number,
@@ -625,7 +626,7 @@ class VovkPLC_class {
         if (!this.wasm_exports.getDeviceHealthPtr) throw new Error("'getDeviceHealthPtr' function not found")
         
         const ptr = this.wasm_exports.getDeviceHealthPtr()
-        const view = new Uint32Array(this.wasm_memory.buffer, ptr, 12)
+        const view = new Uint32Array(this.wasm_memory.buffer, ptr, 13)
         
         return {
             last_cycle_time_us: view[0],
@@ -634,12 +635,13 @@ class VovkPLC_class {
             ram_free: view[3],
             min_ram_free: view[4],
             max_ram_free: view[5],
-            last_period_us: view[6],
-            min_period_us: view[7],
-            max_period_us: view[8],
-            last_jitter_us: view[9],
-            min_jitter_us: view[10],
-            max_jitter_us: view[11],
+            total_ram_size: view[6],
+            last_period_us: view[7],
+            min_period_us: view[8],
+            max_period_us: view[9],
+            last_jitter_us: view[10],
+            min_jitter_us: view[11],
+            max_jitter_us: view[12],
         }
     }
 
@@ -650,6 +652,17 @@ class VovkPLC_class {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         if (!this.wasm_exports.resetDeviceHealth) throw new Error("'resetDeviceHealth' function not found")
         this.wasm_exports.resetDeviceHealth()
+    }
+
+    /**
+     * Gets the total RAM (SRAM) size available on the device in bytes.
+     * 
+     * @returns {number} - Total RAM size in bytes.
+     */
+    getTotalRam = () => {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        if (!this.wasm_exports.getTotalRam) throw new Error("'getTotalRam' function not found")
+        return this.wasm_exports.getTotalRam()
     }
 
     /**

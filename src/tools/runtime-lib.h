@@ -94,6 +94,7 @@ struct DeviceHealth {
     u32 last_ram_free;
     u32 min_ram_free;
     u32 max_ram_free;
+    u32 total_ram_size;
     u32 last_period_us;
     u32 min_period_us;
     u32 max_period_us;
@@ -231,12 +232,18 @@ public:
         health.last_ram_free = last_ram_free;
         health.min_ram_free = min_ram_free;
         health.max_ram_free = max_ram_free;
+        health.total_ram_size = getTotalRam();
         health.last_period_us = last_period_us;
         health.min_period_us = min_period_us;
         health.max_period_us = max_period_us;
         health.last_jitter_us = last_jitter_us;
         health.min_jitter_us = min_jitter_us;
         health.max_jitter_us = max_jitter_us;
+    }
+    // Get total SRAM size of the device
+    u32 getTotalRam() const {
+        int total = getTotalMemory();
+        return total < 0 ? 0u : (u32)total;
     }
     // Legacy individual getters for backward compatibility
     u32 getLastCycleTimeUs() const { return last_cycle_time_us; }
@@ -614,6 +621,7 @@ public:
                 printHexU32(health.last_ram_free);
                 printHexU32(health.min_ram_free);
                 printHexU32(health.max_ram_free);
+                printHexU32(health.total_ram_size);
                 printHexU32(health.last_period_us);
                 printHexU32(health.min_period_us);
                 printHexU32(health.max_period_us);
