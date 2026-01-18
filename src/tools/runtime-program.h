@@ -452,6 +452,10 @@ namespace EEPROMStorage {
         bool unlocked = false;
         
         bool unlock() {
+            // Clear all error flags first (critical for F4!)
+            __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_EOP | FLASH_FLAG_OPERR | FLASH_FLAG_WRPERR | 
+                                   FLASH_FLAG_PGAERR | FLASH_FLAG_PGPERR | FLASH_FLAG_PGSERR);
+            
             HAL_StatusTypeDef status = HAL_FLASH_Unlock();
             int retries = 3;
             while (status != HAL_OK && retries > 0) {
@@ -460,6 +464,10 @@ namespace EEPROMStorage {
                 status = HAL_FLASH_Unlock();
             }
             unlocked = (status == HAL_OK);
+            if (!unlocked) {
+                Serial.print(F("Flash unlock failed, status: "));
+                Serial.println(status);
+            }
             return unlocked;
         }
         
@@ -477,18 +485,32 @@ namespace EEPROMStorage {
         
         bool erase() {
             if (!unlocked) unlock();
+            
+            // Clear error flags again before erase
+            __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_EOP | FLASH_FLAG_OPERR | FLASH_FLAG_WRPERR | 
+                                   FLASH_FLAG_PGAERR | FLASH_FLAG_PGPERR | FLASH_FLAG_PGSERR);
+            
             FLASH_EraseInitTypeDef EraseInitStruct;
             EraseInitStruct.TypeErase = FLASH_TYPEERASE_SECTORS;
+            EraseInitStruct.VoltageRange = FLASH_VOLTAGE_RANGE_3;
             EraseInitStruct.Sector = PLCRUNTIME_STM32_FLASH_SECTOR;
             EraseInitStruct.NbSectors = PLCRUNTIME_STM32_FLASH_SECTOR_COUNT;
-            EraseInitStruct.VoltageRange = FLASH_VOLTAGE_RANGE_3;
+            
             uint32_t sectorError = 0;
             HAL_StatusTypeDef status = HAL_FLASHEx_Erase(&EraseInitStruct, &sectorError);
             int retries = 3;
             while (status != HAL_OK && retries > 0) {
                 retries--;
-                delay(1);
+                delay(10);
+                __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_EOP | FLASH_FLAG_OPERR | FLASH_FLAG_WRPERR | 
+                                       FLASH_FLAG_PGAERR | FLASH_FLAG_PGPERR | FLASH_FLAG_PGSERR);
                 status = HAL_FLASHEx_Erase(&EraseInitStruct, &sectorError);
+            }
+            if (status != HAL_OK) {
+                Serial.print(F("Flash erase failed, status: "));
+                Serial.print(status);
+                Serial.print(F(", sector error: "));
+                Serial.println(sectorError);
             }
             return status == HAL_OK;
         }
@@ -501,14 +523,22 @@ namespace EEPROMStorage {
             if (data_idx == 4) {
                 int retries = 3;
                 HAL_StatusTypeDef status;
+                uint32_t addr = PLCRUNTIME_STM32_FLASH_ADDRESS + write_index;
                 do {
-                    status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, 
-                        PLCRUNTIME_STM32_FLASH_ADDRESS + write_index, data);
+                    status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, addr, data);
                     if (status == HAL_OK) break;
                     retries--;
+                    __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_EOP | FLASH_FLAG_OPERR | FLASH_FLAG_WRPERR | 
+                                           FLASH_FLAG_PGAERR | FLASH_FLAG_PGPERR | FLASH_FLAG_PGSERR);
                     delay(1);
                 } while (retries > 0);
-                if (status != HAL_OK) return false;
+                if (status != HAL_OK) {
+                    Serial.print(F("Flash write failed at 0x"));
+                    Serial.print(addr, HEX);
+                    Serial.print(F(", status: "));
+                    Serial.println(status);
+                    return false;
+                }
                 write_index += 4;
                 data_idx = 0;
             }
@@ -524,9 +554,9 @@ namespace EEPROMStorage {
                 }
                 int retries = 3;
                 HAL_StatusTypeDef status;
+                uint32_t addr = PLCRUNTIME_STM32_FLASH_ADDRESS + write_index;
                 do {
-                    status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, 
-                        PLCRUNTIME_STM32_FLASH_ADDRESS + write_index, data);
+                    status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, addr, data);
                     if (status == HAL_OK) break;
                     retries--;
                     delay(1);
