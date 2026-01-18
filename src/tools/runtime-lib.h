@@ -486,6 +486,11 @@ public:
         return writeArea_u8(memory, offset, value, size);
     }
 
+    #ifdef RUNTIME_THREAD_IMPL
+    void threadSetup(u32 period_us, thread_handle_t& handle) {
+        thread_setup(period_us, handle);
+    }
+    #endif // RUNTIME_THREAD_IMPL
 
 
     void printInfo() {
