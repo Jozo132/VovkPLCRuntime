@@ -1866,7 +1866,8 @@ public:
         int address_end = 0;
 
         // First pass: parse symbol definitions ($$)
-        if (!finalPass) {
+        // Also parse in lint mode to show symbol errors in the linter
+        if (!finalPass || lintMode) {
             symbol_count = 0; // Reset symbol table
             for (int i = 0; i < token_count; i++) {
                 Token& token = tokens[i];
@@ -1887,7 +1888,7 @@ public:
             }
 
             // Check for overlaps after all symbols are parsed
-            if (emit_warnings) {
+            if (emit_warnings || lintMode) {
                 for (int i = 0; i < symbol_count; i++) {
                     checkSymbolOverlap(i);
                 }
