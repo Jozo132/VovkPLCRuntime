@@ -1164,6 +1164,11 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
         case TP_CONST: return PLCMethods::handle_TP_CONST(this->stack, this->memory, program, prog_size, index);
         case TP_MEM: return PLCMethods::handle_TP_MEM(this->stack, this->memory, program, prog_size, index);
 
+        case CTU_CONST: return PLCMethods::handle_CTU_CONST(this->stack, this->memory, program, prog_size, index);
+        case CTU_MEM: return PLCMethods::handle_CTU_MEM(this->stack, this->memory, program, prog_size, index);
+        case CTD_CONST: return PLCMethods::handle_CTD_CONST(this->stack, this->memory, program, prog_size, index);
+        case CTD_MEM: return PLCMethods::handle_CTD_MEM(this->stack, this->memory, program, prog_size, index);
+
         case GET_X8_B0: return PLCMethods::handle_GET_X8_B0(this->stack);
         case GET_X8_B1: return PLCMethods::handle_GET_X8_B1(this->stack);
         case GET_X8_B2: return PLCMethods::handle_GET_X8_B2(this->stack);

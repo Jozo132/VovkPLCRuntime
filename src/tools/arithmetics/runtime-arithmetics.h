@@ -40,6 +40,7 @@
 #include "methods-comparison.h"
 #include "methods-flow.h"
 #include "methods-timer.h"
+#include "methods-counter.h"
 
 namespace PLCMethods {
 

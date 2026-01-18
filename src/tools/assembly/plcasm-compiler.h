@@ -2066,6 +2066,63 @@ public:
                     }
                 }
 
+                // Handle counters (CTU, CTD)
+                {
+                    bool is_ctu = token == "ctu";
+                    bool is_ctd = token == "ctd";
+
+                    if (is_ctu || is_ctd) {
+                        // Counter instruction found - consume it and process parameters
+                        if (!hasNext) {
+                            return buildError(token, "Counter instruction requires 2 arguments: counter_address and preset_value");
+                        }
+                        if (!hasThird) {
+                            return buildError(token_p1, "Counter instruction requires a second argument: preset_value (use #value for constant or address for memory)");
+                        }
+
+                        int counter_addr = 0;
+                        if (addressFromToken(token_p1, counter_addr)) {
+                            // First parameter is not a valid address
+                            return buildError(token_p1, "expected counter address (like S0, M0, etc)");
+                        }
+
+                        // First parameter is valid, now check second parameter
+                        bool is_const_param = token_p2.length > 1 && token_p2.string[0] == '#';
+
+                        if (is_const_param) {
+                            // Constant preset value: #123
+                            StringView valStr;
+                            valStr.data = token_p2.string.data + 1;
+                            valStr.length = token_p2.string.length - 1;
+                            int pv_val_int = 0;
+                            if (!isInteger(valStr, pv_val_int)) {
+                                return buildError(token_p2, "expected integer value after #");
+                            }
+                            u32 pv_val = (u32) pv_val_int;
+
+                            // Constant counter: [opcode][counter_addr][pv_value]
+                            PLCRuntimeInstructionSet op = (PLCRuntimeInstructionSet) (is_ctu ? CTU_CONST : CTD_CONST);
+                            i += 2;
+                            line.size = InstructionCompiler::push_counter_const(bytecode, op, (MY_PTR_t) counter_addr, (u32) pv_val);
+                            _ir_set_timer_const(1, counter_addr, 1 + sizeof(MY_PTR_t), pv_val);
+                            _line_push;
+                        } else {
+                            // Memory-based preset value
+                            int pv_addr = 0;
+                            if (addressFromToken(token_p2, pv_addr)) {
+                                // Second parameter is not a valid address or constant
+                                return buildError(token_p2, "expected preset value (use #123 for constant) or memory address (like M0)");
+                            }
+                            // Memory counter: [opcode][counter_addr][pv_addr]
+                            PLCRuntimeInstructionSet op = (PLCRuntimeInstructionSet) (is_ctu ? CTU_MEM : CTD_MEM);
+                            i += 2;
+                            line.size = InstructionCompiler::push_counter_mem(bytecode, op, (MY_PTR_t) counter_addr, (MY_PTR_t) pv_addr);
+                            _ir_set_timer_mem(1, counter_addr, 1 + sizeof(MY_PTR_t), pv_addr);
+                            _line_push;
+                        }
+                    }
+                }
+
                 { // Handle flow
                     if (hasNext && (token == "jmp" || token == "jump")) { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } i++; line.size = InstructionCompiler::push_jmp(bytecode, label_address); _ir_set_jump(1, label_address); _line_push; }
                     if (hasNext && (token == "jmp_if" || token == "jump_if")) { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } i++; line.size = InstructionCompiler::push_jmp_if(bytecode, label_address); _ir_set_jump(1, label_address); _line_push; }

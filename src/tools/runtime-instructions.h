@@ -173,6 +173,12 @@ enum PLCRuntimeInstructionSet {
     TP_CONST,           // Timer Pulse (IN, PT: Constant u32) -> Q
     TP_MEM,             // Timer Pulse (IN, PT: Memory u32) -> Q
 
+    // Counter operations (IEC 61131-3)
+    CTU_CONST,          // Counter Up (CU, R, PV: Constant u32) -> Q (CV >= PV)
+    CTU_MEM,            // Counter Up (CU, R, PV: Memory u32) -> Q (CV >= PV)
+    CTD_CONST,          // Counter Down (CD, LD, PV: Constant u32) -> Q (CV <= 0)
+    CTD_MEM,            // Counter Down (CD, LD, PV: Memory u32) -> Q (CV <= 0)
+
     // Bit operations (PLC specific for simpler bytecode generation)
     GET_X8_B0 = 0x40,   // Get the first bit of the 1 byte size value (x)
     GET_X8_B1,          // Get the second bit of the 1 byte size value (x)

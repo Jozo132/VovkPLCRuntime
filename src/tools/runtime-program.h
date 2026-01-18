@@ -402,6 +402,33 @@ public:
         for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[offset++] = (pt_addr >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
         return offset;
     }
+
+    // Push counter instruction with pointer (counter address) and constant u32 (preset value)
+    // Format: [opcode][counter_addr (MY_PTR_t)][pv_value (u32)]
+    static u8 push_counter_const(u8* location, PLCRuntimeInstructionSet instruction, MY_PTR_t counter_addr, u32 pv_value) {
+        location[0] = instruction;
+        u8 offset = 1;
+        // Counter address (uses MY_PTR_t for portability)
+        for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[offset++] = (counter_addr >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
+        // Preset value (u32 big endian)
+        location[offset++] = (pv_value >> 24) & 0xFF;
+        location[offset++] = (pv_value >> 16) & 0xFF;
+        location[offset++] = (pv_value >> 8) & 0xFF;
+        location[offset++] = pv_value & 0xFF;
+        return offset;
+    }
+
+    // Push counter instruction with two pointers (counter address and preset value address)
+    // Format: [opcode][counter_addr (MY_PTR_t)][pv_addr (MY_PTR_t)]
+    static u8 push_counter_mem(u8* location, PLCRuntimeInstructionSet instruction, MY_PTR_t counter_addr, MY_PTR_t pv_addr) {
+        location[0] = instruction;
+        u8 offset = 1;
+        // Counter address
+        for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[offset++] = (counter_addr >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
+        // Preset value address
+        for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[offset++] = (pv_addr >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
+        return offset;
+    }
 };
 
 // ==================== EEPROM/Flash Program Storage Support ====================

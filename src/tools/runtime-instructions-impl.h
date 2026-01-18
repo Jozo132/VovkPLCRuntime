@@ -251,6 +251,10 @@ bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
         case TOF_MEM:
         case TP_CONST:
         case TP_MEM:
+        case CTU_CONST:
+        case CTU_MEM:
+        case CTD_CONST:
+        case CTD_MEM:
         case EXIT: return true;
         default: break;
     }
@@ -458,6 +462,10 @@ const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
         case TOF_MEM: return F("TOF_MEM");
         case TP_CONST: return F("TP_CONST");
         case TP_MEM: return F("TP_MEM");
+        case CTU_CONST: return F("CTU_CONST");
+        case CTU_MEM: return F("CTU_MEM");
+        case CTD_CONST: return F("CTD_CONST");
+        case CTD_MEM: return F("CTD_MEM");
         case EXIT: return F("EXIT");
         default: break;
     }
@@ -677,11 +685,15 @@ u8 OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
 
         case TON_CONST:
         case TOF_CONST:
-        case TP_CONST: return 1 + MY_PTR_SIZE_BYTES + 4; // Opcode + TimerStructPtr + PT(u32)
+        case TP_CONST:
+        case CTU_CONST:
+        case CTD_CONST: return 1 + MY_PTR_SIZE_BYTES + 4; // Opcode + CounterStructPtr + PV(u32)
         
         case TON_MEM:
         case TOF_MEM:
-        case TP_MEM: return 1 + MY_PTR_SIZE_BYTES + MY_PTR_SIZE_BYTES; // Opcode + TimerStructPtr + PT_Ptr
+        case TP_MEM:
+        case CTU_MEM:
+        case CTD_MEM: return 1 + MY_PTR_SIZE_BYTES + MY_PTR_SIZE_BYTES; // Opcode + CounterStructPtr + PV_Ptr
 
         case RET:
         case RET_IF:
