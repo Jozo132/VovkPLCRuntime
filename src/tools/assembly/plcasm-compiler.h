@@ -171,7 +171,7 @@ void fill(char c, int count) {
 struct StringView {
     char* data;
     int length;
-    int print() {
+    int print() const {
         for (int i = 0; i < length; i++) printf("%c", data[i]);
         return length;
     }
@@ -604,7 +604,7 @@ struct IR_Entry {
     u8  opcode;             // The instruction opcode
     u8  flags;              // IR_FLAG_* combination
     u8  operand_count;      // Number of operands (0-3)
-    
+
     // Operand info (32 bytes - up to 3 operands)
     // Each operand: type (1) + value (8) + bytecode_pos (1) = 10 bytes, padded to 10
     struct {
@@ -624,7 +624,7 @@ struct IR_Entry {
             double val_f64;
         };
     } operands[3];          // Max 3 operands per instruction
-    
+
     // Reserved (4 bytes)
     u8 _reserved[4];
 };
@@ -641,14 +641,38 @@ const char lex_dividers [] = { '(', ')', '=', '+', '-', '*', '/', '%', '&', '|',
 const char* data_type_keywords [] = { "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "string", "bit", "byte", "ptr", "pointer", "*" };
 const int data_type_keywords_count = sizeof(data_type_keywords) / sizeof(data_type_keywords[0]);
 
+struct Symbol {
+    StringView name;
+    StringView type;
+    u32 address;        // Memory address or byte offset
+    u8 bit;             // Bit position (0-7) or 255 if not a bit type
+    bool is_bit;        // True if this is a bit address (X0.1, Y0.1, etc.)
+    int line;           // Line number where symbol is defined
+    int column;         // Column number where symbol is defined
+    u8 type_size;       // Size in bytes (1 for u8/i8, 2 for u16/i16, 4 for u32/i32/f32, etc.)
+
+    void print() const {
+        printf("Symbol: '");
+        name.print();
+        printf("' type=");
+        type.print();
+        if (is_bit) {
+            printf(" addr=%u.%u", address, bit);
+        } else {
+            printf(" addr=%u (size=%u)", address, type_size);
+        }
+        printf(" [line %d:%d]", line, column);
+    }
+};
+
 
 class PLCASMCompiler {
 public:
     int built_bytecode_length = 0;
     u8 built_bytecode_checksum = 0;
 
-    char assembly_string[MAX_ASSEMBLY_STRING_SIZE] = {0};
-    
+    char assembly_string[MAX_ASSEMBLY_STRING_SIZE] = { 0 };
+
     Token tokens[MAX_NUM_OF_TOKENS];
     int token_count = 0;
     int token_count_temp = 0;
@@ -661,6 +685,9 @@ public:
 
     struct LUT_const LUT_consts[MAX_NUM_OF_TOKENS];
     int LUT_const_count = 0;
+
+    struct Symbol symbols[MAX_NUM_OF_TOKENS];
+    int symbol_count = 0;
 
     u8 built_bytecode[PLCRUNTIME_MAX_PROGRAM_SIZE];
 
@@ -675,7 +702,7 @@ public:
     IR_Entry ir_entries[MAX_IR_ENTRIES];
     int ir_entry_count = 0;
 
-    #define MAX_DOWNLOADED_PROGRAM_SIZE 64535
+#define MAX_DOWNLOADED_PROGRAM_SIZE 64535
     u8 downloaded_program[MAX_DOWNLOADED_PROGRAM_SIZE];
     int downloaded_program_size = 0;
 
@@ -684,22 +711,23 @@ public:
         memset(tokens, 0, sizeof(tokens));
         memset(LUT_labels, 0, sizeof(LUT_labels));
         memset(LUT_consts, 0, sizeof(LUT_consts));
+        memset(symbols, 0, sizeof(symbols));
         memset(built_bytecode, 0, sizeof(built_bytecode));
         memset(programLines, 0, sizeof(programLines));
         memset(downloaded_program, 0, sizeof(downloaded_program));
         memset(ir_entries, 0, sizeof(ir_entries));
         // Default assembly string
-        char default_asm[] = "DEFAULT_ASM_STRING_MARKER";
-/*
-        char default_asm[] = R"(
-// This is a comment
-    f32.const 0.1
-    f32.const 0.2
-    f32.add
-    f32.const -1
-    f32.mul
-)";
-*/
+        char default_asm [] = "DEFAULT_ASM_STRING_MARKER";
+        /*
+                char default_asm[] = R"(
+        // This is a comment
+            f32.const 0.1
+            f32.const 0.2
+            f32.add
+            f32.const -1
+            f32.mul
+        )";
+        */
         set_assembly_string(default_asm);
     }
 
@@ -714,6 +742,367 @@ public:
             return;
         }
         string_copy(assembly_string, new_assembly_string);
+    }
+
+    // Symbol validation and parsing functions
+    bool isValidSymbolName(const StringView& name) {
+        if (name.length == 0) return false;
+        // First character must be letter or underscore
+        char first = name[0];
+        if (!((first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z') || first == '_')) {
+            return false;
+        }
+        // Rest can be alphanumeric or underscore
+        for (int i = 1; i < name.length; i++) {
+            char c = name[i];
+            if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                (c >= '0' && c <= '9') || c == '_')) {
+                return false;
+            }
+        }
+        // Check against illegal keywords
+        for (int i = 0; i < illegal_keywords_count; i++) {
+            if (str_cmp(name, illegal_keywords[i])) return false;
+        }
+        return true;
+    }
+
+    u8 getTypeSize(const StringView& type) {
+        if (str_cmp(type, "i8") || str_cmp(type, "u8") || str_cmp(type, "byte")) return 1;
+        if (str_cmp(type, "i16") || str_cmp(type, "u16")) return 2;
+        if (str_cmp(type, "i32") || str_cmp(type, "u32") || str_cmp(type, "f32")) return 4;
+        if (str_cmp(type, "i64") || str_cmp(type, "u64") || str_cmp(type, "f64")) return 8;
+        if (str_cmp(type, "bit") || str_cmp(type, "bool")) return 0; // bit type has no size
+        if (str_cmp(type, "ptr") || str_cmp(type, "pointer") || str_cmp(type, "*")) return 4;
+        return 0; // unknown type
+    }
+
+    bool parseSymbolAddress(const StringView& addr_str, u32& address, u8& bit, bool& is_bit, Token& error_token) {
+        // Parse addresses like: 130, M4, X0.1, Y0.1, etc.
+        is_bit = false;
+        bit = 255;
+
+        // Check for bit notation (e.g., X0.1, Y0.1, M4.5)
+        int dot_pos = -1;
+        for (int i = 0; i < addr_str.length; i++) {
+            if (addr_str[i] == '.') {
+                dot_pos = i;
+                break;
+            }
+        }
+
+        char prefix = addr_str[0];
+        u32 base_offset = 0;
+        int num_start = 0;
+
+        // Determine memory area and offset
+        if (prefix == 'C' || prefix == 'c') {
+            base_offset = plcasm_control_offset;
+            num_start = 1;
+        } else if (prefix == 'X' || prefix == 'x') {
+            base_offset = plcasm_input_offset;
+            num_start = 1;
+        } else if (prefix == 'Y' || prefix == 'y') {
+            base_offset = plcasm_output_offset;
+            num_start = 1;
+        } else if (prefix == 'S' || prefix == 's') {
+            base_offset = plcasm_system_offset;
+            num_start = 1;
+        } else if (prefix == 'M' || prefix == 'm') {
+            base_offset = plcasm_marker_offset;
+            num_start = 1;
+        } else if (prefix >= '0' && prefix <= '9') {
+            // Direct numeric address
+            num_start = 0;
+            base_offset = 0;
+        } else {
+            Serial.print(F("Error: invalid address prefix '"));
+            Serial.print(prefix);
+            Serial.print(F("' in symbol at "));
+            Serial.print(error_token.line);
+            Serial.print(F(":"));
+            Serial.println(error_token.column);
+            return true;
+        }
+
+        // Parse the numeric part
+        int byte_addr = 0;
+        int end_pos = dot_pos >= 0 ? dot_pos : addr_str.length;
+
+        for (int i = num_start; i < end_pos; i++) {
+            char c = addr_str[i];
+            if (c < '0' || c > '9') {
+                Serial.print(F("Error: invalid digit in address at "));
+                Serial.print(error_token.line);
+                Serial.print(F(":"));
+                Serial.println(error_token.column);
+                return true;
+            }
+            byte_addr = byte_addr * 10 + (c - '0');
+        }
+
+        address = base_offset + byte_addr;
+
+        // Parse bit position if present
+        if (dot_pos >= 0) {
+            is_bit = true;
+            if (dot_pos + 1 >= addr_str.length) {
+                Serial.print(F("Error: missing bit position after '.' at "));
+                Serial.print(error_token.line);
+                Serial.print(F(":"));
+                Serial.println(error_token.column);
+                return true;
+            }
+            char bit_char = addr_str[dot_pos + 1];
+            if (bit_char < '0' || bit_char > '7') {
+                Serial.print(F("Error: bit position must be 0-7 at "));
+                Serial.print(error_token.line);
+                Serial.print(F(":"));
+                Serial.println(error_token.column);
+                return true;
+            }
+            bit = bit_char - '0';
+        }
+
+        return false;
+    }
+
+    bool checkSymbolOverlap(int current_idx) {
+        Symbol& sym = symbols[current_idx];
+        bool found_overlap = false;
+
+        for (int i = 0; i < current_idx; i++) {
+            Symbol& other = symbols[i];
+
+            // Skip if either is a bit type (bits can share the same byte)
+            if (sym.is_bit && other.is_bit) {
+                // Check if same byte and same bit
+                if (sym.address == other.address && sym.bit == other.bit) {
+                    if (emit_warnings) {
+                        Serial.print(F("Warning: symbol '"));
+                        sym.name.print();
+                        Serial.print(F("' overlaps with '"));
+                        other.name.print();
+                        Serial.print(F("' at address "));
+                        Serial.print(sym.address);
+                        Serial.print(F("."));
+                        Serial.print(sym.bit);
+                        Serial.print(F(" [line "));
+                        Serial.print(sym.line);
+                        Serial.print(F(":"));
+                        Serial.print(sym.column);
+                        Serial.println(F("]"));
+                    }
+                    found_overlap = true;
+                }
+                continue;
+            }
+
+            // Check byte-level overlap
+            u32 sym_start = sym.address;
+            u32 sym_end = sym.address + (sym.type_size > 0 ? sym.type_size - 1 : 0);
+            u32 other_start = other.address;
+            u32 other_end = other.address + (other.type_size > 0 ? other.type_size - 1 : 0);
+
+            bool overlaps = !(sym_end < other_start || sym_start > other_end);
+
+            if (overlaps) {
+                if (emit_warnings) {
+                    Serial.print(F("Warning: symbol '"));
+                    sym.name.print();
+                    Serial.print(F("' (addr "));
+                    Serial.print(sym_start);
+                    if (sym.type_size > 1) {
+                        Serial.print(F("-"));
+                        Serial.print(sym_end);
+                    }
+                    Serial.print(F(") overlaps with '"));
+                    other.name.print();
+                    Serial.print(F("' (addr "));
+                    Serial.print(other_start);
+                    if (other.type_size > 1) {
+                        Serial.print(F("-"));
+                        Serial.print(other_end);
+                    }
+                    Serial.print(F(") [line "));
+                    Serial.print(sym.line);
+                    Serial.print(F(":"));
+                    Serial.print(sym.column);
+                    Serial.println(F("]"));
+                }
+                found_overlap = true;
+            }
+        }
+
+        return found_overlap;
+    }
+
+    bool parseSymbolDefinition(int token_idx) {
+        // Symbol format: $$ name | type | address [| comment]
+        if (token_idx + 6 >= token_count) {
+            Serial.print(F("Error: incomplete symbol definition at line "));
+            Serial.print(tokens[token_idx].line);
+            Serial.print(F(":"));
+            Serial.println(tokens[token_idx].column);
+            return true;
+        }
+
+        Token& dollar1 = tokens[token_idx];
+        Token& dollar2 = tokens[token_idx + 1];
+        Token& name = tokens[token_idx + 2];
+        Token& pipe1 = tokens[token_idx + 3];
+        Token& type = tokens[token_idx + 4];
+        Token& pipe2 = tokens[token_idx + 5];
+        Token& address = tokens[token_idx + 6];
+
+        // Validate syntax
+        if (!str_cmp(dollar1.string, "$") || !str_cmp(dollar2.string, "$")) {
+            Serial.print(F("Error: symbol definition must start with '$$' at line "));
+            Serial.print(dollar1.line);
+            Serial.print(F(":"));
+            Serial.println(dollar1.column);
+            return true;
+        }
+
+        if (!str_cmp(pipe1.string, "|") || !str_cmp(pipe2.string, "|")) {
+            Serial.print(F("Error: symbol parts must be separated by '|' at line "));
+            Serial.print(name.line);
+            Serial.print(F(":"));
+            Serial.println(name.column);
+            return true;
+        }
+
+        // Validate symbol name
+        if (!isValidSymbolName(name.string)) {
+            Serial.print(F("Error: invalid symbol name '"));
+            name.string.print();
+            Serial.print(F("' at line "));
+            Serial.print(name.line);
+            Serial.print(F(":"));
+            Serial.println(name.column);
+            return true;
+        }
+
+        // Check for duplicate symbol names
+        for (int i = 0; i < symbol_count; i++) {
+            if (str_cmp(symbols[i].name, name.string)) {
+                Serial.print(F("Error: duplicate symbol '"));
+                name.string.print();
+                Serial.print(F("' at line "));
+                Serial.print(name.line);
+                Serial.print(F(" (first defined at line "));
+                Serial.print(symbols[i].line);
+                Serial.println(F(")"));
+                return true;
+            }
+        }
+
+        // Validate type
+        bool valid_type = false;
+        for (int i = 0; i < data_type_keywords_count; i++) {
+            if (str_cmp(type.string, data_type_keywords[i])) {
+                valid_type = true;
+                break;
+            }
+        }
+        if (!valid_type) {
+            Serial.print(F("Error: invalid type '"));
+            type.string.print();
+            Serial.print(F("' for symbol at line "));
+            Serial.print(type.line);
+            Serial.print(F(":"));
+            Serial.println(type.column);
+            return true;
+        }
+
+        // Parse address
+        u32 addr;
+        u8 bit_pos;
+        bool is_bit;
+        if (parseSymbolAddress(address.string, addr, bit_pos, is_bit, address)) {
+            return true;
+        }
+
+        // Get type size
+        u8 type_size = getTypeSize(type.string);
+
+        // Validate bit type
+        if ((str_cmp(type.string, "bit") || str_cmp(type.string, "bool")) && !is_bit) {
+            Serial.print(F("Error: bit/bool type requires bit address (e.g., X0.1) at line "));
+            Serial.print(address.line);
+            Serial.print(F(":"));
+            Serial.println(address.column);
+            return true;
+        }
+
+        if (!(str_cmp(type.string, "bit") || str_cmp(type.string, "bool")) && is_bit) {
+            Serial.print(F("Error: non-bit type cannot use bit address at line "));
+            Serial.print(address.line);
+            Serial.print(F(":"));
+            Serial.println(address.column);
+            return true;
+        }
+
+        // Check bounds
+        u32 max_addr = PLCRUNTIME_MAX_MEMORY_SIZE;
+        if (is_bit) {
+            if (addr >= max_addr) {
+                Serial.print(F("Error: address "));
+                Serial.print(addr);
+                Serial.print(F(" out of bounds (max "));
+                Serial.print(max_addr - 1);
+                Serial.print(F(") at line "));
+                Serial.print(address.line);
+                Serial.print(F(":"));
+                Serial.println(address.column);
+                return true;
+            }
+        } else {
+            if (addr + type_size > max_addr) {
+                Serial.print(F("Error: address range "));
+                Serial.print(addr);
+                Serial.print(F("-"));
+                Serial.print(addr + type_size - 1);
+                Serial.print(F(" out of bounds (max "));
+                Serial.print(max_addr - 1);
+                Serial.print(F(") at line "));
+                Serial.print(address.line);
+                Serial.print(F(":"));
+                Serial.println(address.column);
+                return true;
+            }
+        }
+
+        // Add symbol to table
+        if (symbol_count >= MAX_NUM_OF_TOKENS) {
+            Serial.print(F("Error: too many symbols (max "));
+            Serial.print(MAX_NUM_OF_TOKENS);
+            Serial.println(F(")"));
+            return true;
+        }
+
+        Symbol& sym = symbols[symbol_count];
+        sym.name = name.string;
+        sym.type = type.string;
+        sym.address = addr;
+        sym.bit = bit_pos;
+        sym.is_bit = is_bit;
+        sym.line = name.line;
+        sym.column = name.column;
+        sym.type_size = type_size;
+
+        symbol_count++;
+
+        return false;
+    }
+
+    Symbol* findSymbol(const StringView& name) {
+        for (int i = 0; i < symbol_count; i++) {
+            if (str_cmp(symbols[i].name, name)) {
+                return &symbols[i];
+            }
+        }
+        return nullptr;
     }
 
     bool add_label(Token& token, int address) {
@@ -922,9 +1311,9 @@ public:
 
             // c == //
             if (c == '/') {
-                 // Check for double slash
-                 bool hasNext = i + 1 < assembly_string_length;
-                 if (hasNext && assembly_string[i + 1] == '/') {
+                // Check for double slash
+                bool hasNext = i + 1 < assembly_string_length;
+                if (hasNext && assembly_string[i + 1] == '/') {
                     error = add_token_optional(token_start, token_length);
                     if (error) return error;
                     while (i < assembly_string_length && assembly_string[i] != '\n') i++;
@@ -933,7 +1322,7 @@ public:
                     line++;
                     column = 1;
                     continue;
-                 }
+                }
             }
             // c == \n
             if (c == '\n') {
@@ -971,7 +1360,7 @@ public:
         error = add_token_optional(token_start, token_length);
         if (error) return error;
         if (!last_token_is_exit) {
-            error = add_token((char*)"exit", 4);
+            error = add_token((char*) "exit", 4);
             if (error) return error;
         }
         token_count = token_count_temp;
@@ -1259,10 +1648,10 @@ public:
     bool parseDuration(StringView& str, u32& milliseconds) {
         if (str.length < 3) return true; // Must be at least "T#x"
         if (str.data[0] != 'T' || str.data[1] != '#') return true;
-        
+
         milliseconds = 0;
         int i = 2; // Start after "T#"
-        
+
         while (i < str.length) {
             // Parse number
             int num_start = i;
@@ -1270,22 +1659,22 @@ public:
                 i++;
             }
             if (i == num_start) return true; // No number found
-            
+
             // Convert number substring to integer
             u32 value = 0;
             for (int j = num_start; j < i; j++) {
                 value = value * 10 + (str.data[j] - '0');
             }
-            
+
             // Parse unit
             if (i >= str.length) return true; // No unit found
-            
+
             char unit1 = str.data[i];
             char unit2 = (i + 1 < str.length) ? str.data[i + 1] : '\0';
-            
+
             u32 multiplier = 0;
             int unit_len = 0;
-            
+
             // Check for two-character units first
             if (unit1 == 'm' && unit2 == 's') {
                 multiplier = 1; // milliseconds
@@ -1305,11 +1694,11 @@ public:
             } else {
                 return true; // Unknown unit
             }
-            
+
             milliseconds += value * multiplier;
             i += unit_len;
         }
-        
+
         return false; // Success
     }
 
@@ -1352,21 +1741,21 @@ public:
     bool buildErrorUnknownLabel(Token token) { return buildError(token, "unknown label"); }
 
     // Helper to add an IR entry
-    void addIREntry(u32 offset, Token& token, u8 size, u8 opcode, u8 flags, 
-                    u8 op_count = 0, 
-                    IR_OperandType op1_type = IR_OP_NONE, u8 op1_pos = 0, u64 op1_val = 0,
-                    IR_OperandType op2_type = IR_OP_NONE, u8 op2_pos = 0, u64 op2_val = 0,
-                    IR_OperandType op3_type = IR_OP_NONE, u8 op3_pos = 0, u64 op3_val = 0) {
+    void addIREntry(u32 offset, Token& token, u8 size, u8 opcode, u8 flags,
+        u8 op_count = 0,
+        IR_OperandType op1_type = IR_OP_NONE, u8 op1_pos = 0, u64 op1_val = 0,
+        IR_OperandType op2_type = IR_OP_NONE, u8 op2_pos = 0, u64 op2_val = 0,
+        IR_OperandType op3_type = IR_OP_NONE, u8 op3_pos = 0, u64 op3_val = 0) {
         if (ir_entry_count >= MAX_IR_ENTRIES) return;
         IR_Entry& e = ir_entries[ir_entry_count++];
         e.bytecode_offset = offset;
-        e.source_line = (u16)token.line;
-        e.source_column = (u16)token.column;
+        e.source_line = (u16) token.line;
+        e.source_column = (u16) token.column;
         e.bytecode_size = size;
         e.opcode = opcode;
         e.flags = flags;
         e.operand_count = op_count;
-        
+
         if (op_count >= 1) {
             e.operands[0].type = op1_type;
             e.operands[0].bytecode_pos = op1_pos;
@@ -1383,7 +1772,7 @@ public:
             e.operands[2].val_u64 = op3_val;
         }
     }
-    
+
     // Simplified IR entry for simple opcodes with no operands
     void addIRSimple(u32 offset, Token& token, u8 size, u8 opcode) {
         addIREntry(offset, token, size, opcode, IR_FLAG_NONE);
@@ -1396,54 +1785,54 @@ public:
         built_bytecode_checksum = 0;
         emit_warnings = finalPass && !lintMode;
         if (finalPass) ir_entry_count = 0; // Clear IR on final pass
-        
+
         // IR flags and operand info to be set before _line_push
         u8 _ir_flags = IR_FLAG_NONE;
         u8 _ir_op_count = 0;
         IR_OperandType _ir_op1_type = IR_OP_NONE; u8 _ir_op1_pos = 0; u64 _ir_op1_val = 0;
         IR_OperandType _ir_op2_type = IR_OP_NONE; u8 _ir_op2_pos = 0; u64 _ir_op2_val = 0;
         IR_OperandType _ir_op3_type = IR_OP_NONE; u8 _ir_op3_pos = 0; u64 _ir_op3_val = 0;
-        
-        #define _ir_reset() \
+
+#define _ir_reset() \
             _ir_flags = IR_FLAG_NONE; \
             _ir_op_count = 0; \
             _ir_op1_type = IR_OP_NONE; _ir_op1_pos = 0; _ir_op1_val = 0; \
             _ir_op2_type = IR_OP_NONE; _ir_op2_pos = 0; _ir_op2_val = 0; \
             _ir_op3_type = IR_OP_NONE; _ir_op3_pos = 0; _ir_op3_val = 0;
-        
-        #define _ir_set_const(typ, pos, val) \
+
+#define _ir_set_const(typ, pos, val) \
             _ir_flags |= IR_FLAG_CONST | IR_FLAG_EDITABLE; \
             _ir_op_count = 1; \
             _ir_op1_type = typ; _ir_op1_pos = pos; _ir_op1_val = val;
-            
-        #define _ir_set_ptr(pos, val) \
+
+#define _ir_set_ptr(pos, val) \
             _ir_flags |= IR_FLAG_READ; \
             _ir_op_count = 1; \
             _ir_op1_type = IR_OP_PTR; _ir_op1_pos = pos; _ir_op1_val = val;
-            
-        #define _ir_set_write_ptr(pos, val) \
+
+#define _ir_set_write_ptr(pos, val) \
             _ir_flags |= IR_FLAG_WRITE; \
             _ir_op_count = 1; \
             _ir_op1_type = IR_OP_PTR; _ir_op1_pos = pos; _ir_op1_val = val;
-            
-        #define _ir_set_jump(pos, val) \
+
+#define _ir_set_jump(pos, val) \
             _ir_flags |= IR_FLAG_JUMP; \
             _ir_op_count = 1; \
             _ir_op1_type = IR_OP_LABEL; _ir_op1_pos = pos; _ir_op1_val = val;
-            
-        #define _ir_set_timer_const(timer_pos, timer_val, pt_pos, pt_val) \
+
+#define _ir_set_timer_const(timer_pos, timer_val, pt_pos, pt_val) \
             _ir_flags |= IR_FLAG_TIMER | IR_FLAG_CONST | IR_FLAG_EDITABLE; \
             _ir_op_count = 2; \
             _ir_op1_type = IR_OP_PTR; _ir_op1_pos = timer_pos; _ir_op1_val = timer_val; \
             _ir_op2_type = IR_OP_U32; _ir_op2_pos = pt_pos; _ir_op2_val = pt_val;
-            
-        #define _ir_set_timer_mem(timer_pos, timer_val, pt_pos, pt_val) \
+
+#define _ir_set_timer_mem(timer_pos, timer_val, pt_pos, pt_val) \
             _ir_flags |= IR_FLAG_TIMER; \
             _ir_op_count = 2; \
             _ir_op1_type = IR_OP_PTR; _ir_op1_pos = timer_pos; _ir_op1_val = timer_val; \
             _ir_op2_type = IR_OP_PTR; _ir_op2_pos = pt_pos; _ir_op2_val = pt_val;
-        
-        #define _line_push \
+
+#define _line_push \
             address_end = built_bytecode_length + line.size; \
             if (address_end >= PLCRUNTIME_MAX_PROGRAM_SIZE) { buildErrorSizeLimit(token); return true; } \
             if (!lintMode) { \
@@ -1464,10 +1853,100 @@ public:
 
         int address_end = 0;
 
+        // First pass: parse symbol definitions ($$)
+        if (!finalPass) {
+            symbol_count = 0; // Reset symbol table
+            for (int i = 0; i < token_count; i++) {
+                Token& token = tokens[i];
+                if (str_cmp(token.string, "$") && i + 1 < token_count && str_cmp(tokens[i + 1].string, "$")) {
+                    // Found symbol definition
+                    if (parseSymbolDefinition(i)) {
+                        return true; // Error occurred
+                    }
+                    // Skip past the symbol definition tokens
+                    // Format: $$ name | type | address [| comment]
+                    // Minimum is 7 tokens: $$ name | type | address
+                    i += 6; // Skip to address token, loop will increment
+                    // Skip optional comment (everything until end of line)
+                    while (i + 1 < token_count && tokens[i + 1].line == token.line) {
+                        i++;
+                    }
+                }
+            }
+
+            // Check for overlaps after all symbols are parsed
+            if (emit_warnings) {
+                for (int i = 0; i < symbol_count; i++) {
+                    checkSymbolOverlap(i);
+                }
+            }
+        }
+
         for (int i = 0; i < token_count; i++) {
             Token& token = tokens[i];
             TokenType type = token.type;
-            if (type == TOKEN_UNKNOWN) { if (buildErrorUnknownToken(token)) return true; continue; }
+
+            // Skip symbol definitions in both passes
+            if (str_cmp(token.string, "$") && i + 1 < token_count && str_cmp(tokens[i + 1].string, "$")) {
+                // Skip past entire symbol definition
+                i += 6; // Skip $$ name | type | address
+                while (i + 1 < token_count && tokens[i + 1].line == token.line) {
+                    i++;
+                }
+                continue;
+            }
+
+            if (type == TOKEN_UNKNOWN) {
+                // Try to resolve as symbol
+                Symbol* sym = findSymbol(token.string);
+                if (sym) {
+                    // Symbol found! Replace token with appropriate address/bit access
+                    if (sym->is_bit) {
+                        // Generate bit read instruction
+                        ProgramLine& line = programLines[programLineCount];
+                        line.index = built_bytecode_length;
+                        line.refToken = &token;
+                        u8* bytecode = line.code;
+
+                        // Determine bit read instruction based on bit position
+                        PLCRuntimeInstructionSet bit_op = (PLCRuntimeInstructionSet) (READ_X8_B0 + sym->bit);
+                        line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, bit_op, sym->address);
+                        _ir_set_ptr(1, sym->address);
+                        _line_push;
+                    } else {
+                        // Generate value load instruction based on type
+                        ProgramLine& line = programLines[programLineCount];
+                        line.index = built_bytecode_length;
+                        line.refToken = &token;
+                        u8* bytecode = line.code;
+
+                        // Determine load type based on symbol type
+                        u8 type_byte = 0;
+                        if (str_cmp(sym->type, "u8") || str_cmp(sym->type, "byte")) type_byte = type_u8;
+                        else if (str_cmp(sym->type, "i8")) type_byte = type_i8;
+                        else if (str_cmp(sym->type, "u16")) type_byte = type_u16;
+                        else if (str_cmp(sym->type, "i16")) type_byte = type_i16;
+                        else if (str_cmp(sym->type, "u32")) type_byte = type_u32;
+                        else if (str_cmp(sym->type, "i32")) type_byte = type_i32;
+                        else if (str_cmp(sym->type, "f32")) type_byte = type_f32;
+                        else if (str_cmp(sym->type, "u64")) type_byte = type_u64;
+                        else if (str_cmp(sym->type, "i64")) type_byte = type_i64;
+                        else if (str_cmp(sym->type, "f64")) type_byte = type_f64;
+                        else {
+                            // Default to pointer load for unknown types
+                            type_byte = type_pointer;
+                        }
+
+                        line.size = InstructionCompiler::push_load_from(bytecode, (PLCRuntimeInstructionSet) type_byte, sym->address);
+                        _ir_set_ptr(2, sym->address);
+                        _line_push;
+                    }
+                    continue;
+                }
+
+                if (buildErrorUnknownToken(token)) return true;
+                continue;
+            }
 
             if (type == TOKEN_LABEL) {
                 if (finalPass) continue;
@@ -1511,7 +1990,7 @@ public:
                     bool is_ton = token == "ton";
                     bool is_tof = token == "tof";
                     bool is_tp = token == "tp";
-                    
+
                     if (is_ton || is_tof || is_tp) {
                         // Timer instruction found - consume it and process parameters
                         if (!hasNext) {
@@ -1520,20 +1999,20 @@ public:
                         if (!hasThird) {
                             return buildError(token_p1, "Timer instruction requires a second argument: preset_time (use #value for constant or address for memory)");
                         }
-                        
+
                         int timer_addr = 0;
                         if (addressFromToken(token_p1, timer_addr)) {
                             // First parameter is not a valid address
                             return buildError(token_p1, "expected timer address (like S0, M0, etc)");
                         }
-                        
+
                         // First parameter is valid, now check second parameter
                         bool is_const_param = token_p2.length > 1 && (token_p2.string[0] == '#' || (token_p2.length > 2 && token_p2.string[0] == 'T' && token_p2.string[1] == '#'));
-                        
+
                         if (is_const_param) {
                             // Constant timer preset (either #123 or T#5s format)
                             u32 pt_val = 0;
-                            
+
                             if (token_p2.string[0] == 'T' && token_p2.string[1] == '#') {
                                 // Duration format: T#5s, T#200ms, T#4m10s500ms
                                 if (parseDuration(token_p2.string, pt_val)) {
@@ -1548,13 +2027,13 @@ public:
                                 if (!isInteger(valStr, pt_val_int)) {
                                     return buildError(token_p2, "expected integer value after # or use duration format T#<number><unit>");
                                 }
-                                pt_val = (u32)pt_val_int;
+                                pt_val = (u32) pt_val_int;
                             }
-                            
+
                             // Constant timer: [opcode][timer_addr][pt_value]
-                            PLCRuntimeInstructionSet op = (PLCRuntimeInstructionSet)(is_ton ? TON_CONST : (is_tof ? TOF_CONST : TP_CONST));
+                            PLCRuntimeInstructionSet op = (PLCRuntimeInstructionSet) (is_ton ? TON_CONST : (is_tof ? TOF_CONST : TP_CONST));
                             i += 2;
-                            line.size = InstructionCompiler::push_timer_const(bytecode, op, (MY_PTR_t)timer_addr, (u32)pt_val);
+                            line.size = InstructionCompiler::push_timer_const(bytecode, op, (MY_PTR_t) timer_addr, (u32) pt_val);
                             _ir_set_timer_const(1, timer_addr, 1 + sizeof(MY_PTR_t), pt_val);
                             _line_push;
                         } else {
@@ -1565,9 +2044,9 @@ public:
                                 return buildError(token_p2, "expected preset time value (use #123 for constant) or memory address (like M0)");
                             }
                             // Memory timer: [opcode][timer_addr][pt_addr]
-                            PLCRuntimeInstructionSet op = (PLCRuntimeInstructionSet)(is_ton ? TON_MEM : (is_tof ? TOF_MEM : TP_MEM));
+                            PLCRuntimeInstructionSet op = (PLCRuntimeInstructionSet) (is_ton ? TON_MEM : (is_tof ? TOF_MEM : TP_MEM));
                             i += 2;
-                            line.size = InstructionCompiler::push_timer_mem(bytecode, op, (MY_PTR_t)timer_addr, (MY_PTR_t)pt_addr);
+                            line.size = InstructionCompiler::push_timer_mem(bytecode, op, (MY_PTR_t) timer_addr, (MY_PTR_t) pt_addr);
                             _ir_set_timer_mem(1, timer_addr, 1 + sizeof(MY_PTR_t), pt_addr);
                             _line_push;
                         }
@@ -1582,13 +2061,13 @@ public:
                     if (hasNext && token == "call_if") { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } i++; line.size = InstructionCompiler::pushCALL_IF(bytecode, label_address); _ir_set_jump(1, label_address); _line_push; }
                     if (hasNext && token == "call_if_not") { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } i++; line.size = InstructionCompiler::pushCALL_IF_NOT(bytecode, label_address); _ir_set_jump(1, label_address); _line_push; }
 
-                    if (hasNext && (token == "jmp_rel" || token == "jump_rel")) { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } int off = !e_label ? (label_address - (int)(line.index + 3)) : (!e_int ? value_int : 0); i++; line.size = InstructionCompiler::push_jmp_rel(bytecode, (i16)off); _ir_set_jump(1, off); _line_push; }
-                    if (hasNext && (token == "jmp_if_rel" || token == "jump_if_rel")) { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } int off = !e_label ? (label_address - (int)(line.index + 3)) : (!e_int ? value_int : 0); i++; line.size = InstructionCompiler::push_jmp_if_rel(bytecode, (i16)off); _ir_set_jump(1, off); _line_push; }
-                    if (hasNext && (token == "jmp_if_not_rel" || token == "jump_if_not_rel")) { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } int off = !e_label ? (label_address - (int)(line.index + 3)) : (!e_int ? value_int : 0); i++; line.size = InstructionCompiler::push_jmp_if_not_rel(bytecode, (i16)off); _ir_set_jump(1, off); _line_push; }
+                    if (hasNext && (token == "jmp_rel" || token == "jump_rel")) { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } int off = !e_label ? (label_address - (int) (line.index + 3)) : (!e_int ? value_int : 0); i++; line.size = InstructionCompiler::push_jmp_rel(bytecode, (i16) off); _ir_set_jump(1, off); _line_push; }
+                    if (hasNext && (token == "jmp_if_rel" || token == "jump_if_rel")) { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } int off = !e_label ? (label_address - (int) (line.index + 3)) : (!e_int ? value_int : 0); i++; line.size = InstructionCompiler::push_jmp_if_rel(bytecode, (i16) off); _ir_set_jump(1, off); _line_push; }
+                    if (hasNext && (token == "jmp_if_not_rel" || token == "jump_if_not_rel")) { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } int off = !e_label ? (label_address - (int) (line.index + 3)) : (!e_int ? value_int : 0); i++; line.size = InstructionCompiler::push_jmp_if_not_rel(bytecode, (i16) off); _ir_set_jump(1, off); _line_push; }
 
-                    if (hasNext && token == "call_rel") { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } int off = !e_label ? (label_address - (int)(line.index + 3)) : (!e_int ? value_int : 0); i++; line.size = InstructionCompiler::pushCALL_REL(bytecode, (i16)off); _ir_set_jump(1, off); _line_push; }
-                    if (hasNext && token == "call_if_rel") { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } int off = !e_label ? (label_address - (int)(line.index + 3)) : (!e_int ? value_int : 0); i++; line.size = InstructionCompiler::pushCALL_IF_REL(bytecode, (i16)off); _line_push; }
-                    if (hasNext && token == "call_if_not_rel") { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } int off = !e_label ? (label_address - (int)(line.index + 3)) : (!e_int ? value_int : 0); i++; line.size = InstructionCompiler::pushCALL_IF_NOT_REL(bytecode, (i16)off); _line_push; }
+                    if (hasNext && token == "call_rel") { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } int off = !e_label ? (label_address - (int) (line.index + 3)) : (!e_int ? value_int : 0); i++; line.size = InstructionCompiler::pushCALL_REL(bytecode, (i16) off); _ir_set_jump(1, off); _line_push; }
+                    if (hasNext && token == "call_if_rel") { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } int off = !e_label ? (label_address - (int) (line.index + 3)) : (!e_int ? value_int : 0); i++; line.size = InstructionCompiler::pushCALL_IF_REL(bytecode, (i16) off); _line_push; }
+                    if (hasNext && token == "call_if_not_rel") { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } int off = !e_label ? (label_address - (int) (line.index + 3)) : (!e_int ? value_int : 0); i++; line.size = InstructionCompiler::pushCALL_IF_NOT_REL(bytecode, (i16) off); _line_push; }
                     if (token == "ret" || token == "return") { line.size = InstructionCompiler::push(bytecode, RET); _line_push; }
                     if (token == "ret_if" || token == "return_if") { line.size = InstructionCompiler::push(bytecode, RET_IF); _line_push; }
                     if (token == "ret_if_not" || token == "return_if_not") { line.size = InstructionCompiler::push(bytecode, RET_IF_NOT); _line_push; }
@@ -1625,7 +2104,7 @@ public:
                     if (token.equals("P_6hr")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B4, 4); _line_push; } // P_6hr: "u8.readBit 4.4",
                     if (token.equals("P_12hr")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B5, 4); _line_push; } // P_12hr: "u8.readBit 4.5",
                     if (token.equals("P_1day")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B6, 4); _line_push; } // P_1day: "u8.readBit 4.6",
-                    
+
                     if (token.equals("S_100ms")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B0, 5); _line_push; } // P_100ms: "u8.readBit 2.0",
                     if (token.equals("S_200ms")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B1, 5); _line_push; } // P_200ms: "u8.readBit 2.1",
                     if (token.equals("S_300ms")) { line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, READ_X8_B2, 5); _line_push; } // P_300ms: "u8.readBit 2.2",
@@ -1686,13 +2165,13 @@ public:
                             else if (token.endsWith(".writeBitOnDD")) edge_task = WRITE_SET_DD;
                             else if (token.endsWith(".writeBitOffDU")) edge_task = WRITE_RSET_DU;
                             else if (token.endsWith(".writeBitOffDD")) edge_task = WRITE_RSET_DD;
-                            
+
                             if (edge_task) {
                                 int addr1 = 0, bit1 = 0;
                                 int addr2 = 0, bit2 = 0;
                                 if (memoryBitFromToken(token_p1, addr1, bit1)) { if (buildError(token_p1, "expected address.bit")) return true; }
                                 i++;
-                                
+
                                 bool has_second_addr = false;
                                 if (hasThird) if (!memoryBitFromToken(token_p2, addr2, bit2)) has_second_addr = true;
 
@@ -1852,20 +2331,20 @@ public:
                                 }
                                 i++; line.size = InstructionCompiler::push_i64(bytecode, value_int); _line_push;
                             }
-                            if (type == type_f32) { 
-                                if (e_real) { if (buildErrorExpectedFloat(token_p1)) return true; } 
+                            if (type == type_f32) {
+                                if (e_real) { if (buildErrorExpectedFloat(token_p1)) return true; }
                                 i++; line.size = InstructionCompiler::push_f32(bytecode, value_float);
                                 u32 f32_bits = 0; memcpy(&f32_bits, &value_float, 4);
                                 _ir_set_const(IR_OP_F32, 1, f32_bits);
-                                _line_push; 
+                                _line_push;
                             }
-                            if (type == type_f64) { 
-                                if (e_real) { if (buildErrorExpectedFloat(token_p1)) return true; } 
+                            if (type == type_f64) {
+                                if (e_real) { if (buildErrorExpectedFloat(token_p1)) return true; }
                                 i++; line.size = InstructionCompiler::push_f64(bytecode, value_float);
-                                double f64_val = (double)value_float;
+                                double f64_val = (double) value_float;
                                 u64 f64_bits = 0; memcpy(&f64_bits, &f64_val, 8);
                                 _ir_set_const(IR_OP_F64, 1, f64_bits);
-                                _line_push; 
+                                _line_push;
                             }
                             Serial.print(F("Error: unknown data type ")); token.print(); Serial.print(F(" at ")); Serial.print(token.line); Serial.print(F(":")); Serial.println(token.column);
                             if (buildErrorUnknownToken(token)) return true; continue;
@@ -1982,7 +2461,7 @@ public:
         Serial.println();
     }
 
-    
+
     // Check if I missed functions: uploadProgram, downloadProgram
 
     u32 uploadProgram() {
@@ -2036,6 +2515,15 @@ public:
         if (debug) { Serial.print(F(" finished in ")); Serial.print(total); Serial.println(F(" ms")); }
 
         if (debug) {
+            if (symbol_count > 0) {
+                Serial.print(F("Symbols ")); Serial.print(symbol_count); Serial.println(F(":"));
+                for (int i = 0; i < symbol_count; i++) {
+                    Serial.print(F("    "));
+                    symbols[i].print();
+                    Serial.println();
+                }
+            } else Serial.println(F("No symbols"));
+
             if (LUT_label_count > 0) {
                 Serial.print(F("Labels ")); Serial.print(LUT_label_count); Serial.println(F(":"));
                 for (int i = 0; i < LUT_label_count; i++) {
