@@ -647,8 +647,7 @@ public:
     int built_bytecode_length = 0;
     u8 built_bytecode_checksum = 0;
 
-    char assembly_string[MAX_ASSEMBLY_STRING_SIZE];
-    char auto_exit_string[5]; // Stores "exit" for auto-append
+    char assembly_string[MAX_ASSEMBLY_STRING_SIZE] = {0};
     
     Token tokens[MAX_NUM_OF_TOKENS];
     int token_count = 0;
@@ -689,8 +688,6 @@ public:
         memset(programLines, 0, sizeof(programLines));
         memset(downloaded_program, 0, sizeof(downloaded_program));
         memset(ir_entries, 0, sizeof(ir_entries));
-        // Initialize auto_exit_string
-        auto_exit_string[0] = 'e'; auto_exit_string[1] = 'x'; auto_exit_string[2] = 'i'; auto_exit_string[3] = 't'; auto_exit_string[4] = '\0';
         // Default assembly string
         char default_asm[] = "DEFAULT_ASM_STRING_MARKER";
 /*
@@ -974,7 +971,7 @@ public:
         error = add_token_optional(token_start, token_length);
         if (error) return error;
         if (!last_token_is_exit) {
-            error = add_token(auto_exit_string, 4);
+            error = add_token((char*)"exit", 4);
             if (error) return error;
         }
         token_count = token_count_temp;

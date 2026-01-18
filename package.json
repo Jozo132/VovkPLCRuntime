@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "node wasm/wasm_build.js",
+    "update": "git pull",
     "serve": "cd wasm/web-server-test && npm install express && node server.js",
     "unit_test": "cd wasm/node-test && node unit_test.js",
     "test_compile": "cd wasm/node-test && node test_compile.js",
