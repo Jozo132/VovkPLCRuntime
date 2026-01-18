@@ -939,7 +939,7 @@ public:
 
     bool parseSymbolDefinition(int token_idx) {
         // Symbol format: $$ name | type | address [| comment]
-        if (token_idx + 6 >= token_count) {
+        if (token_idx + 5 >= token_count) {
             Serial.print(F("Error: incomplete symbol definition at line "));
             Serial.print(tokens[token_idx].line);
             Serial.print(F(":"));
@@ -947,20 +947,19 @@ public:
             return true;
         }
 
-        Token& dollar1 = tokens[token_idx];
-        Token& dollar2 = tokens[token_idx + 1];
-        Token& name = tokens[token_idx + 2];
-        Token& pipe1 = tokens[token_idx + 3];
-        Token& type = tokens[token_idx + 4];
-        Token& pipe2 = tokens[token_idx + 5];
-        Token& address = tokens[token_idx + 6];
+        Token& dollars = tokens[token_idx];
+        Token& name = tokens[token_idx + 1];
+        Token& pipe1 = tokens[token_idx + 2];
+        Token& type = tokens[token_idx + 3];
+        Token& pipe2 = tokens[token_idx + 4];
+        Token& address = tokens[token_idx + 5];
 
         // Validate syntax
-        if (!str_cmp(dollar1.string, "$") || !str_cmp(dollar2.string, "$")) {
+        if (!str_cmp(dollars.string, "$$")) {
             Serial.print(F("Error: symbol definition must start with '$$' at line "));
-            Serial.print(dollar1.line);
+            Serial.print(dollars.line);
             Serial.print(F(":"));
-            Serial.println(dollar1.column);
+            Serial.println(dollars.column);
             return true;
         }
 
@@ -1323,6 +1322,19 @@ public:
                     column = 1;
                     continue;
                 }
+            }
+            // c == $$ (symbol definition)
+            if (c == '$' && hasNext && c1 == '$') {
+                error = add_token_optional(token_start, token_length);
+                if (error) return error;
+                column += token_length;
+                error = add_token(assembly_string + i, 2); // Add "$$" as single token
+                if (error) return error;
+                i++; // Skip the second $
+                token_start = assembly_string + i + 1;
+                token_length = 0;
+                column += 2;
+                continue;
             }
             // c == \n
             if (c == '\n') {
@@ -1858,15 +1870,15 @@ public:
             symbol_count = 0; // Reset symbol table
             for (int i = 0; i < token_count; i++) {
                 Token& token = tokens[i];
-                if (str_cmp(token.string, "$") && i + 1 < token_count && str_cmp(tokens[i + 1].string, "$")) {
+                if (str_cmp(token.string, "$$")) {
                     // Found symbol definition
                     if (parseSymbolDefinition(i)) {
                         return true; // Error occurred
                     }
                     // Skip past the symbol definition tokens
                     // Format: $$ name | type | address [| comment]
-                    // Minimum is 7 tokens: $$ name | type | address
-                    i += 6; // Skip to address token, loop will increment
+                    // Minimum is 6 tokens: $$ name | type | address
+                    i += 5; // Skip to address token, loop will increment
                     // Skip optional comment (everything until end of line)
                     while (i + 1 < token_count && tokens[i + 1].line == token.line) {
                         i++;
@@ -1887,9 +1899,9 @@ public:
             TokenType type = token.type;
 
             // Skip symbol definitions in both passes
-            if (str_cmp(token.string, "$") && i + 1 < token_count && str_cmp(tokens[i + 1].string, "$")) {
+            if (str_cmp(token.string, "$$")) {
                 // Skip past entire symbol definition
-                i += 6; // Skip $$ name | type | address
+                i += 5; // Skip $$ name | type | address
                 while (i + 1 < token_count && tokens[i + 1].line == token.line) {
                     i++;
                 }
