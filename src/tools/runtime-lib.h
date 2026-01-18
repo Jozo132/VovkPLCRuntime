@@ -488,7 +488,7 @@ public:
     }
 
     #ifdef RUNTIME_THREAD_IMPL
-    void threadSetup(u32 period_us, thread_handle_t& handle) {
+    void threadSetup(u32 period_us, thread_handle_t handle = nullptr) {
         thread_setup(period_us, handle);
     }
     #endif // RUNTIME_THREAD_IMPL
