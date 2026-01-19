@@ -212,6 +212,106 @@ CTU C0, #10, I0.1
         }
     }
     
+    // Test 9: Symbol definitions are parsed
+    {
+        const testName = 'Symbol definitions are parsed'
+        const stl = `$$ START_BTN | bit | I0.0
+$$ MOTOR_OUT | bit | Q0.0
+A START_BTN
+= MOTOR_OUT
+`
+        try {
+            const result = await runtime.lintSTL(stl)
+            // Should compile successfully and resolve symbols
+            if (result.problems.length === 0 && result.output.includes('X0.0') && result.output.includes('Y0.0')) {
+                console.log(`✓ ${testName}`)
+                passed++
+            } else {
+                console.log(`✗ ${testName}: Symbol resolution failed`)
+                console.log(`  Output: ${result.output}`)
+                if (result.problems.length > 0) {
+                    result.problems.forEach(p => console.log(`  - [${p.type}] Line ${p.line}: ${p.message}`))
+                }
+                failed++
+            }
+        } catch (e) {
+            console.log(`✗ ${testName}: ${e.message}`)
+            failed++
+        }
+    }
+    
+    // Test 10: Duplicate symbol name error
+    {
+        const testName = 'Duplicate symbol name error'
+        const stl = `$$ MOTOR | bit | Q0.0
+$$ MOTOR | bit | Q0.1
+A I0.0
+= MOTOR
+`
+        try {
+            const result = await runtime.lintSTL(stl)
+            const hasDuplicateError = result.problems.some(p => p.type === 'error' && p.message.includes('Duplicate'))
+            if (hasDuplicateError) {
+                console.log(`✓ ${testName}`)
+                passed++
+            } else {
+                console.log(`✗ ${testName}: Expected duplicate symbol error`)
+                result.problems.forEach(p => console.log(`  - [${p.type}] Line ${p.line}: ${p.message}`))
+                failed++
+            }
+        } catch (e) {
+            console.log(`✗ ${testName}: ${e.message}`)
+            failed++
+        }
+    }
+    
+    // Test 11: Invalid symbol type error
+    {
+        const testName = 'Invalid symbol type error'
+        const stl = `$$ VAR1 | invalid_type | M0
+A I0.0
+= Q0.0
+`
+        try {
+            const result = await runtime.lintSTL(stl)
+            const hasTypeError = result.problems.some(p => p.type === 'error' && p.message.includes('type'))
+            if (hasTypeError) {
+                console.log(`✓ ${testName}`)
+                passed++
+            } else {
+                console.log(`✗ ${testName}: Expected invalid type error`)
+                result.problems.forEach(p => console.log(`  - [${p.type}] Line ${p.line}: ${p.message}`))
+                failed++
+            }
+        } catch (e) {
+            console.log(`✗ ${testName}: ${e.message}`)
+            failed++
+        }
+    }
+    
+    // Test 12: Symbol with byte type
+    {
+        const testName = 'Symbol with byte type'
+        const stl = `$$ COUNTER_VAL | u16 | M10
+L COUNTER_VAL
+`
+        try {
+            const result = await runtime.lintSTL(stl)
+            // Should not have errors
+            if (result.problems.filter(p => p.type === 'error').length === 0) {
+                console.log(`✓ ${testName}`)
+                passed++
+            } else {
+                console.log(`✗ ${testName}: Unexpected error`)
+                result.problems.forEach(p => console.log(`  - [${p.type}] Line ${p.line}: ${p.message}`))
+                failed++
+            }
+        } catch (e) {
+            console.log(`✗ ${testName}: ${e.message}`)
+            failed++
+        }
+    }
+    
     await runtime.terminate()
     
     console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`)

@@ -28,6 +28,19 @@
 #include "plcasm-linter.h" // Reuse LinterProblem struct and enums
 
 #define STL_MAX_LINT_PROBLEMS 100
+#define STL_MAX_SYMBOLS 128
+
+// Simple symbol structure for STL linting
+struct STLSymbol {
+    char name[64];
+    char type[16];
+    u32 address;
+    u8 bit;
+    bool is_bit;
+    int line;
+    int column;
+    u8 type_size;
+};
 
 // ### STL Linter Class Definition ###
 
@@ -36,20 +49,388 @@ public:
     LinterProblem problems[STL_MAX_LINT_PROBLEMS];
     int problem_count = 0;
     
+    // Symbol table
+    STLSymbol symbols[STL_MAX_SYMBOLS];
+    int symbol_count = 0;
+    
     // Track token info for error reporting
     int token_start_column = 1;
     int token_length = 0;
 
     STLLinter() : STLCompiler() {
         problem_count = 0;
+        symbol_count = 0;
     }
 
     void clearProblems() {
         problem_count = 0;
+        symbol_count = 0;
         has_error = false;
         error_message[0] = '\0';
         error_line = 0;
         error_column = 0;
+    }
+    
+    // ============ Symbol Parsing ============
+    
+    // Get type size in bytes
+    u8 getTypeSize(const char* type) {
+        if (strEq(type, "i8") || strEq(type, "u8") || strEq(type, "byte")) return 1;
+        if (strEq(type, "i16") || strEq(type, "u16")) return 2;
+        if (strEq(type, "i32") || strEq(type, "u32") || strEq(type, "f32")) return 4;
+        if (strEq(type, "i64") || strEq(type, "u64") || strEq(type, "f64")) return 8;
+        if (strEq(type, "bit") || strEq(type, "bool")) return 0; // bit type has no size
+        if (strEq(type, "ptr") || strEq(type, "pointer")) return 4;
+        return 0; // unknown type
+    }
+    
+    // Check if type is valid
+    bool isValidType(const char* type) {
+        const char* valid_types[] = { "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", 
+                                       "f32", "f64", "bool", "bit", "byte", "ptr", "pointer" };
+        for (int i = 0; i < 15; i++) {
+            if (strEq(type, valid_types[i])) return true;
+        }
+        return false;
+    }
+    
+    // Check if symbol name is valid
+    bool isValidSymbolName(const char* name) {
+        if (!name || name[0] == '\0') return false;
+        char first = name[0];
+        if (!((first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z') || first == '_')) {
+            return false;
+        }
+        for (int i = 1; name[i]; i++) {
+            char c = name[i];
+            if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || 
+                  (c >= '0' && c <= '9') || c == '_')) {
+                return false;
+            }
+        }
+        return true;
+    }
+    
+    // Find symbol by name
+    STLSymbol* findSymbol(const char* name) {
+        for (int i = 0; i < symbol_count; i++) {
+            if (strEq(symbols[i].name, name)) {
+                return &symbols[i];
+            }
+        }
+        return nullptr;
+    }
+    
+    // Parse symbol address (e.g., "M0", "X0.1", "130")
+    bool parseSymbolAddress(const char* addr_str, u32& address, u8& bit, bool& is_bit) {
+        is_bit = false;
+        bit = 255;
+        
+        if (!addr_str || addr_str[0] == '\0') return false;
+        
+        // Find dot position for bit notation
+        int dot_pos = -1;
+        int len = 0;
+        for (int i = 0; addr_str[i]; i++) {
+            if (addr_str[i] == '.') dot_pos = i;
+            len++;
+        }
+        
+        char prefix = addr_str[0];
+        if (prefix >= 'a' && prefix <= 'z') prefix -= 32; // Uppercase
+        
+        u32 base_offset = 0;
+        int num_start = 0;
+        
+        // Determine memory area and offset
+        switch (prefix) {
+            case 'K': case 'C': base_offset = plcasm_control_offset; num_start = 1; break;
+            case 'I': case 'X': base_offset = plcasm_input_offset; num_start = 1; break;
+            case 'Q': case 'Y': base_offset = plcasm_output_offset; num_start = 1; break;
+            case 'S': base_offset = plcasm_system_offset; num_start = 1; break;
+            case 'M': base_offset = plcasm_marker_offset; num_start = 1; break;
+            case 'T': base_offset = plcasm_timer_offset; num_start = 1; break;
+            default:
+                if (prefix >= '0' && prefix <= '9') {
+                    num_start = 0;
+                    base_offset = 0;
+                } else {
+                    return false;
+                }
+        }
+        
+        // Parse numeric part
+        int byte_addr = 0;
+        int end_pos = dot_pos >= 0 ? dot_pos : len;
+        
+        for (int i = num_start; i < end_pos; i++) {
+            char c = addr_str[i];
+            if (c < '0' || c > '9') return false;
+            byte_addr = byte_addr * 10 + (c - '0');
+        }
+        
+        address = base_offset + byte_addr;
+        
+        // Parse bit position if present
+        if (dot_pos >= 0 && dot_pos + 1 < len) {
+            is_bit = true;
+            char bit_char = addr_str[dot_pos + 1];
+            if (bit_char < '0' || bit_char > '7') return false;
+            bit = bit_char - '0';
+        }
+        
+        return true;
+    }
+    
+    // Parse a symbol definition line: $$ name | type | address [| comment]
+    void parseSymbolDefinition() {
+        int start_line = current_line;
+        int start_col = current_column;
+        
+        // Skip "$$"
+        advance(); advance();
+        skipWhitespace();
+        
+        // Read symbol name
+        char name[64] = {0};
+        int name_col = current_column;
+        int ni = 0;
+        while (ni < 63 && isAlphaNum(peek())) {
+            name[ni++] = advance();
+        }
+        name[ni] = '\0';
+        
+        if (name[0] == '\0') {
+            token_start_column = name_col;
+            token_length = 1;
+            setError("Expected symbol name after '$$'");
+            skipToEndOfLine();
+            return;
+        }
+        
+        if (!isValidSymbolName(name)) {
+            token_start_column = name_col;
+            token_length = ni;
+            setError("Invalid symbol name");
+            skipToEndOfLine();
+            return;
+        }
+        
+        // Check for duplicate
+        if (findSymbol(name)) {
+            token_start_column = name_col;
+            token_length = ni;
+            setError("Duplicate symbol name");
+            skipToEndOfLine();
+            return;
+        }
+        
+        skipWhitespace();
+        
+        // Expect '|'
+        if (peek() != '|') {
+            token_start_column = current_column;
+            token_length = 1;
+            setError("Expected '|' after symbol name");
+            skipToEndOfLine();
+            return;
+        }
+        advance();
+        skipWhitespace();
+        
+        // Read type
+        char type[16] = {0};
+        int type_col = current_column;
+        int ti = 0;
+        while (ti < 15 && isAlphaNum(peek())) {
+            type[ti++] = advance();
+        }
+        type[ti] = '\0';
+        
+        if (!isValidType(type)) {
+            token_start_column = type_col;
+            token_length = ti > 0 ? ti : 1;
+            setError("Invalid symbol type");
+            skipToEndOfLine();
+            return;
+        }
+        
+        skipWhitespace();
+        
+        // Expect '|'
+        if (peek() != '|') {
+            token_start_column = current_column;
+            token_length = 1;
+            setError("Expected '|' after type");
+            skipToEndOfLine();
+            return;
+        }
+        advance();
+        skipWhitespace();
+        
+        // Read address
+        char addr[32] = {0};
+        int addr_col = current_column;
+        int ai = 0;
+        while (ai < 31 && (isAlphaNum(peek()) || peek() == '.')) {
+            addr[ai++] = advance();
+        }
+        addr[ai] = '\0';
+        
+        u32 address;
+        u8 bit;
+        bool is_bit;
+        
+        if (!parseSymbolAddress(addr, address, bit, is_bit)) {
+            token_start_column = addr_col;
+            token_length = ai > 0 ? ai : 1;
+            setError("Invalid symbol address");
+            skipToEndOfLine();
+            return;
+        }
+        
+        // Validate bit/type consistency
+        bool is_bit_type = strEq(type, "bit") || strEq(type, "bool");
+        if (is_bit_type && !is_bit) {
+            token_start_column = addr_col;
+            token_length = ai;
+            setError("bit/bool type requires bit address (e.g., X0.1)");
+            skipToEndOfLine();
+            return;
+        }
+        if (!is_bit_type && is_bit) {
+            token_start_column = addr_col;
+            token_length = ai;
+            setError("Non-bit type cannot use bit address");
+            skipToEndOfLine();
+            return;
+        }
+        
+        // Add symbol if we have space
+        if (symbol_count >= STL_MAX_SYMBOLS) {
+            addWarning("Maximum symbols reached", start_line, start_col);
+            skipToEndOfLine();
+            return;
+        }
+        
+        STLSymbol& sym = symbols[symbol_count++];
+        // Clear name and type arrays first
+        for (int i = 0; i < 64; i++) sym.name[i] = '\0';
+        for (int i = 0; i < 16; i++) sym.type[i] = '\0';
+        // Copy name
+        for (int i = 0; i < 63 && name[i]; i++) sym.name[i] = name[i];
+        // Copy type
+        for (int i = 0; i < 15 && type[i]; i++) sym.type[i] = type[i];
+        sym.address = address;
+        sym.bit = bit;
+        sym.is_bit = is_bit;
+        sym.line = start_line;
+        sym.column = start_col;
+        sym.type_size = getTypeSize(type);
+        
+        // Skip rest of line (comment)
+        skipToEndOfLine();
+    }
+    
+    // Check if an operand is a valid address/symbol
+    bool validateOperand(const char* operand, int col, int len) {
+        if (!operand || operand[0] == '\0') return false;
+        
+        char first = operand[0];
+        if (first >= 'a' && first <= 'z') first -= 32;
+        
+        // Check if it's a known symbol
+        STLSymbol* sym = findSymbol(operand);
+        if (sym) return true;
+        
+        // Check if it's a valid address format
+        // Valid prefixes: I, Q, M, S, X, Y, K, C, T, P (pulse), # (immediate)
+        switch (first) {
+            case 'I': case 'Q': case 'M': case 'S': case 'X': case 'Y':
+            case 'K': case 'C': case 'T': case '#':
+                return true;
+            case 'P':
+                // P_On, P_Off, P_1s etc.
+                if (operand[1] == '_') return true;
+                return false;
+            default:
+                // Could be a plain number or unknown identifier
+                if (first >= '0' && first <= '9') return true;
+                // Unknown identifier - report warning
+                token_start_column = col;
+                token_length = len;
+                addWarning("Unknown identifier - may be undefined symbol", current_line, col, len);
+                return true; // Don't block compilation
+        }
+    }
+    
+    // Override convertAddress to resolve symbols first
+    void convertAddress(const char* stlAddr, char* plcasmAddr) override {
+        // Check if it's a symbol name
+        STLSymbol* sym = findSymbol(stlAddr);
+        if (sym) {
+            // Resolve to actual address
+            // Build address string from symbol's stored address
+            u32 addr = sym->address;
+            u8 bit = sym->bit;
+            bool is_bit = sym->is_bit;
+            
+            // Determine the memory prefix from the address
+            char prefix = 'M'; // default
+            u32 offset = addr;
+            
+            if (addr >= plcasm_timer_offset) {
+                prefix = 'T';
+                offset = (addr - plcasm_timer_offset) / 9; // Timer struct is 9 bytes
+            } else if (addr >= plcasm_marker_offset) {
+                prefix = 'M';
+                offset = addr - plcasm_marker_offset;
+            } else if (addr >= plcasm_system_offset) {
+                prefix = 'S';
+                offset = addr - plcasm_system_offset;
+            } else if (addr >= plcasm_output_offset) {
+                prefix = 'Y';
+                offset = addr - plcasm_output_offset;
+            } else if (addr >= plcasm_input_offset) {
+                prefix = 'X';
+                offset = addr - plcasm_input_offset;
+            } else if (addr >= plcasm_control_offset) {
+                prefix = 'K';
+                offset = addr - plcasm_control_offset;
+            }
+            
+            int j = 0;
+            plcasmAddr[j++] = prefix;
+            
+            // Write offset as decimal
+            char numBuf[16];
+            int ni = 0;
+            u32 tmp = offset;
+            if (tmp == 0) {
+                numBuf[ni++] = '0';
+            } else {
+                while (tmp > 0) {
+                    numBuf[ni++] = '0' + (tmp % 10);
+                    tmp /= 10;
+                }
+            }
+            // Reverse
+            for (int k = ni - 1; k >= 0; k--) {
+                plcasmAddr[j++] = numBuf[k];
+            }
+            
+            // Add bit if needed
+            if (is_bit) {
+                plcasmAddr[j++] = '.';
+                plcasmAddr[j++] = '0' + bit;
+            }
+            
+            plcasmAddr[j] = '\0';
+            return;
+        }
+        
+        // Not a symbol, use base class implementation
+        STLCompiler::convertAddress(stlAddr, plcasmAddr);
     }
 
     // Override setError to capture errors instead of stopping at the first one
@@ -215,6 +596,12 @@ public:
                     emit(buf);
                 }
                 emit("\n");
+                continue;
+            }
+            
+            // Symbol definition: $$ name | type | address [| comment]
+            if (c == '$' && peek(1) == '$') {
+                parseSymbolDefinition();
                 continue;
             }
             

@@ -319,7 +319,7 @@ public:
     // Convert STL address to PLCASM address
     // STL uses: I0.0 (input), Q0.0 (output), M0.0 (marker), etc.
     // PLCASM uses: X0.0 (input), Y0.0 (output), M0.0 (marker), S0 (system), C0 (control)
-    void convertAddress(const char* stlAddr, char* plcasmAddr) {
+    virtual void convertAddress(const char* stlAddr, char* plcasmAddr) {
         int i = 0, j = 0;
         
         // Map first character
