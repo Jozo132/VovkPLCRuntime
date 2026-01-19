@@ -326,8 +326,8 @@ public:
             case 'I': plcasmAddr[j++] = 'X'; i++; break;  // Input
             case 'Q': plcasmAddr[j++] = 'Y'; i++; break;  // Output
             case 'M': plcasmAddr[j++] = 'M'; i++; break;  // Marker
-            case 'S': plcasmAddr[j++] = 'S'; i++; break;  // System (timer/counter)
-            case 'C': plcasmAddr[j++] = 'C'; i++; break;  // Counter address -> use S for struct
+            case 'S': plcasmAddr[j++] = 'S'; i++; break;  // System
+            case 'C': plcasmAddr[j++] = 'C'; i++; break;  // Counter -> C (with struct size multiplier)
             case 'T': 
                 // T could be timer or T# duration
                 if (stlAddr[1] == '#') {
@@ -336,9 +336,10 @@ public:
                     plcasmAddr[j] = '\0';
                     return;
                 }
-                plcasmAddr[j++] = 'S'; i++; break;  // Timer -> S
+                plcasmAddr[j++] = 'T'; i++; break;  // Timer -> T (with struct size multiplier)
             case 'X': plcasmAddr[j++] = 'X'; i++; break;  // Already PLCASM format
             case 'Y': plcasmAddr[j++] = 'Y'; i++; break;
+            case 'K': plcasmAddr[j++] = 'K'; i++; break;  // K maps to controls
             case 'P':
                 // Special: P_1s or similar pulse macro
                 while (stlAddr[i]) plcasmAddr[j++] = stlAddr[i++];

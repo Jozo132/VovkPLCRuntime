@@ -47,6 +47,24 @@
 #define PLCRUNTIME_NUM_OF_MARKERS 256
 #endif // PLCRUNTIME_NUM_OF_MARKERS
 
+#ifndef PLCRUNTIME_NUM_OF_TIMERS
+#define PLCRUNTIME_NUM_OF_TIMERS 16
+#endif // PLCRUNTIME_NUM_OF_TIMERS
+
+#ifndef PLCRUNTIME_NUM_OF_COUNTERS
+#define PLCRUNTIME_NUM_OF_COUNTERS 16
+#endif // PLCRUNTIME_NUM_OF_COUNTERS
+
+// Timer struct size: ET(4) + StartTime(4) + Flags(1) = 9 bytes
+#ifndef PLCRUNTIME_TIMER_STRUCT_SIZE
+#define PLCRUNTIME_TIMER_STRUCT_SIZE 9
+#endif // PLCRUNTIME_TIMER_STRUCT_SIZE
+
+// Counter struct size: CV(4) + Flags(1) = 5 bytes
+#ifndef PLCRUNTIME_COUNTER_STRUCT_SIZE
+#define PLCRUNTIME_COUNTER_STRUCT_SIZE 5
+#endif // PLCRUNTIME_COUNTER_STRUCT_SIZE
+
 #ifndef PLCRUNTIME_CONTROL_OFFSET
 #define PLCRUNTIME_CONTROL_OFFSET 0
 #endif // PLCRUNTIME_CONTROL_OFFSET
@@ -66,6 +84,15 @@
 #ifndef PLCRUNTIME_MARKER_OFFSET
 #define PLCRUNTIME_MARKER_OFFSET (PLCRUNTIME_SYSTEM_OFFSET + PLCRUNTIME_NUM_OF_SYSTEMS)
 #endif // PLCRUNTIME_MARKER_OFFSET
+
+#ifndef PLCRUNTIME_TIMER_OFFSET
+#define PLCRUNTIME_TIMER_OFFSET (PLCRUNTIME_MARKER_OFFSET + PLCRUNTIME_NUM_OF_MARKERS)
+#endif // PLCRUNTIME_TIMER_OFFSET
+
+#ifndef PLCRUNTIME_COUNTER_OFFSET
+#define PLCRUNTIME_COUNTER_OFFSET (PLCRUNTIME_TIMER_OFFSET + (PLCRUNTIME_NUM_OF_TIMERS * PLCRUNTIME_TIMER_STRUCT_SIZE))
+#endif // PLCRUNTIME_COUNTER_OFFSET
+
 #ifdef __WASM__
 #include "assembly/wasm/wasm.h"
 #define STDOUT_PRINT Stream
@@ -130,10 +157,12 @@ private:
     }
 public:
     u32 control_offset = PLCRUNTIME_CONTROL_OFFSET; // Control offset in memory
-    u32 input_offset = PLCRUNTIME_INPUT_OFFSET; // Output offset in memory
+    u32 input_offset = PLCRUNTIME_INPUT_OFFSET; // Input offset in memory
     u32 output_offset = PLCRUNTIME_OUTPUT_OFFSET; // Output offset in memory
     u32 system_offset = PLCRUNTIME_SYSTEM_OFFSET; // System offset in memory
     u32 marker_offset = PLCRUNTIME_MARKER_OFFSET; // Marker offset in memory
+    u32 timer_offset = PLCRUNTIME_TIMER_OFFSET; // Timer offset in memory (T0, T1, ...)
+    u32 counter_offset = PLCRUNTIME_COUNTER_OFFSET; // Counter offset in memory (C0, C1, ...)
 
     RuntimeStack stack = RuntimeStack(); // Active memory stack for PLC execution
     u8 memory[PLCRUNTIME_MAX_MEMORY_SIZE]; // PLC memory to manipulate

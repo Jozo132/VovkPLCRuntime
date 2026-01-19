@@ -188,35 +188,35 @@ A   M10.0
 
 // NETWORK 2: Timers driven by latch
 A   M10.0
-TON S0 T#50ms
+TON T0, T#50ms
 =   Y0.1
 
 A   M10.0
-TOF S9 #100
+TOF T1, #100
 =   Y0.2
 
 A   M10.0
-TP  S18 #200
+TP  T2, #200
 =   Y0.3
 
 // NETWORK 3: Counter up on 1s pulse, reset by stop
-A   2.4
+A   M2.4
 CTU C0, #10, X0.1
 =   Y0.4
 
 // NETWORK 4: Counter down on 1s pulse, load when start edge
-A   2.4
+A   M2.4
 CTD C1, #5, M0.2
 =   Y0.5
 
 // NETWORK 5: Math + compare + jump
 L   M20
-L   10
+L   #10
 +I
 T   M20
 
 L   M20
-L   100
+L   #100
 >I
 JC  Over100
 
@@ -238,8 +238,8 @@ DoCall:
 CALL Sub1
 
 End:
-BE
-
+// Main program ends - jump over subroutine
+JU  ProgramEnd
 
 Sub1:
     // If input is false, return immediately (conditional return)
@@ -252,6 +252,9 @@ Sub1:
 
 SubEnd:
     BE
+
+ProgramEnd:
+// Program exit point
 `
         await testSTLFull(runtime, 'Complex STL Program', stl12)
 
@@ -378,6 +381,13 @@ async function testSTLFull(runtime, name, stlCode) {
         const execOutput = await runtime.readStream()
         if (execOutput) {
             console.log(`Execution output:\n${execOutput}`)
+        }
+        
+        // Check for runtime errors in output
+        if (execOutput && (execOutput.includes('Error') || execOutput.includes('UNDERFLOW') || execOutput.includes('OVERFLOW'))) {
+            console.error(`[${name}] FAIL: Runtime error detected in output`)
+            failed++
+            return
         }
         
         console.log(`[${name}] ✓ Full compile and execute successful`)

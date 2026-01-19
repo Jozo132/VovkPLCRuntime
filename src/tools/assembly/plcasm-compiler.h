@@ -68,11 +68,21 @@
 #define PLCRUNTIME_MARKER_OFFSET (PLCRUNTIME_SYSTEM_OFFSET + PLCRUNTIME_NUM_OF_SYSTEMS)
 #endif // PLCRUNTIME_MARKER_OFFSET
 
+#ifndef PLCRUNTIME_TIMER_OFFSET
+#define PLCRUNTIME_TIMER_OFFSET (PLCRUNTIME_MARKER_OFFSET + PLCRUNTIME_NUM_OF_MARKERS)
+#endif // PLCRUNTIME_TIMER_OFFSET
+
+#ifndef PLCRUNTIME_COUNTER_OFFSET
+#define PLCRUNTIME_COUNTER_OFFSET (PLCRUNTIME_TIMER_OFFSET + (PLCRUNTIME_NUM_OF_TIMERS * PLCRUNTIME_TIMER_STRUCT_SIZE))
+#endif // PLCRUNTIME_COUNTER_OFFSET
+
 static u32 plcasm_control_offset = PLCRUNTIME_CONTROL_OFFSET;
 static u32 plcasm_input_offset = PLCRUNTIME_INPUT_OFFSET;
 static u32 plcasm_output_offset = PLCRUNTIME_OUTPUT_OFFSET;
 static u32 plcasm_system_offset = PLCRUNTIME_SYSTEM_OFFSET;
 static u32 plcasm_marker_offset = PLCRUNTIME_MARKER_OFFSET;
+static u32 plcasm_timer_offset = PLCRUNTIME_TIMER_OFFSET;
+static u32 plcasm_counter_offset = PLCRUNTIME_COUNTER_OFFSET;
 
 #define MAX_ASSEMBLY_STRING_SIZE 64535
 #define MAX_NUM_OF_TOKENS 10000
@@ -1499,24 +1509,35 @@ public:
         return true;
     }
 
-    bool memoryOffsetFromPrefix(char prefix, int& offset) {
+    bool memoryOffsetFromPrefix(char prefix, int& offset, int& multiplier) {
+        multiplier = 1; // Default multiplier for byte-addressable areas
         switch (prefix) {
-            case 'C': case 'c': offset = (int) plcasm_control_offset; return true;
+            case 'K': case 'k': offset = (int) plcasm_control_offset; return true;
             case 'X': case 'x': offset = (int) plcasm_input_offset; return true;
             case 'Y': case 'y': offset = (int) plcasm_output_offset; return true;
             case 'M': case 'm': offset = (int) plcasm_marker_offset; return true;
             case 'S': case 's': offset = (int) plcasm_system_offset; return true;
+            case 'T': case 't': offset = (int) plcasm_timer_offset; multiplier = PLCRUNTIME_TIMER_STRUCT_SIZE; return true;
+            case 'C': case 'c': offset = (int) plcasm_counter_offset; multiplier = PLCRUNTIME_COUNTER_STRUCT_SIZE; return true;
             default: return false;
         }
+    }
+    
+    // Legacy overload for backward compatibility
+    bool memoryOffsetFromPrefix(char prefix, int& offset) {
+        int multiplier = 1;
+        return memoryOffsetFromPrefix(prefix, offset, multiplier);
     }
 
     bool memorySizeFromPrefix(char prefix, int& size, const char*& name) {
         switch (prefix) {
-            case 'C': case 'c': size = PLCRUNTIME_NUM_OF_CONTROLS; name = "controls"; return true;
+            case 'K': case 'k': size = PLCRUNTIME_NUM_OF_CONTROLS; name = "controls"; return true;
             case 'X': case 'x': size = PLCRUNTIME_NUM_OF_INPUTS; name = "inputs"; return true;
             case 'Y': case 'y': size = PLCRUNTIME_NUM_OF_OUTPUTS; name = "outputs"; return true;
             case 'S': case 's': size = PLCRUNTIME_NUM_OF_SYSTEMS; name = "systems"; return true;
             case 'M': case 'm': size = PLCRUNTIME_NUM_OF_MARKERS; name = "markers"; return true;
+            case 'T': case 't': size = PLCRUNTIME_NUM_OF_TIMERS; name = "timers"; return true;
+            case 'C': case 'c': size = PLCRUNTIME_NUM_OF_COUNTERS; name = "counters"; return true;
             default: return false;
         }
     }
@@ -1535,29 +1556,54 @@ public:
         token.highlight(assembly_string);
     }
 
-    bool parsePrefixedAddressToken(Token& token, StringView& number, int& offset) {
+    bool parsePrefixedAddressToken(Token& token, StringView& number, int& offset, int& multiplier) {
         if (token.length < 2) return false;
-        if (!memoryOffsetFromPrefix(token.string[0], offset)) return false;
+        if (!memoryOffsetFromPrefix(token.string[0], offset, multiplier)) return false;
         number.data = token.string.data + 1;
         number.length = token.length - 1;
         return true;
     }
+    
+    // Legacy overload for backward compatibility
+    bool parsePrefixedAddressToken(Token& token, StringView& number, int& offset) {
+        int multiplier = 1;
+        return parsePrefixedAddressToken(token, number, offset, multiplier);
+    }
 
     bool addressFromToken(Token& token, int& output) {
         int offset = 0;
+        int multiplier = 1;
         StringView number;
-        if (parsePrefixedAddressToken(token, number, offset)) {
+        
+        // Handle # prefix for immediate/direct values (e.g., #1000)
+        if (token.length > 1 && token.string[0] == '#') {
+            number.data = token.string.data + 1;
+            number.length = token.length - 1;
+            int value_int = 0;
+            float value_float = 0;
+            if (isInteger(number, value_int)) {
+                output = value_int;
+                return false;
+            }
+            if (isReal(number, value_float)) {
+                output = (int) value_float;
+                return false;
+            }
+            // Fall through to other parsing methods
+        }
+        
+        if (parsePrefixedAddressToken(token, number, offset, multiplier)) {
             int value_int = 0;
             float value_float = 0;
             if (isInteger(number, value_int)) {
                 warnPrefixedAddressOutOfRange(token, token.string[0], value_int);
-                output = offset + value_int;
+                output = offset + (value_int * multiplier);
                 return false;
             }
             if (isReal(number, value_float)) {
                 int addr = (int) value_float;
                 warnPrefixedAddressOutOfRange(token, token.string[0], addr);
-                output = offset + addr;
+                output = offset + (addr * multiplier);
                 return false;
             }
             // If prefixed parsing fails, fall back to named constants or plain ints.
@@ -2748,11 +2794,34 @@ WASM_EXPORT void setRuntimeOffsets(u32 controlOffset, u32 inputOffset, u32 outpu
     plcasm_output_offset = outputOffset;
     plcasm_system_offset = systemOffset;
     plcasm_marker_offset = markerOffset;
+    // Timer and counter offsets are auto-calculated based on marker offset
+    plcasm_timer_offset = markerOffset + PLCRUNTIME_NUM_OF_MARKERS;
+    plcasm_counter_offset = plcasm_timer_offset + (PLCRUNTIME_NUM_OF_TIMERS * PLCRUNTIME_TIMER_STRUCT_SIZE);
     runtime.control_offset = controlOffset;
     runtime.input_offset = inputOffset;
     runtime.output_offset = outputOffset;
     runtime.system_offset = systemOffset;
     runtime.marker_offset = markerOffset;
+    runtime.timer_offset = plcasm_timer_offset;
+    runtime.counter_offset = plcasm_counter_offset;
+}
+
+// Extended version with timer and counter offsets
+WASM_EXPORT void setRuntimeOffsetsEx(u32 controlOffset, u32 inputOffset, u32 outputOffset, u32 systemOffset, u32 markerOffset, u32 timerOffset, u32 counterOffset) {
+    plcasm_control_offset = controlOffset;
+    plcasm_input_offset = inputOffset;
+    plcasm_output_offset = outputOffset;
+    plcasm_system_offset = systemOffset;
+    plcasm_marker_offset = markerOffset;
+    plcasm_timer_offset = timerOffset;
+    plcasm_counter_offset = counterOffset;
+    runtime.control_offset = controlOffset;
+    runtime.input_offset = inputOffset;
+    runtime.output_offset = outputOffset;
+    runtime.system_offset = systemOffset;
+    runtime.marker_offset = markerOffset;
+    runtime.timer_offset = timerOffset;
+    runtime.counter_offset = counterOffset;
 }
 
 WASM_EXPORT bool loadCompiledProgram() {
