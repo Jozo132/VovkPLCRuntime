@@ -26,3 +26,4 @@
 #include "tools/assembly/plcasm-compiler.h"
 #include "tools/assembly/plcasm-linter.h"
 #include "tools/assembly/stl-compiler.h"
+#include "tools/assembly/stl-linter.h"

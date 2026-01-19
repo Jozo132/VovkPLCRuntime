@@ -178,7 +178,8 @@ public:
 
     // ============ Error handling ============
 
-    void setError(const char* msg) {
+    // Virtual so STLLinter can override to capture multiple errors
+    virtual void setError(const char* msg) {
         if (has_error) return; // Keep first error
         has_error = true;
         error_line = current_line;
@@ -190,6 +191,9 @@ public:
         }
         error_message[i] = '\0';
     }
+    
+    // Virtual destructor for proper cleanup in derived classes
+    virtual ~STLCompiler() = default;
 
     // ============ Lexer helpers ============
 

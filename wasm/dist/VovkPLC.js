@@ -361,6 +361,103 @@ class VovkPLC_class {
     }
 
     /**
+     * @typedef {{ type: 'error' | 'warning' | 'info', line: number, column: number, length: number, message: string }} STLLinterProblem
+     */
+
+    /**
+     * @typedef {{ problems: STLLinterProblem[], output: string }} STLLintResult
+     */
+
+    /**
+     * Lints the provided STL (Statement List) code.
+     * Streams the STL to the linter, runs the analysis, and returns problems and generated PLCASM.
+     *
+     * @param {string} stl - The STL source code to lint.
+     * @param {boolean} [debug=false] - If true, streams linter output to console.
+     * @returns {STLLintResult} - Object containing problems array and generated PLCASM output.
+     */
+    lintSTL = (stl, debug = false) => {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        if (!this.wasm_exports.stl_lint_load_from_stream) throw new Error("'stl_lint_load_from_stream' function not found - STL linter not available")
+        if (!this.wasm_exports.stl_lint_run) throw new Error("'stl_lint_run' function not found")
+        if (!this.wasm_exports.stl_lint_get_problem_count) throw new Error("'stl_lint_get_problem_count' function not found")
+        if (!this.wasm_exports.stl_lint_get_problems_pointer) throw new Error("'stl_lint_get_problems_pointer' function not found")
+        if (!this.wasm_exports.stl_lint_get_output) throw new Error("'stl_lint_get_output' function not found")
+
+        const wasSilent = this.silent
+
+        // Temporarily disable stream output unless debug is enabled
+        if (!debug) {
+            this.setSilent(true)
+        }
+
+        try {
+            // 1. Stream STL code to linter
+            let ok = true
+            for (let i = 0; i < stl.length && ok; i++) {
+                ok = this.wasm_exports.streamIn(stl.charCodeAt(i))
+            }
+            if (!ok) throw new Error('Failed to stream STL code')
+            this.wasm_exports.streamIn(0) // Null terminator
+            this.wasm_exports.stl_lint_load_from_stream()
+
+            // 2. Run STL Linter
+            this.wasm_exports.stl_lint_run()
+
+            // 3. Get problems
+            const count = this.wasm_exports.stl_lint_get_problem_count()
+            /** @type { STLLinterProblem[] } */
+            const problems = []
+
+            if (count > 0) {
+                const pointer = this.wasm_exports.stl_lint_get_problems_pointer()
+                // Struct size = 84 bytes (same as PLCASM linter: 4+4+4+4+64+4)
+                const struct_size = 84
+
+                const memoryBuffer = this.wasm_exports.memory.buffer
+                const view = new DataView(memoryBuffer)
+
+                for (let i = 0; i < count; i++) {
+                    const offset = pointer + i * struct_size
+                    const type_int = view.getUint32(offset + 0, true)
+                    const line = view.getUint32(offset + 4, true)
+                    const column = view.getUint32(offset + 8, true)
+                    const length = view.getUint32(offset + 12, true)
+
+                    // message is 64 bytes at offset 16
+                    let message = ''
+                    for (let j = 0; j < 64; j++) {
+                        const charCode = view.getUint8(offset + 16 + j)
+                        if (charCode === 0) break
+                        message += String.fromCharCode(charCode)
+                    }
+
+                    problems.push({
+                        type: type_int === 2 ? 'error' : type_int === 1 ? 'warning' : 'info',
+                        line,
+                        column,
+                        length,
+                        message,
+                    })
+                }
+            }
+
+            // 4. Get generated PLCASM output
+            this.wasm_exports.stl_lint_get_output()
+            const output = this.readStream()
+
+            return { problems, output }
+        } finally {
+            // Restore original stream callback
+            this.setSilent(wasSilent)
+            // Clear any accumulated stream output
+            if (!debug) {
+                this.readStream()
+            }
+        }
+    }
+
+    /**
      * IR Flag constants for instruction classification.
      */
     static IR_FLAGS = {
@@ -1924,6 +2021,8 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
 
     /** @type { (assembly: string, debug?: boolean) => Promise<any> } */
     lint = (assembly, debug = false) => this.call('lint', assembly, debug)
+    /** @type { (stl: string, debug?: boolean) => Promise<{ problems: STLLinterProblem[], output: string }> } */
+    lintSTL = (stl, debug = false) => this.call('lintSTL', stl, debug)
     /** @type { (value?: boolean) => Promise<any> } */
     setSilent = value => this.call('setSilent', value)
     /** @type { () => Promise<any> } */
@@ -1936,8 +2035,12 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
     setRuntimeOffsets = (controlOffset, inputOffset, outputOffset, systemOffset, markerOffset) => this.call('setRuntimeOffsets', controlOffset, inputOffset, outputOffset, systemOffset, markerOffset)
     /** @type { (assembly: string) => Promise<any> } */
     downloadAssembly = assembly => this.call('downloadAssembly', assembly)
-    /** @type { (assembly: string, options?: boolean | { run?: boolean, language?: 'plcasm' | 'stl' }) => Promise<any> } */
+    /** @type { (assembly: string, options?: boolean | { run?: boolean, language?: 'plcasm' | 'stl' }) => Promise<CompileResult> } */
     compile = (assembly, options = false) => this.call('compile', assembly, options)
+    /** @type { (plcasm: string, options?: { run?: boolean }) => Promise<CompileResult> } */
+    compilePLCASM = (plcasm, options = {}) => this.call('compilePLCASM', plcasm, options)
+    /** @type { (stl: string) => Promise<CompileResult> } */
+    compileSTL = stl => this.call('compileSTL', stl)
     /** @type { (program: string | number[]) => Promise<any> } */
     downloadBytecode = program => this.call('downloadBytecode', program)
     /** @type { () => Promise<any> } */
