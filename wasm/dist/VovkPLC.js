@@ -2069,6 +2069,8 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
     getMillis = () => this.call('getMillis')
     /** @type { () => Promise<number> } */
     getMicros = () => this.call('getMicros')
+    /** @type { () => Promise<number> } */
+    getTotalRam = () => this.call('getTotalRam')
     
     // IR (Intermediate Representation) accessors
     /** @type { () => Promise<import('./VovkPLC.js').IR_Entry[]> } */
