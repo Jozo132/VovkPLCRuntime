@@ -707,15 +707,67 @@ class VovkPLC_class {
     /**
      * Compiles assembly code into executable bytecode within the PLC.
      *
-     * @param {string} assembly - The assembly source code.
-     * @param {boolean} [run=false] - If true, loads and runs the program immediately after compilation (in debug mode).
-     * @returns {{size: number, output: string}} - The compilation result containing bytecode size and hexdump output.
+     * @param {string} assembly - The assembly source code (PLCASM or STL depending on language parameter).
+     * @param {boolean | { run?: boolean, language?: 'plcasm' | 'stl' }} [options=false] - If boolean, whether to run after compile. If object, contains options.
+     * @returns {{size: number, output: string, plcasm?: string}} - The compilation result containing bytecode size, hexdump output, and optionally the generated PLCASM (for STL).
      * @throws {Error} If compilation fails.
      */
-    compile(assembly, run = false) {
+    compile(assembly, options = false) {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
-        if (assembly) {
-             this.downloadAssembly(assembly)
+        
+        // Handle backward-compatible boolean parameter
+        let run = false
+        let language = 'plcasm'
+        if (typeof options === 'boolean') {
+            run = options
+        } else if (typeof options === 'object' && options !== null) {
+            run = options.run || false
+            language = options.language || 'plcasm'
+        }
+        
+        let plcasmCode = assembly
+        let generatedPlcasm = undefined
+        
+        // If STL language, first transpile to PLCASM
+        if (language === 'stl') {
+            if (!this.wasm_exports.stl_load_from_stream) throw new Error("'stl_load_from_stream' function not found - STL compiler not available")
+            if (!this.wasm_exports.stl_compile) throw new Error("'stl_compile' function not found")
+            if (!this.wasm_exports.stl_get_output) throw new Error("'stl_get_output' function not found")
+            if (!this.wasm_exports.stl_has_error) throw new Error("'stl_has_error' function not found")
+            
+            // Stream STL code to compiler
+            let ok = true
+            for (let i = 0; i < assembly.length && ok; i++) {
+                ok = this.wasm_exports.streamIn(assembly.charCodeAt(i))
+            }
+            if (!ok) throw new Error('Failed to stream STL code')
+            this.wasm_exports.streamIn(0) // Null terminator
+            
+            // Load from stream and compile STL to PLCASM
+            this.wasm_exports.stl_load_from_stream()
+            const stlSuccess = this.wasm_exports.stl_compile()
+            
+            if (!stlSuccess) {
+                const hasError = this.wasm_exports.stl_has_error()
+                if (hasError) {
+                    const errorLine = this.wasm_exports.stl_get_error_line ? this.wasm_exports.stl_get_error_line() : 0
+                    const errorCol = this.wasm_exports.stl_get_error_column ? this.wasm_exports.stl_get_error_column() : 0
+                    throw new Error(`STL compilation failed at line ${errorLine}, column ${errorCol}`)
+                }
+                throw new Error('STL compilation failed')
+            }
+            
+            // Get the generated PLCASM via stream
+            if (this.wasm_exports.stl_output_to_stream) {
+                this.wasm_exports.stl_output_to_stream()
+                plcasmCode = this.readStream()
+                generatedPlcasm = plcasmCode
+            }
+        }
+        
+        // Compile PLCASM to bytecode
+        if (plcasmCode) {
+            this.downloadAssembly(plcasmCode)
         }
         if (!this.wasm_exports.compileAssembly) throw new Error("'compileAssembly' function not found")
         if (!this.wasm_exports.loadCompiledProgram) throw new Error("'loadCompiledProgram' function not found")
@@ -725,7 +777,11 @@ class VovkPLC_class {
             this.wasm_exports.loadCompiledProgram()
             this.runDebug()
         }
-        return this.extractProgram()
+        const result = this.extractProgram()
+        if (generatedPlcasm !== undefined) {
+            result.plcasm = generatedPlcasm
+        }
+        return result
     }
 
     /**
@@ -1818,8 +1874,8 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
     setRuntimeOffsets = (controlOffset, inputOffset, outputOffset, systemOffset, markerOffset) => this.call('setRuntimeOffsets', controlOffset, inputOffset, outputOffset, systemOffset, markerOffset)
     /** @type { (assembly: string) => Promise<any> } */
     downloadAssembly = assembly => this.call('downloadAssembly', assembly)
-    /** @type { (assembly: string, run?: boolean) => Promise<any> } */
-    compile = (assembly, run = false) => this.call('compile', assembly, run)
+    /** @type { (assembly: string, options?: boolean | { run?: boolean, language?: 'plcasm' | 'stl' }) => Promise<any> } */
+    compile = (assembly, options = false) => this.call('compile', assembly, options)
     /** @type { (program: string | number[]) => Promise<any> } */
     downloadBytecode = program => this.call('downloadBytecode', program)
     /** @type { () => Promise<any> } */
