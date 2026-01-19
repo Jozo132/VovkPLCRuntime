@@ -2053,16 +2053,16 @@ public:
                     if (is_ton || is_tof || is_tp) {
                         // Timer instruction found - consume it and process parameters
                         if (!hasNext) {
-                            return buildError(token, "Timer instruction requires 2 arguments: timer_address and preset_time");
+                            return buildError(token, "missing timer parameters");
                         }
                         if (!hasThird) {
-                            return buildError(token_p1, "Timer instruction requires a second argument: preset_time (use #value for constant or address for memory)");
+                            return buildError(token_p1, "missing timer parameters");
                         }
 
                         int timer_addr = 0;
                         if (addressFromToken(token_p1, timer_addr)) {
                             // First parameter is not a valid address
-                            return buildError(token_p1, "expected timer address (like S0, M0, etc)");
+                            return buildError(token_p1, "invalid timer address ");
                         }
 
                         // First parameter is valid, now check second parameter
@@ -2075,7 +2075,7 @@ public:
                             if (token_p2.string[0] == 'T' && token_p2.string[1] == '#') {
                                 // Duration format: T#5s, T#200ms, T#4m10s500ms
                                 if (parseDuration(token_p2.string, pt_val)) {
-                                    return buildError(token_p2, "invalid duration format (expected T#<number><unit> like T#5s, T#200ms, T#1m30s)");
+                                    return buildError(token_p2, "invalid duration format");
                                 }
                             } else {
                                 // Simple integer format: #123
@@ -2084,7 +2084,7 @@ public:
                                 valStr.length = token_p2.string.length - 1;
                                 int pt_val_int = 0;
                                 if (!isInteger(valStr, pt_val_int)) {
-                                    return buildError(token_p2, "expected integer value after # or use duration format T#<number><unit>");
+                                    return buildError(token_p2, "unknown variable or value");
                                 }
                                 pt_val = (u32) pt_val_int;
                             }
@@ -2100,7 +2100,7 @@ public:
                             int pt_addr = 0;
                             if (addressFromToken(token_p2, pt_addr)) {
                                 // Second parameter is not a valid address or constant
-                                return buildError(token_p2, "expected preset time value (use #123 for constant) or memory address (like M0)");
+                                return buildError(token_p2, "unknown variable or value");
                             }
                             // Memory timer: [opcode][timer_addr][pt_addr]
                             PLCRuntimeInstructionSet op = (PLCRuntimeInstructionSet) (is_ton ? TON_MEM : (is_tof ? TOF_MEM : TP_MEM));
@@ -2120,16 +2120,16 @@ public:
                     if (is_ctu || is_ctd) {
                         // Counter instruction found - consume it and process parameters
                         if (!hasNext) {
-                            return buildError(token, "Counter instruction requires 2 arguments: counter_address and preset_value");
+                            return buildError(token, "missing counter parameters");
                         }
                         if (!hasThird) {
-                            return buildError(token_p1, "Counter instruction requires a second argument: preset_value (use #value for constant or address for memory)");
+                            return buildError(token_p1, "missing counter parameters");
                         }
 
                         int counter_addr = 0;
                         if (addressFromToken(token_p1, counter_addr)) {
                             // First parameter is not a valid address
-                            return buildError(token_p1, "expected counter address (like S0, M0, etc)");
+                            return buildError(token_p1, "invalid counter address ");
                         }
 
                         // First parameter is valid, now check second parameter
@@ -2157,7 +2157,7 @@ public:
                             int pv_addr = 0;
                             if (addressFromToken(token_p2, pv_addr)) {
                                 // Second parameter is not a valid address or constant
-                                return buildError(token_p2, "expected preset value (use #123 for constant) or memory address (like M0)");
+                                return buildError(token_p2, "invalid preset address");
                             }
                             // Memory counter: [opcode][counter_addr][pv_addr]
                             PLCRuntimeInstructionSet op = (PLCRuntimeInstructionSet) (is_ctu ? CTU_MEM : CTD_MEM);
