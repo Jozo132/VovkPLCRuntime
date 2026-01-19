@@ -1123,9 +1123,8 @@ public:
             return;
         }
         
-        // Unknown instruction - check if it looks like an address (passthrough)
-        // This handles cases where the token might be an address used as a standalone instruction
-        // Or emit as comment
+        // Unknown instruction - report error
+        setError("Unknown instruction");
         emit("// Unknown instruction: ");
         emitLine(instr);
     }

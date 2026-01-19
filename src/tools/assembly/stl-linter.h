@@ -696,6 +696,7 @@ public:
             if (isAlpha(c)) {
                 char identifier[64];
                 int start_col = current_column;
+                last_operand_ptr = stl_source + pos;  // Track for error reporting
                 readIdentifier(identifier, sizeof(identifier));
                 token_length = current_column - start_col;
                 
@@ -804,6 +805,19 @@ public:
         // Check for unclosed nesting
         if (nesting_depth > 0) {
             addWarning("Unclosed parenthesis - missing ')'");
+        }
+
+        // If there are any errors, clear the output to prevent invalid PLCASM from being used
+        bool hasErrors = false;
+        for (int i = 0; i < problem_count; i++) {
+            if (problems[i].type == LINT_ERROR) {
+                hasErrors = true;
+                break;
+            }
+        }
+        if (hasErrors) {
+            output[0] = '\0';
+            output_length = 0;
         }
 
         return problem_count == 0;
