@@ -56,6 +56,10 @@ public:
     // Track token info for error reporting
     int token_start_column = 1;
     int token_length = 0;
+    
+    // Track last operand position for address validation errors
+    int last_operand_column = 1;
+    int last_operand_length = 0;
 
     STLLinter() : STLCompiler() {
         problem_count = 0;
@@ -69,6 +73,14 @@ public:
         error_message[0] = '\0';
         error_line = 0;
         error_column = 0;
+    }
+    
+    // Override readIdentifier to track operand position for error reporting
+    bool readIdentifier(char* buf, int maxLen) override {
+        last_operand_column = current_column;
+        bool result = STLCompiler::readIdentifier(buf, maxLen);
+        last_operand_length = current_column - last_operand_column;
+        return result;
     }
     
     // ============ Symbol Parsing ============
@@ -486,9 +498,11 @@ public:
         
         // Validate address format before converting
         if (!isValidAddressFormat(stlAddr)) {
-            // Report error for invalid address
+            // Report error for invalid address at the operand position
             int len = 0;
             while (stlAddr[len]) len++;
+            token_start_column = last_operand_column;
+            token_length = last_operand_length > 0 ? last_operand_length : len;
             setError("Invalid address format");
             // Still convert to avoid null output
             STLCompiler::convertAddress(stlAddr, plcasmAddr);

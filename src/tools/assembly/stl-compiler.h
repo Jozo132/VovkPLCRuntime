@@ -245,7 +245,7 @@ public:
     }
 
     // Read an identifier/keyword
-    bool readIdentifier(char* buf, int maxLen) {
+    virtual bool readIdentifier(char* buf, int maxLen) {
         int i = 0;
         while (i < maxLen - 1) {
             char c = peek();
