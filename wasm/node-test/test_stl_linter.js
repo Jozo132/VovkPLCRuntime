@@ -312,6 +312,29 @@ L COUNTER_VAL
         }
     }
     
+    // Test 13: Invalid address format (trailing characters)
+    {
+        const testName = 'Invalid address format error'
+        const stl = `A I0.0
+= Q0.0d
+`
+        try {
+            const result = await runtime.lintSTL(stl)
+            const hasAddressError = result.problems.some(p => p.type === 'error' && p.message.includes('Invalid address'))
+            if (hasAddressError) {
+                console.log(`✓ ${testName}`)
+                passed++
+            } else {
+                console.log(`✗ ${testName}: Expected invalid address format error`)
+                result.problems.forEach(p => console.log(`  - [${p.type}] Line ${p.line}: ${p.message}`))
+                failed++
+            }
+        } catch (e) {
+            console.log(`✗ ${testName}: ${e.message}`)
+            failed++
+        }
+    }
+    
     await runtime.terminate()
     
     console.log(`\n=== Results: ${passed} passed, ${failed} failed ===`)

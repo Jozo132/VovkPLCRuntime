@@ -364,7 +364,62 @@ public:
         }
     }
     
-    // Override convertAddress to resolve symbols first
+    // Validate address format (e.g., I0.0, Q1, M10.5, T#5s, #123)
+    bool isValidAddressFormat(const char* addr) {
+        if (!addr || addr[0] == '\0') return false;
+        
+        char first = addr[0];
+        if (first >= 'a' && first <= 'z') first -= 32; // Uppercase
+        
+        // Special formats that are passed through
+        if (first == '#') return true;  // Immediate value
+        if (first == 'P' && addr[1] == '_') return true;  // P_On, P_Off, etc.
+        if (first == 'T' && addr[1] == '#') return true;  // T#5s duration
+        
+        // Standard address prefixes
+        bool hasPrefix = false;
+        int i = 0;
+        switch (first) {
+            case 'I': case 'Q': case 'M': case 'S': case 'X': case 'Y':
+            case 'K': case 'C': case 'T':
+                hasPrefix = true;
+                i = 1;
+                break;
+            default:
+                // Could be a plain number or a symbol name
+                if (first >= '0' && first <= '9') {
+                    i = 0;
+                } else if ((first >= 'A' && first <= 'Z') || first == '_') {
+                    // Could be a symbol name - let it pass for now
+                    return true;
+                } else {
+                    return false;
+                }
+        }
+        
+        // After prefix, expect digits
+        bool hasDigits = false;
+        while (addr[i] >= '0' && addr[i] <= '9') {
+            hasDigits = true;
+            i++;
+        }
+        
+        if (!hasDigits && hasPrefix) return false;  // Must have at least one digit after prefix
+        
+        // Optional: dot followed by bit number (0-7)
+        if (addr[i] == '.') {
+            i++;
+            if (addr[i] < '0' || addr[i] > '7') return false;  // Invalid bit number
+            i++;
+        }
+        
+        // Should be at end of string now
+        if (addr[i] != '\0') return false;  // Extra characters after valid address
+        
+        return true;
+    }
+    
+    // Override convertAddress to resolve symbols first and validate addresses
     void convertAddress(const char* stlAddr, char* plcasmAddr) override {
         // Check if it's a symbol name
         STLSymbol* sym = findSymbol(stlAddr);
@@ -426,6 +481,17 @@ public:
             }
             
             plcasmAddr[j] = '\0';
+            return;
+        }
+        
+        // Validate address format before converting
+        if (!isValidAddressFormat(stlAddr)) {
+            // Report error for invalid address
+            int len = 0;
+            while (stlAddr[len]) len++;
+            setError("Invalid address format");
+            // Still convert to avoid null output
+            STLCompiler::convertAddress(stlAddr, plcasmAddr);
             return;
         }
         
