@@ -540,7 +540,7 @@ public:
         STDOUT_PRINT.print(PLCRUNTIME_MAX_STACK_SIZE); STDOUT_PRINT.print(F(","));
         STDOUT_PRINT.print(PLCRUNTIME_MAX_MEMORY_SIZE); STDOUT_PRINT.print(F(","));
         STDOUT_PRINT.print(PLCRUNTIME_MAX_PROGRAM_SIZE); STDOUT_PRINT.print(F(","));
-        // IO map (Controls, Inputs, Outputs, Systems, Markers)
+        // IO map (Controls, Inputs, Outputs, Systems, Markers, Timers, Counters)
         STDOUT_PRINT.print(control_offset); STDOUT_PRINT.print(F(","));
         STDOUT_PRINT.print(PLCRUNTIME_NUM_OF_CONTROLS); STDOUT_PRINT.print(F(","));
         STDOUT_PRINT.print(input_offset); STDOUT_PRINT.print(F(","));
@@ -551,6 +551,12 @@ public:
         STDOUT_PRINT.print(PLCRUNTIME_NUM_OF_SYSTEMS); STDOUT_PRINT.print(F(","));
         STDOUT_PRINT.print(marker_offset); STDOUT_PRINT.print(F(","));
         STDOUT_PRINT.print(PLCRUNTIME_NUM_OF_MARKERS); STDOUT_PRINT.print(F(","));
+        STDOUT_PRINT.print(timer_offset); STDOUT_PRINT.print(F(","));
+        STDOUT_PRINT.print(PLCRUNTIME_NUM_OF_TIMERS); STDOUT_PRINT.print(F(","));
+        STDOUT_PRINT.print(PLCRUNTIME_TIMER_STRUCT_SIZE); STDOUT_PRINT.print(F(","));
+        STDOUT_PRINT.print(counter_offset); STDOUT_PRINT.print(F(","));
+        STDOUT_PRINT.print(PLCRUNTIME_NUM_OF_COUNTERS); STDOUT_PRINT.print(F(","));
+        STDOUT_PRINT.print(PLCRUNTIME_COUNTER_STRUCT_SIZE); STDOUT_PRINT.print(F(","));
         // Device name
         STDOUT_PRINT.print(F(VOVKPLC_DEVICE_NAME));
 

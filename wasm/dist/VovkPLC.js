@@ -572,7 +572,7 @@ class VovkPLC_class {
         const raw = this.readStream().trim()
         if (raw.length === 0) return 'No info available'
         if (raw.startsWith('[') && raw.endsWith(']')) {
-            // '[VovkPLCRuntime,WASM,0,1,0,324,2025-03-16 19:16:44,1024,104857,104857,0,16,16,16,32,16,48,16,64,16,Simulator]'
+            // '[VovkPLCRuntime,WASM,0,1,0,324,2025-03-16 19:16:44,1024,104857,104857,0,16,16,16,32,16,48,16,64,16,704,16,9,848,16,5,Simulator]'
             const content = raw.substring(1, raw.length - 1)
             const parts = content.split(',')
             const base = {
@@ -584,7 +584,31 @@ class VovkPLC_class {
                 memory: +parts[8],
                 program: +parts[9],
             }
+            if (parts.length >= 27) {
+                // New format with timer and counter info
+                return {
+                    ...base,
+                    control_offset: +parts[10],
+                    control_size: +parts[11],
+                    input_offset: +parts[12],
+                    input_size: +parts[13],
+                    output_offset: +parts[14],
+                    output_size: +parts[15],
+                    system_offset: +parts[16],
+                    system_size: +parts[17],
+                    marker_offset: +parts[18],
+                    marker_size: +parts[19],
+                    timer_offset: +parts[20],
+                    timer_count: +parts[21],
+                    timer_struct_size: +parts[22],
+                    counter_offset: +parts[23],
+                    counter_count: +parts[24],
+                    counter_struct_size: +parts[25],
+                    device: parts[26],
+                }
+            }
             if (parts.length >= 21) {
+                // Legacy format without timer/counter info
                 return {
                     ...base,
                     control_offset: +parts[10],
@@ -600,7 +624,7 @@ class VovkPLC_class {
                     device: parts[20],
                 }
             }
-            return { // Legacy format
+            return { // Very old legacy format
                 ...base,
                 input_offset: +parts[10],
                 input_size: +parts[11],
