@@ -728,15 +728,103 @@ class VovkPLC_class {
         const error = !ok
         return error
     }
+
     /**
-     * Compiles assembly code into executable bytecode within the PLC.
+     * @typedef {{ type: 'bytecode' | 'plcasm', size: number, output: string }} CompileResult
+     */
+
+    /**
+     * Compiles PLCASM assembly code into executable bytecode.
      *
-     * @param {string} assembly - The assembly source code (PLCASM or STL depending on language parameter).
-     * @param {boolean | { run?: boolean, language?: 'plcasm' | 'stl' }} [options=false] - If boolean, whether to run after compile. If object, contains options.
-     * @returns {{size: number, output: string, plcasm?: string}} - The compilation result containing bytecode size, hexdump output, and optionally the generated PLCASM (for STL).
+     * @param {string} plcasm - The PLCASM source code.
+     * @param {{ run?: boolean }} [options={}] - Options: run=true to execute after compile.
+     * @returns {CompileResult} - The compilation result with type='bytecode'.
      * @throws {Error} If compilation fails.
      */
-    compile(assembly, options = false) {
+    compilePLCASM(plcasm, options = {}) {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        if (!this.wasm_exports.compileAssembly) throw new Error("'compileAssembly' function not found")
+        if (!this.wasm_exports.loadCompiledProgram) throw new Error("'loadCompiledProgram' function not found")
+        
+        const run = options.run || false
+        
+        this.downloadAssembly(plcasm)
+        if (this.wasm_exports.compileAssembly(false)) throw new Error('Failed to compile assembly')
+        
+        if (run) {
+            this.wasm_exports.loadCompiledProgram()
+            this.runDebug()
+        }
+        
+        const result = this.extractProgram()
+        return {
+            type: 'bytecode',
+            size: result.size,
+            output: result.output
+        }
+    }
+
+    /**
+     * Transpiles STL (Siemens Statement List) code to PLCASM assembly.
+     *
+     * @param {string} stl - The STL source code.
+     * @returns {CompileResult} - The compilation result with type='plcasm'.
+     * @throws {Error} If transpilation fails.
+     */
+    compileSTL(stl) {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        if (!this.wasm_exports.stl_load_from_stream) throw new Error("'stl_load_from_stream' function not found - STL compiler not available")
+        if (!this.wasm_exports.stl_compile) throw new Error("'stl_compile' function not found")
+        if (!this.wasm_exports.stl_get_output) throw new Error("'stl_get_output' function not found")
+        if (!this.wasm_exports.stl_has_error) throw new Error("'stl_has_error' function not found")
+        
+        // Stream STL code to compiler
+        let ok = true
+        for (let i = 0; i < stl.length && ok; i++) {
+            ok = this.wasm_exports.streamIn(stl.charCodeAt(i))
+        }
+        if (!ok) throw new Error('Failed to stream STL code')
+        this.wasm_exports.streamIn(0) // Null terminator
+        
+        // Load from stream and compile STL to PLCASM
+        this.wasm_exports.stl_load_from_stream()
+        const stlSuccess = this.wasm_exports.stl_compile()
+        
+        if (!stlSuccess) {
+            const hasError = this.wasm_exports.stl_has_error()
+            if (hasError) {
+                const errorLine = this.wasm_exports.stl_get_error_line ? this.wasm_exports.stl_get_error_line() : 0
+                const errorCol = this.wasm_exports.stl_get_error_column ? this.wasm_exports.stl_get_error_column() : 0
+                throw new Error(`STL compilation failed at line ${errorLine}, column ${errorCol}`)
+            }
+            throw new Error('STL compilation failed')
+        }
+        
+        // Get the generated PLCASM via stream
+        let plcasmCode = ''
+        if (this.wasm_exports.stl_output_to_stream) {
+            this.wasm_exports.stl_output_to_stream()
+            plcasmCode = this.readStream()
+        }
+        
+        return {
+            type: 'plcasm',
+            size: plcasmCode.length,
+            output: plcasmCode
+        }
+    }
+
+    /**
+     * Compiles source code based on the specified language.
+     * - 'plcasm': Compiles directly to bytecode.
+     * - 'stl': Transpiles to PLCASM (for further compilation by external editor).
+     *
+     * @param {string} source_code - The source code to compile.
+     * @param {boolean | { run?: boolean, language?: 'plcasm' | 'stl' }} [options=false] - If boolean, whether to run after compile (only for plcasm). If object, contains options.
+     * @returns {CompileResult} - The compilation result.
+     * @throws {Error} If compilation fails.
+     */
+    compile(source_code, options = false) {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         
         // Handle backward-compatible boolean parameter
@@ -749,63 +837,13 @@ class VovkPLC_class {
             language = options.language || 'plcasm'
         }
         
-        let plcasmCode = assembly
-        let generatedPlcasm = undefined
-        
-        // If STL language, first transpile to PLCASM
-        if (language === 'stl') {
-            if (!this.wasm_exports.stl_load_from_stream) throw new Error("'stl_load_from_stream' function not found - STL compiler not available")
-            if (!this.wasm_exports.stl_compile) throw new Error("'stl_compile' function not found")
-            if (!this.wasm_exports.stl_get_output) throw new Error("'stl_get_output' function not found")
-            if (!this.wasm_exports.stl_has_error) throw new Error("'stl_has_error' function not found")
-            
-            // Stream STL code to compiler
-            let ok = true
-            for (let i = 0; i < assembly.length && ok; i++) {
-                ok = this.wasm_exports.streamIn(assembly.charCodeAt(i))
-            }
-            if (!ok) throw new Error('Failed to stream STL code')
-            this.wasm_exports.streamIn(0) // Null terminator
-            
-            // Load from stream and compile STL to PLCASM
-            this.wasm_exports.stl_load_from_stream()
-            const stlSuccess = this.wasm_exports.stl_compile()
-            
-            if (!stlSuccess) {
-                const hasError = this.wasm_exports.stl_has_error()
-                if (hasError) {
-                    const errorLine = this.wasm_exports.stl_get_error_line ? this.wasm_exports.stl_get_error_line() : 0
-                    const errorCol = this.wasm_exports.stl_get_error_column ? this.wasm_exports.stl_get_error_column() : 0
-                    throw new Error(`STL compilation failed at line ${errorLine}, column ${errorCol}`)
-                }
-                throw new Error('STL compilation failed')
-            }
-            
-            // Get the generated PLCASM via stream
-            if (this.wasm_exports.stl_output_to_stream) {
-                this.wasm_exports.stl_output_to_stream()
-                plcasmCode = this.readStream()
-                generatedPlcasm = plcasmCode
-            }
+        switch (language) {
+            case 'stl':
+                return this.compileSTL(source_code)
+            case 'plcasm':
+            default:
+                return this.compilePLCASM(source_code, { run })
         }
-        
-        // Compile PLCASM to bytecode
-        if (plcasmCode) {
-            this.downloadAssembly(plcasmCode)
-        }
-        if (!this.wasm_exports.compileAssembly) throw new Error("'compileAssembly' function not found")
-        if (!this.wasm_exports.loadCompiledProgram) throw new Error("'loadCompiledProgram' function not found")
-        if (this.wasm_exports.compileAssembly(false)) throw new Error('Failed to compile assembly')
-        if (run) {
-            // this.updateTime()
-            this.wasm_exports.loadCompiledProgram()
-            this.runDebug()
-        }
-        const result = this.extractProgram()
-        if (generatedPlcasm !== undefined) {
-            result.plcasm = generatedPlcasm
-        }
-        return result
     }
 
     /**
