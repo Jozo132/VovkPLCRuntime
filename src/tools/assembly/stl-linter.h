@@ -60,6 +60,7 @@ public:
     // Track last operand position for address validation errors
     int last_operand_column = 1;
     int last_operand_length = 0;
+    const char* last_operand_ptr = nullptr;  // Pointer into source for token text
 
     STLLinter() : STLCompiler() {
         problem_count = 0;
@@ -78,6 +79,7 @@ public:
     // Override readIdentifier to track operand position for error reporting
     bool readIdentifier(char* buf, int maxLen) override {
         last_operand_column = current_column;
+        last_operand_ptr = stl_source + pos;  // Capture pointer into source
         bool result = STLCompiler::readIdentifier(buf, maxLen);
         last_operand_length = current_column - last_operand_column;
         return result;
@@ -552,7 +554,9 @@ public:
         p.line = current_line;
         p.column = token_start_column > 0 ? token_start_column : current_column;
         p.length = token_length > 0 ? token_length : 1;
-        p.token_text = nullptr; // STL doesn't have Token struct
+        
+        // Set token_text pointer to point into the source at the last operand position
+        p.token_text = (char*)last_operand_ptr;
 
         // Reset message buffer
         for (int k = 0; k < 64; k++) p.message[k] = 0;
@@ -592,7 +596,7 @@ public:
         p.line = line >= 0 ? line : current_line;
         p.column = column >= 0 ? column : current_column;
         p.length = length;
-        p.token_text = nullptr;
+        p.token_text = (char*)last_operand_ptr;
 
         for (int k = 0; k < 64; k++) p.message[k] = 0;
         int i = 0;
@@ -614,7 +618,7 @@ public:
         p.line = line >= 0 ? line : current_line;
         p.column = column >= 0 ? column : current_column;
         p.length = length;
-        p.token_text = nullptr;
+        p.token_text = (char*)last_operand_ptr;
 
         for (int k = 0; k < 64; k++) p.message[k] = 0;
         int i = 0;

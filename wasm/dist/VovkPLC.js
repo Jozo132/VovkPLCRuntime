@@ -432,12 +432,21 @@ class VovkPLC_class {
                         message += String.fromCharCode(charCode)
                     }
 
+                    // token_text pointer at offset 80
+                    const token_ptr = view.getUint32(offset + 80, true)
+                    let token_text = ''
+                    if (token_ptr !== 0 && length > 0) {
+                        const token_buf = new Uint8Array(memoryBuffer, token_ptr, length)
+                        token_text = new TextDecoder().decode(token_buf)
+                    }
+
                     problems.push({
                         type: type_int === 2 ? 'error' : type_int === 1 ? 'warning' : 'info',
                         line,
                         column,
                         length,
                         message,
+                        token_text,
                     })
                 }
             }
