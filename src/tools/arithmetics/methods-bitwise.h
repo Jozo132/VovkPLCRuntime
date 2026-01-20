@@ -565,4 +565,37 @@ namespace PLCMethods {
     RuntimeError handle_STACK_DU(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) { return handle_STACK_EDGE(stack, memory, program, prog_size, index, true); }
     RuntimeError handle_STACK_DD(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) { return handle_STACK_EDGE(stack, memory, program, prog_size, index, false); }
 
+    // Differentiate Change - detects any state change (rising OR falling)
+    RuntimeError handle_STACK_DC(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
+        if (index + 3 > prog_size) return PROGRAM_SIZE_EXCEEDED;
+
+        if (stack.size() < 1) return STACK_UNDERFLOW;
+        u8 val_stack_byte = stack.pop_u8();
+        bool input_val = (val_stack_byte != 0);
+
+        // State Address
+        u16 state_addr;
+        state_addr = program[index++] << 8;
+        state_addr |= program[index++];
+        u8 state_bit = program[index++];
+
+        // Read State
+        u8 val_byte_state = 0;
+        if (get_u8(memory, state_addr, val_byte_state)) return INVALID_MEMORY_ADDRESS;
+        bool state_val = (val_byte_state >> state_bit) & 1;
+
+        // Detect any change (XOR)
+        bool edge_detected = (input_val != state_val);
+        
+        // Update State
+        if (edge_detected) {
+            if (input_val) val_byte_state |= (1 << state_bit);
+            else val_byte_state &= ~(1 << state_bit);
+            if (set_u8(memory, state_addr, val_byte_state)) return INVALID_MEMORY_ADDRESS;
+        }
+
+        stack.push_u8(edge_detected ? 1 : 0);
+        return STATUS_SUCCESS;
+    }
+
 }

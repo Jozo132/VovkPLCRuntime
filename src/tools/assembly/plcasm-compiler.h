@@ -2260,8 +2260,8 @@ public:
 
                                 line.size = InstructionCompiler::push_InstructionWithTwoPointers(bytecode, edge_task, addr1, bit1, addr2, bit2);
                                 _line_push;
-                            } else if (token.endsWith(".du") || token.endsWith(".dd")) {
-                                PLCRuntimeInstructionSet stack_edge_task = token.endsWith(".du") ? STACK_DU : STACK_DD;
+                            } else if (token.endsWith(".du") || token.endsWith(".dd") || token.endsWith(".dc")) {
+                                PLCRuntimeInstructionSet stack_edge_task = token.endsWith(".du") ? STACK_DU : (token.endsWith(".dd") ? STACK_DD : STACK_DC);
                                 int addr_state = 0, bit_state = 0;
                                 // Expect [State] for static linking
                                 bool has_state_addr = false;

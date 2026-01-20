@@ -1281,6 +1281,7 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
         
         case STACK_DU: return PLCMethods::handle_STACK_DU(this->stack, this->memory, program, prog_size, index);
         case STACK_DD: return PLCMethods::handle_STACK_DD(this->stack, this->memory, program, prog_size, index);
+        case STACK_DC: return PLCMethods::handle_STACK_DC(this->stack, this->memory, program, prog_size, index);
 
         case BW_AND_X8: return PLCMethods::handle_BW_AND_X8(this->stack);
         case BW_AND_X16: return PLCMethods::handle_BW_AND_X16(this->stack);

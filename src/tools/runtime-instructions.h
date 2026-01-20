@@ -272,6 +272,7 @@ enum PLCRuntimeInstructionSet {
 
     STACK_DU,
     STACK_DD,
+    STACK_DC,  // Differentiate Change - triggers on any state change
 
     // Bitwise operations
     BW_AND_X8 = 0xA0,   // Bitwise AND for 1 byte size values (x, y)

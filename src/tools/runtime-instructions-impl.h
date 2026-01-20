@@ -193,6 +193,7 @@ bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
         case WRITE_RSET_DD:
         case STACK_DU:
         case STACK_DD:
+        case STACK_DC:
 
         case BW_AND_X8:
         case BW_AND_X16:
@@ -404,6 +405,7 @@ const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
 
         case STACK_DU: return F("STACK_DU");
         case STACK_DD: return F("STACK_DD");
+        case STACK_DC: return F("STACK_DC");
 
         case BW_AND_X8: return F("BW_AND_X8");
         case BW_AND_X16: return F("BW_AND_X16");
@@ -630,7 +632,8 @@ u8 OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
         case WRITE_RSET_DD: return 7;
 
         case STACK_DU:
-        case STACK_DD: return 4;
+        case STACK_DD:
+        case STACK_DC: return 4;
 
         case BW_AND_X8:
         case BW_AND_X16:
