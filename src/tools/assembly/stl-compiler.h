@@ -93,6 +93,7 @@ public:
 
     // Nesting stack for A(, O(, X( operations
     char nesting_ops[STL_MAX_NESTING_DEPTH]; // 'A', 'O', 'X'
+    bool nesting_had_rlo[STL_MAX_NESTING_DEPTH]; // Track if outer had RLO before nesting
     int nesting_depth = 0;
 
     // Label counter for generated labels
@@ -410,10 +411,12 @@ public:
             setError("Maximum nesting depth exceeded");
             return;
         }
-        nesting_ops[nesting_depth++] = op;
-        // The actual combine will happen when ) is encountered
-        // For now, we reset the inner network
-        // Note: This simplified approach works for most cases
+        // Save whether there was an outer RLO before starting this nesting
+        nesting_had_rlo[nesting_depth] = network_has_rlo;
+        nesting_ops[nesting_depth] = op;
+        nesting_depth++;
+        // Reset RLO for the inner expression
+        network_has_rlo = false;
     }
 
     // Handle nesting close: )
@@ -424,9 +427,14 @@ public:
         }
         nesting_depth--;
         char op = nesting_ops[nesting_depth];
+        bool had_outer_rlo = nesting_had_rlo[nesting_depth];
         
-        // Combine the inner result with outer RLO
-        emitBoolCombine(op);
+        // Only combine if there was an outer RLO to combine with
+        if (had_outer_rlo) {
+            emitBoolCombine(op);
+        }
+        // After closing, we have an RLO (the result of the nested expression)
+        network_has_rlo = true;
     }
 
     // Handle = (assign)
