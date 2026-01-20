@@ -23,14 +23,14 @@ const checkSupport = () => {
     const support = {
         sab: typeof SharedArrayBuffer !== 'undefined',
         atomics: typeof Atomics !== 'undefined',
-        decodeShared: false
+        decodeShared: false,
     }
-    
+
     if (support.sab) {
         try {
             // Verify SAB is actually usable (might be blocked by COOP/COEP)
             new SharedArrayBuffer(8)
-            
+
             // Check if TextDecoder can decode from SharedBufferView directly
             // This avoids an extra copy where supported (e.g. some browsers)
             const sab = new SharedArrayBuffer(1)
@@ -115,7 +115,7 @@ const SUPPORT = checkSupport()
  * @example
  * // 1. Worker Usage (Recommended, Non-blocking)
  * import VovkPLC from './VovkPLC.js';
- * 
+ *
  * const worker = await VovkPLC.createWorker('./VovkPLC.wasm');
  * await worker.enableSharedMemory(); // Enable SharedArrayBuffer for high performance
  *
@@ -152,7 +152,7 @@ const SUPPORT = checkSupport()
  *   u8.move
  *   exit
  * `, true); // true = run immediately in debug mode
- * 
+ *
  * // Read Memory
  * const mem = plc.readMemoryArea(0, 1);
  * console.log('Value at 0:', mem[0]);
@@ -455,7 +455,7 @@ class VovkPLC_class {
             this.wasm_exports.stl_lint_get_output()
             const output = this.readStream()
 
-            return { problems, output }
+            return {problems, output}
         } finally {
             // Restore original stream callback
             this.setSilent(wasSilent)
@@ -471,22 +471,33 @@ class VovkPLC_class {
      */
     static IR_FLAGS = {
         NONE: 0x00,
-        READ: 0x01,          // Instruction reads from memory
-        WRITE: 0x02,         // Instruction writes to memory
-        CONST: 0x04,         // Instruction uses an embedded constant
-        JUMP: 0x08,          // Instruction is a jump/call
-        TIMER: 0x10,         // Instruction is a timer
-        LABEL_TARGET: 0x20,  // This address is a jump target (label)
-        EDITABLE: 0x40,      // Constant can be edited in-place
+        READ: 0x01, // Instruction reads from memory
+        WRITE: 0x02, // Instruction writes to memory
+        CONST: 0x04, // Instruction uses an embedded constant
+        JUMP: 0x08, // Instruction is a jump/call
+        TIMER: 0x10, // Instruction is a timer
+        LABEL_TARGET: 0x20, // This address is a jump target (label)
+        EDITABLE: 0x40, // Constant can be edited in-place
     }
 
     /**
      * IR Operand Type constants.
      */
     static IR_OP_TYPES = {
-        NONE: 0, BOOL: 1, I8: 2, U8: 3, I16: 4, U16: 5,
-        I32: 6, U32: 7, I64: 8, U64: 9, F32: 10, F64: 11,
-        PTR: 12, LABEL: 13
+        NONE: 0,
+        BOOL: 1,
+        I8: 2,
+        U8: 3,
+        I16: 4,
+        U16: 5,
+        I32: 6,
+        U32: 7,
+        I64: 8,
+        U64: 9,
+        F32: 10,
+        F64: 11,
+        PTR: 12,
+        LABEL: 13,
     }
 
     /**
@@ -576,7 +587,7 @@ class VovkPLC_class {
             const operands = []
 
             for (let j = 0; j < operand_count && j < 3; j++) {
-                const op_offset = offset + 16 + (j * 16) // Each operand is 16 bytes (8-byte aligned)
+                const op_offset = offset + 16 + j * 16 // Each operand is 16 bytes (8-byte aligned)
                 const op_type = view.getUint8(op_offset + 0)
                 const op_bytecode_pos = view.getUint8(op_offset + 1)
 
@@ -624,7 +635,7 @@ class VovkPLC_class {
                 operands.push({
                     type: op_type,
                     bytecode_pos: op_bytecode_pos,
-                    value: op_value
+                    value: op_value,
                 })
             }
 
@@ -636,7 +647,7 @@ class VovkPLC_class {
                 opcode,
                 flags,
                 operand_count,
-                operands
+                operands,
             })
         }
 
@@ -730,7 +741,8 @@ class VovkPLC_class {
                     device: parts[20],
                 }
             }
-            return { // Very old legacy format
+            return {
+                // Very old legacy format
                 ...base,
                 input_offset: +parts[10],
                 input_size: +parts[11],
@@ -754,10 +766,10 @@ class VovkPLC_class {
     getDeviceHealth = () => {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         if (!this.wasm_exports.getDeviceHealthPtr) throw new Error("'getDeviceHealthPtr' function not found")
-        
+
         const ptr = this.wasm_exports.getDeviceHealthPtr()
         const view = new Uint32Array(this.wasm_memory.buffer, ptr, 13)
-        
+
         return {
             last_cycle_time_us: view[0],
             min_cycle_time_us: view[1],
@@ -786,7 +798,7 @@ class VovkPLC_class {
 
     /**
      * Gets the total RAM (SRAM) size available on the device in bytes.
-     * 
+     *
      * @returns {number} - Total RAM size in bytes.
      */
     getTotalRam = () => {
@@ -822,7 +834,7 @@ class VovkPLC_class {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         if (!this.wasm_exports.streamIn) throw new Error("'streamIn' function not found")
         if (!this.wasm_exports.loadAssembly) throw new Error("'loadAssembly' function not found")
-        
+
         let ok = true
         for (let i = 0; i < assembly.length && ok; i++) {
             const char = assembly[i]
@@ -851,22 +863,22 @@ class VovkPLC_class {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         if (!this.wasm_exports.compileAssembly) throw new Error("'compileAssembly' function not found")
         if (!this.wasm_exports.loadCompiledProgram) throw new Error("'loadCompiledProgram' function not found")
-        
+
         const run = options.run || false
-        
+
         this.downloadAssembly(plcasm)
         if (this.wasm_exports.compileAssembly(false)) throw new Error('Failed to compile assembly')
-        
+
         if (run) {
             this.wasm_exports.loadCompiledProgram()
             this.runDebug()
         }
-        
+
         const result = this.extractProgram()
         return {
             type: 'bytecode',
             size: result.size,
-            output: result.output
+            output: result.output,
         }
     }
 
@@ -883,7 +895,7 @@ class VovkPLC_class {
         if (!this.wasm_exports.stl_compile) throw new Error("'stl_compile' function not found")
         if (!this.wasm_exports.stl_get_output) throw new Error("'stl_get_output' function not found")
         if (!this.wasm_exports.stl_has_error) throw new Error("'stl_has_error' function not found")
-        
+
         // Stream STL code to compiler
         let ok = true
         for (let i = 0; i < stl.length && ok; i++) {
@@ -891,11 +903,11 @@ class VovkPLC_class {
         }
         if (!ok) throw new Error('Failed to stream STL code')
         this.wasm_exports.streamIn(0) // Null terminator
-        
+
         // Load from stream and compile STL to PLCASM
         this.wasm_exports.stl_load_from_stream()
         const stlSuccess = this.wasm_exports.stl_compile()
-        
+
         if (!stlSuccess) {
             const hasError = this.wasm_exports.stl_has_error()
             if (hasError) {
@@ -905,18 +917,18 @@ class VovkPLC_class {
             }
             throw new Error('STL compilation failed')
         }
-        
+
         // Get the generated PLCASM via stream
         let plcasmCode = ''
         if (this.wasm_exports.stl_output_to_stream) {
             this.wasm_exports.stl_output_to_stream()
             plcasmCode = this.readStream()
         }
-        
+
         return {
             type: 'plcasm',
             size: plcasmCode.length,
-            output: plcasmCode
+            output: plcasmCode,
         }
     }
 
@@ -932,7 +944,7 @@ class VovkPLC_class {
      */
     compile(source_code, options = false) {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
-        
+
         // Handle backward-compatible boolean parameter
         let run = false
         let language = 'plcasm'
@@ -942,13 +954,13 @@ class VovkPLC_class {
             run = options.run || false
             language = options.language || 'plcasm'
         }
-        
+
         switch (language) {
             case 'stl':
                 return this.compileSTL(source_code)
             case 'plcasm':
             default:
-                return this.compilePLCASM(source_code, { run })
+                return this.compilePLCASM(source_code, {run})
         }
     }
 
@@ -1001,10 +1013,10 @@ class VovkPLC_class {
     startRuntime = (interval = 10) => {
         if (this.mainLoopActive) return
         this.mainLoopActive = true
-        
+
         const loop = () => {
             if (!this.mainLoopActive) return
-            
+
             // Execute a burst of cycles (optimized)
             const start = performance.now()
             // Try to run for 8ms max to leave breathing room for UI
@@ -1012,7 +1024,7 @@ class VovkPLC_class {
                 if (this.wasm_exports) this.wasm_exports.run()
                 else break
             }
-            
+
             // Schedule next burst
             if (this.mainLoopActive) {
                 setTimeout(loop, interval)
@@ -1329,7 +1341,7 @@ class VovkPLC_class {
                     input[0]
                         .split('')
                         .filter(c => allowedChars.includes(c))
-                        .join('') || ''
+                        .join('') || '',
                 )
             /** @type { number[] } */ // @ts-ignore
             const data = input
@@ -1401,7 +1413,7 @@ class VovkPLC_class {
                     input[0]
                         .split('')
                         .filter(c => allowedChars.includes(c))
-                        .join('') || ''
+                        .join('') || '',
                 )
             /** @type { number[] } */ // @ts-ignore
             const data = input
@@ -1430,14 +1442,14 @@ class VovkPLC_class {
                     data[0]
                         .split('')
                         .filter(c => allowedChars.includes(c))
-                        .join('') || ''
+                        .join('') || '',
                 )
             if (typeof mask[0] === 'string')
                 mask = this.parseHex(
                     mask[0]
                         .split('')
                         .filter(c => allowedChars.includes(c))
-                        .join('') || ''
+                        .join('') || '',
                 )
             /** @type { number[] } */ // @ts-ignore
             const data_bytes = data
@@ -1478,7 +1490,7 @@ const SHARED_BUFFER_SIZE = 64 * 1024 * 1024 // 64MB
 const RING_SIZE = 1024 * 1024 // 1MB for each ring
 const OFFSETS = {
     M2S_WRITE: 0, // Master Write Index
-    M2S_READ: 4,  // Slave Read Index
+    M2S_READ: 4, // Slave Read Index
     S2M_WRITE: 8, // Slave Write Index
     S2M_READ: 12, // Master Read Index
     LOCK: 16,
@@ -1487,7 +1499,7 @@ const OFFSETS = {
     IO_OUT_SIZE: 28,
     M2S_START: 1024,
     S2M_START: 1024 + RING_SIZE,
-    DATA_START: 1024 + RING_SIZE * 2
+    DATA_START: 1024 + RING_SIZE * 2,
 }
 
 /**
@@ -1562,19 +1574,19 @@ class VovkPLCWorkerClient {
     _onMessage
     /** @type { (error: any) => void } */
     _onError
-    
+
     /** @type { SharedArrayBuffer | null } */
     sab = null
     /** @type { Int32Array | null } */
     sabI32 = null
     /** @type { Uint8Array | null } */
     sabU8 = null
-    
+
     encoder = new TextEncoder()
     decoder = new TextDecoder()
-    
+
     isPolling = false
-    
+
     // Batched postMessage fallback for high-throughput when SAB unavailable
     /** @type { Array<{id: number, type: string, payload: Record<string, any>}> } */
     batchQueue = []
@@ -1592,7 +1604,7 @@ class VovkPLCWorkerClient {
         this.worker = worker
         this._onMessage = this._handleMessage
         this._onError = this._handleError
-        
+
         // Performance optimization: Prefer direct property assignment for Browser Workers
         // This bypasses the EventTarget dispatch chain overhead significantly in high-frequency scenarios
         if ('onmessage' in worker) {
@@ -1607,28 +1619,27 @@ class VovkPLCWorkerClient {
         }
     }
 
-
     /** @type { () => void } */
     startPolling = () => {
         if (this.isPolling) return
         this.isPolling = true
-        
+
         const poll = () => {
             if (!this.sabI32 || !this.sabU8 || !this.isPolling) return
-            
+
             // Allow checking for multiple messages in one poll tick
             while (true) {
                 // Check if Data in S2M Ring
                 const readIdx = Atomics.load(this.sabI32, OFFSETS.S2M_READ / 4)
                 const writeIdx = Atomics.load(this.sabI32, OFFSETS.S2M_WRITE / 4)
-                
+
                 if (readIdx === writeIdx) break // Buffer Empty
-                
+
                 const start = OFFSETS.S2M_START
                 let current = readIdx
-                
+
                 // Helper to read wrapping buffer
-                const readByte = (/** @type {number} */ idx) => this.sabU8 ? this.sabU8[start + (idx % RING_SIZE)] : 0
+                const readByte = (/** @type {number} */ idx) => (this.sabU8 ? this.sabU8[start + (idx % RING_SIZE)] : 0)
                 const readU32 = (/** @type {number} */ idx) => {
                     let val = 0
                     val |= readByte(idx)
@@ -1637,20 +1648,20 @@ class VovkPLCWorkerClient {
                     val |= readByte(idx + 3) << 24
                     return val
                 }
-                
+
                 const frameSize = readU32(current)
                 const msgId = readU32(current + 4)
                 const ok = readByte(current + 8)
-                
+
                 // Payload
                 const payloadLen = frameSize - 9
                 let payload = null
-                
+
                 if (payloadLen > 0) {
                     // Extract payload. Since it might wrap, we might need two copies
                     const payloadStart = (current + 9) % RING_SIZE
                     const payloadEnd = (current + 9 + payloadLen) % RING_SIZE
-                    
+
                     if (this.sab && this.sabU8) {
                         if (payloadEnd > payloadStart) {
                             const view = new Uint8Array(this.sab, start + payloadStart, payloadLen)
@@ -1675,22 +1686,23 @@ class VovkPLCWorkerClient {
                     this.pending.delete(msgId)
                     if (ok) pending.resolve(payload && typeof payload.result !== 'undefined' ? payload.result : payload)
                     else pending.reject(new Error(payload && payload.error ? payload.error : 'Worker call failed'))
-                } else if (msgId === 0) { // EVENTS have ID 0
-                   // Structure for events: { type: 'event', event: ..., ... }
-                   // payload is the message object
-                   if (payload && payload.type === 'event') {
-                       this._handleEvent(payload)
-                   }
+                } else if (msgId === 0) {
+                    // EVENTS have ID 0
+                    // Structure for events: { type: 'event', event: ..., ... }
+                    // payload is the message object
+                    if (payload && payload.type === 'event') {
+                        this._handleEvent(payload)
+                    }
                 }
 
                 // Advance Read Pointer
-                const nextRead = (readIdx + frameSize)
+                const nextRead = readIdx + frameSize
                 Atomics.store(this.sabI32, OFFSETS.S2M_READ / 4, nextRead)
             }
-            
+
             if (this.isPolling) {
-                 if (isNodeRuntime) setImmediate(poll)
-                 else requestAnimationFrame(poll)
+                if (isNodeRuntime) setImmediate(poll)
+                else requestAnimationFrame(poll)
             }
         }
         poll()
@@ -1699,13 +1711,13 @@ class VovkPLCWorkerClient {
     /** @type { (message: any) => void } */
     _handleMessage = message => {
         const data = message.data || message
-        
+
         // Check for batched ArrayBuffer response
         if (data instanceof ArrayBuffer) {
             this._parseBatchResponse(data)
             return
         }
-        
+
         // Handle Init Response special case if needed, or fallback for non-shared setup
         if (data.id) {
             const pending = this.pending.get(data.id)
@@ -1713,12 +1725,11 @@ class VovkPLCWorkerClient {
                 this.pending.delete(data.id)
                 if (data.ok) {
                     if (data.type === 'init_ack') {
-                       // Received Ack for Init with Shared Memory
-                       this.startPolling()
+                        // Received Ack for Init with Shared Memory
+                        this.startPolling()
                     }
                     pending.resolve(data.result)
-                }
-                else pending.reject(new Error(data.error || 'Worker call failed'))
+                } else pending.reject(new Error(data.error || 'Worker call failed'))
                 return
             }
         }
@@ -1755,7 +1766,7 @@ class VovkPLCWorkerClient {
         const id = this.nextId++
         return new Promise((resolve, reject) => {
             this.pending.set(id, {resolve, reject})
-            
+
             // If Shared Memory is active and not forced to use postMessage, use Ring Buffer
             if (!this.forcePostMessage && this.sab && this.sabI32 && this.sabU8) {
                 try {
@@ -1772,7 +1783,7 @@ class VovkPLCWorkerClient {
             }
         })
     }
-    
+
     /** @type { (id: number, type: string, payload: Record<string, any>) => void } */
     _enqueueBatch = (id, type, payload) => {
         this.batchQueue.push({id, type, payload})
@@ -1786,14 +1797,14 @@ class VovkPLCWorkerClient {
             }
         }
     }
-    
+
     /** @type { () => void } */
     _flushBatch = () => {
         this.batchScheduled = false
         if (this.batchQueue.length === 0) return
-        
+
         const ops = this.batchQueue.splice(0, this.batchQueue.length)
-        
+
         // Calculate total size needed
         // Format: [u32 count][...ops]
         // Each op: [u32 id][u8 typeLen][type bytes][u32 payloadLen][payload bytes]
@@ -1802,44 +1813,54 @@ class VovkPLCWorkerClient {
             const typeBytes = this.encoder.encode(op.type)
             const payloadBytes = this.encoder.encode(JSON.stringify(op.payload))
             totalSize += 4 + 1 + typeBytes.length + 4 + payloadBytes.length
-            return { id: op.id, typeBytes, payloadBytes }
+            return {id: op.id, typeBytes, payloadBytes}
         })
-        
+
         // Build the buffer
         const buf = new ArrayBuffer(totalSize)
         const dv = new DataView(buf)
         const u8 = new Uint8Array(buf)
         let off = 0
-        
-        dv.setUint32(off, encodedOps.length, true); off += 4
-        
+
+        dv.setUint32(off, encodedOps.length, true)
+        off += 4
+
         for (const op of encodedOps) {
-            dv.setUint32(off, op.id, true); off += 4
-            dv.setUint8(off, op.typeBytes.length); off += 1
-            u8.set(op.typeBytes, off); off += op.typeBytes.length
-            dv.setUint32(off, op.payloadBytes.length, true); off += 4
-            u8.set(op.payloadBytes, off); off += op.payloadBytes.length
+            dv.setUint32(off, op.id, true)
+            off += 4
+            dv.setUint8(off, op.typeBytes.length)
+            off += 1
+            u8.set(op.typeBytes, off)
+            off += op.typeBytes.length
+            dv.setUint32(off, op.payloadBytes.length, true)
+            off += 4
+            u8.set(op.payloadBytes, off)
+            off += op.payloadBytes.length
         }
-        
+
         // Transfer the buffer (zero-copy)
         this.worker.postMessage(buf, [buf])
     }
-    
+
     /** @type { (buffer: ArrayBuffer) => void } */
-    _parseBatchResponse = (buffer) => {
+    _parseBatchResponse = buffer => {
         // Format: [u32 count][...responses]
         // Each response: [u32 id][u8 ok][u32 payloadLen][payload bytes]
         const dv = new DataView(buffer)
         const u8 = new Uint8Array(buffer)
         let off = 0
-        
-        const count = dv.getUint32(off, true); off += 4
-        
+
+        const count = dv.getUint32(off, true)
+        off += 4
+
         for (let i = 0; i < count; i++) {
-            const id = dv.getUint32(off, true); off += 4
-            const ok = dv.getUint8(off) === 1; off += 1
-            const payloadLen = dv.getUint32(off, true); off += 4
-            
+            const id = dv.getUint32(off, true)
+            off += 4
+            const ok = dv.getUint8(off) === 1
+            off += 1
+            const payloadLen = dv.getUint32(off, true)
+            off += 4
+
             let result = undefined
             let error = undefined
             if (payloadLen > 0) {
@@ -1854,7 +1875,7 @@ class VovkPLCWorkerClient {
                 }
             }
             off += payloadLen
-            
+
             const pending = this.pending.get(id)
             if (pending) {
                 this.pending.delete(id)
@@ -1865,16 +1886,16 @@ class VovkPLCWorkerClient {
     }
 
     /** @param { Record<string, any> } msg */
-    _writeToRing = (msg) => {
+    _writeToRing = msg => {
         if (!this.sabI32 || !this.sabU8) throw new Error('Shared Buffer not initialized')
         // Frame: [TotalSize(4)][ID(4)][TypeLen(1)][Type(utf8)][Payload(json_utf8)]
-        const { id, type, ...rest } = msg
+        const {id, type, ...rest} = msg
         const typeBytes = this.encoder.encode(type)
         const payloadStr = JSON.stringify(rest)
         const payloadBytes = this.encoder.encode(payloadStr)
-        
+
         const totalSize = 4 + 4 + 1 + typeBytes.length + payloadBytes.length
-        
+
         // Wait for space?
         // Simple spin-wait with timeout to avoid freezing main thread indefinitely if worker dead
         const startWait = Date.now()
@@ -1886,31 +1907,33 @@ class VovkPLCWorkerClient {
             if (Date.now() - startWait > 1000) throw new Error('Command Queue Full (Timeout)')
             // Yield? No yield in JS sync function...
         }
-        
+
         const start = OFFSETS.M2S_START
         const current = writeIdx
-        
+
         // Write Helper
-        const writeByte = (/** @type {number} */ idx, /** @type {number} */ val) => { if (this.sabU8) this.sabU8[start + (idx % RING_SIZE)] = val }
+        const writeByte = (/** @type {number} */ idx, /** @type {number} */ val) => {
+            if (this.sabU8) this.sabU8[start + (idx % RING_SIZE)] = val
+        }
         const writeU32 = (/** @type {number} */ idx, /** @type {number} */ val) => {
             writeByte(idx, val & 0xff)
             writeByte(idx + 1, (val >> 8) & 0xff)
             writeByte(idx + 2, (val >> 16) & 0xff)
             writeByte(idx + 3, (val >> 24) & 0xff)
         }
-        
+
         writeU32(current, totalSize)
         writeU32(current + 4, id)
         writeByte(current + 8, typeBytes.length)
-        
+
         // Write Type
         let i = 0
         for (; i < typeBytes.length; i++) writeByte(current + 9 + i, typeBytes[i])
-        
+
         // Write Payload
         const payloadStart = 9 + typeBytes.length
         for (let j = 0; j < payloadBytes.length; j++) writeByte(current + payloadStart + j, payloadBytes[j])
-        
+
         // Commit
         const nextWrite = writeIdx + totalSize
         Atomics.store(this.sabI32, OFFSETS.M2S_WRITE / 4, nextWrite)
@@ -1935,13 +1958,13 @@ class VovkPLCWorkerClient {
                 this.sab = new SharedArrayBuffer(SHARED_BUFFER_SIZE)
                 this.sabI32 = new Int32Array(this.sab)
                 this.sabU8 = new Uint8Array(this.sab)
-                
+
                 // Init Queues
                 this.sabI32[OFFSETS.M2S_WRITE / 4] = 0
                 this.sabI32[OFFSETS.M2S_READ / 4] = 0
                 this.sabI32[OFFSETS.S2M_WRITE / 4] = 0
                 this.sabI32[OFFSETS.S2M_READ / 4] = 0
-                
+
                 // Send init with SAB via postMessage
                 // We fake '_send' logic here because we need to attach the SAB
                 const id = this.nextId++
@@ -1954,7 +1977,7 @@ class VovkPLCWorkerClient {
                     this.startPolling()
                     return res
                 })
-            } catch(e) {
+            } catch (e) {
                 console.warn('Failed to create SharedArrayBuffer, falling back to batched postMessage', e)
             }
         }
@@ -1983,7 +2006,10 @@ class VovkPLCWorkerClient {
     setupSharedMemory = (sharedBuffer, instanceId = null) => this._send('setup_shared_memory', {sharedBuffer, instanceId})
 
     /** @type { () => Promise<any> } */
-    terminate = async () => {
+    terminate = () => new Promise(async resolve => {
+        new Promise(r => setTimeout(r, 1000)).then(() => {
+            resolve(1)
+        })
         for (const pending of this.pending.values()) pending.reject(new Error('Worker terminated'))
         this.pending.clear()
         this.stdoutHandlers.clear()
@@ -1998,8 +2024,8 @@ class VovkPLCWorkerClient {
             this.worker.removeListener('message', this._onMessage)
             this.worker.removeListener('error', this._onError)
         }
-        if (typeof this.worker.terminate === 'function') return this.worker.terminate()
-    }
+        if (typeof this.worker.terminate === 'function') this.worker.terminate()
+    })
 }
 
 class VovkPLCWorker extends VovkPLCWorkerClient {
@@ -2080,7 +2106,7 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
     getMicros = () => this.call('getMicros')
     /** @type { () => Promise<number> } */
     getTotalRam = () => this.call('getTotalRam')
-    
+
     // IR (Intermediate Representation) accessors
     /** @type { () => Promise<import('./VovkPLC.js').IR_Entry[]> } */
     getIR = () => this.call('getIR')
@@ -2098,24 +2124,26 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
     /** @type { Uint8Array | null } */
     _sharedOutputs = null
 
-    get sharedInputs() { 
+    get sharedInputs() {
         if (this.sabU8 && this.sabI32) {
             const offset = this.sabI32[OFFSETS.IO_OFFSET / 4]
             const size = this.sabI32[OFFSETS.IO_IN_SIZE / 4]
             if (offset && size) return new Uint8Array(this.sab, offset, size)
         }
-        return this._sharedInputs 
+        return this._sharedInputs
     }
-    get sharedOutputs() { 
+    get sharedOutputs() {
         if (this.sabU8 && this.sabI32) {
-             const offset = this.sabI32[OFFSETS.IO_OFFSET / 4]
-             const inSize = this.sabI32[OFFSETS.IO_IN_SIZE / 4]
-             const outSize = this.sabI32[OFFSETS.IO_OUT_SIZE / 4]
-             if (offset && inSize && outSize) return new Uint8Array(this.sab, offset + inSize, outSize)
+            const offset = this.sabI32[OFFSETS.IO_OFFSET / 4]
+            const inSize = this.sabI32[OFFSETS.IO_IN_SIZE / 4]
+            const outSize = this.sabI32[OFFSETS.IO_OUT_SIZE / 4]
+            if (offset && inSize && outSize) return new Uint8Array(this.sab, offset + inSize, outSize)
         }
-        return this._sharedOutputs 
+        return this._sharedOutputs
     }
-    get sharedControl() { return this._sharedControl }
+    get sharedControl() {
+        return this._sharedControl
+    }
 
     /** @type { () => Promise<boolean> } */
     enableSharedMemory = async () => {
@@ -2124,16 +2152,16 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
         // Wait, VovkPLCWorker extends VovkPLCWorkerClient.
         // So 'this' IS the client.
         if (!this.sab) return false
-        
+
         // Use the new IO area in the 64MB buffer
         await this.printInfo() // Refresh info internally via stream/console hack? No, we used call before.
-        
+
         // Wait, printInfo writes to stdout. We need to catch it?
         // Actually, we can just call the worker to "map" the IO area now that it has the info.
-        
-        // We don't need 'enableSharedMemory' logic for buffer creation anymore, 
+
+        // We don't need 'enableSharedMemory' logic for buffer creation anymore,
         // but we might need to tell the worker to populate the IO offsets in the header.
-        await this._send('setup_shared_io') 
+        await this._send('setup_shared_io')
         return true
     }
 
@@ -2143,9 +2171,9 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
         if (!this.sabI32) return
         const offset = this.sabI32[OFFSETS.IO_OFFSET / 4]
         if (!offset) return
-        
+
         const i32 = new Int32Array(this.sab, offset)
-        const map = { 'stop': 0, 'run': 1, 'pause': 2, 'step': 3 }
+        const map = {stop: 0, run: 1, pause: 2, step: 3}
         Atomics.store(i32, 0, map[mode])
         Atomics.notify(i32, 0)
     }
@@ -2161,7 +2189,7 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
         const offset = this.sabI32[OFFSETS.IO_OFFSET / 4]
         if (!offset) return null
         const i32 = new Int32Array(this.sab, offset)
-        
+
         return {
             status: Atomics.load(i32, 1),
             cycles: Atomics.load(i32, 6),
@@ -2170,7 +2198,7 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
             max_time: Atomics.load(i32, 9),
         }
     }
-    
+
     /**
      * Resets execution statistics (cycles, min/max times) via the worker.
      *

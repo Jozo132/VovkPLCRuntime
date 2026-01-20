@@ -1,0 +1,1762 @@
+// ladder-compiler.h - Ladder Logic ⇄ STL Transpiler using Network IR
+// Bidirectional conversion between Ladder Logic and Siemens-style STL
+//
+// Copyright (c) 2026 J.Vovk
+//
+// This file is part of VovkPLCRuntime.
+//
+// VovkPLCRuntime is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// VovkPLCRuntime is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with VovkPLCRuntime.  If not, see <https://www.gnu.org/licenses/>.
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#pragma once
+
+#ifdef __WASM__
+
+#include "network-ir.h"
+#include "stl-compiler.h"
+
+// ============================================================================
+// Ladder JSON to Network IR Parser
+// ============================================================================
+//
+// Parses JSON Ladder representation into Network IR.
+// JSON format:
+//   {
+//     "rungs": [
+//       {
+//         "comment": "optional comment",
+//         "elements": [
+//           { "type": "contact", "address": "I0.0", "inverted": false, "trigger": "normal" },
+//           { "type": "contact", "address": "I0.1", "inverted": true, "trigger": "rising" },
+//           { "type": "coil", "address": "Q0.0", "inverted": false },
+//           { "type": "coil_set", "address": "M0.0" },
+//           { "type": "coil_rset", "address": "M0.1" }
+//         ],
+//         "branches": [  // optional OR branches
+//           { "elements": [...] }
+//         ]
+//       }
+//     ]
+//   }
+//
+// Element types:
+//   - contact:    Normally open contact (A operand)
+//   - contact_nc: Normally closed contact (AN operand)
+//   - coil:       Output coil (= operand)
+//   - coil_set:   Set coil (S operand)
+//   - coil_rset:  Reset coil (R operand)
+//   - coil_n:     Negated coil (inverted =)
+//
+// Contact properties:
+//   - address:  Symbol address (I0.0, M0.0, etc.)
+//   - inverted: true for normally closed (AN)
+//   - trigger:  "normal", "rising" (FP), "falling" (FN)
+//
+// ============================================================================
+
+class LadderJSONToIRParser {
+public:
+    const char* source;
+    int length;
+    int pos;
+    
+    char error_msg[256];
+    bool has_error;
+    
+    // Edge memory counter for auto-generated edge state bits
+    // Start at bit 800 = M100.0 to avoid conflict with user memory
+    int edge_mem_counter;
+    
+    LadderJSONToIRParser() { reset(); }
+    
+    void reset() {
+        source = nullptr;
+        length = 0;
+        pos = 0;
+        error_msg[0] = '\0';
+        has_error = false;
+        edge_mem_counter = 800; // Start at M100.0 (bit 800 = 100*8)
+    }
+    
+    void setError(const char* msg) {
+        if (has_error) return;
+        has_error = true;
+        int i = 0;
+        while (msg[i] && i < 255) {
+            error_msg[i] = msg[i];
+            i++;
+        }
+        error_msg[i] = '\0';
+    }
+    
+    // ============ JSON Lexer Helpers ============
+    
+    char peek(int offset = 0) {
+        int p = pos + offset;
+        return (p < length) ? source[p] : '\0';
+    }
+    
+    char advance() {
+        if (pos >= length) return '\0';
+        return source[pos++];
+    }
+    
+    void skipWhitespace() {
+        while (pos < length) {
+            char c = peek();
+            if (c == ' ' || c == '\t' || c == '\r' || c == '\n') advance();
+            else break;
+        }
+    }
+    
+    bool expect(char c) {
+        skipWhitespace();
+        if (peek() == c) {
+            advance();
+            return true;
+        }
+        return false;
+    }
+    
+    bool strMatch(const char* s) {
+        skipWhitespace();
+        int i = 0;
+        while (s[i]) {
+            if (peek(i) != s[i]) return false;
+            i++;
+        }
+        // Advance past matched string
+        for (int j = 0; j < i; j++) advance();
+        return true;
+    }
+    
+    bool strEqI(const char* a, const char* b) {
+        while (*a && *b) {
+            char ca = (*a >= 'A' && *a <= 'Z') ? *a + 32 : *a;
+            char cb = (*b >= 'A' && *b <= 'Z') ? *b + 32 : *b;
+            if (ca != cb) return false;
+            a++; b++;
+        }
+        return *a == *b;
+    }
+    
+    // Read a JSON string value (expects opening quote already consumed or at current pos)
+    bool readString(char* buf, int maxLen) {
+        skipWhitespace();
+        if (peek() != '"') {
+            setError("Expected string");
+            return false;
+        }
+        advance(); // Skip opening quote
+        
+        int i = 0;
+        while (i < maxLen - 1) {
+            char c = peek();
+            if (c == '\0') {
+                setError("Unterminated string");
+                return false;
+            }
+            if (c == '"') {
+                advance(); // Skip closing quote
+                break;
+            }
+            if (c == '\\') {
+                advance();
+                c = peek();
+                // Handle escape sequences
+                if (c == 'n') c = '\n';
+                else if (c == 't') c = '\t';
+                else if (c == 'r') c = '\r';
+            }
+            buf[i++] = advance();
+        }
+        buf[i] = '\0';
+        return true;
+    }
+    
+    // Read a JSON boolean value
+    bool readBool(bool& value) {
+        skipWhitespace();
+        if (strMatch("true")) {
+            value = true;
+            return true;
+        }
+        if (strMatch("false")) {
+            value = false;
+            return true;
+        }
+        setError("Expected boolean");
+        return false;
+    }
+    
+    // Skip a JSON value (string, number, object, array, bool, null)
+    void skipValue() {
+        skipWhitespace();
+        char c = peek();
+        
+        if (c == '"') {
+            // String
+            advance();
+            while (peek() && peek() != '"') {
+                if (peek() == '\\') advance();
+                advance();
+            }
+            if (peek() == '"') advance();
+        } else if (c == '{') {
+            // Object
+            advance();
+            int depth = 1;
+            while (peek() && depth > 0) {
+                if (peek() == '{') depth++;
+                else if (peek() == '}') depth--;
+                else if (peek() == '"') {
+                    advance();
+                    while (peek() && peek() != '"') {
+                        if (peek() == '\\') advance();
+                        advance();
+                    }
+                }
+                advance();
+            }
+        } else if (c == '[') {
+            // Array
+            advance();
+            int depth = 1;
+            while (peek() && depth > 0) {
+                if (peek() == '[') depth++;
+                else if (peek() == ']') depth--;
+                else if (peek() == '"') {
+                    advance();
+                    while (peek() && peek() != '"') {
+                        if (peek() == '\\') advance();
+                        advance();
+                    }
+                }
+                advance();
+            }
+        } else if ((c >= '0' && c <= '9') || c == '-') {
+            // Number
+            while (peek() && ((peek() >= '0' && peek() <= '9') || peek() == '.' || peek() == '-' || peek() == 'e' || peek() == 'E')) {
+                advance();
+            }
+        } else if (c == 't' || c == 'f' || c == 'n') {
+            // true, false, null
+            while (peek() && peek() >= 'a' && peek() <= 'z') advance();
+        }
+    }
+    
+    // ============ Ladder Element Parsing ============
+    
+    struct LadderElement {
+        char type[16];       // contact, coil, coil_set, coil_rset, etc.
+        char address[32];    // I0.0, Q0.0, M0.0, etc.
+        bool inverted;       // Normally closed for contacts, negated for coils
+        char trigger[16];    // normal, rising, falling
+        
+        void clear() {
+            type[0] = '\0';
+            address[0] = '\0';
+            inverted = false;
+            trigger[0] = 'n'; trigger[1] = 'o'; trigger[2] = 'r'; trigger[3] = 'm';
+            trigger[4] = 'a'; trigger[5] = 'l'; trigger[6] = '\0';
+        }
+    };
+    
+    bool parseElement(LadderElement& elem) {
+        elem.clear();
+        
+        if (!expect('{')) {
+            setError("Expected element object");
+            return false;
+        }
+        
+        while (peek() != '}' && peek() != '\0') {
+            char key[32];
+            if (!readString(key, sizeof(key))) return false;
+            
+            if (!expect(':')) {
+                setError("Expected ':' after key");
+                return false;
+            }
+            
+            if (strEqI(key, "type")) {
+                if (!readString(elem.type, sizeof(elem.type))) return false;
+            } else if (strEqI(key, "address")) {
+                if (!readString(elem.address, sizeof(elem.address))) return false;
+            } else if (strEqI(key, "inverted")) {
+                if (!readBool(elem.inverted)) return false;
+            } else if (strEqI(key, "trigger")) {
+                if (!readString(elem.trigger, sizeof(elem.trigger))) return false;
+            } else {
+                // Skip unknown property
+                skipValue();
+            }
+            
+            // Skip comma if present
+            skipWhitespace();
+            if (peek() == ',') advance();
+        }
+        
+        if (!expect('}')) {
+            setError("Expected '}' to close element");
+            return false;
+        }
+        
+        return true;
+    }
+    
+    // ============ Rung Parsing ============
+    
+    // Branches structure for OR logic
+    static const int MAX_BRANCHES = 16;
+    static const int MAX_BRANCH_ELEMENTS = 32;
+    
+    struct Branch {
+        LadderElement elements[MAX_BRANCH_ELEMENTS];
+        int element_count;
+        
+        void clear() { element_count = 0; }
+    };
+    
+    bool parseBranch(Branch& branch) {
+        branch.clear();
+        
+        if (!expect('{')) {
+            setError("Expected branch object");
+            return false;
+        }
+        
+        while (peek() != '}' && peek() != '\0') {
+            char key[32];
+            if (!readString(key, sizeof(key))) return false;
+            
+            if (!expect(':')) {
+                setError("Expected ':' after key");
+                return false;
+            }
+            
+            if (strEqI(key, "elements")) {
+                if (!expect('[')) {
+                    setError("Expected elements array in branch");
+                    return false;
+                }
+                
+                while (peek() != ']' && peek() != '\0') {
+                    if (branch.element_count >= MAX_BRANCH_ELEMENTS) {
+                        setError("Too many elements in branch");
+                        return false;
+                    }
+                    
+                    if (!parseElement(branch.elements[branch.element_count])) return false;
+                    branch.element_count++;
+                    
+                    skipWhitespace();
+                    if (peek() == ',') advance();
+                }
+                
+                if (!expect(']')) {
+                    setError("Expected ']' to close branch elements");
+                    return false;
+                }
+            } else {
+                skipValue();
+            }
+            
+            skipWhitespace();
+            if (peek() == ',') advance();
+        }
+        
+        if (!expect('}')) {
+            setError("Expected '}' to close branch");
+            return false;
+        }
+        
+        return true;
+    }
+    
+    bool parseRung() {
+        if (!expect('{')) {
+            setError("Expected rung object");
+            return false;
+        }
+        
+        // Collect elements for this rung
+        static const int MAX_ELEMENTS = 64;
+        LadderElement elements[MAX_ELEMENTS];
+        int element_count = 0;
+        
+        // Branches for parallel (OR) logic
+        Branch branches[MAX_BRANCHES];
+        int branch_count = 0;
+        
+        while (peek() != '}' && peek() != '\0') {
+            char key[32];
+            if (!readString(key, sizeof(key))) return false;
+            
+            if (!expect(':')) {
+                setError("Expected ':' after key");
+                return false;
+            }
+            
+            if (strEqI(key, "elements")) {
+                // Parse elements array
+                if (!expect('[')) {
+                    setError("Expected elements array");
+                    return false;
+                }
+                
+                while (peek() != ']' && peek() != '\0') {
+                    if (element_count >= MAX_ELEMENTS) {
+                        setError("Too many elements in rung");
+                        return false;
+                    }
+                    
+                    if (!parseElement(elements[element_count])) return false;
+                    element_count++;
+                    
+                    skipWhitespace();
+                    if (peek() == ',') advance();
+                }
+                
+                if (!expect(']')) {
+                    setError("Expected ']' to close elements");
+                    return false;
+                }
+            } else if (strEqI(key, "comment")) {
+                // Skip comment for now
+                skipValue();
+            } else if (strEqI(key, "branches")) {
+                // Parse branches array for OR logic
+                if (!expect('[')) {
+                    setError("Expected branches array");
+                    return false;
+                }
+                
+                while (peek() != ']' && peek() != '\0') {
+                    if (branch_count >= MAX_BRANCHES) {
+                        setError("Too many branches in rung");
+                        return false;
+                    }
+                    
+                    if (!parseBranch(branches[branch_count])) return false;
+                    branch_count++;
+                    
+                    skipWhitespace();
+                    if (peek() == ',') advance();
+                }
+                
+                if (!expect(']')) {
+                    setError("Expected ']' to close branches");
+                    return false;
+                }
+            } else {
+                skipValue();
+            }
+            
+            skipWhitespace();
+            if (peek() == ',') advance();
+        }
+        
+        if (!expect('}')) {
+            setError("Expected '}' to close rung");
+            return false;
+        }
+        
+        // Now build Network IR from elements and branches
+        return buildNetworkFromElements(elements, element_count, branches, branch_count);
+    }
+    
+    // Build expression from a single branch (series of contacts = AND chain)
+    uint32_t buildBranchExpr(LadderElement* elements, int* indices, int count) {
+        if (count == 0) return nir::NIR_NONE;
+        
+        uint32_t and_children[32];
+        int and_count = 0;
+        
+        for (int i = 0; i < count && and_count < 32; i++) {
+            LadderElement& elem = elements[indices[i]];
+            
+            bool inverted = elem.inverted || strEqI(elem.type, "contact_nc");
+            
+            uint32_t sym_idx = nir::g_store.addSymbol(elem.address);
+            if (sym_idx == nir::NIR_NONE) return nir::NIR_NONE;
+            
+            uint32_t leaf_expr = nir::g_store.addLeaf(sym_idx, inverted);
+            if (leaf_expr == nir::NIR_NONE) return nir::NIR_NONE;
+            
+            // Handle edge detection
+            if (strEqI(elem.trigger, "rising") || strEqI(elem.trigger, "positive")) {
+                char edge_mem[16];
+                int byte_addr = edge_mem_counter / 8;
+                int bit_addr = edge_mem_counter % 8;
+                edge_mem_counter++;
+                
+                int idx = 0;
+                edge_mem[idx++] = 'M';
+                int hundreds = byte_addr / 100;
+                int tens = (byte_addr / 10) % 10;
+                int ones = byte_addr % 10;
+                if (hundreds > 0) edge_mem[idx++] = '0' + hundreds;
+                if (hundreds > 0 || tens > 0) edge_mem[idx++] = '0' + tens;
+                edge_mem[idx++] = '0' + ones;
+                edge_mem[idx++] = '.';
+                edge_mem[idx++] = '0' + bit_addr;
+                edge_mem[idx] = '\0';
+                
+                uint32_t edge_sym = nir::g_store.addSymbol(edge_mem, nir::SYM_EDGE);
+                leaf_expr = nir::g_store.addCallBool(nir::CALL_FP, leaf_expr, edge_sym);
+            } else if (strEqI(elem.trigger, "falling") || strEqI(elem.trigger, "negative")) {
+                char edge_mem[16];
+                int byte_addr = edge_mem_counter / 8;
+                int bit_addr = edge_mem_counter % 8;
+                edge_mem_counter++;
+                
+                int idx = 0;
+                edge_mem[idx++] = 'M';
+                int hundreds = byte_addr / 100;
+                int tens = (byte_addr / 10) % 10;
+                int ones = byte_addr % 10;
+                if (hundreds > 0) edge_mem[idx++] = '0' + hundreds;
+                if (hundreds > 0 || tens > 0) edge_mem[idx++] = '0' + tens;
+                edge_mem[idx++] = '0' + ones;
+                edge_mem[idx++] = '.';
+                edge_mem[idx++] = '0' + bit_addr;
+                edge_mem[idx] = '\0';
+                
+                uint32_t edge_sym = nir::g_store.addSymbol(edge_mem, nir::SYM_EDGE);
+                leaf_expr = nir::g_store.addCallBool(nir::CALL_FN, leaf_expr, edge_sym);
+            }
+            
+            and_children[and_count++] = leaf_expr;
+        }
+        
+        if (and_count == 1) {
+            return and_children[0];
+        } else if (and_count > 1) {
+            return nir::g_store.addAnd(and_children, and_count);
+        }
+        return nir::NIR_NONE;
+    }
+    
+    bool buildNetworkFromElements(LadderElement* elements, int count, Branch* branches, int branch_count) {
+        if (count == 0 && branch_count == 0) return true;
+        
+        // Separate contacts and coils from main elements
+        static const int MAX_CONTACTS = 32;
+        static const int MAX_COILS = 16;
+        
+        int contact_indices[MAX_CONTACTS];
+        int coil_indices[MAX_COILS];
+        int contact_count = 0;
+        int coil_count = 0;
+        
+        for (int i = 0; i < count; i++) {
+            const char* type = elements[i].type;
+            if (strEqI(type, "contact") || strEqI(type, "contact_nc")) {
+                if (contact_count < MAX_CONTACTS) {
+                    contact_indices[contact_count++] = i;
+                }
+            } else if (strEqI(type, "coil") || strEqI(type, "coil_set") || 
+                       strEqI(type, "coil_rset") || strEqI(type, "coil_n")) {
+                if (coil_count < MAX_COILS) {
+                    coil_indices[coil_count++] = i;
+                }
+            }
+        }
+        
+        // Build condition expression from contacts (AND chain)
+        uint32_t condition_expr = nir::NIR_NONE;
+        uint32_t and_children[MAX_CONTACTS];
+        int and_count = 0;
+        
+        for (int i = 0; i < contact_count; i++) {
+            LadderElement& elem = elements[contact_indices[i]];
+            
+            // Determine if inverted
+            bool inverted = elem.inverted || strEqI(elem.type, "contact_nc");
+            
+            // Create symbol for address
+            uint32_t sym_idx = nir::g_store.addSymbol(elem.address);
+            if (sym_idx == nir::NIR_NONE) return false;
+            
+            // Create leaf expression
+            uint32_t leaf_expr = nir::g_store.addLeaf(sym_idx, inverted);
+            if (leaf_expr == nir::NIR_NONE) return false;
+            
+            // Handle edge detection
+            if (strEqI(elem.trigger, "rising") || strEqI(elem.trigger, "positive")) {
+                // Wrap in FP call - generate unique edge memory address
+                char edge_mem[16];
+                int byte_addr = edge_mem_counter / 8;
+                int bit_addr = edge_mem_counter % 8;
+                edge_mem_counter++;
+                
+                // Format as "M{byte}.{bit}" - M100.0, M100.1, etc.
+                int idx = 0;
+                edge_mem[idx++] = 'M';
+                // Write byte address digits
+                int hundreds = byte_addr / 100;
+                int tens = (byte_addr / 10) % 10;
+                int ones = byte_addr % 10;
+                if (hundreds > 0) edge_mem[idx++] = '0' + hundreds;
+                if (hundreds > 0 || tens > 0) edge_mem[idx++] = '0' + tens;
+                edge_mem[idx++] = '0' + ones;
+                edge_mem[idx++] = '.';
+                edge_mem[idx++] = '0' + bit_addr;
+                edge_mem[idx] = '\0';
+                
+                uint32_t edge_sym = nir::g_store.addSymbol(edge_mem, nir::SYM_EDGE);
+                leaf_expr = nir::g_store.addCallBool(nir::CALL_FP, leaf_expr, edge_sym);
+            } else if (strEqI(elem.trigger, "falling") || strEqI(elem.trigger, "negative")) {
+                // Wrap in FN call - generate unique edge memory address
+                char edge_mem[16];
+                int byte_addr = edge_mem_counter / 8;
+                int bit_addr = edge_mem_counter % 8;
+                edge_mem_counter++;
+                
+                // Format as "M{byte}.{bit}"
+                int idx = 0;
+                edge_mem[idx++] = 'M';
+                // Write byte address digits
+                int hundreds = byte_addr / 100;
+                int tens = (byte_addr / 10) % 10;
+                int ones = byte_addr % 10;
+                if (hundreds > 0) edge_mem[idx++] = '0' + hundreds;
+                if (hundreds > 0 || tens > 0) edge_mem[idx++] = '0' + tens;
+                edge_mem[idx++] = '0' + ones;
+                edge_mem[idx++] = '.';
+                edge_mem[idx++] = '0' + bit_addr;
+                edge_mem[idx] = '\0';
+                
+                uint32_t edge_sym = nir::g_store.addSymbol(edge_mem, nir::SYM_EDGE);
+                leaf_expr = nir::g_store.addCallBool(nir::CALL_FN, leaf_expr, edge_sym);
+            }
+            
+            and_children[and_count++] = leaf_expr;
+        }
+        
+        // Build main branch expression
+        uint32_t main_branch_expr = nir::NIR_NONE;
+        if (and_count == 1) {
+            main_branch_expr = and_children[0];
+        } else if (and_count > 1) {
+            main_branch_expr = nir::g_store.addAnd(and_children, and_count);
+        }
+        
+        // If we have branches, build OR expression
+        if (branch_count > 0) {
+            uint32_t or_children[MAX_BRANCHES + 1];
+            int or_count = 0;
+            
+            // Main elements form the first branch
+            if (main_branch_expr != nir::NIR_NONE) {
+                or_children[or_count++] = main_branch_expr;
+            }
+            
+            // Add each branch as an OR alternative
+            for (int b = 0; b < branch_count && or_count < MAX_BRANCHES + 1; b++) {
+                Branch& br = branches[b];
+                
+                // Separate contacts from coils in this branch
+                int br_contact_indices[32];
+                int br_contact_count = 0;
+                
+                for (int i = 0; i < br.element_count; i++) {
+                    const char* type = br.elements[i].type;
+                    if (strEqI(type, "contact") || strEqI(type, "contact_nc")) {
+                        if (br_contact_count < 32) {
+                            br_contact_indices[br_contact_count++] = i;
+                        }
+                    }
+                    // Note: coils in branches would need special handling
+                }
+                
+                // Build this branch's expression
+                uint32_t branch_expr = buildBranchExpr(br.elements, br_contact_indices, br_contact_count);
+                if (branch_expr != nir::NIR_NONE) {
+                    or_children[or_count++] = branch_expr;
+                }
+            }
+            
+            // Create OR expression
+            if (or_count == 1) {
+                condition_expr = or_children[0];
+            } else if (or_count > 1) {
+                condition_expr = nir::g_store.addOr(or_children, or_count);
+            }
+        } else {
+            condition_expr = main_branch_expr;
+        }
+        
+        // Build actions from coils
+        uint32_t action_start = nir::g_store.action_count;
+        uint16_t action_cnt = 0;
+        
+        for (int i = 0; i < coil_count; i++) {
+            LadderElement& elem = elements[coil_indices[i]];
+            
+            nir::ActionKind kind = nir::ACT_ASSIGN;
+            if (strEqI(elem.type, "coil_set")) {
+                kind = nir::ACT_SET;
+            } else if (strEqI(elem.type, "coil_rset")) {
+                kind = nir::ACT_RESET;
+            }
+            
+            uint32_t target_sym = nir::g_store.addSymbol(elem.address);
+            if (target_sym == nir::NIR_NONE) return false;
+            
+            uint32_t action_idx = nir::g_store.addAction(kind, target_sym);
+            if (action_idx == nir::NIR_NONE) return false;
+            action_cnt++;
+        }
+        
+        // Create network
+        if (condition_expr != nir::NIR_NONE || action_cnt > 0) {
+            nir::g_store.addNetwork(condition_expr, action_start, action_cnt);
+        }
+        
+        return true;
+    }
+    
+    // ============ Main Parser ============
+    
+    bool parse(const char* src, int len) {
+        reset();
+        source = src;
+        length = len;
+        
+        nir::g_store.reset();
+        
+        // Expect root object
+        if (!expect('{')) {
+            setError("Expected JSON object");
+            return false;
+        }
+        
+        while (peek() != '}' && peek() != '\0') {
+            char key[32];
+            if (!readString(key, sizeof(key))) return false;
+            
+            if (!expect(':')) {
+                setError("Expected ':' after key");
+                return false;
+            }
+            
+            if (strEqI(key, "rungs")) {
+                // Parse rungs array
+                if (!expect('[')) {
+                    setError("Expected rungs array");
+                    return false;
+                }
+                
+                while (peek() != ']' && peek() != '\0') {
+                    if (!parseRung()) return false;
+                    
+                    skipWhitespace();
+                    if (peek() == ',') advance();
+                }
+                
+                if (!expect(']')) {
+                    setError("Expected ']' to close rungs");
+                    return false;
+                }
+            } else {
+                // Skip unknown property
+                skipValue();
+            }
+            
+            skipWhitespace();
+            if (peek() == ',') advance();
+        }
+        
+        if (!expect('}')) {
+            setError("Expected '}' to close root object");
+            return false;
+        }
+        
+        return !has_error;
+    }
+};
+
+
+// ============================================================================
+// STL to Network IR Parser
+// ============================================================================
+//
+// Parses Siemens-style STL into Network IR representation.
+// Supports: A, AN, O, ON, X, XN, NOT, SET, CLR, =, S, R, FP, FN
+//           TON, TOF, TP, CTU, CTD and nesting with O( ... )
+//
+// ============================================================================
+
+class STLToIRParser {
+public:
+    const char* source;
+    int length;
+    int pos;
+    int line;
+    int col;
+    
+    // Output buffer for error messages
+    char error_msg[256];
+    bool has_error;
+    
+    // RLO expression stack for nested logic
+    static const int MAX_EXPR_STACK = 64;
+    uint32_t expr_stack[MAX_EXPR_STACK];
+    int expr_stack_top;
+    
+    // OR branch tracking
+    static const int MAX_OR_BRANCHES = 32;
+    uint32_t or_branches[MAX_OR_BRANCHES];
+    int or_branch_count;
+    bool in_or_block;
+    
+    // Current network actions
+    static const int MAX_PENDING_ACTIONS = 32;
+    uint32_t pending_actions[MAX_PENDING_ACTIONS];
+    int pending_action_count;
+    uint32_t action_start_idx;
+    
+    STLToIRParser() { reset(); }
+    
+    void reset() {
+        source = nullptr;
+        length = 0;
+        pos = 0;
+        line = 1;
+        col = 1;
+        error_msg[0] = '\0';
+        has_error = false;
+        expr_stack_top = 0;
+        or_branch_count = 0;
+        in_or_block = false;
+        pending_action_count = 0;
+        action_start_idx = 0;
+    }
+    
+    void setError(const char* msg) {
+        if (has_error) return;
+        has_error = true;
+        int i = 0;
+        while (msg[i] && i < 255) {
+            error_msg[i] = msg[i];
+            i++;
+        }
+        error_msg[i] = '\0';
+    }
+    
+    // ============ Lexer Helpers ============
+    
+    char peek(int offset = 0) {
+        int p = pos + offset;
+        return (p < length) ? source[p] : '\0';
+    }
+    
+    char advance() {
+        if (pos >= length) return '\0';
+        char c = source[pos++];
+        if (c == '\n') { line++; col = 1; }
+        else col++;
+        return c;
+    }
+    
+    void skipWhitespace() {
+        while (pos < length) {
+            char c = peek();
+            if (c == ' ' || c == '\t' || c == '\r') advance();
+            else break;
+        }
+    }
+    
+    void skipLine() {
+        while (pos < length && peek() != '\n') advance();
+    }
+    
+    bool isAlpha(char c) {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
+    }
+    
+    bool isDigit(char c) {
+        return c >= '0' && c <= '9';
+    }
+    
+    bool isAlphaNum(char c) {
+        return isAlpha(c) || isDigit(c);
+    }
+    
+    bool readToken(char* buf, int maxLen) {
+        skipWhitespace();
+        int i = 0;
+        
+        // Special handling for single-character operators: = S R
+        char c = peek();
+        if (c == '=' || c == ')') {
+            buf[0] = advance();
+            buf[1] = '\0';
+            return true;
+        }
+        
+        while (i < maxLen - 1) {
+            char c = peek();
+            if (isAlphaNum(c) || c == '.' || c == '#' || c == '_' || c == ':') {
+                buf[i++] = advance();
+            } else {
+                break;
+            }
+        }
+        buf[i] = '\0';
+        return i > 0;
+    }
+    
+    bool strEqI(const char* a, const char* b) {
+        while (*a && *b) {
+            char ca = (*a >= 'a' && *a <= 'z') ? *a - 32 : *a;
+            char cb = (*b >= 'a' && *b <= 'z') ? *b - 32 : *b;
+            if (ca != cb) return false;
+            a++; b++;
+        }
+        return *a == *b;
+    }
+    
+    // ============ Expression Stack ============
+    
+    void pushExpr(uint32_t expr) {
+        if (expr_stack_top < MAX_EXPR_STACK) {
+            expr_stack[expr_stack_top++] = expr;
+        }
+    }
+    
+    uint32_t popExpr() {
+        if (expr_stack_top > 0) {
+            return expr_stack[--expr_stack_top];
+        }
+        return nir::NIR_NONE;
+    }
+    
+    uint32_t peekExpr() {
+        if (expr_stack_top > 0) {
+            return expr_stack[expr_stack_top - 1];
+        }
+        return nir::NIR_NONE;
+    }
+    
+    // Combine top two expressions with AND
+    void combineAnd() {
+        if (expr_stack_top >= 2) {
+            uint32_t b = popExpr();
+            uint32_t a = popExpr();
+            uint32_t children[2] = { a, b };
+            uint32_t and_expr = nir::g_store.addAnd(children, 2);
+            pushExpr(and_expr);
+        }
+    }
+    
+    // ============ Control Flow Detection ============
+    
+    bool hasControlFlow() {
+        const char* p = source;
+        char word[32];
+        
+        while (*p) {
+            // Skip whitespace
+            while (*p && (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n')) p++;
+            if (!*p) break;
+            
+            // Skip comments
+            if (*p == '/' && *(p+1) == '/') {
+                while (*p && *p != '\n') p++;
+                continue;
+            }
+            
+            // Read word
+            int i = 0;
+            while (*p && i < 31 && (isAlpha(*p) || isDigit(*p) || *p == '_')) {
+                word[i++] = (*p >= 'a' && *p <= 'z') ? *p - 32 : *p;
+                p++;
+            }
+            word[i] = '\0';
+            
+            if (i == 0) { p++; continue; }
+            
+            // Check for control flow
+            if (strEqI(word, "JU") || strEqI(word, "JC") || strEqI(word, "JCN") ||
+                strEqI(word, "JMP") || strEqI(word, "JUMP") ||
+                strEqI(word, "CALL") || strEqI(word, "LOOP") ||
+                strEqI(word, "BE") || strEqI(word, "BEC") || strEqI(word, "BEU") ||
+                strEqI(word, "RET") || strEqI(word, "RETURN")) {
+                return true;
+            }
+            
+            while (*p && *p != ' ' && *p != '\t' && *p != '\r' && *p != '\n') p++;
+        }
+        return false;
+    }
+    
+    // ============ Main Parser ============
+    
+    bool parse(const char* src, int len) {
+        reset();
+        source = src;
+        length = len;
+        
+        nir::g_store.reset();
+        
+        // Check for control flow first
+        if (hasControlFlow()) {
+            setError("Cannot convert to Network IR: STL contains control flow (JU/JC/JCN/CALL) not representable in LADDER");
+            return false;
+        }
+        
+        action_start_idx = 0;
+        
+        char token[64];
+        char operand[64];
+        
+        while (pos < length) {
+            skipWhitespace();
+            if (pos >= length) break;
+            
+            // Handle newline - potential network boundary
+            if (peek() == '\n') {
+                advance();
+                // Check if we have pending actions -> finalize network
+                if (pending_action_count > 0 && expr_stack_top > 0) {
+                    finalizeNetwork();
+                }
+                continue;
+            }
+            
+            // Skip comments
+            if (peek() == '/' && peek(1) == '/') {
+                skipLine();
+                continue;
+            }
+            
+            // Skip labels (name followed by colon)
+            int save_pos = pos;
+            if (readToken(token, sizeof(token))) {
+                skipWhitespace();
+                if (peek() == ':') {
+                    advance(); // Skip label
+                    continue;
+                }
+                // Not a label, restore position
+                pos = save_pos;
+            }
+            
+            // Read instruction
+            if (!readToken(token, sizeof(token))) {
+                advance();
+                continue;
+            }
+            
+            // Uppercase token
+            for (int i = 0; token[i]; i++) {
+                if (token[i] >= 'a' && token[i] <= 'z') token[i] -= 32;
+            }
+            
+            // Read operand if any
+            operand[0] = '\0';
+            skipWhitespace();
+            
+            // Check for opening parenthesis (nesting)
+            if (peek() == '(') {
+                advance();
+                operand[0] = '(';
+                operand[1] = '\0';
+            } else if (peek() != '\n' && peek() != '/' && peek() != '\0') {
+                readToken(operand, sizeof(operand));
+            }
+            
+            // Process instruction
+            if (!processInstruction(token, operand)) {
+                return false;
+            }
+        }
+        
+        // Finalize any remaining network
+        if (pending_action_count > 0 || expr_stack_top > 0) {
+            finalizeNetwork();
+        }
+        
+        return !has_error;
+    }
+    
+    bool processInstruction(const char* instr, const char* operand) {
+        // ============ Load instructions (contacts) ============
+        if (strEqI(instr, "A") || strEqI(instr, "AN") ||
+            strEqI(instr, "O") || strEqI(instr, "ON") ||
+            strEqI(instr, "X") || strEqI(instr, "XN")) {
+            
+            bool inverted = (instr[1] == 'N' || instr[1] == 'n');
+            bool is_or = (instr[0] == 'O' || instr[0] == 'o');
+            bool is_xor = (instr[0] == 'X' || instr[0] == 'x');
+            
+            // Check for nesting start: O( or A(
+            if (operand[0] == '(') {
+                if (is_or) {
+                    // Start OR block - save current expression
+                    if (expr_stack_top > 0) {
+                        or_branches[or_branch_count++] = popExpr();
+                    }
+                    in_or_block = true;
+                }
+                // A( starts AND nesting - we'll combine on )
+                return true;
+            }
+            
+            if (operand[0] == '\0') {
+                setError("Missing operand for load instruction");
+                return false;
+            }
+            
+            // Create leaf expression
+            uint32_t sym_idx = nir::g_store.addSymbol(operand);
+            if (sym_idx == nir::NIR_NONE) return false;
+            
+            uint32_t leaf = nir::g_store.addLeaf(sym_idx, inverted);
+            if (leaf == nir::NIR_NONE) return false;
+            
+            if (is_or && expr_stack_top > 0) {
+                // OR with previous - collect as branch
+                or_branches[or_branch_count++] = popExpr();
+                or_branches[or_branch_count++] = leaf;
+                
+                // Create OR expression
+                uint32_t or_expr = nir::g_store.addOr(or_branches, or_branch_count);
+                or_branch_count = 0;
+                pushExpr(or_expr);
+            } else if (is_xor && expr_stack_top > 0) {
+                // XOR - for now treat similar to OR
+                uint32_t prev = popExpr();
+                uint32_t children[2] = { prev, leaf };
+                // TODO: Add proper XOR support
+                uint32_t xor_expr = nir::g_store.addOr(children, 2);
+                pushExpr(xor_expr);
+            } else if (expr_stack_top > 0 && !in_or_block) {
+                // AND with previous (series)
+                pushExpr(leaf);
+                combineAnd();
+            } else {
+                pushExpr(leaf);
+            }
+            
+            return true;
+        }
+        
+        // ============ Closing parenthesis ============
+        if (strEqI(instr, ")") || operand[0] == ')') {
+            if (in_or_block && or_branch_count > 0) {
+                // Close OR block
+                if (expr_stack_top > 0) {
+                    or_branches[or_branch_count++] = popExpr();
+                }
+                uint32_t or_expr = nir::g_store.addOr(or_branches, or_branch_count);
+                or_branch_count = 0;
+                in_or_block = false;
+                pushExpr(or_expr);
+            }
+            return true;
+        }
+        
+        // ============ NOT instruction ============
+        if (strEqI(instr, "NOT")) {
+            if (expr_stack_top > 0) {
+                uint32_t top = popExpr();
+                uint32_t not_expr = nir::g_store.addNot(top);
+                pushExpr(not_expr);
+            }
+            return true;
+        }
+        
+        // ============ Edge detection ============
+        if (strEqI(instr, "FP") || strEqI(instr, "FN")) {
+            bool is_falling = (instr[1] == 'N' || instr[1] == 'n');
+            nir::CallOp op = is_falling ? nir::CALL_FN : nir::CALL_FP;
+            
+            // FP/FN uses operand as edge state memory
+            uint32_t state_sym = nir::g_store.addSymbol(operand, nir::SYM_EDGE);
+            
+            if (expr_stack_top > 0) {
+                uint32_t in_expr = popExpr();
+                uint32_t call_expr = nir::g_store.addCallBool(op, in_expr, state_sym);
+                pushExpr(call_expr);
+            }
+            return true;
+        }
+        
+        // ============ Timer instructions ============
+        if (strEqI(instr, "TON") || strEqI(instr, "TOF") || strEqI(instr, "TP")) {
+            nir::CallOp op = strEqI(instr, "TON") ? nir::CALL_TON :
+                             strEqI(instr, "TOF") ? nir::CALL_TOF : nir::CALL_TP;
+            
+            // Parse: TON T0, T#50ms or TON T0, #50
+            char instance[32];
+            uint32_t preset_ms = 0;
+            
+            // operand contains instance name (T0)
+            int i = 0;
+            while (operand[i] && operand[i] != ',' && i < 31) {
+                instance[i] = operand[i];
+                i++;
+            }
+            instance[i] = '\0';
+            
+            // Skip comma and whitespace, read preset
+            if (operand[i] == ',') {
+                i++;
+                while (operand[i] == ' ') i++;
+                // Parse preset (skip T# prefix if present)
+                if (operand[i] == 'T' || operand[i] == 't') i++;
+                if (operand[i] == '#') i++;
+                preset_ms = 0;
+                while (operand[i] >= '0' && operand[i] <= '9') {
+                    preset_ms = preset_ms * 10 + (operand[i] - '0');
+                    i++;
+                }
+                // Check for ms/s suffix
+                if ((operand[i] == 'm' || operand[i] == 'M') &&
+                    (operand[i+1] == 's' || operand[i+1] == 'S')) {
+                    // Already in ms
+                } else if (operand[i] == 's' || operand[i] == 'S') {
+                    preset_ms *= 1000; // Convert to ms
+                }
+            }
+            
+            uint32_t inst_sym = nir::g_store.addSymbol(instance, nir::SYM_TIMER);
+            
+            if (expr_stack_top > 0) {
+                uint32_t in_expr = popExpr();
+                uint32_t call_expr = nir::g_store.addCallBool(op, in_expr, inst_sym, preset_ms);
+                pushExpr(call_expr);
+            }
+            return true;
+        }
+        
+        // ============ Counter instructions ============
+        if (strEqI(instr, "CTU") || strEqI(instr, "CTD")) {
+            nir::CallOp op = strEqI(instr, "CTU") ? nir::CALL_CTU : nir::CALL_CTD;
+            
+            // Parse: CTU C0, #10, X0.1 (instance, PV, reset/load)
+            char instance[32];
+            uint32_t pv = 0;
+            char aux_operand[32];
+            aux_operand[0] = '\0';
+            
+            int i = 0;
+            // Instance
+            while (operand[i] && operand[i] != ',' && i < 31) {
+                instance[i] = operand[i];
+                i++;
+            }
+            instance[i] = '\0';
+            
+            // PV
+            if (operand[i] == ',') {
+                i++;
+                while (operand[i] == ' ') i++;
+                if (operand[i] == '#') i++;
+                while (operand[i] >= '0' && operand[i] <= '9') {
+                    pv = pv * 10 + (operand[i] - '0');
+                    i++;
+                }
+            }
+            
+            // Aux input (reset for CTU, load for CTD)
+            if (operand[i] == ',') {
+                i++;
+                while (operand[i] == ' ') i++;
+                int j = 0;
+                while (operand[i] && j < 31) {
+                    aux_operand[j++] = operand[i++];
+                }
+                aux_operand[j] = '\0';
+            }
+            
+            uint32_t inst_sym = nir::g_store.addSymbol(instance, nir::SYM_COUNTER);
+            uint32_t aux_expr = nir::NIR_NONE;
+            
+            if (aux_operand[0]) {
+                uint32_t aux_sym = nir::g_store.addSymbol(aux_operand);
+                aux_expr = nir::g_store.addLeaf(aux_sym);
+            }
+            
+            if (expr_stack_top > 0) {
+                uint32_t in_expr = popExpr();
+                uint32_t call_expr = nir::g_store.addCallBool(op, in_expr, inst_sym, pv, aux_expr);
+                pushExpr(call_expr);
+            }
+            return true;
+        }
+        
+        // ============ Output instructions (coils) ============
+        if (strEqI(instr, "=") || strEqI(instr, "S") || strEqI(instr, "R")) {
+            nir::ActionKind kind = strEqI(instr, "=") ? nir::ACT_ASSIGN :
+                                   strEqI(instr, "S") ? nir::ACT_SET : nir::ACT_RESET;
+            
+            uint32_t target_sym = nir::g_store.addSymbol(operand);
+            uint32_t action_idx = nir::g_store.addAction(kind, target_sym);
+            
+            if (action_idx != nir::NIR_NONE) {
+                if (pending_action_count == 0) {
+                    action_start_idx = action_idx;
+                }
+                pending_actions[pending_action_count++] = action_idx;
+            }
+            return true;
+        }
+        
+        // ============ RLO manipulation ============
+        if (strEqI(instr, "SET") || strEqI(instr, "CLR")) {
+            // SET = force RLO to 1, CLR = force RLO to 0
+            // For IR: create a constant true/false leaf
+            // Not commonly used in LADDER, skip for now
+            return true;
+        }
+        
+        // Unknown instruction - skip
+        return true;
+    }
+    
+    void finalizeNetwork() {
+        uint32_t condition = (expr_stack_top > 0) ? popExpr() : nir::NIR_NONE;
+        
+        if (pending_action_count > 0 || condition != nir::NIR_NONE) {
+            nir::g_store.addNetwork(condition, action_start_idx, pending_action_count);
+        }
+        
+        // Reset for next network
+        pending_action_count = 0;
+        action_start_idx = nir::g_store.action_count;
+        expr_stack_top = 0;
+        or_branch_count = 0;
+        in_or_block = false;
+    }
+};
+
+// ============================================================================
+// Network IR to STL Emitter
+// ============================================================================
+
+class IRToSTLEmitter {
+public:
+    static const int MAX_OUTPUT = 32768;
+    char output[MAX_OUTPUT];
+    int output_len;
+    
+    char error_msg[256];
+    bool has_error;
+    
+    IRToSTLEmitter() { reset(); }
+    
+    void reset() {
+        output_len = 0;
+        output[0] = '\0';
+        error_msg[0] = '\0';
+        has_error = false;
+    }
+    
+    void emit(const char* s) {
+        while (*s && output_len < MAX_OUTPUT - 1) {
+            output[output_len++] = *s++;
+        }
+        output[output_len] = '\0';
+    }
+    
+    void emitLine(const char* s) {
+        emit(s);
+        emit("\n");
+    }
+    
+    void emitInt(int val) {
+        char buf[16];
+        int i = 0;
+        bool neg = val < 0;
+        if (neg) val = -val;
+        if (val == 0) buf[i++] = '0';
+        else {
+            while (val > 0) {
+                buf[i++] = '0' + (val % 10);
+                val /= 10;
+            }
+        }
+        if (neg) buf[i++] = '-';
+        while (i > 0) {
+            output[output_len++] = buf[--i];
+        }
+        output[output_len] = '\0';
+    }
+    
+    void setError(const char* msg) {
+        if (has_error) return;
+        has_error = true;
+        int i = 0;
+        while (msg[i] && i < 255) {
+            error_msg[i] = msg[i];
+            i++;
+        }
+        error_msg[i] = '\0';
+    }
+    
+    // ============ Expression Emission ============
+    
+    void emitExpr(uint32_t expr_idx, bool first_in_and = true) {
+        if (expr_idx == nir::NIR_NONE) return;
+        
+        nir::Expr& expr = nir::g_store.exprs[expr_idx];
+        
+        switch (expr.kind) {
+            case nir::EXPR_LEAF:
+                emitLeaf(expr, first_in_and);
+                break;
+                
+            case nir::EXPR_NOT:
+                emit("NOT\n");
+                emitExpr(expr.a, true);
+                break;
+                
+            case nir::EXPR_AND:
+                for (uint16_t i = 0; i < expr.child_cnt; i++) {
+                    uint32_t child_idx = nir::g_store.children[expr.child_ofs + i].expr_index;
+                    emitExpr(child_idx, i == 0);
+                }
+                break;
+                
+            case nir::EXPR_OR:
+                // First branch
+                if (expr.child_cnt > 0) {
+                    uint32_t first = nir::g_store.children[expr.child_ofs].expr_index;
+                    emitExpr(first, true);
+                }
+                // Remaining branches with O(
+                for (uint16_t i = 1; i < expr.child_cnt; i++) {
+                    emit("O(\n");
+                    uint32_t child_idx = nir::g_store.children[expr.child_ofs + i].expr_index;
+                    emitExpr(child_idx, true);
+                    emit(")\n");
+                }
+                break;
+                
+            case nir::EXPR_CALL_BOOL:
+                emitCallBool(expr);
+                break;
+        }
+    }
+    
+    void emitLeaf(nir::Expr& expr, bool first_in_and) {
+        bool inverted = (expr.flags & nir::EXPR_FLAG_INVERTED) != 0;
+        
+        // Determine instruction
+        const char* instr = first_in_and ? (inverted ? "AN" : "A") : (inverted ? "AN" : "A");
+        
+        emit(instr);
+        emit(" ");
+        emit(nir::g_store.symbols[expr.a].name);
+        emit("\n");
+    }
+    
+    void emitCallBool(nir::Expr& expr) {
+        uint32_t call_idx = expr.a;
+        nir::CallBool& call = nir::g_store.calls[call_idx];
+        
+        // First emit the input expression
+        emitExpr(call.in_expr, true);
+        
+        // Then emit the call instruction
+        switch (call.op) {
+            case nir::CALL_FP:
+                emit("FP ");
+                emit(nir::g_store.symbols[call.instance_sym].name);
+                emit("\n");
+                break;
+                
+            case nir::CALL_FN:
+                emit("FN ");
+                emit(nir::g_store.symbols[call.instance_sym].name);
+                emit("\n");
+                break;
+                
+            case nir::CALL_TON:
+            case nir::CALL_TOF:
+            case nir::CALL_TP: {
+                const char* op = call.op == nir::CALL_TON ? "TON" :
+                                 call.op == nir::CALL_TOF ? "TOF" : "TP";
+                emit(op);
+                emit(" ");
+                emit(nir::g_store.symbols[call.instance_sym].name);
+                emit(", T#");
+                emitInt(call.preset_u32);
+                emit("ms\n");
+                break;
+            }
+                
+            case nir::CALL_CTU:
+            case nir::CALL_CTD: {
+                const char* op = call.op == nir::CALL_CTU ? "CTU" : "CTD";
+                emit(op);
+                emit(" ");
+                emit(nir::g_store.symbols[call.instance_sym].name);
+                emit(", #");
+                emitInt(call.preset_u32);
+                if (call.aux_expr != nir::NIR_NONE) {
+                    emit(", ");
+                    // Get the aux symbol name
+                    nir::Expr& aux = nir::g_store.exprs[call.aux_expr];
+                    if (aux.kind == nir::EXPR_LEAF) {
+                        emit(nir::g_store.symbols[aux.a].name);
+                    }
+                }
+                emit("\n");
+                break;
+            }
+            
+            default:
+                break;
+        }
+    }
+    
+    // ============ Action Emission ============
+    
+    void emitAction(nir::Action& action) {
+        const char* instr = action.kind == nir::ACT_ASSIGN ? "=" :
+                            action.kind == nir::ACT_SET ? "S" : "R";
+        emit(instr);
+        emit(" ");
+        emit(nir::g_store.symbols[action.target_sym].name);
+        emit("\n");
+    }
+    
+    // ============ Network Emission ============
+    
+    void emitNetwork(nir::Network& net) {
+        // Emit condition expression
+        if (net.condition_expr != nir::NIR_NONE) {
+            emitExpr(net.condition_expr, true);
+        }
+        
+        // Emit actions
+        for (uint16_t i = 0; i < net.action_cnt; i++) {
+            emitAction(nir::g_store.actions[net.action_ofs + i]);
+        }
+        
+        emit("\n"); // Blank line between networks
+    }
+    
+    // ============ Full Program Emission ============
+    
+    bool emitAll() {
+        reset();
+        
+        emit("// Generated from Network IR by VovkPLCRuntime\n\n");
+        
+        for (uint32_t i = 0; i < nir::g_store.network_count; i++) {
+            emitNetwork(nir::g_store.networks[i]);
+        }
+        
+        return !has_error;
+    }
+};
+
+// ============================================================================
+// Global Instances and WASM Exports
+// ============================================================================
+
+static LadderJSONToIRParser ladderJSONParser;
+static STLToIRParser stlToIRParser;
+static IRToSTLEmitter irToSTLEmitter;
+static char ladder_input_buffer[32768];
+static int ladder_input_length = 0;
+
+extern "C" {
+
+// ============ Ladder JSON to Network IR ============
+
+WASM_EXPORT void ladder_load_from_stream() {
+    streamRead(ladder_input_buffer, ladder_input_length, sizeof(ladder_input_buffer));
+}
+
+WASM_EXPORT bool ladder_compile() {
+    // Parse JSON Ladder into Network IR, then emit to STL
+    if (!ladderJSONParser.parse(ladder_input_buffer, ladder_input_length)) {
+        return false;
+    }
+    return irToSTLEmitter.emitAll();
+}
+
+WASM_EXPORT const char* ladder_get_output() {
+    return irToSTLEmitter.output;
+}
+
+WASM_EXPORT int ladder_get_output_length() {
+    return irToSTLEmitter.output_len;
+}
+
+WASM_EXPORT void ladder_output_to_stream() {
+    for (int i = 0; i < irToSTLEmitter.output_len; i++) {
+        streamOut(irToSTLEmitter.output[i]);
+    }
+}
+
+WASM_EXPORT bool ladder_has_error() {
+    return ladderJSONParser.has_error || irToSTLEmitter.has_error;
+}
+
+WASM_EXPORT const char* ladder_get_error() {
+    if (ladderJSONParser.has_error) return ladderJSONParser.error_msg;
+    if (irToSTLEmitter.has_error) return irToSTLEmitter.error_msg;
+    return "";
+}
+
+// ============ Full Pipeline: Ladder JSON -> IR -> STL -> PLCASM -> Bytecode ============
+
+WASM_EXPORT bool ladder_compile_full() {
+    // Step 1: Parse JSON Ladder to Network IR
+    if (!ladderJSONParser.parse(ladder_input_buffer, ladder_input_length)) {
+        return false;
+    }
+    
+    // Step 2: Emit Network IR to canonical STL
+    if (!irToSTLEmitter.emitAll()) {
+        return false;
+    }
+    
+    // Step 3: Compile STL to PLCASM
+    stlCompiler.setSource(irToSTLEmitter.output, irToSTLEmitter.output_len);
+    if (!stlCompiler.compile()) {
+        return false;
+    }
+    
+    // Step 4: Compile PLCASM to bytecode
+    defaultCompiler.set_assembly_string((char*)stlCompiler.getOutput());
+    return !defaultCompiler.compileAssembly(false, false);
+}
+
+// ============ STL to Network IR ============
+
+WASM_EXPORT void stl_to_ir_load_from_stream() {
+    streamRead(ladder_input_buffer, ladder_input_length, sizeof(ladder_input_buffer));
+}
+
+WASM_EXPORT bool stl_to_ir_parse() {
+    return stlToIRParser.parse(ladder_input_buffer, ladder_input_length);
+}
+
+WASM_EXPORT bool stl_to_ir_has_error() {
+    return stlToIRParser.has_error;
+}
+
+WASM_EXPORT const char* stl_to_ir_get_error() {
+    return stlToIRParser.error_msg;
+}
+
+// ============ Network IR to STL ============
+
+WASM_EXPORT bool ir_to_stl_emit() {
+    return irToSTLEmitter.emitAll();
+}
+
+WASM_EXPORT const char* ir_to_stl_get_output() {
+    return irToSTLEmitter.output;
+}
+
+WASM_EXPORT int ir_to_stl_get_output_length() {
+    return irToSTLEmitter.output_len;
+}
+
+WASM_EXPORT void ir_to_stl_output_to_stream() {
+    for (int i = 0; i < irToSTLEmitter.output_len; i++) {
+        streamOut(irToSTLEmitter.output[i]);
+    }
+}
+
+WASM_EXPORT bool ir_to_stl_has_error() {
+    return irToSTLEmitter.has_error;
+}
+
+WASM_EXPORT const char* ir_to_stl_get_error() {
+    return irToSTLEmitter.error_msg;
+}
+
+// ============ Round-trip: STL -> IR -> STL ============
+
+WASM_EXPORT bool stl_roundtrip() {
+    // Parse STL to IR
+    if (!stlToIRParser.parse(ladder_input_buffer, ladder_input_length)) {
+        return false;
+    }
+    // Emit IR to STL
+    return irToSTLEmitter.emitAll();
+}
+
+// ============ Full Pipeline: STL -> IR -> STL -> PLCASM -> Bytecode ============
+
+WASM_EXPORT bool stl_to_ir_compile_full() {
+    // Step 1: Parse STL to Network IR
+    if (!stlToIRParser.parse(ladder_input_buffer, ladder_input_length)) {
+        return false;
+    }
+    
+    // Step 2: Emit Network IR back to canonical STL
+    if (!irToSTLEmitter.emitAll()) {
+        return false;
+    }
+    
+    // Step 3: Compile STL to PLCASM
+    stlCompiler.setSource(irToSTLEmitter.output, irToSTLEmitter.output_len);
+    if (!stlCompiler.compile()) {
+        return false;
+    }
+    
+    // Step 4: Compile PLCASM to bytecode
+    defaultCompiler.set_assembly_string((char*)stlCompiler.getOutput());
+    return !defaultCompiler.compileAssembly(false, false);
+}
+
+// ============ STL to Ladder (via IR) ============
+
+WASM_EXPORT bool stl_to_ladder_convert() {
+    // Parse STL into Network IR
+    if (!stlToIRParser.parse(stl_source_buffer, stl_source_length)) {
+        return false;
+    }
+    // The IR itself IS the "ladder" representation
+    // Emit back to STL for now (visual ladder rendering is a JS concern)
+    return irToSTLEmitter.emitAll();
+}
+
+WASM_EXPORT bool stl_to_ladder_has_error() {
+    return stlToIRParser.has_error;
+}
+
+WASM_EXPORT const char* stl_to_ladder_get_error() {
+    return stlToIRParser.error_msg;
+}
+
+WASM_EXPORT const char* stl_to_ladder_get_output() {
+    return irToSTLEmitter.output;
+}
+
+WASM_EXPORT int stl_to_ladder_get_output_length() {
+    return irToSTLEmitter.output_len;
+}
+
+WASM_EXPORT void stl_to_ladder_output_to_stream() {
+    ir_to_stl_output_to_stream();
+}
+
+} // extern "C"
+
+#endif // __WASM__
