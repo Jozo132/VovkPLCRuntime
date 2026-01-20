@@ -392,6 +392,65 @@ public:
             case 'X': emitLine("u8.xor"); break;
         }
     }
+    
+    // Lookahead to check if the next non-comment instruction is an output (=, S, R)
+    // This allows us to emit u8.copy only when needed for multiple coil outputs
+    bool peekNextIsOutput() {
+        int savedPos = pos;
+        int savedLine = current_line;
+        int savedCol = current_column;
+        
+        while (pos < stl_length) {
+            // Skip whitespace
+            while (pos < stl_length && (stl_source[pos] == ' ' || stl_source[pos] == '\t' || 
+                   stl_source[pos] == '\r' || stl_source[pos] == '\n')) {
+                if (stl_source[pos] == '\n') { current_line++; current_column = 1; }
+                else { current_column++; }
+                pos++;
+            }
+            
+            if (pos >= stl_length) break;
+            
+            char c = stl_source[pos];
+            
+            // Skip comments
+            if (c == '/' && pos + 1 < stl_length && stl_source[pos + 1] == '/') {
+                while (pos < stl_length && stl_source[pos] != '\n') pos++;
+                continue;
+            }
+            
+            // Check for = (assign)
+            if (c == '=') {
+                // Make sure it's not ==I comparison
+                if (pos + 1 < stl_length && stl_source[pos + 1] == '=') {
+                    // It's ==I, not an output
+                    break;
+                }
+                // It's an assign output
+                pos = savedPos; current_line = savedLine; current_column = savedCol;
+                return true;
+            }
+            
+            // Check for S or R (set/reset) - must be followed by whitespace and operand
+            if (c == 'S' || c == 's' || c == 'R' || c == 'r') {
+                // Check it's a standalone S/R, not SET, S1, etc.
+                if (pos + 1 < stl_length) {
+                    char next = stl_source[pos + 1];
+                    if (next == ' ' || next == '\t') {
+                        // It's S or R instruction (output)
+                        pos = savedPos; current_line = savedLine; current_column = savedCol;
+                        return true;
+                    }
+                }
+            }
+            
+            // Any other instruction - not an output
+            break;
+        }
+        
+        pos = savedPos; current_line = savedLine; current_column = savedCol;
+        return false;
+    }
 
     // Handle A/AN/O/ON/X/XN instructions
     void handleBitLogic(char op, bool negate, const char* operand) {
@@ -441,9 +500,13 @@ public:
     void handleAssign(const char* operand) {
         char plcAddr[64];
         convertAddress(operand, plcAddr);
+        // Only duplicate RLO if another output instruction follows
+        if (peekNextIsOutput()) {
+            emit("u8.copy\n");
+        }
         emit("u8.writeBit ");
         emitLine(plcAddr);
-        network_has_rlo = false; // Consumed
+        network_has_rlo = false; // Consumed (or preserved if we duped)
     }
 
     // Handle S (set if RLO=1)
@@ -451,8 +514,12 @@ public:
         char plcAddr[64];
         convertAddress(operand, plcAddr);
         
-        int savedCounter = label_counter++; // Save and increment once
+        int savedCounter = label_counter++;
         
+        // Only duplicate RLO if another output instruction follows
+        if (peekNextIsOutput()) {
+            emit("u8.copy\n");
+        }
         emit("jmp_if_not __skip_set_");
         emitInt(savedCounter);
         emit("\n");
@@ -472,8 +539,12 @@ public:
         char plcAddr[64];
         convertAddress(operand, plcAddr);
         
-        int savedCounter = label_counter++; // Save and increment once
+        int savedCounter = label_counter++;
         
+        // Only duplicate RLO if another output instruction follows
+        if (peekNextIsOutput()) {
+            emit("u8.copy\n");
+        }
         emit("jmp_if_not __skip_reset_");
         emitInt(savedCounter);
         emit("\n");
