@@ -4,14 +4,17 @@
 // Usage:
 //   npm run explain < input.asm           # Explain PLCASM code
 //   npm run explain < input.stl           # Explain STL code (auto-detected)
+//   npm run explain < input.json          # Explain Ladder JSON (auto-detected)
 //   echo "A I0.0\n= Q0.0" | npm run explain
+//   echo '{"rungs":[...]}' | npm run explain
 //
 // The script will:
-//   1. Auto-detect the input language (STL or PLCASM)
-//   2. If STL, show the STL->PLCASM transpilation
-//   3. Show the PLCASM->Bytecode compilation with symbol/label resolution
-//   4. Run the bytecode in full debug mode showing stack state at each step
-//   5. Limit execution to 100 steps to prevent infinite loops
+//   1. Auto-detect the input language (Ladder JSON, STL, or PLCASM)
+//   2. If Ladder, show the Ladder->STL transpilation
+//   3. If STL, show the STL->PLCASM transpilation
+//   4. Show the PLCASM->Bytecode compilation with symbol/label resolution
+//   5. Run the bytecode in full debug mode showing stack state at each step
+//   6. Limit execution to 100 steps to prevent infinite loops
 
 import VovkPLC from '../dist/VovkPLC.js'
 import path from 'path'
@@ -33,14 +36,17 @@ explain.js - CLI tool for explaining PLC code compilation and execution
 Usage:
   npm run explain < input.asm           # Explain PLCASM code
   npm run explain < input.stl           # Explain STL code (auto-detected)
+  npm run explain < input.json          # Explain Ladder JSON (auto-detected)
   echo "A I0.0" | npm run explain
+  echo '{"rungs":[...]}' | npm run explain
 
 The script will:
-  1. Auto-detect the input language (STL or PLCASM)
-  2. If STL, show the STL->PLCASM transpilation
-  3. Show the PLCASM->Bytecode compilation with symbol/label resolution
-  4. Run the bytecode in full debug mode showing stack state at each step
-  5. Limit execution to ${maxSteps} steps to prevent infinite loops
+  1. Auto-detect the input language (Ladder JSON, STL, or PLCASM)
+  2. If Ladder, show the Ladder->STL transpilation
+  3. If STL, show the STL->PLCASM transpilation
+  4. Show the PLCASM->Bytecode compilation with symbol/label resolution
+  5. Run the bytecode in full debug mode showing stack state at each step
+  6. Limit execution to ${maxSteps} steps to prevent infinite loops
 
 Options:
   --max-steps=N   Maximum execution steps (default: 100)
@@ -49,6 +55,7 @@ Options:
 Examples:
   echo -e "A I0.0\\n= Q0.0" | npm run explain
   echo -e "u8.const 1\\nu8.const 2\\nu8.add\\nexit" | npm run explain
+  echo '{"rungs":[{"elements":[{"type":"contact","address":"I0.0"},{"type":"coil","address":"Q0.0"}]}]}' | npm run explain
 `)
     process.exit(0)
 }
@@ -71,8 +78,22 @@ async function readStdin() {
     })
 }
 
-// Detect if input is STL or PLCASM
+// Detect if input is Ladder JSON, STL, or PLCASM
 function detectLanguage(code) {
+    const trimmed = code.trim()
+    
+    // Check for JSON first - if it starts with { and contains "rungs", it's ladder
+    if (trimmed.startsWith('{')) {
+        try {
+            const parsed = JSON.parse(trimmed)
+            if (parsed.rungs && Array.isArray(parsed.rungs)) {
+                return 'ladder'
+            }
+        } catch (e) {
+            // Not valid JSON, continue with other detection
+        }
+    }
+    
     const lines = code.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('//'))
     
     // STL-specific patterns
@@ -229,15 +250,51 @@ const run = async () => {
         console.log()
         
         let plcasm = input
+        let stl = null
+        let stepOffset = 0
         
-        // Step 2: If STL, transpile to PLCASM
-        if (language === 'stl') {
+        // Step 2: If Ladder, transpile to STL first
+        if (language === 'ladder') {
             console.log('┌─────────────────────────────────────────────────────────────────┐')
-            console.log('│ STEP 2: STL → PLCASM Transpilation                             │')
+            console.log('│ STEP 2: Ladder → STL Transpilation                             │')
             console.log('└─────────────────────────────────────────────────────────────────┘')
             console.log()
             
             await streamCode(runtime, input)
+            await runtime.callExport('ladder_load_from_stream')
+            
+            const ladderSuccess = await runtime.callExport('ladder_compile')
+            
+            if (!ladderSuccess) {
+                console.error('  ✗ Ladder compilation error')
+                process.exit(1)
+            }
+            
+            await runtime.callExport('ladder_output_to_stream')
+            stl = await runtime.readStream()
+            
+            const stlLines = stl.split('\n')
+            stlLines.forEach((line, i) => {
+                if (line.trim()) {
+                    console.log(`  ${String(i + 1).padStart(3)}│ ${line}`)
+                }
+            })
+            console.log()
+            console.log('  ✓ Ladder transpiled to STL successfully')
+            console.log()
+            stepOffset = 1
+        }
+        
+        // Step 2/3: If STL (or from ladder), transpile to PLCASM
+        if (language === 'stl' || language === 'ladder') {
+            const stepNum = 2 + stepOffset
+            console.log('┌─────────────────────────────────────────────────────────────────┐')
+            console.log(`│ STEP ${stepNum}: STL → PLCASM Transpilation                             │`)
+            console.log('└─────────────────────────────────────────────────────────────────┘')
+            console.log()
+            
+            const stlInput = stl || input
+            await streamCode(runtime, stlInput)
             await runtime.callExport('stl_load_from_stream')
             
             const success = await runtime.callExport('stl_compile')
@@ -267,10 +324,10 @@ const run = async () => {
             console.log()
         }
         
-        // Step 3: Compile PLCASM to bytecode
-        const stepNum = language === 'stl' ? 3 : 2
+        // Step 3/4: Compile PLCASM to bytecode
+        const plcasmStepNum = language === 'ladder' ? 4 : (language === 'stl' ? 3 : 2)
         console.log('┌─────────────────────────────────────────────────────────────────┐')
-        console.log(`│ STEP ${stepNum}: PLCASM → Bytecode Compilation                           │`)
+        console.log(`│ STEP ${plcasmStepNum}: PLCASM → Bytecode Compilation                           │`)
         console.log('└─────────────────────────────────────────────────────────────────┘')
         console.log()
         
@@ -311,8 +368,8 @@ const run = async () => {
             console.log(loadOutput)
         }
         
-        // Step 5: Execute with debug
-        const execStepNum = language === 'stl' ? 4 : 3
+        // Step 4/5: Execute with debug
+        const execStepNum = language === 'ladder' ? 5 : (language === 'stl' ? 4 : 3)
         console.log('┌─────────────────────────────────────────────────────────────────┐')
         console.log(`│ STEP ${execStepNum}: Bytecode Execution (Debug Mode, max ${maxSteps} steps)          │`)
         console.log('└─────────────────────────────────────────────────────────────────┘')

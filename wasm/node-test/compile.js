@@ -1,16 +1,19 @@
 #!/usr/bin/env node
-// compile.js - CLI tool for compiling PLCASM to bytecode or STL to PLCASM
+// compile.js - CLI tool for compiling PLCASM to bytecode, STL to PLCASM, or Ladder to STL
 //
 // Usage:
 //   npm run compile < input.asm           # Compile PLCASM, output raw bytecode
 //   npm run compile --stl < input.stl     # Compile STL, output PLCASM
+//   npm run compile --ladder < input.json # Compile Ladder JSON, output STL
 //   echo "u8.const 1\nexit" | npm run compile
 //   echo "A I0.0\n= Q0.0" | npm run compile --stl
+//   echo '{"rungs":[...]}' | npm run compile --ladder
 //
 // Options:
-//   --stl    Input is STL code, output PLCASM instead of bytecode
-//   --hex    Output bytecode as hex string instead of raw bytes
-//   --help   Show this help message
+//   --stl     Input is STL code, output PLCASM instead of bytecode
+//   --ladder  Input is Ladder JSON, output STL
+//   --hex     Output bytecode as hex string instead of raw bytes
+//   --help    Show this help message
 
 import VovkPLC from '../dist/VovkPLC.js'
 import path from 'path'
@@ -23,23 +26,26 @@ const __dirname = path.dirname(__filename)
 // Parse command line arguments
 const args = process.argv.slice(2)
 const isSTL = args.includes('--stl')
+const isLadder = args.includes('--ladder')
 const isHex = args.includes('--hex')
 const showHelp = args.includes('--help') || args.includes('-h')
 
 if (showHelp) {
     console.log(`
-compile.js - CLI tool for compiling PLCASM to bytecode or STL to PLCASM
+compile.js - CLI tool for compiling PLCASM to bytecode, STL to PLCASM, or Ladder to STL
 
 Usage:
   npm run compile < input.asm           # Compile PLCASM, output raw bytecode
   npm run compile --stl < input.stl     # Compile STL, output PLCASM
+  npm run compile --ladder < input.json # Compile Ladder JSON, output STL
   echo "u8.const 1" | npm run compile
   echo "A I0.0" | npm run compile --stl
 
 Options:
-  --stl    Input is STL code, output PLCASM instead of bytecode
-  --hex    Output bytecode as hex string instead of raw bytes
-  --help   Show this help message
+  --stl     Input is STL code, output PLCASM instead of bytecode
+  --ladder  Input is Ladder JSON, output STL
+  --hex     Output bytecode as hex string instead of raw bytes
+  --help    Show this help message
 
 Examples:
   # Compile PLCASM and get raw bytecode
@@ -50,6 +56,9 @@ Examples:
 
   # Convert STL to PLCASM
   echo -e "A I0.0\\n= Q0.0" | npm run compile -- --stl
+  
+  # Convert Ladder JSON to STL
+  echo '{"rungs":[{"elements":[{"type":"contact","address":"I0.0"},{"type":"coil","address":"Q0.0"}]}]}' | npm run compile -- --ladder
 `)
     process.exit(0)
 }
@@ -104,7 +113,26 @@ const run = async () => {
             process.exit(1)
         }
         
-        if (isSTL) {
+        if (isLadder) {
+            // Ladder mode: compile Ladder JSON to STL and output STL
+            await streamCode(runtime, input)
+            await runtime.callExport('ladder_load_from_stream')
+            
+            const success = await runtime.callExport('ladder_compile')
+            
+            if (!success) {
+                console.error('Ladder compilation error')
+                process.exit(1)
+            }
+            
+            // Output STL to stream and read it
+            await runtime.callExport('ladder_output_to_stream')
+            const stl = await runtime.readStream()
+            
+            // Output STL to stdout
+            process.stdout.write(stl)
+            
+        } else if (isSTL) {
             // STL mode: compile STL to PLCASM and output PLCASM
             await streamCode(runtime, input)
             await runtime.callExport('stl_load_from_stream')
