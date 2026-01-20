@@ -520,7 +520,8 @@ public:
         if (peekNextIsOutput()) {
             emit("u8.copy\n");
         }
-        emit("jmp_if_not __skip_set_");
+        // Use relative jump for position-independent bytecode
+        emit("jmp_if_not_rel __skip_set_");
         emitInt(savedCounter);
         emit("\n");
         
@@ -545,7 +546,8 @@ public:
         if (peekNextIsOutput()) {
             emit("u8.copy\n");
         }
-        emit("jmp_if_not __skip_reset_");
+        // Use relative jump for position-independent bytecode
+        emit("jmp_if_not_rel __skip_reset_");
         emitInt(savedCounter);
         emit("\n");
         
