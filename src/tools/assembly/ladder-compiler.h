@@ -1503,6 +1503,8 @@ public:
     char error_msg[256];
     bool has_error;
     
+    int indent_level;  // Track nesting depth for indentation
+    
     IRToSTLEmitter() { reset(); }
     
     void reset() {
@@ -1510,6 +1512,7 @@ public:
         output[0] = '\0';
         error_msg[0] = '\0';
         has_error = false;
+        indent_level = 0;
     }
     
     void emit(const char* s) {
@@ -1520,6 +1523,21 @@ public:
     }
     
     void emitLine(const char* s) {
+        emit(s);
+        emit("\n");
+    }
+    
+    void emitIndent() {
+        for (int i = 0; i < indent_level * 4; i++) {
+            if (output_len < MAX_OUTPUT - 1) {
+                output[output_len++] = ' ';
+            }
+        }
+        output[output_len] = '\0';
+    }
+    
+    void emitIndentedLine(const char* s) {
+        emitIndent();
         emit(s);
         emit("\n");
     }
@@ -1567,7 +1585,7 @@ public:
                 break;
                 
             case nir::EXPR_NOT:
-                emit("NOT\n");
+                emitIndentedLine("NOT");
                 emitExpr(expr.a, true);
                 break;
                 
@@ -1578,9 +1596,11 @@ public:
                     
                     // If child is an OR expression (or other complex expr), wrap it with A( ... )
                     if (child.kind == nir::EXPR_OR) {
-                        emit("A(\n");
+                        emitIndentedLine("A(");
+                        indent_level++;
                         emitExpr(child_idx, true);
-                        emit(")\n");
+                        indent_level--;
+                        emitIndentedLine(")");
                     } else {
                         emitExpr(child_idx, i == 0);
                     }
@@ -1601,13 +1621,16 @@ public:
                     // Simple leaf can use plain O, complex needs O( ... )
                     if (child.kind == nir::EXPR_LEAF) {
                         bool inverted = (child.flags & nir::EXPR_FLAG_INVERTED) != 0;
+                        emitIndent();
                         emit(inverted ? "ON " : "O ");
                         emit(nir::g_store.symbols[child.a].name);
                         emit("\n");
                     } else {
-                        emit("O(\n");
+                        emitIndentedLine("O(");
+                        indent_level++;
                         emitExpr(child_idx, true);
-                        emit(")\n");
+                        indent_level--;
+                        emitIndentedLine(")");
                     }
                 }
                 break;
@@ -1624,6 +1647,7 @@ public:
         // Determine instruction
         const char* instr = first_in_and ? (inverted ? "AN" : "A") : (inverted ? "AN" : "A");
         
+        emitIndent();
         emit(instr);
         emit(" ");
         emit(nir::g_store.symbols[expr.a].name);
@@ -1640,18 +1664,21 @@ public:
         // Then emit the call instruction
         switch (call.op) {
             case nir::CALL_FP:
+                emitIndent();
                 emit("FP ");
                 emit(nir::g_store.symbols[call.instance_sym].name);
                 emit("\n");
                 break;
                 
             case nir::CALL_FN:
+                emitIndent();
                 emit("FN ");
                 emit(nir::g_store.symbols[call.instance_sym].name);
                 emit("\n");
                 break;
                 
             case nir::CALL_FX:
+                emitIndent();
                 emit("FX ");
                 emit(nir::g_store.symbols[call.instance_sym].name);
                 emit("\n");
@@ -1662,6 +1689,7 @@ public:
             case nir::CALL_TP: {
                 const char* op = call.op == nir::CALL_TON ? "TON" :
                                  call.op == nir::CALL_TOF ? "TOF" : "TP";
+                emitIndent();
                 emit(op);
                 emit(" ");
                 emit(nir::g_store.symbols[call.instance_sym].name);
@@ -1680,6 +1708,7 @@ public:
             case nir::CALL_CTU:
             case nir::CALL_CTD: {
                 const char* op = call.op == nir::CALL_CTU ? "CTU" : "CTD";
+                emitIndent();
                 emit(op);
                 emit(" ");
                 emit(nir::g_store.symbols[call.instance_sym].name);
@@ -1707,6 +1736,7 @@ public:
     void emitAction(nir::Action& action) {
         const char* instr = action.kind == nir::ACT_ASSIGN ? "=" :
                             action.kind == nir::ACT_SET ? "S" : "R";
+        emitIndent();
         emit(instr);
         emit(" ");
         emit(nir::g_store.symbols[action.target_sym].name);
