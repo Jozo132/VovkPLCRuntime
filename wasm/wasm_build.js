@@ -15,7 +15,7 @@ console.log('Building the WASM executable ...');
 console.log('Executing: ' + TARGET_RELATIVE);
 
 try {
-    execSync(TARGET, { stdio: 'inherit', shell: true });
+    execSync(`"${TARGET}"`, { stdio: 'inherit', shell: true });
     
     const msg = `The compiled WASM file is located in: ${BUILD_PATH}VovkPLC.wasm`;
     console.log('-'.repeat(msg.length));
