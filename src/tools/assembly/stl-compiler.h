@@ -607,8 +607,13 @@ public:
         
         // Stack needs [CU, R] with R on top
         // RLO is already CU, now push R
-        emit("u8.readBit ");
-        emitLine(plcReset);
+        if (plcReset[0] != '\0') {
+            emit("u8.readBit ");
+            emitLine(plcReset);
+        } else {
+            // No reset bit provided, push 0 (false) as default
+            emitLine("u8.const 0");
+        }
         
         emit("ctu ");
         emit(plcCounter);
@@ -625,8 +630,13 @@ public:
         
         // Stack needs [CD, LD] with LD on top
         // RLO is already CD, now push LD
-        emit("u8.readBit ");
-        emitLine(plcLoad);
+        if (plcLoad[0] != '\0') {
+            emit("u8.readBit ");
+            emitLine(plcLoad);
+        } else {
+            // No load bit provided, push 0 (false) as default
+            emitLine("u8.const 0");
+        }
         
         emit("ctd ");
         emit(plcCounter);
