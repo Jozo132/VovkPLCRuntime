@@ -314,9 +314,40 @@ public:
     }
 
     // Convert a single element to an expression (handles precompiled nested structures)
-    uint32_t elementToExpr(LadderElement& elem) {
+    // in_expr is the accumulated input expression for timers/counters (can be NIR_NONE)
+    uint32_t elementToExpr(LadderElement& elem, uint32_t in_expr = nir::NIR_NONE) {
         if (elem.precompiled_expr != nir::NIR_NONE) return elem.precompiled_expr;
         
+        // Handle Timers
+        if (strEqI(elem.type, "timer_ton") || strEqI(elem.type, "timer_tof") || strEqI(elem.type, "timer_tp")) {
+            nir::CallOp op = nir::CALL_TON;
+            if (strEqI(elem.type, "timer_tof")) op = nir::CALL_TOF;
+            else if (strEqI(elem.type, "timer_tp")) op = nir::CALL_TP;
+            
+            uint32_t sym_idx = nir::g_store.addSymbol(elem.address, nir::SYM_TIMER);
+            if (sym_idx == nir::NIR_NONE) return nir::NIR_NONE;
+            
+            uint32_t call_expr;
+            if (elem.preset_str[0] != '\0') {
+                call_expr = nir::g_store.addCallBoolLiteral(op, in_expr, sym_idx, elem.preset_str);
+            } else {
+                call_expr = nir::g_store.addCallBool(op, in_expr, sym_idx, elem.preset);
+            }
+            return call_expr;
+        }
+        
+        // Handle Counters
+        if (strEqI(elem.type, "counter_u") || strEqI(elem.type, "counter_d")) {
+            nir::CallOp op = strEqI(elem.type, "counter_u") ? nir::CALL_CTU : nir::CALL_CTD;
+            
+            uint32_t sym_idx = nir::g_store.addSymbol(elem.address, nir::SYM_COUNTER);
+            if (sym_idx == nir::NIR_NONE) return nir::NIR_NONE;
+            
+            uint32_t call_expr = nir::g_store.addCallBool(op, in_expr, sym_idx, elem.preset);
+            return call_expr;
+        }
+        
+        // Handle Contacts
         bool inverted = elem.inverted || strEqI(elem.type, "contact_nc");
         uint32_t sym_idx = nir::g_store.addSymbol(elem.address);
         if (sym_idx == nir::NIR_NONE) return nir::NIR_NONE;
@@ -343,12 +374,19 @@ public:
         return leaf_expr;
     }
 
+    // Check if element type is a timer or counter
+    bool isTimerOrCounter(const char* type) {
+        return strEqI(type, "timer_ton") || strEqI(type, "timer_tof") || strEqI(type, "timer_tp") ||
+               strEqI(type, "counter_u") || strEqI(type, "counter_d");
+    }
+
     // Parse elements array recursively to expression
     bool parseElementsArrayToExpr(uint32_t& out_expr) {
         if (!expect('[')) { setError("Expected elements array"); return false; }
         
         uint32_t children[32];
         int count = 0;
+        uint32_t accumulated_expr = nir::NIR_NONE;  // For chaining into timers/counters
         
         while (peek() != ']' && peek() != '\0') {
             if (count >= 32) { setError("Too many elements in nested block"); return false; }
@@ -356,10 +394,32 @@ public:
             LadderElement elem;
             if (!parseElement(elem)) return false;
             
+            // Skip coils in nested element parsing
+            if (strEqI(elem.type, "coil") || strEqI(elem.type, "coil_set") ||
+                strEqI(elem.type, "coil_rset") || strEqI(elem.type, "coil_n")) {
+                skipWhitespace();
+                if (peek() == ',') advance();
+                continue;
+            }
+            
+            // Handle contacts, OR blocks, and precompiled expressions
             if (strEqI(elem.type, "contact") || strEqI(elem.type, "contact_nc") || 
                 strEqI(elem.type, "or") || elem.precompiled_expr != nir::NIR_NONE) {
                 uint32_t e = elementToExpr(elem);
                 if (e != nir::NIR_NONE) children[count++] = e;
+            }
+            // Handle timers and counters - they consume accumulated expression
+            else if (isTimerOrCounter(elem.type)) {
+                // Build accumulated expression from current children
+                if (count > 0) {
+                    if (count == 1) accumulated_expr = children[0];
+                    else accumulated_expr = nir::g_store.addAnd(children, count);
+                    count = 0;  // Reset children
+                }
+                
+                uint32_t e = elementToExpr(elem, accumulated_expr);
+                if (e != nir::NIR_NONE) children[count++] = e;
+                accumulated_expr = nir::NIR_NONE;
             }
             
             skipWhitespace();
