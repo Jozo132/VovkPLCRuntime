@@ -1647,6 +1647,7 @@ public:
     }
 
     // Parse "2.7" into address and bit, where we separate the two with a dot. The bits range from 0 to 7
+    // Also resolves symbols like "button1" to their defined address
     bool memoryBitFromToken(Token& token, int& address, int& bit) {
         int offset = 0;
         StringView number = token.string;
@@ -1696,6 +1697,18 @@ public:
                 bit > 25 ? 3 :
                 bit > 15 ? 2 :
                 bit > 5 ? 1 : 0;
+            return false;
+        }
+        // Try to resolve as a symbol
+        Symbol* sym = findSymbol(token.string);
+        if (sym != nullptr) {
+            // Symbol found - use its address
+            address = sym->address;
+            if (sym->is_bit) {
+                bit = sym->bit;
+            } else {
+                bit = 0;
+            }
             return false;
         }
         return true;
