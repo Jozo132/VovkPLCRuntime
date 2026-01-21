@@ -577,6 +577,14 @@ public:
         emitLine(plcAddr);
     }
 
+    // Handle FX (any edge / change detect) - VovkPLCRuntime extension
+    void handleFX(const char* edgeBit) {
+        char plcAddr[64];
+        convertAddress(edgeBit, plcAddr);
+        emit("u8.dc ");
+        emitLine(plcAddr);
+    }
+
     // Handle TON/TOF/TP timers
     void handleTimer(const char* type, const char* timerAddr, const char* preset) {
         char plcTimer[64], plcPreset[64];
@@ -977,6 +985,12 @@ public:
             skipWhitespace();
             readIdentifier(operand1, sizeof(operand1));
             handleFN(operand1);
+            return;
+        }
+        if (strEq(upperInstr, "FX")) {
+            skipWhitespace();
+            readIdentifier(operand1, sizeof(operand1));
+            handleFX(operand1);
             return;
         }
         

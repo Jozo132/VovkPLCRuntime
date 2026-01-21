@@ -62,7 +62,7 @@
 // Contact properties:
 //   - address:  Symbol address (I0.0, M0.0, etc.)
 //   - inverted: true for normally closed (AN)
-//   - trigger:  "normal", "rising" (FP), "falling" (FN)
+//   - trigger:  "normal", "rising" (FP), "falling" (FN), "change" (FX)
 //
 // ============================================================================
 
@@ -537,6 +537,26 @@ public:
                 
                 uint32_t edge_sym = nir::g_store.addSymbol(edge_mem, nir::SYM_EDGE);
                 leaf_expr = nir::g_store.addCallBool(nir::CALL_FN, leaf_expr, edge_sym);
+            } else if (strEqI(elem.trigger, "change") || strEqI(elem.trigger, "any")) {
+                char edge_mem[16];
+                int byte_addr = edge_mem_counter / 8;
+                int bit_addr = edge_mem_counter % 8;
+                edge_mem_counter++;
+                
+                int idx = 0;
+                edge_mem[idx++] = 'M';
+                int hundreds = byte_addr / 100;
+                int tens = (byte_addr / 10) % 10;
+                int ones = byte_addr % 10;
+                if (hundreds > 0) edge_mem[idx++] = '0' + hundreds;
+                if (hundreds > 0 || tens > 0) edge_mem[idx++] = '0' + tens;
+                edge_mem[idx++] = '0' + ones;
+                edge_mem[idx++] = '.';
+                edge_mem[idx++] = '0' + bit_addr;
+                edge_mem[idx] = '\0';
+                
+                uint32_t edge_sym = nir::g_store.addSymbol(edge_mem, nir::SYM_EDGE);
+                leaf_expr = nir::g_store.addCallBool(nir::CALL_FX, leaf_expr, edge_sym);
             }
             
             and_children[and_count++] = leaf_expr;
@@ -642,6 +662,29 @@ public:
                 
                 uint32_t edge_sym = nir::g_store.addSymbol(edge_mem, nir::SYM_EDGE);
                 leaf_expr = nir::g_store.addCallBool(nir::CALL_FN, leaf_expr, edge_sym);
+            } else if (strEqI(elem.trigger, "change") || strEqI(elem.trigger, "any")) {
+                // Wrap in DC call - generate unique edge memory address
+                char edge_mem[16];
+                int byte_addr = edge_mem_counter / 8;
+                int bit_addr = edge_mem_counter % 8;
+                edge_mem_counter++;
+                
+                // Format as "M{byte}.{bit}"
+                int idx = 0;
+                edge_mem[idx++] = 'M';
+                // Write byte address digits
+                int hundreds = byte_addr / 100;
+                int tens = (byte_addr / 10) % 10;
+                int ones = byte_addr % 10;
+                if (hundreds > 0) edge_mem[idx++] = '0' + hundreds;
+                if (hundreds > 0 || tens > 0) edge_mem[idx++] = '0' + tens;
+                edge_mem[idx++] = '0' + ones;
+                edge_mem[idx++] = '.';
+                edge_mem[idx++] = '0' + bit_addr;
+                edge_mem[idx] = '\0';
+                
+                uint32_t edge_sym = nir::g_store.addSymbol(edge_mem, nir::SYM_EDGE);
+                leaf_expr = nir::g_store.addCallBool(nir::CALL_FX, leaf_expr, edge_sym);
             }
             
             and_children[and_count++] = leaf_expr;
@@ -1485,6 +1528,12 @@ public:
                 
             case nir::CALL_FN:
                 emit("FN ");
+                emit(nir::g_store.symbols[call.instance_sym].name);
+                emit("\n");
+                break;
+                
+            case nir::CALL_FX:
+                emit("FX ");
                 emit(nir::g_store.symbols[call.instance_sym].name);
                 emit("\n");
                 break;

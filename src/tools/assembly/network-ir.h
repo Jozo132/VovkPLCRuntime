@@ -96,6 +96,7 @@ enum CallOp : uint8_t {
     CALL_NONE = 0,
     CALL_FP   = 1,   // Rising edge (positive)
     CALL_FN   = 2,   // Falling edge (negative)
+    CALL_FX   = 3,   // Any edge (change detect) - VovkPLCRuntime extension
     CALL_TON  = 10,  // Timer On-Delay
     CALL_TOF  = 11,  // Timer Off-Delay
     CALL_TP   = 12,  // Timer Pulse
