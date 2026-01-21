@@ -30,6 +30,10 @@ const checkSupport = () => {
 
 const SUPPORT = checkSupport()
 
+// Control flags for worker loops
+let queueLoopActive = false
+let sharedLoopActive = new Map() // key -> active
+
 const SHARED_BUFFER_SIZE = 64 * 1024 * 1024 // 64MB
 const RING_SIZE = 1024 * 1024 // 1MB for each ring
 const OFFSETS = {
@@ -303,6 +307,18 @@ const processRequest = async (post, id, type, payload) => {
     } else if (type === 'setup_shared_memory') {
         const { instanceId, sharedBuffer } = payload
         return setupSharedInstance(instanceId, sharedBuffer)
+    } else if (type === 'shutdown') {
+        // Stop all loops to allow graceful termination
+        stopAllLoops()
+        // Give loops time to see the flag, then exit
+        if (isNodeRuntime) {
+            setTimeout(() => {
+                if (typeof process !== 'undefined' && typeof process.exit === 'function') {
+                    process.exit(0)
+                }
+            }, 50)
+        }
+        return true
     } else {
         throw new Error(`Unknown worker request: ${type}`)
     }
@@ -385,10 +401,16 @@ const writeResponseToRing = (msg) => {
     // Client polls, no notify needed, or notify is useless for browser main thread
 }
 
+const stopAllLoops = () => {
+    queueLoopActive = false
+    sharedLoopActive.clear()
+}
+
 const startQueueLoop = async (/** @type {(msg: any) => void} */ post) => {
+    queueLoopActive = true
     // Convert to non-blocking loop to allow runSharedLoop (setTimeout) to function
     const checkQueue = async () => {
-        if (!sabI32 || !sabU8) return
+        if (!queueLoopActive || !sabI32 || !sabU8) return
 
         try {
             const readIdxAddr = OFFSETS.M2S_READ / 4
@@ -460,7 +482,7 @@ const startQueueLoop = async (/** @type {(msg: any) => void} */ post) => {
         }
         
         // Schedule next check (5ms polling)
-        setTimeout(checkQueue, 5)
+        if (queueLoopActive) setTimeout(checkQueue, 5)
     }
     checkQueue()
 }
@@ -578,10 +600,13 @@ const setupSharedIO = () => {
     }
     
     sharedContexts.set('default', context)
+    sharedLoopActive.set('default', true)
     runSharedLoop('default')
 }
 
 const runSharedLoop = (key) => {
+    if (!sharedLoopActive.get(key)) return
+    
     try {
         const context = sharedContexts.get(key)
         if (!context) return
@@ -645,7 +670,7 @@ const runSharedLoop = (key) => {
             if (Atomics.load(i32, 0) === 1) {
                  Atomics.store(i32, 1, 1) // STATUS = RUNNING
             }
-            setTimeout(() => runSharedLoop(key), 0)
+            if (sharedLoopActive.get(key)) setTimeout(() => runSharedLoop(key), 0)
         } else if (cmd === 3) { // STEP
             // Do one cycle
             const memory = /** @type {WebAssembly.Memory} */ (instance.wasm_exports.memory)
@@ -666,16 +691,16 @@ const runSharedLoop = (key) => {
     
             Atomics.store(i32, 0, 2) // CMD -> PAUSE
             Atomics.store(i32, 1, 2) // STATUS = PAUSED
-            setTimeout(() => runSharedLoop(key), 10)
+            if (sharedLoopActive.get(key)) setTimeout(() => runSharedLoop(key), 10)
         } else {
             // IDLE or PAUSED
             Atomics.store(i32, 1, cmd === 2 ? 2 : 0) // STATUS matches CMD
-            setTimeout(() => runSharedLoop(key), 50) 
+            if (sharedLoopActive.get(key)) setTimeout(() => runSharedLoop(key), 50) 
         }
     } catch (e) {
         console.error('[WORKER] Error in runSharedLoop:', e)
         // Retry? Be careful of tight loops of death.
-        setTimeout(() => runSharedLoop(key), 1000)
+        if (sharedLoopActive.get(key)) setTimeout(() => runSharedLoop(key), 1000)
     }
 }
 

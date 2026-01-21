@@ -1720,6 +1720,11 @@ class VovkPLCWorkerClient {
     }
 
     /** @type { () => void } */
+    stopPolling = () => {
+        this.isPolling = false
+    }
+
+    /** @type { () => void } */
     startPolling = () => {
         if (this.isPolling) return
         this.isPolling = true
@@ -2105,15 +2110,25 @@ class VovkPLCWorkerClient {
     /** @type { (sharedBuffer: SharedArrayBuffer, instanceId?: number | null) => Promise<any> } */
     setupSharedMemory = (sharedBuffer, instanceId = null) => this._send('setup_shared_memory', {sharedBuffer, instanceId})
 
-    /** @type { () => Promise<any> } */
-    terminate = () => new Promise(async resolve => {
-        new Promise(r => setTimeout(r, 1000)).then(() => {
-            resolve(1)
-        })
+    /**
+     * Terminate the worker and clean up resources.
+     * @param {Object} options - Termination options
+     * @param {boolean} [options.exit=false] - If true, call process.exit(0) after cleanup (Node.js only).
+     *   Due to Node.js worker_threads behavior, the process may not exit naturally even after 
+     *   worker.terminate(). Use exit:true for CLI tools or when this is the last operation.
+     * @returns {Promise<number>} - Returns 0 on success
+     */
+    terminate = async (options = {}) => {
+        // Stop polling loop first
+        this.stopPolling()
+        
+        // Reject all pending requests
         for (const pending of this.pending.values()) pending.reject(new Error('Worker terminated'))
         this.pending.clear()
         this.stdoutHandlers.clear()
         this.stderrHandlers.clear()
+        
+        // Remove all event listeners BEFORE terminating
         if (typeof this.worker.removeEventListener === 'function') {
             this.worker.removeEventListener('message', this._onMessage)
             this.worker.removeEventListener('error', this._onError)
@@ -2124,8 +2139,37 @@ class VovkPLCWorkerClient {
             this.worker.removeListener('message', this._onMessage)
             this.worker.removeListener('error', this._onError)
         }
-        if (typeof this.worker.terminate === 'function') this.worker.terminate()
-    })
+        
+        // Unref before terminate so the worker doesn't keep the process alive
+        if (typeof this.worker.unref === 'function') this.worker.unref()
+        
+        // Terminate and wait for exit
+        if (typeof this.worker.terminate === 'function') {
+            // For Node.js worker_threads, wait for the 'exit' event for proper cleanup
+            const exitPromise = new Promise(resolve => {
+                if (typeof this.worker.once === 'function') {
+                    this.worker.once('exit', resolve)
+                } else {
+                    resolve(0)
+                }
+            })
+            const result = this.worker.terminate()
+            if (result && typeof result.then === 'function') await result
+            await exitPromise
+        }
+        
+        // Remove any remaining listeners (belt and suspenders)
+        if (typeof this.worker.removeAllListeners === 'function') {
+            this.worker.removeAllListeners()
+        }
+        
+        // In Node.js, optionally force process exit after cleanup
+        // This is needed because Node.js worker_threads may keep internal refs even after terminate
+        if (options.exit && isNodeRuntime && typeof process !== 'undefined' && typeof process.exit === 'function') {
+            setImmediate(() => process.exit(0))
+        }
+        return 0
+    }
 }
 
 class VovkPLCWorker extends VovkPLCWorkerClient {
@@ -2332,7 +2376,12 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
 const getDefaultWorkerFactory = async () => {
     if (isNodeRuntime) {
         const {Worker} = await import('worker_threads') // @ts-ignore
-        return url => new Worker(url, {type: 'module'})
+        return url => {
+            const worker = new Worker(url, {type: 'module'})
+            // Don't keep the process alive just because of this worker
+            if (typeof worker.unref === 'function') worker.unref()
+            return worker
+        }
     }
     if (typeof Worker !== 'undefined') return url => new Worker(url, {type: 'module'})
     throw new Error('Workers are not supported in this environment')
