@@ -280,6 +280,7 @@ public:
         char trigger[16];    // normal, rising, falling
         uint32_t preset;     // Timer/Counter preset value
         char preset_str[32]; // Timer preset as literal string (e.g. T#5s)
+        uint32_t precompiled_expr; // For nested structures like OR blocks
         
         void clear() {
             type[0] = '\0';
@@ -289,8 +290,130 @@ public:
             trigger[4] = 'a'; trigger[5] = 'l'; trigger[6] = '\0';
             preset = 0;
             preset_str[0] = '\0';
+            precompiled_expr = nir::NIR_NONE;
         }
     };
+
+    // Helper to generate unique edge memory address
+    void generateEdgeAddress(char* edge_mem) {
+        int byte_addr = edge_mem_counter / 8;
+        int bit_addr = edge_mem_counter % 8;
+        edge_mem_counter++;
+        
+        int idx = 0;
+        edge_mem[idx++] = 'M';
+        int hundreds = byte_addr / 100;
+        int tens = (byte_addr / 10) % 10;
+        int ones = byte_addr % 10;
+        if (hundreds > 0) edge_mem[idx++] = '0' + hundreds;
+        if (hundreds > 0 || tens > 0) edge_mem[idx++] = '0' + tens;
+        edge_mem[idx++] = '0' + ones;
+        edge_mem[idx++] = '.';
+        edge_mem[idx++] = '0' + bit_addr;
+        edge_mem[idx] = '\0';
+    }
+
+    // Convert a single element to an expression (handles precompiled nested structures)
+    uint32_t elementToExpr(LadderElement& elem) {
+        if (elem.precompiled_expr != nir::NIR_NONE) return elem.precompiled_expr;
+        
+        bool inverted = elem.inverted || strEqI(elem.type, "contact_nc");
+        uint32_t sym_idx = nir::g_store.addSymbol(elem.address);
+        if (sym_idx == nir::NIR_NONE) return nir::NIR_NONE;
+        
+        uint32_t leaf_expr = nir::g_store.addLeaf(sym_idx, inverted);
+        
+        // Handle edge detection
+        if (strEqI(elem.trigger, "rising") || strEqI(elem.trigger, "positive")) {
+            char edge_mem[16];
+            generateEdgeAddress(edge_mem);
+            uint32_t edge_sym = nir::g_store.addSymbol(edge_mem, nir::SYM_EDGE);
+            leaf_expr = nir::g_store.addCallBool(nir::CALL_FP, leaf_expr, edge_sym);
+        } else if (strEqI(elem.trigger, "falling") || strEqI(elem.trigger, "negative")) {
+            char edge_mem[16];
+            generateEdgeAddress(edge_mem);
+            uint32_t edge_sym = nir::g_store.addSymbol(edge_mem, nir::SYM_EDGE);
+            leaf_expr = nir::g_store.addCallBool(nir::CALL_FN, leaf_expr, edge_sym);
+        } else if (strEqI(elem.trigger, "change") || strEqI(elem.trigger, "any")) {
+            char edge_mem[16];
+            generateEdgeAddress(edge_mem);
+            uint32_t edge_sym = nir::g_store.addSymbol(edge_mem, nir::SYM_EDGE);
+            leaf_expr = nir::g_store.addCallBool(nir::CALL_FX, leaf_expr, edge_sym);
+        }
+        return leaf_expr;
+    }
+
+    // Parse elements array recursively to expression
+    bool parseElementsArrayToExpr(uint32_t& out_expr) {
+        if (!expect('[')) { setError("Expected elements array"); return false; }
+        
+        uint32_t children[32];
+        int count = 0;
+        
+        while (peek() != ']' && peek() != '\0') {
+            if (count >= 32) { setError("Too many elements in nested block"); return false; }
+            
+            LadderElement elem;
+            if (!parseElement(elem)) return false;
+            
+            if (strEqI(elem.type, "contact") || strEqI(elem.type, "contact_nc") || 
+                strEqI(elem.type, "or") || elem.precompiled_expr != nir::NIR_NONE) {
+                uint32_t e = elementToExpr(elem);
+                if (e != nir::NIR_NONE) children[count++] = e;
+            }
+            
+            skipWhitespace();
+            if (peek() == ',') advance();
+        }
+        
+        if (!expect(']')) { setError("Expected ] close elements"); return false; }
+        
+        if (count == 0) out_expr = nir::NIR_NONE;
+        else if (count == 1) out_expr = children[0];
+        else out_expr = nir::g_store.addAnd(children, count);
+        return true;
+    }
+    
+    // Parse branches array recursively to OR expression
+    bool parseRecursiveBranches(uint32_t& out_expr) {
+        if (!expect('[')) { setError("Expected branches array"); return false; }
+        
+        uint32_t children[16];
+        int count = 0;
+        
+        while (peek() != ']' && peek() != '\0') {
+            if (count >= 16) { setError("Too many branches"); return false; }
+            
+            if (!expect('{')) { setError("Expected branch object"); return false; }
+            
+            uint32_t br_expr = nir::NIR_NONE;
+            while (peek() != '}' && peek() != '\0') {
+                char key[32];
+                if (!readString(key, sizeof(key))) return false;
+                if (!expect(':')) { setError("Expected :"); return false; }
+                
+                if (strEqI(key, "elements")) {
+                    if (!parseElementsArrayToExpr(br_expr)) return false;
+                } else skipValue();
+                
+                skipWhitespace();
+                if (peek() == ',') advance();
+            }
+            if (!expect('}')) { setError("Expected } close branch"); return false; }
+            
+            if (br_expr != nir::NIR_NONE) children[count++] = br_expr;
+            
+            skipWhitespace();
+            if (peek() == ',') advance();
+        }
+        
+        if (!expect(']')) { setError("Expected ] close branches"); return false; }
+        
+        if (count == 0) out_expr = nir::NIR_NONE;
+        else if (count == 1) out_expr = children[0];
+        else out_expr = nir::g_store.addOr(children, count);
+        return true;
+    }
     
     bool parseElement(LadderElement& elem) {
         elem.clear();
@@ -311,6 +434,9 @@ public:
             
             if (strEqI(key, "type")) {
                 if (!readString(elem.type, sizeof(elem.type))) return false;
+            } else if (strEqI(key, "branches")) {
+                // Recursive OR branches within an element
+                if (!parseRecursiveBranches(elem.precompiled_expr)) return false;
             } else if (strEqI(key, "address")) {
                 if (!readString(elem.address, sizeof(elem.address))) return false;
             } else if (strEqI(key, "inverted")) {
@@ -502,25 +628,6 @@ public:
         // Now build Network IR from elements and branches
         return buildNetworkFromElements(elements, element_count, branches, branch_count);
     }
-    
-    // Helper to generate unique edge memory address
-    void generateEdgeAddress(char* edge_mem) {
-        int byte_addr = edge_mem_counter / 8;
-        int bit_addr = edge_mem_counter % 8;
-        edge_mem_counter++;
-        
-        int idx = 0;
-        edge_mem[idx++] = 'M';
-        int hundreds = byte_addr / 100;
-        int tens = (byte_addr / 10) % 10;
-        int ones = byte_addr % 10;
-        if (hundreds > 0) edge_mem[idx++] = '0' + hundreds;
-        if (hundreds > 0 || tens > 0) edge_mem[idx++] = '0' + tens;
-        edge_mem[idx++] = '0' + ones;
-        edge_mem[idx++] = '.';
-        edge_mem[idx++] = '0' + bit_addr;
-        edge_mem[idx] = '\0';
-    }
 
     // Build logic expression processing contacts and function blocks (timers/counters)
     uint32_t buildLogicExpression(LadderElement* elements, int count) {
@@ -536,6 +643,15 @@ public:
             // Skip coils
             if (strEqI(elem.type, "coil") || strEqI(elem.type, "coil_set") || 
                 strEqI(elem.type, "coil_rset") || strEqI(elem.type, "coil_n")) {
+                continue;
+            }
+            
+            // Handle elements with precompiled expressions (nested OR blocks)
+            if (elem.precompiled_expr != nir::NIR_NONE || strEqI(elem.type, "or")) {
+                uint32_t expr = elementToExpr(elem);
+                if (expr != nir::NIR_NONE && and_count < MAX_AND_CHILDREN) {
+                    and_children[and_count++] = expr;
+                }
                 continue;
             }
             
@@ -721,10 +837,10 @@ public:
                 return false;
             }
             
-            if (strEqI(key, "rungs")) {
-                // Parse rungs array
+            if (strEqI(key, "rungs") || strEqI(key, "networks")) {
+                // Parse rungs/networks array
                 if (!expect('[')) {
-                    setError("Expected rungs array");
+                    setError("Expected rungs/networks array");
                     return false;
                 }
                 
@@ -1398,22 +1514,41 @@ public:
             case nir::EXPR_AND:
                 for (uint16_t i = 0; i < expr.child_cnt; i++) {
                     uint32_t child_idx = nir::g_store.children[expr.child_ofs + i].expr_index;
-                    emitExpr(child_idx, i == 0);
+                    nir::Expr& child = nir::g_store.exprs[child_idx];
+                    
+                    // If child is an OR expression (or other complex expr), wrap it with A( ... )
+                    if (child.kind == nir::EXPR_OR) {
+                        emit("A(\n");
+                        emitExpr(child_idx, true);
+                        emit(")\n");
+                    } else {
+                        emitExpr(child_idx, i == 0);
+                    }
                 }
                 break;
                 
             case nir::EXPR_OR:
-                // First branch
+                // First branch - emit normally
                 if (expr.child_cnt > 0) {
                     uint32_t first = nir::g_store.children[expr.child_ofs].expr_index;
                     emitExpr(first, true);
                 }
-                // Remaining branches with O(
+                // Remaining branches with O ... (simple) or O( ... ) (complex)
                 for (uint16_t i = 1; i < expr.child_cnt; i++) {
-                    emit("O(\n");
                     uint32_t child_idx = nir::g_store.children[expr.child_ofs + i].expr_index;
-                    emitExpr(child_idx, true);
-                    emit(")\n");
+                    nir::Expr& child = nir::g_store.exprs[child_idx];
+                    
+                    // Simple leaf can use plain O, complex needs O( ... )
+                    if (child.kind == nir::EXPR_LEAF) {
+                        bool inverted = (child.flags & nir::EXPR_FLAG_INVERTED) != 0;
+                        emit(inverted ? "ON " : "O ");
+                        emit(nir::g_store.symbols[child.a].name);
+                        emit("\n");
+                    } else {
+                        emit("O(\n");
+                        emitExpr(child_idx, true);
+                        emit(")\n");
+                    }
                 }
                 break;
                 
