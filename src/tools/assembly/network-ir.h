@@ -473,6 +473,36 @@ struct Store {
         
         return expr_idx;
     }
+
+    uint32_t addCallBoolLiteral(CallOp op, uint32_t in_expr, uint32_t instance_sym,
+                                const char* preset_literal, uint32_t aux_expr = NIR_NONE) {
+        if (expr_count >= NIR_MAX_EXPR || call_count >= NIR_MAX_CALLS) {
+            setError("Expression/call arena full");
+            return NIR_NONE;
+        }
+        
+        // Add preset to pool
+        uint16_t preset_ofs = addPresetLiteral(preset_literal);
+        
+        // Add call parameters
+        uint32_t call_idx = call_count++;
+        calls[call_idx].clear();
+        calls[call_idx].op = op;
+        calls[call_idx].in_expr = in_expr;
+        calls[call_idx].instance_sym = instance_sym;
+        calls[call_idx].preset_str_ofs = preset_ofs;
+        calls[call_idx].preset_kind = PRESET_LITERAL;
+        calls[call_idx].aux_expr = aux_expr;
+        
+        // Add expression node
+        uint32_t expr_idx = expr_count++;
+        exprs[expr_idx].clear();
+        exprs[expr_idx].kind = EXPR_CALL_BOOL;
+        exprs[expr_idx].flags = EXPR_FLAG_NON_PURE;
+        exprs[expr_idx].a = call_idx;
+        
+        return expr_idx;
+    }
     
     // ============ Action Building ============
     

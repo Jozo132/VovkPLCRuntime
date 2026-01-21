@@ -201,6 +201,20 @@ public:
         return false;
     }
     
+    // Read a JSON number as u32
+    bool readU32(uint32_t& value) {
+        skipWhitespace();
+        if (peek() < '0' || peek() > '9') {
+            setError("Expected number");
+            return false;
+        }
+        value = 0;
+        while (peek() >= '0' && peek() <= '9') {
+            value = value * 10 + (advance() - '0');
+        }
+        return true;
+    }
+    
     // Skip a JSON value (string, number, object, array, bool, null)
     void skipValue() {
         skipWhitespace();
@@ -264,6 +278,8 @@ public:
         char address[32];    // I0.0, Q0.0, M0.0, etc.
         bool inverted;       // Normally closed for contacts, negated for coils
         char trigger[16];    // normal, rising, falling
+        uint32_t preset;     // Timer/Counter preset value
+        char preset_str[32]; // Timer preset as literal string (e.g. T#5s)
         
         void clear() {
             type[0] = '\0';
@@ -271,6 +287,8 @@ public:
             inverted = false;
             trigger[0] = 'n'; trigger[1] = 'o'; trigger[2] = 'r'; trigger[3] = 'm';
             trigger[4] = 'a'; trigger[5] = 'l'; trigger[6] = '\0';
+            preset = 0;
+            preset_str[0] = '\0';
         }
     };
     
@@ -299,6 +317,13 @@ public:
                 if (!readBool(elem.inverted)) return false;
             } else if (strEqI(key, "trigger")) {
                 if (!readString(elem.trigger, sizeof(elem.trigger))) return false;
+            } else if (strEqI(key, "preset")) {
+                skipWhitespace();
+                if (peek() == '"') {
+                    if (!readString(elem.preset_str, sizeof(elem.preset_str))) return false;
+                } else {
+                    if (!readU32(elem.preset)) return false;
+                }
             } else {
                 // Skip unknown property
                 skipValue();
@@ -478,225 +503,139 @@ public:
         return buildNetworkFromElements(elements, element_count, branches, branch_count);
     }
     
-    // Build expression from a single branch (series of contacts = AND chain)
-    uint32_t buildBranchExpr(LadderElement* elements, int* indices, int count) {
+    // Helper to generate unique edge memory address
+    void generateEdgeAddress(char* edge_mem) {
+        int byte_addr = edge_mem_counter / 8;
+        int bit_addr = edge_mem_counter % 8;
+        edge_mem_counter++;
+        
+        int idx = 0;
+        edge_mem[idx++] = 'M';
+        int hundreds = byte_addr / 100;
+        int tens = (byte_addr / 10) % 10;
+        int ones = byte_addr % 10;
+        if (hundreds > 0) edge_mem[idx++] = '0' + hundreds;
+        if (hundreds > 0 || tens > 0) edge_mem[idx++] = '0' + tens;
+        edge_mem[idx++] = '0' + ones;
+        edge_mem[idx++] = '.';
+        edge_mem[idx++] = '0' + bit_addr;
+        edge_mem[idx] = '\0';
+    }
+
+    // Build logic expression processing contacts and function blocks (timers/counters)
+    uint32_t buildLogicExpression(LadderElement* elements, int count) {
         if (count == 0) return nir::NIR_NONE;
         
-        uint32_t and_children[32];
+        static const int MAX_AND_CHILDREN = 64;
+        uint32_t and_children[MAX_AND_CHILDREN];
         int and_count = 0;
         
-        for (int i = 0; i < count && and_count < 32; i++) {
-            LadderElement& elem = elements[indices[i]];
+        for (int i = 0; i < count; i++) {
+            LadderElement& elem = elements[i];
             
-            bool inverted = elem.inverted || strEqI(elem.type, "contact_nc");
-            
-            uint32_t sym_idx = nir::g_store.addSymbol(elem.address);
-            if (sym_idx == nir::NIR_NONE) return nir::NIR_NONE;
-            
-            uint32_t leaf_expr = nir::g_store.addLeaf(sym_idx, inverted);
-            if (leaf_expr == nir::NIR_NONE) return nir::NIR_NONE;
-            
-            // Handle edge detection
-            if (strEqI(elem.trigger, "rising") || strEqI(elem.trigger, "positive")) {
-                char edge_mem[16];
-                int byte_addr = edge_mem_counter / 8;
-                int bit_addr = edge_mem_counter % 8;
-                edge_mem_counter++;
-                
-                int idx = 0;
-                edge_mem[idx++] = 'M';
-                int hundreds = byte_addr / 100;
-                int tens = (byte_addr / 10) % 10;
-                int ones = byte_addr % 10;
-                if (hundreds > 0) edge_mem[idx++] = '0' + hundreds;
-                if (hundreds > 0 || tens > 0) edge_mem[idx++] = '0' + tens;
-                edge_mem[idx++] = '0' + ones;
-                edge_mem[idx++] = '.';
-                edge_mem[idx++] = '0' + bit_addr;
-                edge_mem[idx] = '\0';
-                
-                uint32_t edge_sym = nir::g_store.addSymbol(edge_mem, nir::SYM_EDGE);
-                leaf_expr = nir::g_store.addCallBool(nir::CALL_FP, leaf_expr, edge_sym);
-            } else if (strEqI(elem.trigger, "falling") || strEqI(elem.trigger, "negative")) {
-                char edge_mem[16];
-                int byte_addr = edge_mem_counter / 8;
-                int bit_addr = edge_mem_counter % 8;
-                edge_mem_counter++;
-                
-                int idx = 0;
-                edge_mem[idx++] = 'M';
-                int hundreds = byte_addr / 100;
-                int tens = (byte_addr / 10) % 10;
-                int ones = byte_addr % 10;
-                if (hundreds > 0) edge_mem[idx++] = '0' + hundreds;
-                if (hundreds > 0 || tens > 0) edge_mem[idx++] = '0' + tens;
-                edge_mem[idx++] = '0' + ones;
-                edge_mem[idx++] = '.';
-                edge_mem[idx++] = '0' + bit_addr;
-                edge_mem[idx] = '\0';
-                
-                uint32_t edge_sym = nir::g_store.addSymbol(edge_mem, nir::SYM_EDGE);
-                leaf_expr = nir::g_store.addCallBool(nir::CALL_FN, leaf_expr, edge_sym);
-            } else if (strEqI(elem.trigger, "change") || strEqI(elem.trigger, "any")) {
-                char edge_mem[16];
-                int byte_addr = edge_mem_counter / 8;
-                int bit_addr = edge_mem_counter % 8;
-                edge_mem_counter++;
-                
-                int idx = 0;
-                edge_mem[idx++] = 'M';
-                int hundreds = byte_addr / 100;
-                int tens = (byte_addr / 10) % 10;
-                int ones = byte_addr % 10;
-                if (hundreds > 0) edge_mem[idx++] = '0' + hundreds;
-                if (hundreds > 0 || tens > 0) edge_mem[idx++] = '0' + tens;
-                edge_mem[idx++] = '0' + ones;
-                edge_mem[idx++] = '.';
-                edge_mem[idx++] = '0' + bit_addr;
-                edge_mem[idx] = '\0';
-                
-                uint32_t edge_sym = nir::g_store.addSymbol(edge_mem, nir::SYM_EDGE);
-                leaf_expr = nir::g_store.addCallBool(nir::CALL_FX, leaf_expr, edge_sym);
+            // Skip coils
+            if (strEqI(elem.type, "coil") || strEqI(elem.type, "coil_set") || 
+                strEqI(elem.type, "coil_rset") || strEqI(elem.type, "coil_n")) {
+                continue;
             }
             
-            and_children[and_count++] = leaf_expr;
+            // Handle Contacts
+            if (strEqI(elem.type, "contact") || strEqI(elem.type, "contact_nc")) {
+                bool inverted = elem.inverted || strEqI(elem.type, "contact_nc");
+                
+                uint32_t sym_idx = nir::g_store.addSymbol(elem.address);
+                if (sym_idx == nir::NIR_NONE) return nir::NIR_NONE;
+                
+                uint32_t leaf_expr = nir::g_store.addLeaf(sym_idx, inverted);
+                if (leaf_expr == nir::NIR_NONE) return nir::NIR_NONE;
+                
+                // Handle edge detection
+                if (strEqI(elem.trigger, "rising") || strEqI(elem.trigger, "positive")) {
+                    char edge_mem[16];
+                    generateEdgeAddress(edge_mem);
+                    uint32_t edge_sym = nir::g_store.addSymbol(edge_mem, nir::SYM_EDGE);
+                    leaf_expr = nir::g_store.addCallBool(nir::CALL_FP, leaf_expr, edge_sym);
+                } else if (strEqI(elem.trigger, "falling") || strEqI(elem.trigger, "negative")) {
+                    char edge_mem[16];
+                    generateEdgeAddress(edge_mem);
+                    uint32_t edge_sym = nir::g_store.addSymbol(edge_mem, nir::SYM_EDGE);
+                    leaf_expr = nir::g_store.addCallBool(nir::CALL_FN, leaf_expr, edge_sym);
+                } else if (strEqI(elem.trigger, "change") || strEqI(elem.trigger, "any")) {
+                    char edge_mem[16];
+                    generateEdgeAddress(edge_mem);
+                    uint32_t edge_sym = nir::g_store.addSymbol(edge_mem, nir::SYM_EDGE);
+                    leaf_expr = nir::g_store.addCallBool(nir::CALL_FX, leaf_expr, edge_sym);
+                }
+                
+                if (and_count < MAX_AND_CHILDREN) {
+                    and_children[and_count++] = leaf_expr;
+                }
+            }
+            // Handle Timers/Counters
+            else if (strEqI(elem.type, "timer_ton") || strEqI(elem.type, "timer_tof") ||
+                     strEqI(elem.type, "timer_tp") || strEqI(elem.type, "counter_u") ||
+                     strEqI(elem.type, "counter_d")) {
+                
+                // Collapse current AND terms to get the Input Expression
+                uint32_t in_expr = nir::NIR_NONE;
+                if (and_count == 1) {
+                    in_expr = and_children[0];
+                } else if (and_count > 1) {
+                    in_expr = nir::g_store.addAnd(and_children, and_count);
+                }
+                
+                // Reset AND accumulation
+                and_count = 0;
+                
+                nir::CallOp op = nir::CALL_NONE;
+                if (strEqI(elem.type, "timer_ton")) op = nir::CALL_TON;
+                else if (strEqI(elem.type, "timer_tof")) op = nir::CALL_TOF;
+                else if (strEqI(elem.type, "timer_tp")) op = nir::CALL_TP;
+                else if (strEqI(elem.type, "counter_u")) op = nir::CALL_CTU;
+                else if (strEqI(elem.type, "counter_d")) op = nir::CALL_CTD;
+
+                uint32_t sym_idx = nir::g_store.addSymbol(elem.address, (op >= nir::CALL_CTU) ? nir::SYM_COUNTER : nir::SYM_TIMER);
+                
+                uint32_t call_expr;
+                if (elem.preset_str[0] != '\0') {
+                    call_expr = nir::g_store.addCallBoolLiteral(op, in_expr, sym_idx, elem.preset_str);
+                } else {
+                    call_expr = nir::g_store.addCallBool(op, in_expr, sym_idx, elem.preset);
+                }
+                
+                if (and_count < MAX_AND_CHILDREN) {
+                    and_children[and_count++] = call_expr;
+                }
+            }
         }
         
-        if (and_count == 1) {
-            return and_children[0];
-        } else if (and_count > 1) {
-            return nir::g_store.addAnd(and_children, and_count);
-        }
+        if (and_count == 1) return and_children[0];
+        if (and_count > 1) return nir::g_store.addAnd(and_children, and_count);
         return nir::NIR_NONE;
     }
     
     bool buildNetworkFromElements(LadderElement* elements, int count, Branch* branches, int branch_count) {
         if (count == 0 && branch_count == 0) return true;
         
-        // Separate contacts and coils from main elements
-        static const int MAX_CONTACTS = 32;
+        // Identify coils for action generation
         static const int MAX_COILS = 16;
-        
-        int contact_indices[MAX_CONTACTS];
         int coil_indices[MAX_COILS];
-        int contact_count = 0;
         int coil_count = 0;
         
         for (int i = 0; i < count; i++) {
             const char* type = elements[i].type;
-            if (strEqI(type, "contact") || strEqI(type, "contact_nc")) {
-                if (contact_count < MAX_CONTACTS) {
-                    contact_indices[contact_count++] = i;
-                }
-            } else if (strEqI(type, "coil") || strEqI(type, "coil_set") || 
-                       strEqI(type, "coil_rset") || strEqI(type, "coil_n")) {
+            if (strEqI(type, "coil") || strEqI(type, "coil_set") || 
+                strEqI(type, "coil_rset") || strEqI(type, "coil_n")) {
                 if (coil_count < MAX_COILS) {
                     coil_indices[coil_count++] = i;
                 }
             }
         }
         
-        // Build condition expression from contacts (AND chain)
+        // Build main branch logic expression
+        uint32_t main_branch_expr = buildLogicExpression(elements, count);
+        
         uint32_t condition_expr = nir::NIR_NONE;
-        uint32_t and_children[MAX_CONTACTS];
-        int and_count = 0;
-        
-        for (int i = 0; i < contact_count; i++) {
-            LadderElement& elem = elements[contact_indices[i]];
-            
-            // Determine if inverted
-            bool inverted = elem.inverted || strEqI(elem.type, "contact_nc");
-            
-            // Create symbol for address
-            uint32_t sym_idx = nir::g_store.addSymbol(elem.address);
-            if (sym_idx == nir::NIR_NONE) return false;
-            
-            // Create leaf expression
-            uint32_t leaf_expr = nir::g_store.addLeaf(sym_idx, inverted);
-            if (leaf_expr == nir::NIR_NONE) return false;
-            
-            // Handle edge detection
-            if (strEqI(elem.trigger, "rising") || strEqI(elem.trigger, "positive")) {
-                // Wrap in FP call - generate unique edge memory address
-                char edge_mem[16];
-                int byte_addr = edge_mem_counter / 8;
-                int bit_addr = edge_mem_counter % 8;
-                edge_mem_counter++;
-                
-                // Format as "M{byte}.{bit}" - M100.0, M100.1, etc.
-                int idx = 0;
-                edge_mem[idx++] = 'M';
-                // Write byte address digits
-                int hundreds = byte_addr / 100;
-                int tens = (byte_addr / 10) % 10;
-                int ones = byte_addr % 10;
-                if (hundreds > 0) edge_mem[idx++] = '0' + hundreds;
-                if (hundreds > 0 || tens > 0) edge_mem[idx++] = '0' + tens;
-                edge_mem[idx++] = '0' + ones;
-                edge_mem[idx++] = '.';
-                edge_mem[idx++] = '0' + bit_addr;
-                edge_mem[idx] = '\0';
-                
-                uint32_t edge_sym = nir::g_store.addSymbol(edge_mem, nir::SYM_EDGE);
-                leaf_expr = nir::g_store.addCallBool(nir::CALL_FP, leaf_expr, edge_sym);
-            } else if (strEqI(elem.trigger, "falling") || strEqI(elem.trigger, "negative")) {
-                // Wrap in FN call - generate unique edge memory address
-                char edge_mem[16];
-                int byte_addr = edge_mem_counter / 8;
-                int bit_addr = edge_mem_counter % 8;
-                edge_mem_counter++;
-                
-                // Format as "M{byte}.{bit}"
-                int idx = 0;
-                edge_mem[idx++] = 'M';
-                // Write byte address digits
-                int hundreds = byte_addr / 100;
-                int tens = (byte_addr / 10) % 10;
-                int ones = byte_addr % 10;
-                if (hundreds > 0) edge_mem[idx++] = '0' + hundreds;
-                if (hundreds > 0 || tens > 0) edge_mem[idx++] = '0' + tens;
-                edge_mem[idx++] = '0' + ones;
-                edge_mem[idx++] = '.';
-                edge_mem[idx++] = '0' + bit_addr;
-                edge_mem[idx] = '\0';
-                
-                uint32_t edge_sym = nir::g_store.addSymbol(edge_mem, nir::SYM_EDGE);
-                leaf_expr = nir::g_store.addCallBool(nir::CALL_FN, leaf_expr, edge_sym);
-            } else if (strEqI(elem.trigger, "change") || strEqI(elem.trigger, "any")) {
-                // Wrap in DC call - generate unique edge memory address
-                char edge_mem[16];
-                int byte_addr = edge_mem_counter / 8;
-                int bit_addr = edge_mem_counter % 8;
-                edge_mem_counter++;
-                
-                // Format as "M{byte}.{bit}"
-                int idx = 0;
-                edge_mem[idx++] = 'M';
-                // Write byte address digits
-                int hundreds = byte_addr / 100;
-                int tens = (byte_addr / 10) % 10;
-                int ones = byte_addr % 10;
-                if (hundreds > 0) edge_mem[idx++] = '0' + hundreds;
-                if (hundreds > 0 || tens > 0) edge_mem[idx++] = '0' + tens;
-                edge_mem[idx++] = '0' + ones;
-                edge_mem[idx++] = '.';
-                edge_mem[idx++] = '0' + bit_addr;
-                edge_mem[idx] = '\0';
-                
-                uint32_t edge_sym = nir::g_store.addSymbol(edge_mem, nir::SYM_EDGE);
-                leaf_expr = nir::g_store.addCallBool(nir::CALL_FX, leaf_expr, edge_sym);
-            }
-            
-            and_children[and_count++] = leaf_expr;
-        }
-        
-        // Build main branch expression
-        uint32_t main_branch_expr = nir::NIR_NONE;
-        if (and_count == 1) {
-            main_branch_expr = and_children[0];
-        } else if (and_count > 1) {
-            main_branch_expr = nir::g_store.addAnd(and_children, and_count);
-        }
         
         // If we have branches, build OR expression
         if (branch_count > 0) {
@@ -711,23 +650,8 @@ public:
             // Add each branch as an OR alternative
             for (int b = 0; b < branch_count && or_count < MAX_BRANCHES + 1; b++) {
                 Branch& br = branches[b];
-                
-                // Separate contacts from coils in this branch
-                int br_contact_indices[32];
-                int br_contact_count = 0;
-                
-                for (int i = 0; i < br.element_count; i++) {
-                    const char* type = br.elements[i].type;
-                    if (strEqI(type, "contact") || strEqI(type, "contact_nc")) {
-                        if (br_contact_count < 32) {
-                            br_contact_indices[br_contact_count++] = i;
-                        }
-                    }
-                    // Note: coils in branches would need special handling
-                }
-                
                 // Build this branch's expression
-                uint32_t branch_expr = buildBranchExpr(br.elements, br_contact_indices, br_contact_count);
+                uint32_t branch_expr = buildLogicExpression(br.elements, br.element_count);
                 if (branch_expr != nir::NIR_NONE) {
                     or_children[or_count++] = branch_expr;
                 }
@@ -1546,9 +1470,15 @@ public:
                 emit(op);
                 emit(" ");
                 emit(nir::g_store.symbols[call.instance_sym].name);
-                emit(", T#");
-                emitInt(call.preset_u32);
-                emit("ms\n");
+                emit(", ");
+                if (call.preset_kind == nir::PRESET_LITERAL) {
+                    emit(&nir::g_store.preset_pool[call.preset_str_ofs]);
+                } else {
+                    emit("T#");
+                    emitInt(call.preset_u32);
+                    emit("ms");
+                }
+                emit("\n");
                 break;
             }
                 
