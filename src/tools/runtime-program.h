@@ -790,12 +790,20 @@ namespace EEPROMStorage {
         
         // Write bytecode
         for (u32 i = 0; i < prog_size; i++) {
+#if defined(ESP8266) || defined(ESP32)
+            EEPROM.write(addr++, program[i]);
+#else
             EEPROM.update(addr++, program[i]);
+#endif
         }
-        
+
         // Write CRC
+#if defined(ESP8266) || defined(ESP32)
+        EEPROM.write(addr, checksum);
+#else
         EEPROM.update(addr, checksum);
-        
+#endif
+
 #if defined(ESP8266) || defined(ESP32)
         if (!EEPROM.commit()) {
             Serial.println(F("EEPROM commit failed"));
