@@ -98,6 +98,16 @@ public:
 
     // Label counter for generated labels
     int label_counter = 0;
+    
+    // Unique hash for this compilation unit (to avoid label collisions when concatenating)
+    uint32_t compilation_hash = 0;
+    
+    // Static counter that increments with each compilation to ensure uniqueness
+    // even for identical source code compiled multiple times
+    static uint32_t& getGlobalCompilationCounter() {
+        static uint32_t counter = 0;
+        return counter;
+    }
 
     STLCompiler() {
         reset();
@@ -118,12 +128,39 @@ public:
         network_has_rlo = false;
         nesting_depth = 0;
         label_counter = 0;
+        compilation_hash = 0;
     }
 
     void setSource(char* source, int length) {
         reset();
         stl_source = source;
         stl_length = length;
+        // Combine content hash with global counter for guaranteed uniqueness
+        uint32_t content_hash = computeSourceHash(source, length);
+        uint32_t counter = getGlobalCompilationCounter()++;
+        compilation_hash = content_hash ^ (counter * 0x9e3779b9); // Mix with golden ratio
+    }
+    
+    // Simple hash function for generating unique compilation unit ID
+    uint32_t computeSourceHash(const char* source, int length) {
+        uint32_t hash = 0x811c9dc5; // FNV-1a offset basis
+        for (int i = 0; i < length; i++) {
+            hash ^= (uint8_t)source[i];
+            hash *= 0x01000193; // FNV-1a prime
+        }
+        return hash;
+    }
+    
+    // Emit hex value (for hash suffix)
+    void emitHex(uint32_t value) {
+        const char hex[] = "0123456789abcdef";
+        char buf[9];
+        for (int i = 7; i >= 0; i--) {
+            buf[i] = hex[value & 0xF];
+            value >>= 4;
+        }
+        buf[8] = '\0';
+        emit(buf);
     }
 
     // ============ Output helpers ============
@@ -169,12 +206,14 @@ public:
         output[output_length] = '\0';
     }
 
-    // Generate unique label
+    // Generate unique label with hash postfix to avoid collisions across compilation units
     void emitUniqueLabel(const char* prefix) {
         emit("__");
         emit(prefix);
         emit("_");
         emitInt(label_counter++);
+        emit("_");
+        emitHex(compilation_hash);
     }
 
     // ============ Error handling ============
@@ -523,6 +562,8 @@ public:
         // Use relative jump for position-independent bytecode
         emit("jmp_if_not_rel __skip_set_");
         emitInt(savedCounter);
+        emit("_");
+        emitHex(compilation_hash);
         emit("\n");
         
         emit("u8.writeBitOn ");
@@ -530,6 +571,8 @@ public:
         
         emit("__skip_set_");
         emitInt(savedCounter);
+        emit("_");
+        emitHex(compilation_hash);
         emit(":\n");
         
         network_has_rlo = false;
@@ -549,6 +592,8 @@ public:
         // Use relative jump for position-independent bytecode
         emit("jmp_if_not_rel __skip_reset_");
         emitInt(savedCounter);
+        emit("_");
+        emitHex(compilation_hash);
         emit("\n");
         
         emit("u8.writeBitOff ");
@@ -556,6 +601,8 @@ public:
         
         emit("__skip_reset_");
         emitInt(savedCounter);
+        emit("_");
+        emitHex(compilation_hash);
         emit(":\n");
         
         network_has_rlo = false;
