@@ -294,6 +294,51 @@ public:
             precompiled_expr = nir::NIR_NONE;
         }
     };
+    
+    // ============ Deferred Actions from Nested Branches ============
+    // Actions (coils, TAPs) found inside OR branches need to be collected
+    // with their condition and processed after the main network is built.
+    
+    static const int MAX_DEFERRED_ACTIONS = 32;
+    
+    struct DeferredAction {
+        char type[16];      // coil, coil_set, coil_rset, coil_n, tap
+        char address[32];   // Output address
+        bool inverted;
+        uint32_t condition; // NIR expression for when this action should execute
+        
+        void clear() {
+            type[0] = '\0';
+            address[0] = '\0';
+            inverted = false;
+            condition = nir::NIR_NONE;
+        }
+    };
+    
+    // Global collection for deferred actions during parsing
+    DeferredAction deferred_actions[MAX_DEFERRED_ACTIONS];
+    int deferred_action_count = 0;
+    
+    void clearDeferredActions() {
+        deferred_action_count = 0;
+    }
+    
+    void addDeferredAction(const char* type, const char* address, bool inverted, uint32_t condition) {
+        if (deferred_action_count >= MAX_DEFERRED_ACTIONS) return;
+        DeferredAction& da = deferred_actions[deferred_action_count++];
+        da.clear();
+        
+        int i = 0;
+        while (type[i] && i < 15) { da.type[i] = type[i]; i++; }
+        da.type[i] = '\0';
+        
+        i = 0;
+        while (address[i] && i < 31) { da.address[i] = address[i]; i++; }
+        da.address[i] = '\0';
+        
+        da.inverted = inverted;
+        da.condition = condition;
+    };
 
     // Helper to generate unique edge memory address
     void generateEdgeAddress(char* edge_mem) {
@@ -319,11 +364,13 @@ public:
     uint32_t elementToExpr(LadderElement& elem, uint32_t in_expr = nir::NIR_NONE) {
         if (elem.precompiled_expr != nir::NIR_NONE) return elem.precompiled_expr;
         
-        // Handle Timers
-        if (strEqI(elem.type, "timer_ton") || strEqI(elem.type, "timer_tof") || strEqI(elem.type, "timer_tp")) {
+        // Handle Timers (multiple name formats supported)
+        if (strEqI(elem.type, "timer_ton") || strEqI(elem.type, "timer_on") ||
+            strEqI(elem.type, "timer_tof") || strEqI(elem.type, "timer_off") ||
+            strEqI(elem.type, "timer_tp") || strEqI(elem.type, "timer_pulse")) {
             nir::CallOp op = nir::CALL_TON;
-            if (strEqI(elem.type, "timer_tof")) op = nir::CALL_TOF;
-            else if (strEqI(elem.type, "timer_tp")) op = nir::CALL_TP;
+            if (strEqI(elem.type, "timer_tof") || strEqI(elem.type, "timer_off")) op = nir::CALL_TOF;
+            else if (strEqI(elem.type, "timer_tp") || strEqI(elem.type, "timer_pulse")) op = nir::CALL_TP;
             
             uint32_t sym_idx = nir::g_store.addSymbol(elem.address, nir::SYM_TIMER);
             if (sym_idx == nir::NIR_NONE) return nir::NIR_NONE;
@@ -337,9 +384,11 @@ public:
             return call_expr;
         }
         
-        // Handle Counters
-        if (strEqI(elem.type, "counter_u") || strEqI(elem.type, "counter_d")) {
-            nir::CallOp op = strEqI(elem.type, "counter_u") ? nir::CALL_CTU : nir::CALL_CTD;
+        // Handle Counters (multiple name formats supported)
+        if (strEqI(elem.type, "counter_u") || strEqI(elem.type, "counter_up") ||
+            strEqI(elem.type, "counter_d") || strEqI(elem.type, "counter_down")) {
+            nir::CallOp op = (strEqI(elem.type, "counter_u") || strEqI(elem.type, "counter_up")) 
+                            ? nir::CALL_CTU : nir::CALL_CTD;
             
             uint32_t sym_idx = nir::g_store.addSymbol(elem.address, nir::SYM_COUNTER);
             if (sym_idx == nir::NIR_NONE) return nir::NIR_NONE;
@@ -377,17 +426,51 @@ public:
 
     // Check if element type is a timer or counter
     bool isTimerOrCounter(const char* type) {
-        return strEqI(type, "timer_ton") || strEqI(type, "timer_tof") || strEqI(type, "timer_tp") ||
-               strEqI(type, "counter_u") || strEqI(type, "counter_d");
+        return strEqI(type, "timer_ton") || strEqI(type, "timer_on") ||
+               strEqI(type, "timer_tof") || strEqI(type, "timer_off") ||
+               strEqI(type, "timer_tp") || strEqI(type, "timer_pulse") ||
+               strEqI(type, "counter_u") || strEqI(type, "counter_up") ||
+               strEqI(type, "counter_d") || strEqI(type, "counter_down");
+    }
+    
+    // Check if element type is a coil
+    bool isCoil(const char* type) {
+        return strEqI(type, "coil") || strEqI(type, "coil_set") ||
+               strEqI(type, "coil_rset") || strEqI(type, "coil_n");
     }
 
-    // Parse elements array recursively to expression
-    bool parseElementsArrayToExpr(uint32_t& out_expr) {
+    // Structure to hold parsed branch info (coils, TAPs, etc.)
+    struct BranchParseResult {
+        uint32_t condition_expr;
+        bool has_coils;
+        bool has_tap;
+        
+        // Collected coils
+        static const int MAX_BRANCH_COILS = 8;
+        struct CoilInfo {
+            char type[16];
+            char address[32];
+            bool inverted;
+        } coils[MAX_BRANCH_COILS];
+        int coil_count;
+        
+        void clear() {
+            condition_expr = nir::NIR_NONE;
+            has_coils = false;
+            has_tap = false;
+            coil_count = 0;
+        }
+    };
+
+    // Parse elements array to expression AND collect coils/TAPs for compound branch detection
+    bool parseElementsArrayWithActions(BranchParseResult& result) {
+        result.clear();
+        
         if (!expect('[')) { setError("Expected elements array"); return false; }
         
         uint32_t children[32];
         int count = 0;
-        uint32_t accumulated_expr = nir::NIR_NONE;  // For chaining into timers/counters
+        uint32_t accumulated_expr = nir::NIR_NONE;
         
         while (peek() != ']' && peek() != '\0') {
             if (count >= 32) { setError("Too many elements in nested block"); return false; }
@@ -395,27 +478,45 @@ public:
             LadderElement elem;
             if (!parseElement(elem)) return false;
             
-            // Skip coils in nested element parsing
-            if (strEqI(elem.type, "coil") || strEqI(elem.type, "coil_set") ||
-                strEqI(elem.type, "coil_rset") || strEqI(elem.type, "coil_n")) {
+            // Handle coils - collect them for compound branch
+            if (isCoil(elem.type)) {
+                if (result.coil_count < BranchParseResult::MAX_BRANCH_COILS) {
+                    BranchParseResult::CoilInfo& ci = result.coils[result.coil_count++];
+                    int i = 0;
+                    while (elem.type[i] && i < 15) { ci.type[i] = elem.type[i]; i++; }
+                    ci.type[i] = '\0';
+                    i = 0;
+                    while (elem.address[i] && i < 31) { ci.address[i] = elem.address[i]; i++; }
+                    ci.address[i] = '\0';
+                    ci.inverted = elem.inverted;
+                    result.has_coils = true;
+                }
+                skipWhitespace();
+                if (peek() == ',') advance();
+                continue;
+            }
+            
+            // Handle TAP - mark branch as having TAP
+            if (strEqI(elem.type, "tap")) {
+                result.has_tap = true;
                 skipWhitespace();
                 if (peek() == ',') advance();
                 continue;
             }
             
             // Handle contacts, OR blocks, and precompiled expressions
-            if (strEqI(elem.type, "contact") || strEqI(elem.type, "contact_nc") || 
+            if (strEqI(elem.type, "contact") || strEqI(elem.type, "contact_no") ||
+                strEqI(elem.type, "contact_nc") || 
                 strEqI(elem.type, "or") || elem.precompiled_expr != nir::NIR_NONE) {
                 uint32_t e = elementToExpr(elem);
                 if (e != nir::NIR_NONE) children[count++] = e;
             }
-            // Handle timers and counters - they consume accumulated expression
+            // Handle timers and counters
             else if (isTimerOrCounter(elem.type)) {
-                // Build accumulated expression from current children
                 if (count > 0) {
                     if (count == 1) accumulated_expr = children[0];
                     else accumulated_expr = nir::g_store.addAnd(children, count);
-                    count = 0;  // Reset children
+                    count = 0;
                 }
                 
                 uint32_t e = elementToExpr(elem, accumulated_expr);
@@ -429,13 +530,21 @@ public:
         
         if (!expect(']')) { setError("Expected ] close elements"); return false; }
         
-        if (count == 0) out_expr = nir::NIR_NONE;
-        else if (count == 1) out_expr = children[0];
-        else out_expr = nir::g_store.addAnd(children, count);
+        if (count == 0) result.condition_expr = nir::NIR_NONE;
+        else if (count == 1) result.condition_expr = children[0];
+        else result.condition_expr = nir::g_store.addAnd(children, count);
         return true;
     }
     
-    // Parse branches array recursively to OR expression
+    // Simple version that doesn't collect actions (for backward compat)
+    bool parseElementsArrayToExpr(uint32_t& out_expr) {
+        BranchParseResult result;
+        if (!parseElementsArrayWithActions(result)) return false;
+        out_expr = result.condition_expr;
+        return true;
+    }
+    
+    // Parse branches array - creates compound expressions for branches with coils/TAPs
     bool parseRecursiveBranches(uint32_t& out_expr) {
         if (!expect('[')) { setError("Expected branches array"); return false; }
         
@@ -445,24 +554,64 @@ public:
         while (peek() != ']' && peek() != '\0') {
             if (count >= 16) { setError("Too many branches"); return false; }
             
-            if (!expect('{')) { setError("Expected branch object"); return false; }
+            BranchParseResult br_result;
+            br_result.clear();
             
-            uint32_t br_expr = nir::NIR_NONE;
-            while (peek() != '}' && peek() != '\0') {
-                char key[32];
-                if (!readString(key, sizeof(key))) return false;
-                if (!expect(':')) { setError("Expected :"); return false; }
-                
-                if (strEqI(key, "elements")) {
-                    if (!parseElementsArrayToExpr(br_expr)) return false;
-                } else skipValue();
-                
-                skipWhitespace();
-                if (peek() == ',') advance();
+            skipWhitespace();
+            // Support both formats:
+            // 1. [ [...elements...], [...elements...] ]  (arrays directly)
+            // 2. [ {elements: [...]}, {elements: [...]} ]  (objects with elements)
+            if (peek() == '[') {
+                // Branch is an array of elements directly
+                if (!parseElementsArrayWithActions(br_result)) return false;
+            } else if (peek() == '{') {
+                // Branch is an object with elements key
+                advance(); // skip '{'
+            
+                while (peek() != '}' && peek() != '\0') {
+                    char key[32];
+                    if (!readString(key, sizeof(key))) return false;
+                    if (!expect(':')) { setError("Expected :"); return false; }
+                    
+                    if (strEqI(key, "elements")) {
+                        if (!parseElementsArrayWithActions(br_result)) return false;
+                    } else skipValue();
+                    
+                    skipWhitespace();
+                    if (peek() == ',') advance();
+                }
+                if (!expect('}')) { setError("Expected } close branch"); return false; }
+            } else {
+                setError("Expected branch ([ or {)");
+                return false;
             }
-            if (!expect('}')) { setError("Expected } close branch"); return false; }
             
-            if (br_expr != nir::NIR_NONE) children[count++] = br_expr;
+            // If branch has coils or TAP, create a compound expression
+            if (br_result.has_coils || br_result.has_tap) {
+                uint32_t comp_expr = nir::g_store.addCompoundBranch(br_result.condition_expr, br_result.has_tap);
+                if (comp_expr == nir::NIR_NONE) return false;
+                
+                // Get the compound index from the expression
+                nir::Expr& expr = nir::g_store.exprs[comp_expr];
+                uint32_t comp_idx = expr.a;
+                
+                // Add inline actions
+                for (int i = 0; i < br_result.coil_count; i++) {
+                    BranchParseResult::CoilInfo& ci = br_result.coils[i];
+                    nir::ActionKind kind = nir::ACT_ASSIGN;
+                    if (strEqI(ci.type, "coil_set")) kind = nir::ACT_SET;
+                    else if (strEqI(ci.type, "coil_rset")) kind = nir::ACT_RESET;
+                    
+                    uint32_t target_sym = nir::g_store.addSymbol(ci.address);
+                    if (target_sym == nir::NIR_NONE) return false;
+                    
+                    nir::g_store.addCompoundAction(comp_idx, kind, target_sym);
+                }
+                
+                children[count++] = comp_expr;
+            } else if (br_result.condition_expr != nir::NIR_NONE) {
+                children[count++] = br_result.condition_expr;
+            }
             
             skipWhitespace();
             if (peek() == ',') advance();
@@ -604,6 +753,9 @@ public:
             return false;
         }
         
+        // Clear deferred actions from previous rung
+        clearDeferredActions();
+        
         // Collect elements for this rung
         static const int MAX_ELEMENTS = 64;
         LadderElement elements[MAX_ELEMENTS];
@@ -635,8 +787,32 @@ public:
                         return false;
                     }
                     
-                    if (!parseElement(elements[element_count])) return false;
-                    element_count++;
+                    // Check if this is a nested array (row of elements)
+                    skipWhitespace();
+                    if (peek() == '[') {
+                        // Parse nested array as a row of elements
+                        advance(); // skip '['
+                        while (peek() != ']' && peek() != '\0') {
+                            if (element_count >= MAX_ELEMENTS) {
+                                setError("Too many elements in nested row");
+                                return false;
+                            }
+                            
+                            if (!parseElement(elements[element_count])) return false;
+                            element_count++;
+                            
+                            skipWhitespace();
+                            if (peek() == ',') advance();
+                        }
+                        if (!expect(']')) {
+                            setError("Expected ']' to close nested row");
+                            return false;
+                        }
+                    } else {
+                        // Parse single element
+                        if (!parseElement(elements[element_count])) return false;
+                        element_count++;
+                    }
                     
                     skipWhitespace();
                     if (peek() == ',') advance();
@@ -644,6 +820,88 @@ public:
                 
                 if (!expect(']')) {
                     setError("Expected ']' to close elements");
+                    return false;
+                }
+            } else if (strEqI(key, "segments")) {
+                // Parse segments array - each segment has elements
+                if (!expect('[')) {
+                    setError("Expected segments array");
+                    return false;
+                }
+                
+                while (peek() != ']' && peek() != '\0') {
+                    // Each segment is an object with elements
+                    if (!expect('{')) {
+                        setError("Expected segment object");
+                        return false;
+                    }
+                    
+                    while (peek() != '}' && peek() != '\0') {
+                        char segKey[32];
+                        if (!readString(segKey, sizeof(segKey))) return false;
+                        if (!expect(':')) { setError("Expected ':'"); return false; }
+                        
+                        if (strEqI(segKey, "elements")) {
+                            // Parse elements array within segment
+                            if (!expect('[')) {
+                                setError("Expected elements array in segment");
+                                return false;
+                            }
+                            
+                            while (peek() != ']' && peek() != '\0') {
+                                // Check if nested array
+                                skipWhitespace();
+                                if (peek() == '[') {
+                                    advance();
+                                    while (peek() != ']' && peek() != '\0') {
+                                        if (element_count >= MAX_ELEMENTS) {
+                                            setError("Too many elements");
+                                            return false;
+                                        }
+                                        if (!parseElement(elements[element_count])) return false;
+                                        element_count++;
+                                        skipWhitespace();
+                                        if (peek() == ',') advance();
+                                    }
+                                    if (!expect(']')) {
+                                        setError("Expected ']' close nested");
+                                        return false;
+                                    }
+                                } else {
+                                    if (element_count >= MAX_ELEMENTS) {
+                                        setError("Too many elements");
+                                        return false;
+                                    }
+                                    if (!parseElement(elements[element_count])) return false;
+                                    element_count++;
+                                }
+                                skipWhitespace();
+                                if (peek() == ',') advance();
+                            }
+                            
+                            if (!expect(']')) {
+                                setError("Expected ']' close segment elements");
+                                return false;
+                            }
+                        } else {
+                            skipValue();
+                        }
+                        
+                        skipWhitespace();
+                        if (peek() == ',') advance();
+                    }
+                    
+                    if (!expect('}')) {
+                        setError("Expected '}' close segment");
+                        return false;
+                    }
+                    
+                    skipWhitespace();
+                    if (peek() == ',') advance();
+                }
+                
+                if (!expect(']')) {
+                    setError("Expected ']' close segments");
                     return false;
                 }
             } else if (strEqI(key, "comment")) {
@@ -749,9 +1007,11 @@ public:
                 }
             }
             // Handle Timers/Counters
-            else if (strEqI(elem.type, "timer_ton") || strEqI(elem.type, "timer_tof") ||
-                     strEqI(elem.type, "timer_tp") || strEqI(elem.type, "counter_u") ||
-                     strEqI(elem.type, "counter_d")) {
+            else if (strEqI(elem.type, "timer_ton") || strEqI(elem.type, "timer_on") ||
+                     strEqI(elem.type, "timer_tof") || strEqI(elem.type, "timer_off") ||
+                     strEqI(elem.type, "timer_tp") || strEqI(elem.type, "timer_pulse") ||
+                     strEqI(elem.type, "counter_u") || strEqI(elem.type, "counter_up") ||
+                     strEqI(elem.type, "counter_d") || strEqI(elem.type, "counter_down")) {
                 
                 // Collapse current AND terms to get the Input Expression
                 uint32_t in_expr = nir::NIR_NONE;
@@ -765,11 +1025,11 @@ public:
                 and_count = 0;
                 
                 nir::CallOp op = nir::CALL_NONE;
-                if (strEqI(elem.type, "timer_ton")) op = nir::CALL_TON;
-                else if (strEqI(elem.type, "timer_tof")) op = nir::CALL_TOF;
-                else if (strEqI(elem.type, "timer_tp")) op = nir::CALL_TP;
-                else if (strEqI(elem.type, "counter_u")) op = nir::CALL_CTU;
-                else if (strEqI(elem.type, "counter_d")) op = nir::CALL_CTD;
+                if (strEqI(elem.type, "timer_ton") || strEqI(elem.type, "timer_on")) op = nir::CALL_TON;
+                else if (strEqI(elem.type, "timer_tof") || strEqI(elem.type, "timer_off")) op = nir::CALL_TOF;
+                else if (strEqI(elem.type, "timer_tp") || strEqI(elem.type, "timer_pulse")) op = nir::CALL_TP;
+                else if (strEqI(elem.type, "counter_u") || strEqI(elem.type, "counter_up")) op = nir::CALL_CTU;
+                else if (strEqI(elem.type, "counter_d") || strEqI(elem.type, "counter_down")) op = nir::CALL_CTD;
 
                 uint32_t sym_idx = nir::g_store.addSymbol(elem.address, (op >= nir::CALL_CTU) ? nir::SYM_COUNTER : nir::SYM_TIMER);
                 
@@ -925,10 +1185,44 @@ public:
             action_cnt++;
         }
         
+        // NOTE: Deferred TAPs from nested branches do NOT modify condition_expr.
+        // The branch expression already includes the TAP condition as part of the OR.
+        // TAP inside a branch just marks "this is what I contribute to the OR".
+        
         // Create network
         if (condition_expr != nir::NIR_NONE || action_cnt > 0) {
             nir::g_store.addNetwork(condition_expr, action_start, action_cnt);
         }
+        
+        // Process deferred coil actions - create separate networks for each
+        for (int i = 0; i < deferred_action_count; i++) {
+            DeferredAction& da = deferred_actions[i];
+            
+            // Skip TAPs - they don't generate separate networks
+            // (the branch expression already includes the TAP condition)
+            if (strEqI(da.type, "tap")) continue;
+            
+            // Create a network for this deferred coil
+            nir::ActionKind kind = nir::ACT_ASSIGN;
+            if (strEqI(da.type, "coil_set")) {
+                kind = nir::ACT_SET;
+            } else if (strEqI(da.type, "coil_rset")) {
+                kind = nir::ACT_RESET;
+            }
+            
+            uint32_t target_sym = nir::g_store.addSymbol(da.address);
+            if (target_sym == nir::NIR_NONE) continue;
+            
+            uint32_t def_action_start = nir::g_store.action_count;
+            uint32_t action_idx = nir::g_store.addAction(kind, target_sym);
+            if (action_idx == nir::NIR_NONE) continue;
+            
+            // Use the deferred condition for this action
+            nir::g_store.addNetwork(da.condition, def_action_start, 1);
+        }
+        
+        // Clear deferred actions after processing
+        clearDeferredActions();
         
         return true;
     }
@@ -1668,8 +1962,8 @@ public:
                     uint32_t child_idx = nir::g_store.children[expr.child_ofs + i].expr_index;
                     nir::Expr& child = nir::g_store.exprs[child_idx];
                     
-                    // If child is an OR expression (or other complex expr), wrap it with A( ... )
-                    if (child.kind == nir::EXPR_OR) {
+                    // If child is an OR or COMPOUND expression, wrap it with A( ... )
+                    if (child.kind == nir::EXPR_OR || child.kind == nir::EXPR_COMPOUND) {
                         emitIndentedLine("A(");
                         indent_level++;
                         emitExpr(child_idx, true);
@@ -1682,10 +1976,11 @@ public:
                 break;
                 
             case nir::EXPR_OR:
-                // First branch - emit normally
+                // First branch - emit directly (no wrapper needed for first branch)
+                // The first branch establishes the RLO, subsequent branches OR with it
                 if (expr.child_cnt > 0) {
                     uint32_t first = nir::g_store.children[expr.child_ofs].expr_index;
-                    emitExpr(first, true);
+                    emitExpr(first, true);  // First branch emits its own A() if needed
                 }
                 // Remaining branches with O ... (simple) or O( ... ) (complex)
                 for (uint16_t i = 1; i < expr.child_cnt; i++) {
@@ -1712,6 +2007,36 @@ public:
             case nir::EXPR_CALL_BOOL:
                 emitCallBool(expr);
                 break;
+                
+            case nir::EXPR_COMPOUND:
+                emitCompoundBranch(expr);
+                break;
+        }
+    }
+    
+    // Emit a compound branch (condition + inline actions + optional TAP)
+    void emitCompoundBranch(nir::Expr& expr) {
+        uint32_t comp_idx = expr.a;
+        nir::CompoundBranch& comp = nir::g_store.compounds[comp_idx];
+        
+        // Emit the condition expression
+        emitExpr(comp.condition_expr, true);
+        
+        // Emit inline actions
+        for (int i = 0; i < comp.action_count; i++) {
+            nir::CompoundBranch::InlineAction& act = comp.actions[i];
+            const char* instr = act.kind == nir::ACT_ASSIGN ? "=" :
+                                act.kind == nir::ACT_SET ? "S" : "R";
+            emitIndent();
+            emit(instr);
+            emit(" ");
+            emit(nir::g_store.symbols[act.target_sym].name);
+            emit("\n");
+        }
+        
+        // Emit TAP if present
+        if (comp.has_tap) {
+            emitIndentedLine("TAP");
         }
     }
     

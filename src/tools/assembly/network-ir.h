@@ -88,6 +88,7 @@ enum ExprKind : uint8_t {
     EXPR_OR        = 4,   // Logical OR (parallel in ladder)
     EXPR_XOR       = 5,   // Logical XOR
     EXPR_CALL_BOOL = 6,   // Pass-through block (TON/TOF/TP/CTU/CTD/FP/FN)
+    EXPR_COMPOUND  = 7,   // Compound branch: condition + inline actions + optional TAP
 };
 
 // ============ Call Operations (for EXPR_CALL_BOOL) ============
@@ -215,6 +216,38 @@ struct CallBool {
     }
 };
 
+// Compound Branch - branch with inline actions (coils, TAPs)
+// Used for EXPR_COMPOUND to represent branches like: A Y0.2 / R Y0.1 / TAP
+static const uint32_t NIR_MAX_COMPOUND_ACTIONS = 8;
+
+struct CompoundBranch {
+    uint32_t condition_expr;  // The condition expression for this branch
+    uint8_t action_count;     // Number of inline actions
+    uint8_t has_tap;          // Whether branch ends with TAP
+    uint8_t reserved[2];
+    
+    // Inline actions (up to 8)
+    struct InlineAction {
+        uint8_t kind;         // ActionKind (ACT_ASSIGN, ACT_SET, ACT_RESET)
+        uint8_t reserved[3];
+        uint32_t target_sym;  // Target symbol index
+    } actions[NIR_MAX_COMPOUND_ACTIONS];
+    
+    void clear() {
+        condition_expr = NIR_NONE;
+        action_count = 0;
+        has_tap = 0;
+        reserved[0] = reserved[1] = 0;
+        for (int i = 0; i < NIR_MAX_COMPOUND_ACTIONS; i++) {
+            actions[i].kind = ACT_NONE;
+            actions[i].reserved[0] = actions[i].reserved[1] = actions[i].reserved[2] = 0;
+            actions[i].target_sym = NIR_NONE;
+        }
+    }
+};
+
+static const uint32_t NIR_MAX_COMPOUNDS = 128;
+
 // Action (coil operation)
 struct Action {
     uint8_t kind;       // ActionKind
@@ -262,6 +295,7 @@ struct Store {
     uint32_t call_count;
     uint32_t action_count;
     uint32_t network_count;
+    uint32_t compound_count;
     
     // Arenas
     Symbol   symbols[NIR_MAX_SYMBOLS];
@@ -270,6 +304,7 @@ struct Store {
     CallBool calls[NIR_MAX_CALLS];
     Action   actions[NIR_MAX_ACTIONS];
     Network  networks[NIR_MAX_NETWORKS];
+    CompoundBranch compounds[NIR_MAX_COMPOUNDS];
     
     // String pools
     uint16_t preset_pool_len;
@@ -286,6 +321,7 @@ struct Store {
         call_count = 0;
         action_count = 0;
         network_count = 0;
+        compound_count = 0;
         preset_pool_len = 0;
         has_error = false;
         error_msg[0] = '\0';
@@ -503,6 +539,42 @@ struct Store {
         exprs[expr_idx].a = call_idx;
         
         return expr_idx;
+    }
+    
+    // Add compound branch expression (branch with inline actions)
+    // Returns expression index for use in OR children
+    uint32_t addCompoundBranch(uint32_t condition_expr, bool has_tap) {
+        if (expr_count >= NIR_MAX_EXPR || compound_count >= NIR_MAX_COMPOUNDS) {
+            setError("Expression/compound arena full");
+            return NIR_NONE;
+        }
+        
+        // Add compound branch data
+        uint32_t comp_idx = compound_count++;
+        compounds[comp_idx].clear();
+        compounds[comp_idx].condition_expr = condition_expr;
+        compounds[comp_idx].has_tap = has_tap ? 1 : 0;
+        
+        // Add expression node that points to compound
+        uint32_t expr_idx = expr_count++;
+        exprs[expr_idx].clear();
+        exprs[expr_idx].kind = EXPR_COMPOUND;
+        exprs[expr_idx].flags = EXPR_FLAG_NON_PURE;  // Has side effects
+        exprs[expr_idx].a = comp_idx;  // Index into compounds array
+        
+        return expr_idx;
+    }
+    
+    // Add an inline action to a compound branch (must be called after addCompoundBranch)
+    bool addCompoundAction(uint32_t comp_idx, ActionKind kind, uint32_t target_sym) {
+        if (comp_idx >= compound_count) return false;
+        CompoundBranch& comp = compounds[comp_idx];
+        if (comp.action_count >= NIR_MAX_COMPOUND_ACTIONS) return false;
+        
+        comp.actions[comp.action_count].kind = kind;
+        comp.actions[comp.action_count].target_sym = target_sym;
+        comp.action_count++;
+        return true;
     }
     
     // ============ Action Building ============
