@@ -58,6 +58,7 @@
 //   - coil_set:   Set coil (S operand)
 //   - coil_rset:  Reset coil (R operand)
 //   - coil_n:     Negated coil (inverted =)
+//   - tap:        RLO passthrough to next rung (VovkPLCRuntime extension)
 //
 // Contact properties:
 //   - address:  Symbol address (I0.0, M0.0, etc.)
@@ -793,6 +794,57 @@ public:
     bool buildNetworkFromElements(LadderElement* elements, int count, Branch* branches, int branch_count) {
         if (count == 0 && branch_count == 0) return true;
         
+        // TAP splits elements into segments. Each segment before a TAP becomes its own network
+        // with a TAP action to pass RLO forward. The last segment doesn't need TAP.
+        //
+        // Example: [contact A, coil X, tap, contact B, coil Y]
+        // Becomes: Network 1: A -> X (with TAP action)
+        //          Network 2: B -> Y (RLO continues from Network 1)
+        //
+        // We process segments by finding TAP elements
+        
+        // Find TAP positions
+        int tap_positions[16];
+        int tap_count = 0;
+        for (int i = 0; i < count && tap_count < 16; i++) {
+            if (strEqI(elements[i].type, "tap")) {
+                tap_positions[tap_count++] = i;
+            }
+        }
+        
+        // If no TAPs, process normally (old behavior)
+        if (tap_count == 0) {
+            return buildNetworkSegment(elements, count, branches, branch_count, false);
+        }
+        
+        // Process each segment
+        int segment_start = 0;
+        for (int t = 0; t <= tap_count; t++) {
+            int segment_end = (t < tap_count) ? tap_positions[t] : count;
+            int segment_len = segment_end - segment_start;
+            
+            if (segment_len > 0) {
+                // For segments before the last, add TAP action
+                bool add_tap = (t < tap_count);
+                
+                // Build this segment (only pass branches to first segment)
+                Branch* seg_branches = (t == 0) ? branches : nullptr;
+                int seg_branch_count = (t == 0) ? branch_count : 0;
+                
+                if (!buildNetworkSegment(&elements[segment_start], segment_len, seg_branches, seg_branch_count, add_tap)) {
+                    return false;
+                }
+            }
+            
+            segment_start = segment_end + 1; // Skip the TAP element itself
+        }
+        
+        return true;
+    }
+    
+    bool buildNetworkSegment(LadderElement* elements, int count, Branch* branches, int branch_count, bool add_tap) {
+        if (count == 0 && branch_count == 0 && !add_tap) return true;
+        
         // Identify coils for action generation
         static const int MAX_COILS = 16;
         int coil_indices[MAX_COILS];
@@ -806,6 +858,7 @@ public:
                     coil_indices[coil_count++] = i;
                 }
             }
+            // TAP elements are already handled by buildNetworkFromElements
         }
         
         // Build main branch logic expression
@@ -861,6 +914,13 @@ public:
             if (target_sym == nir::NIR_NONE) return false;
             
             uint32_t action_idx = nir::g_store.addAction(kind, target_sym);
+            if (action_idx == nir::NIR_NONE) return false;
+            action_cnt++;
+        }
+        
+        // Add TAP action if requested (passthrough RLO to next segment/network)
+        if (add_tap) {
+            uint32_t action_idx = nir::g_store.addAction(nir::ACT_TAP, nir::NIR_NONE);
             if (action_idx == nir::NIR_NONE) return false;
             action_cnt++;
         }
@@ -1462,6 +1522,20 @@ public:
             return true;
         }
         
+        // ============ TAP (VovkPLCRuntime extension) ============
+        if (strEqI(instr, "TAP")) {
+            // TAP - passthrough RLO to next network
+            uint32_t action_idx = nir::g_store.addAction(nir::ACT_TAP, nir::NIR_NONE);
+            
+            if (action_idx != nir::NIR_NONE) {
+                if (pending_action_count == 0) {
+                    action_start_idx = action_idx;
+                }
+                pending_actions[pending_action_count++] = action_idx;
+            }
+            return true;
+        }
+        
         // ============ RLO manipulation ============
         if (strEqI(instr, "SET") || strEqI(instr, "CLR")) {
             // SET = force RLO to 1, CLR = force RLO to 0
@@ -1734,6 +1808,11 @@ public:
     // ============ Action Emission ============
     
     void emitAction(nir::Action& action) {
+        if (action.kind == nir::ACT_TAP) {
+            // TAP - passthrough RLO to next network (no operand)
+            emitIndentedLine("TAP");
+            return;
+        }
         const char* instr = action.kind == nir::ACT_ASSIGN ? "=" :
                             action.kind == nir::ACT_SET ? "S" : "R";
         emitIndent();

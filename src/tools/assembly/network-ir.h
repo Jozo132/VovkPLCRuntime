@@ -112,6 +112,7 @@ enum ActionKind : uint8_t {
     ACT_ASSIGN = 1,   // = symbol (assign coil)
     ACT_SET    = 2,   // S symbol (set coil)
     ACT_RESET  = 3,   // R symbol (reset coil)
+    ACT_TAP    = 4,   // TAP - passthrough RLO to next network (VovkPLCRuntime extension)
 };
 
 // ============ Preset Kinds ============

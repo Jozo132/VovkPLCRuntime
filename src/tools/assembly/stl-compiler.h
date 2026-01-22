@@ -37,6 +37,9 @@
 //   SET, CLR, NOT         - Set RLO=1, Clear RLO=0, Negate RLO
 //   A(, O(, X(, )         - Nesting (parentheses)
 //
+// VovkPLCRuntime Extensions (non-standard):
+//   TAP                   - Tap/passthrough RLO to next rung (preserves RLO after output)
+//
 // Edge Detection:
 //   FP, FN                - Positive/Negative edge detect
 //
@@ -479,6 +482,21 @@ public:
                         // It's S or R instruction (output)
                         pos = savedPos; current_line = savedLine; current_column = savedCol;
                         return true;
+                    }
+                }
+            }
+            
+            // Check for TAP instruction (RLO passthrough) - also needs RLO preserved
+            if (c == 'T' || c == 't') {
+                if (pos + 2 < stl_length) {
+                    char c2 = stl_source[pos + 1];
+                    char c3 = stl_source[pos + 2];
+                    if ((c2 == 'A' || c2 == 'a') && (c3 == 'P' || c3 == 'p')) {
+                        // Check it's standalone TAP, not TAPE or similar
+                        if (pos + 3 >= stl_length || !isAlphaNum(stl_source[pos + 3])) {
+                            pos = savedPos; current_line = savedLine; current_column = savedCol;
+                            return true;
+                        }
                     }
                 }
             }
@@ -1005,6 +1023,15 @@ public:
         }
         if (strEq(upperInstr, "NOT")) {
             emitLine("u8.not");
+            return;
+        }
+        
+        // TAP (VovkPLCRuntime extension) - passthrough RLO to next rung
+        // The RLO was already preserved by the previous output instruction
+        // (because peekNextIsOutput() returned true for TAP)
+        // We just need to mark that RLO is still valid
+        if (strEq(upperInstr, "TAP")) {
+            network_has_rlo = true;
             return;
         }
         
