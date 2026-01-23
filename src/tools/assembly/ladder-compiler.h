@@ -2153,6 +2153,7 @@ public:
     bool has_error;
     
     int indent_level;  // Track nesting depth for indentation
+    int skip_label_counter;  // Counter for unique skip labels
     
     IRToSTLEmitter() { reset(); }
     
@@ -2162,6 +2163,7 @@ public:
         error_msg[0] = '\0';
         has_error = false;
         indent_level = 0;
+        skip_label_counter = 0;
     }
     
     void emit(const char* s) {
@@ -2827,15 +2829,46 @@ public:
     
     // ============ Network Emission ============
     
+    // Helper: check if any action in the network is a MOVE (math/transfer)
+    bool hasMoveAction(nir::Network& net) {
+        for (uint16_t i = 0; i < net.action_cnt; i++) {
+            if (nir::g_store.actions[net.action_ofs + i].kind == nir::ACT_MOVE) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
     void emitNetwork(nir::Network& net) {
         // Emit condition expression
         if (net.condition_expr != nir::NIR_NONE) {
             emitExpr(net.condition_expr, true);
         }
         
+        // Check if we need conditional execution for MOVE actions
+        // MOVE actions (math/transfer) don't naturally use RLO, so we need
+        // to wrap them with JCN to skip when RLO=0
+        bool needsConditionalSkip = (net.condition_expr != nir::NIR_NONE) && hasMoveAction(net);
+        int skipLabel = 0;
+        
+        if (needsConditionalSkip) {
+            skipLabel = skip_label_counter++;
+            emitIndent();
+            emit("JCN skip_");
+            emitInt(skipLabel);
+            emit("\n");
+        }
+        
         // Emit actions
         for (uint16_t i = 0; i < net.action_cnt; i++) {
             emitAction(nir::g_store.actions[net.action_ofs + i]);
+        }
+        
+        // Emit skip label if we added JCN
+        if (needsConditionalSkip) {
+            emit("skip_");
+            emitInt(skipLabel);
+            emit(":\n");
         }
         
         emit("\n"); // Blank line between networks

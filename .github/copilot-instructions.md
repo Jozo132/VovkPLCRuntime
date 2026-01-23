@@ -10,10 +10,8 @@
 ## Testing
 - Run `npm run test` to execute all tests (unit tests + memory leak tests)
 - Individual test scripts are in `wasm/node-test/`:
-  - `npm run unit_test` - Core runtime unit tests
   - `npm run test_compile` - Compilation tests
   - `npm run test_timers` - Timer instruction tests
-  - `npm run test_edge` - Edge detection tests
   - `npm run test_lint` - Linter tests
   - Additional test files: `test_ladder.js`, `test_stl_compiler.js`, `test_network_ir.js`, `test_tap_inline.js`, `test_stl_math.js`, etc.
 - Run tests after any significant C++ changes to verify functionality
@@ -53,17 +51,6 @@
 ## Platform Targets
 ### Arduino/Embedded (C++)
 - Compatible with most Arduino boards (AVR, STM32, ESP32, etc.)
-- Configure via defines before including:
-  ```cpp
-  #define __RUNTIME_PRODUCTION__  // Production mode (no debug output)
-  #define __RUNTIME_DEBUG__       // Debug mode (verbose output)
-  #define PLCRUNTIME_SERIAL_ENABLED
-  #define PLCRUNTIME_NUM_OF_INPUTS    16
-  #define PLCRUNTIME_NUM_OF_OUTPUTS   16
-  #define PLCRUNTIME_MAX_STACK_SIZE   64
-  #define PLCRUNTIME_MAX_MEMORY_SIZE  64
-  #define PLCRUNTIME_MAX_PROGRAM_SIZE 1024
-  ```
 - PlatformIO example in `examples/platformio_example/`
 
 ### WASM/Browser/Node.js
@@ -80,14 +67,6 @@ These files are **manually authored** (NOT generated) and interface with the bar
 - Provides `VovkPLC.createWorker()` factory for worker-based usage (async, non-blocking)
 - Handles WASM loading, memory management, and JS ↔ WASM communication
 - Works in both browser and Node.js environments (`isNodeRuntime` detection)
-- Key APIs:
-  - `initialize(wasmPath, debug, silent)` - Load and init WASM module
-  - `compile(assembly, run?)` - Compile PLCASM and optionally run
-  - `compileSTL(stl)` - Compile STL to bytecode
-  - `compileLadder(ladderJson)` - Compile Ladder JSON to bytecode
-  - `lint(assembly)` / `lintSTL(stl)` - Code analysis
-  - `run()` / `startRuntime()` / `stopRuntime()` - Execution control
-  - `readMemoryArea()` / `writeMemoryByte()` - Memory access
 - SharedArrayBuffer support for zero-copy memory sharing with workers
 
 #### `VovkPLC.worker.js` - Web Worker Entry Point
@@ -98,7 +77,6 @@ These files are **manually authored** (NOT generated) and interface with the bar
 - Features:
   - Request batching via ArrayBuffer for high-throughput operations
   - SharedArrayBuffer ring buffer for lock-free communication (64MB shared memory)
-  - Real-time status monitoring without blocking main thread
   - `enqueue()` function serializes operations per instance
 - Control flags: `queueLoopActive`, `sharedLoopActive`
 
@@ -118,4 +96,4 @@ These files are **manually authored** (NOT generated) and interface with the bar
 - WASM build uses `clang++` with `--target=wasm32-undefined-undefined-wasm`
 - No external dependencies for core runtime (Arduino-compatible)
 - Node.js tests use ES modules (`"type": "module"` in package.json)
-- Do not trust changes made to the compiler, test sample code by echoing and piping it to `npm run explain` which will explain and analyze the final bytecode step by step with the stack state after each instruction and the program pointer we are at.
+- Do not trust changes made to the compiler, test sample code by echoing as a single quote escaped string and piping it to `npm run explain` which will explain and analyze the final bytecode step by step with the stack state after each instruction and the program pointer we are at.
