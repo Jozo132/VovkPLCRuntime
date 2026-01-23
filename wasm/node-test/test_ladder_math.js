@@ -197,7 +197,7 @@ test('math_add with constant operand', async (runtime) => {
     const result = await compileLadder(runtime, ladder);
     expect(result.success).toBeTruthy();
     expect(result.stl).toContain('L MW0');
-    expect(result.stl).toContain('+I 100');
+    expect(result.stl).toContain('+I #100');
     expect(result.stl).toContain('T MW4');
 });
 
@@ -216,7 +216,7 @@ test('math_mul with constant first operand', async (runtime) => {
     
     const result = await compileLadder(runtime, ladder);
     expect(result.success).toBeTruthy();
-    expect(result.stl).toContain('L 50');
+    expect(result.stl).toContain('L #50');
     expect(result.stl).toContain('*D MD0');
     expect(result.stl).toContain('T MD4');
 });
@@ -255,7 +255,7 @@ test('move with constant value', async (runtime) => {
     
     const result = await compileLadder(runtime, ladder);
     expect(result.success).toBeTruthy();
-    expect(result.stl).toContain('L 12345');
+    expect(result.stl).toContain('L #12345');
     expect(result.stl).toContain('T MD0');
 });
 
@@ -296,7 +296,7 @@ test('compare_gt operation', async (runtime) => {
     const result = await compileLadder(runtime, ladder);
     expect(result.success).toBeTruthy();
     expect(result.stl).toContain('L MD0');
-    expect(result.stl).toContain('>D 100');
+    expect(result.stl).toContain('>D #100');
 });
 
 test('compare_lt operation', async (runtime) => {

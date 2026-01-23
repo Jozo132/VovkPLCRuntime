@@ -118,3 +118,4 @@ These files are **manually authored** (NOT generated) and interface with the bar
 - WASM build uses `clang++` with `--target=wasm32-undefined-undefined-wasm`
 - No external dependencies for core runtime (Arduino-compatible)
 - Node.js tests use ES modules (`"type": "module"` in package.json)
+- Do not trust changes made to the compiler, test sample code by echoing and piping it to `npm run explain` which will explain and analyze the final bytecode step by step with the stack state after each instruction and the program pointer we are at.

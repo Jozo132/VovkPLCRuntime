@@ -2447,10 +2447,17 @@ public:
     
     char dataTypeToSuffix(nir::DataType dt) {
         switch (dt) {
-            case nir::DT_I16: return 'I';  // INT
-            case nir::DT_I32: return 'D';  // DINT
+            case nir::DT_U8:
+            case nir::DT_I8:
+            case nir::DT_U16:
+            case nir::DT_I16: return 'I';  // INT (Word operations)
+            case nir::DT_U32:
+            case nir::DT_I32: return 'D';  // DINT (DWord operations)
             case nir::DT_F32: return 'R';  // REAL
-            default:          return '\0'; // Use extended form
+            case nir::DT_U64:
+            case nir::DT_I64:
+            case nir::DT_F64:
+            default:          return '\0'; // Use extended form for 64-bit
         }
     }
     
@@ -2507,13 +2514,15 @@ public:
             operand_out[i] = '\0';
         }
         else if (expr.kind == nir::EXPR_CONST) {
-            // Constant value
+            // Constant value - prefix with # for STL format
             uint32_t const_idx = expr.a;
             nir::ConstExpr& c = nir::g_store.consts[const_idx];
             
+            int i = 0;
+            operand_out[i++] = '#';  // STL constant prefix
+            
             if (c.data_type == nir::DT_F32) {
                 // Format float
-                int i = 0;
                 float v = c.f32_val;
                 if (v < 0) { operand_out[i++] = '-'; v = -v; }
                 int intPart = (int)v;
@@ -2542,7 +2551,6 @@ public:
             } else {
                 // Format integer
                 int64_t val = c.i64_val;
-                int i = 0;
                 if (val < 0) { operand_out[i++] = '-'; val = -val; }
                 
                 char ibuf[24];
@@ -2694,7 +2702,7 @@ public:
         nir::ConstExpr& c = nir::g_store.consts[const_idx];
         
         emitIndent();
-        emit("L ");
+        emit("L #");  // STL constant prefix
         
         if (c.data_type == nir::DT_F32) {
             emitFloat(c.f32_val);

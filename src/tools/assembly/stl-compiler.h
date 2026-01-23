@@ -1018,6 +1018,29 @@ public:
         emitLine(plcPreset);
     }
 
+    // Emit a load instruction for an operand with explicit type
+    // Used by math operations like +I operand where we know the type from the operator
+    void emitLoadForType(const char* operand, const char* type) {
+        char plcAddr[64];
+        
+        // Check if it's an immediate value
+        if (operand[0] == '#') {
+            // Immediate value
+            emit(type);
+            emit(".const ");
+            emitLine(operand + 1); // Skip #
+        } else {
+            // Memory address - convert but use the type we were given
+            const char* addrType = nullptr;
+            convertTypedAddress(operand, plcAddr, &addrType);
+            emit(type);
+            emit(".load_from ");
+            emitLine(plcAddr);
+        }
+        // Track the type we just loaded
+        setExprType(type);
+    }
+
     // Handle L (load)
     void handleLoad(const char* operand) {
         char plcAddr[64];
@@ -1602,14 +1625,27 @@ public:
         
         // ============ Math Operations ============
         
-        // Siemens STL standard operations
+        // Siemens STL standard operations - may have optional operand
+        // +I operand means: load operand, then add
         if (strEq(upperInstr, "+I") || strEq(upperInstr, "-I") || 
             strEq(upperInstr, "*I") || strEq(upperInstr, "/I") ||
             strEq(upperInstr, "+D") || strEq(upperInstr, "-D") || 
             strEq(upperInstr, "*D") || strEq(upperInstr, "/D") ||
             strEq(upperInstr, "+R") || strEq(upperInstr, "-R") || 
-            strEq(upperInstr, "*R") || strEq(upperInstr, "/R") ||
-            strEq(upperInstr, "MOD") || strEq(upperInstr, "NEG") || strEq(upperInstr, "ABS")) {
+            strEq(upperInstr, "*R") || strEq(upperInstr, "/R")) {
+            skipWhitespace();
+            if (peek() != '\0' && peek() != '\n' && peek() != '\r' && peek() != '/' && peek() != ';') {
+                // Has operand - emit load first
+                readIdentifier(operand1, sizeof(operand1));
+                // Determine type from instruction suffix
+                char suffix = upperInstr[1]; // I, D, or R
+                const char* typePrefix = suffix == 'I' ? "i16" : suffix == 'D' ? "i32" : "f32";
+                emitLoadForType(operand1, typePrefix);
+            }
+            handleMath(upperInstr);
+            return;
+        }
+        if (strEq(upperInstr, "MOD") || strEq(upperInstr, "NEG") || strEq(upperInstr, "ABS")) {
             handleMath(upperInstr);
             return;
         }
@@ -1641,7 +1677,8 @@ public:
         
         // ============ Compare Operations ============
         
-        // Siemens STL standard comparisons (I=16-bit, D=32-bit, R=float)
+        // Siemens STL standard comparisons - may have optional operand
+        // ==I operand means: load operand, then compare
         if (strEq(upperInstr, "==I") || strEq(upperInstr, "<>I") ||
             strEq(upperInstr, ">I") || strEq(upperInstr, ">=I") ||
             strEq(upperInstr, "<I") || strEq(upperInstr, "<=I") ||
@@ -1651,6 +1688,17 @@ public:
             strEq(upperInstr, "==R") || strEq(upperInstr, "<>R") ||
             strEq(upperInstr, ">R") || strEq(upperInstr, ">=R") ||
             strEq(upperInstr, "<R") || strEq(upperInstr, "<=R")) {
+            skipWhitespace();
+            if (peek() != '\0' && peek() != '\n' && peek() != '\r' && peek() != '/' && peek() != ';') {
+                // Has operand - emit load first
+                readIdentifier(operand1, sizeof(operand1));
+                // Determine type from instruction suffix (last char)
+                int len = 0;
+                while (upperInstr[len]) len++;
+                char suffix = upperInstr[len - 1]; // I, D, or R
+                const char* typePrefix = suffix == 'I' ? "i16" : suffix == 'D' ? "i32" : "f32";
+                emitLoadForType(operand1, typePrefix);
+            }
             handleCompare(upperInstr);
             return;
         }
