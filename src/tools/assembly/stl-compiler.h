@@ -59,16 +59,47 @@
 // Load/Transfer:
 //   L, T                  - Load to accumulator, Transfer from accumulator
 //
-// Math:
-//   +I, -I, *I, /I, MOD   - Integer math
+// Math (Siemens STL style):
+//   +I, -I, *I, /I        - 16-bit signed integer math (maps to i16)
+//   +D, -D, *D, /D        - 32-bit signed integer math (maps to i32)
+//   +R, -R, *R, /R        - 32-bit floating point math (maps to f32)
+//   MOD                   - Modulo (i16 default)
 //   NEG, ABS              - Negate, Absolute value
 //
+// Math (Extended VovkPLCRuntime types):
+//   ADD_U8..ADD_I64       - Typed addition (u8, u16, u32, u64, i8, i16, i32, i64, f32, f64)
+//   SUB_U8..SUB_I64       - Typed subtraction
+//   MUL_U8..MUL_I64       - Typed multiplication
+//   DIV_U8..DIV_I64       - Typed division
+//   MOD_U8..MOD_I64       - Typed modulo
+//   NEG_I8..NEG_F64       - Typed negate (signed types only)
+//   ABS_I8..ABS_F64       - Typed absolute value (signed types only)
+//
 // Compare:
-//   ==I, <>I, >I, >=I, <I, <=I  - Integer comparisons
+//   ==I, <>I, >I, >=I, <I, <=I  - Integer comparisons (i16 default)
+//   ==D, <>D, >D, >=D, <D, <=D  - 32-bit comparisons (i32)
+//   ==R, <>R, >R, >=R, <R, <=R  - Float comparisons (f32)
 
 #define STL_MAX_OUTPUT_SIZE 32768
 #define STL_MAX_NESTING_DEPTH 16
 #define STL_MAX_LABELS 64
+#define STL_MAX_TYPE_STACK 64
+
+// Type IDs for stack tracking (must match PLCASM type codes)
+enum STLType {
+    STL_TYPE_UNKNOWN = 0,
+    STL_TYPE_BOOL = 1,
+    STL_TYPE_U8 = 2,
+    STL_TYPE_U16 = 3,
+    STL_TYPE_U32 = 4,
+    STL_TYPE_U64 = 5,
+    STL_TYPE_I8 = 6,
+    STL_TYPE_I16 = 7,
+    STL_TYPE_I32 = 8,
+    STL_TYPE_I64 = 9,
+    STL_TYPE_F32 = 10,
+    STL_TYPE_F64 = 11,
+};
 
 class STLCompiler {
 public:
@@ -105,6 +136,13 @@ public:
     // Unique hash for this compilation unit (to avoid label collisions when concatenating)
     uint32_t compilation_hash = 0;
     
+    // Type stack for tracking what's on the runtime stack
+    STLType type_stack[STL_MAX_TYPE_STACK];
+    int type_stack_depth = 0;
+    
+    // Current expression type (type of the last value pushed/computed)
+    const char* currentExprType = nullptr;
+    
     // Static counter that increments with each compilation to ensure uniqueness
     // even for identical source code compiled multiple times
     static uint32_t& getGlobalCompilationCounter() {
@@ -132,6 +170,7 @@ public:
         nesting_depth = 0;
         label_counter = 0;
         compilation_hash = 0;
+        currentExprType = nullptr;
     }
 
     void setSource(char* source, int length) {
@@ -409,6 +448,276 @@ public:
             plcasmAddr[j++] = stlAddr[i++];
         }
         plcasmAddr[j] = '\0';
+    }
+
+    // ============ Type inference helpers ============
+    
+    // Get PLCASM type from STL address prefix (MW, MD, MB, etc.)
+    // Returns the type string and advances the index past the type prefix
+    // MW = Memory Word (16-bit signed) → i16
+    // MD = Memory Double word (32-bit signed) → i32
+    // MB = Memory Byte (8-bit unsigned) → u8
+    // Similar for I (input), Q (output)
+    const char* getTypeFromAddressPrefix(const char* addr, int* skipChars = nullptr) {
+        if (!addr || !addr[0]) { if (skipChars) *skipChars = 0; return "u8"; }
+        
+        char first = addr[0];
+        if (first >= 'a' && first <= 'z') first -= 32; // Uppercase
+        
+        char second = addr[1];
+        if (second >= 'a' && second <= 'z') second -= 32; // Uppercase
+        
+        // Check for type suffix after area letter (M, I, Q, etc.)
+        // Format: <area><type><number> e.g., MW10, MD20, IW0, QD4
+        if (first == 'M' || first == 'I' || first == 'Q' || first == 'X' || first == 'Y') {
+            switch (second) {
+                case 'B': if (skipChars) *skipChars = 2; return "u8";   // Byte (8-bit)
+                case 'W': if (skipChars) *skipChars = 2; return "i16";  // Word (16-bit signed)
+                case 'D': if (skipChars) *skipChars = 2; return "i32";  // Double word (32-bit signed)
+                case 'L': if (skipChars) *skipChars = 2; return "i64";  // Long (64-bit signed)
+                case 'R': if (skipChars) *skipChars = 2; return "f32";  // Real (32-bit float)
+                default:
+                    // No type suffix - check if it's a bit address (has dot)
+                    for (int i = 1; addr[i]; i++) {
+                        if (addr[i] == '.') { if (skipChars) *skipChars = 1; return "u8"; } // Bit address
+                    }
+                    if (skipChars) *skipChars = 1;
+                    return "u8"; // Default to byte
+            }
+        }
+        
+        if (skipChars) *skipChars = 0;
+        return "u8"; // Default
+    }
+    
+    // Convert STL typed address to PLCASM address (strips type prefix)
+    // MW10 → M10, IW0 → X0, QD4 → Y4
+    void convertTypedAddress(const char* stlAddr, char* plcasmAddr, const char** outType = nullptr) {
+        int i = 0, j = 0;
+        
+        char first = stlAddr[0];
+        if (first >= 'a' && first <= 'z') first -= 32; // Uppercase
+        
+        // Map area letter
+        switch (first) {
+            case 'I': plcasmAddr[j++] = 'X'; i++; break;  // Input
+            case 'Q': plcasmAddr[j++] = 'Y'; i++; break;  // Output
+            case 'M': plcasmAddr[j++] = 'M'; i++; break;  // Marker
+            case 'X': plcasmAddr[j++] = 'X'; i++; break;  // Already PLCASM
+            case 'Y': plcasmAddr[j++] = 'Y'; i++; break;
+            default:
+                // Unknown - copy as-is, get type from prefix
+                int skip = 0;
+                if (outType) *outType = getTypeFromAddressPrefix(stlAddr, &skip);
+                while (stlAddr[i]) plcasmAddr[j++] = stlAddr[i++];
+                plcasmAddr[j] = '\0';
+                return;
+        }
+        
+        // Check for type suffix (B, W, D, L, R)
+        char second = stlAddr[i];
+        if (second >= 'a' && second <= 'z') second -= 32;
+        
+        const char* type = "u8";
+        if (second == 'B' || second == 'W' || second == 'D' || second == 'L' || second == 'R') {
+            switch (second) {
+                case 'B': type = "u8"; break;
+                case 'W': type = "i16"; break;
+                case 'D': type = "i32"; break;
+                case 'L': type = "i64"; break;
+                case 'R': type = "f32"; break;
+            }
+            i++; // Skip type suffix
+        }
+        
+        if (outType) *outType = type;
+        
+        // Copy rest of address (the number part)
+        while (stlAddr[i]) {
+            plcasmAddr[j++] = stlAddr[i++];
+        }
+        plcasmAddr[j] = '\0';
+    }
+
+    // Get PLCASM type name from STL type suffix (I, D, R) or extended type (U8, I16, etc.)
+    // Returns the type prefix for PLCASM (e.g., "i16", "i32", "f32", "u8")
+    const char* getTypeFromSuffix(const char* suffix) {
+        if (!suffix || !suffix[0]) return "u8"; // Default
+        
+        // Single character suffixes (Siemens style)
+        if (suffix[1] == '\0' || suffix[1] == ' ' || suffix[1] == '\n' || suffix[1] == '\r') {
+            char c = suffix[0];
+            if (c >= 'a' && c <= 'z') c -= 32; // Uppercase
+            switch (c) {
+                case 'I': return "i16";  // Integer (16-bit signed)
+                case 'D': return "i32";  // Double word (32-bit signed)
+                case 'R': return "f32";  // Real (32-bit float)
+            }
+        }
+        
+        // Extended type suffixes (VovkPLCRuntime style: _U8, _I16, etc.)
+        if (suffix[0] == '_') suffix++; // Skip underscore
+        
+        if (strEq(suffix, "U8"))  return "u8";
+        if (strEq(suffix, "U16")) return "u16";
+        if (strEq(suffix, "U32")) return "u32";
+        if (strEq(suffix, "U64")) return "u64";
+        if (strEq(suffix, "I8"))  return "i8";
+        if (strEq(suffix, "I16")) return "i16";
+        if (strEq(suffix, "I32")) return "i32";
+        if (strEq(suffix, "I64")) return "i64";
+        if (strEq(suffix, "F32")) return "f32";
+        if (strEq(suffix, "F64")) return "f64";
+        
+        return "u8"; // Default fallback
+    }
+    
+    // Check if two type strings are the same
+    bool typesMatch(const char* t1, const char* t2) {
+        if (!t1 || !t2) return false;
+        return strEq(t1, t2);
+    }
+    
+    // Emit CVT instruction if source and destination types differ
+    // Updates currentExprType to destType
+    void emitCvtIfNeeded(const char* destType) {
+        if (!currentExprType || !destType) return;
+        if (typesMatch(currentExprType, destType)) return;
+        
+        // Emit conversion: cvt <from> <to>
+        emit("cvt ");
+        emit(currentExprType);
+        emit(" ");
+        emitLine(destType);
+        currentExprType = destType;
+    }
+    
+    // Set current expression type (after load or math operation)
+    void setExprType(const char* type) {
+        currentExprType = type;
+    }
+    
+    // Lookahead to find the next math/compare operation and return its expected type
+    // This allows L (load) to emit the correct type directly without needing CVT
+    const char* peekNextMathType() {
+        int savedPos = pos;
+        int savedLine = current_line;
+        int savedCol = current_column;
+        const char* result = "u8"; // Default type
+        
+        while (pos < stl_length) {
+            // Skip whitespace
+            while (pos < stl_length && (stl_source[pos] == ' ' || stl_source[pos] == '\t' || 
+                   stl_source[pos] == '\r' || stl_source[pos] == '\n')) {
+                if (stl_source[pos] == '\n') { current_line++; current_column = 1; }
+                else { current_column++; }
+                pos++;
+            }
+            
+            if (pos >= stl_length) break;
+            
+            char c = stl_source[pos];
+            
+            // Skip comments
+            if (c == '/' && pos + 1 < stl_length && stl_source[pos + 1] == '/') {
+                while (pos < stl_length && stl_source[pos] != '\n') pos++;
+                continue;
+            }
+            
+            // Check for math operators: +I, -I, *I, /I, +D, -D, *D, /D, +R, -R, *R, /R
+            if (c == '+' || c == '-' || c == '*' || c == '/') {
+                if (pos + 1 < stl_length) {
+                    char typeSuffix = stl_source[pos + 1];
+                    if (typeSuffix == 'I' || typeSuffix == 'i') { result = "i16"; break; }
+                    if (typeSuffix == 'D' || typeSuffix == 'd') { result = "i32"; break; }
+                    if (typeSuffix == 'R' || typeSuffix == 'r') { result = "f32"; break; }
+                }
+            }
+            
+            // Check for comparison operators: ==I, <>I, >I, etc.
+            if (c == '=' && pos + 2 < stl_length && stl_source[pos + 1] == '=') {
+                char typeSuffix = stl_source[pos + 2];
+                if (typeSuffix == 'I' || typeSuffix == 'i') { result = "i16"; break; }
+                if (typeSuffix == 'D' || typeSuffix == 'd') { result = "i32"; break; }
+                if (typeSuffix == 'R' || typeSuffix == 'r') { result = "f32"; break; }
+            }
+            if (c == '<' || c == '>') {
+                int offset = 1;
+                if (pos + offset < stl_length && (stl_source[pos + offset] == '=' || stl_source[pos + offset] == '>')) {
+                    offset++;
+                }
+                if (pos + offset < stl_length) {
+                    char typeSuffix = stl_source[pos + offset];
+                    if (typeSuffix == 'I' || typeSuffix == 'i') { result = "i16"; break; }
+                    if (typeSuffix == 'D' || typeSuffix == 'd') { result = "i32"; break; }
+                    if (typeSuffix == 'R' || typeSuffix == 'r') { result = "f32"; break; }
+                }
+            }
+            
+            // Check for extended typed operations (ADD_U8, SUB_I32, etc.)
+            if (isAlpha(c)) {
+                char token[64];
+                int i = 0;
+                while (i < 63 && pos + i < stl_length && (isAlphaNum(stl_source[pos + i]) || stl_source[pos + i] == '_')) {
+                    token[i] = stl_source[pos + i];
+                    if (token[i] >= 'a' && token[i] <= 'z') token[i] -= 32; // Uppercase
+                    i++;
+                }
+                token[i] = '\0';
+                
+                // Check for extended math ops: ADD_*, SUB_*, MUL_*, DIV_*, MOD_*, NEG_*, ABS_*
+                if (startsWith(token, "ADD_") || startsWith(token, "SUB_") ||
+                    startsWith(token, "MUL_") || startsWith(token, "DIV_") ||
+                    startsWith(token, "MOD_") || startsWith(token, "NEG_") ||
+                    startsWith(token, "ABS_")) {
+                    result = getTypeFromSuffix(token + 3); // Skip "ADD" etc, keep "_U8"
+                    break;
+                }
+                
+                // Check for standard MOD, NEG, ABS (default to i16)
+                if (strEq(token, "MOD") || strEq(token, "NEG") || strEq(token, "ABS")) {
+                    result = "i16";
+                    break;
+                }
+                
+                // T (Transfer) instruction - get type from destination address
+                if (strEq(token, "T")) {
+                    pos += i;
+                    // Skip whitespace to get to operand
+                    while (pos < stl_length && (stl_source[pos] == ' ' || stl_source[pos] == '\t')) pos++;
+                    // Read the address operand
+                    char addr[64];
+                    int ai = 0;
+                    while (ai < 63 && pos < stl_length && stl_source[pos] != ' ' && stl_source[pos] != '\t' && 
+                           stl_source[pos] != '\r' && stl_source[pos] != '\n') {
+                        addr[ai++] = stl_source[pos++];
+                    }
+                    addr[ai] = '\0';
+                    // Get type from address prefix (MW → i16, MD → i32, etc.)
+                    result = getTypeFromAddressPrefix(addr);
+                    break;
+                }
+                
+                // L instruction - skip and continue looking (it's another load)
+                if (strEq(token, "L")) {
+                    pos += i;
+                    // Skip the operand
+                    while (pos < stl_length && (stl_source[pos] == ' ' || stl_source[pos] == '\t')) pos++;
+                    while (pos < stl_length && stl_source[pos] != ' ' && stl_source[pos] != '\t' && 
+                           stl_source[pos] != '\r' && stl_source[pos] != '\n') pos++;
+                    continue;
+                }
+                
+                // Any other instruction - stop looking (might be boolean logic, jumps, etc.)
+                break;
+            }
+            
+            // Skip unknown characters
+            pos++;
+        }
+        
+        pos = savedPos; current_line = savedLine; current_column = savedCol;
+        return result;
     }
 
     // ============ Instruction handlers ============
@@ -712,46 +1021,179 @@ public:
     // Handle L (load)
     void handleLoad(const char* operand) {
         char plcAddr[64];
-        convertAddress(operand, plcAddr);
+        const char* type = nullptr;
         
-        if (plcAddr[0] == '#') {
-            // Immediate value
-            emit("u8.const ");
-            emitLine(plcAddr + 1); // Skip #
+        // Check if it's an immediate value
+        if (operand[0] == '#') {
+            // Immediate value - use lookahead to determine correct type
+            type = peekNextMathType();
+            emit(type);
+            emit(".const ");
+            emitLine(operand + 1); // Skip #
         } else {
-            emit("u8.load_from ");
+            // Memory address - check for typed address (MW, MD, etc.)
+            convertTypedAddress(operand, plcAddr, &type);
+            emit(type);
+            emit(".load_from ");
             emitLine(plcAddr);
         }
+        // Track the type we just loaded
+        setExprType(type);
     }
 
     // Handle T (transfer)
     void handleTransfer(const char* operand) {
         char plcAddr[64];
-        convertAddress(operand, plcAddr);
-        emit("u8.move_to ");
+        const char* destType = nullptr;
+        convertTypedAddress(operand, plcAddr, &destType);
+        
+        // If current expression type differs from destination, emit CVT
+        emitCvtIfNeeded(destType);
+        
+        emit(destType);
+        emit(".move_to ");
         emitLine(plcAddr);
+        
+        // Clear expression type after transfer (value consumed)
+        currentExprType = nullptr;
     }
 
     // Handle math operations
+    // Siemens STL: +I/-I/*I//I (16-bit), +D/-D/*D//D (32-bit), +R/-R/*R//R (float)
+    // Extended: ADD_U8, SUB_I32, MUL_F64, etc.
     void handleMath(const char* op) {
-        if (strEq(op, "+I")) emitLine("u8.add");
-        else if (strEq(op, "-I")) emitLine("u8.sub");
-        else if (strEq(op, "*I")) emitLine("u8.mul");
-        else if (strEq(op, "/I")) emitLine("u8.div");
-        else if (strEq(op, "MOD")) emitLine("u8.mod");
-        else if (strEq(op, "NEG")) emitLine("u8.neg");
-        else if (strEq(op, "ABS")) emitLine("u8.abs");
+        const char* resultType = nullptr;
+        
+        // Standard Siemens STL operations (16-bit signed integer default)
+        if (strEq(op, "+I")) { emitLine("i16.add"); resultType = "i16"; }
+        else if (strEq(op, "-I")) { emitLine("i16.sub"); resultType = "i16"; }
+        else if (strEq(op, "*I")) { emitLine("i16.mul"); resultType = "i16"; }
+        else if (strEq(op, "/I")) { emitLine("i16.div"); resultType = "i16"; }
+        
+        // Siemens STL 32-bit operations (Double word)
+        else if (strEq(op, "+D")) { emitLine("i32.add"); resultType = "i32"; }
+        else if (strEq(op, "-D")) { emitLine("i32.sub"); resultType = "i32"; }
+        else if (strEq(op, "*D")) { emitLine("i32.mul"); resultType = "i32"; }
+        else if (strEq(op, "/D")) { emitLine("i32.div"); resultType = "i32"; }
+        
+        // Siemens STL Real (float) operations
+        else if (strEq(op, "+R")) { emitLine("f32.add"); resultType = "f32"; }
+        else if (strEq(op, "-R")) { emitLine("f32.sub"); resultType = "f32"; }
+        else if (strEq(op, "*R")) { emitLine("f32.mul"); resultType = "f32"; }
+        else if (strEq(op, "/R")) { emitLine("f32.div"); resultType = "f32"; }
+        
+        // MOD variants
+        else if (strEq(op, "MOD")) { emitLine("i16.mod"); resultType = "i16"; }
+        else if (strEq(op, "MOD_U8"))  { emitLine("u8.mod");  resultType = "u8"; }
+        else if (strEq(op, "MOD_U16")) { emitLine("u16.mod"); resultType = "u16"; }
+        else if (strEq(op, "MOD_U32")) { emitLine("u32.mod"); resultType = "u32"; }
+        else if (strEq(op, "MOD_U64")) { emitLine("u64.mod"); resultType = "u64"; }
+        else if (strEq(op, "MOD_I8"))  { emitLine("i8.mod");  resultType = "i8"; }
+        else if (strEq(op, "MOD_I16")) { emitLine("i16.mod"); resultType = "i16"; }
+        else if (strEq(op, "MOD_I32")) { emitLine("i32.mod"); resultType = "i32"; }
+        else if (strEq(op, "MOD_I64")) { emitLine("i64.mod"); resultType = "i64"; }
+        
+        // NEG variants (signed types only)
+        else if (strEq(op, "NEG")) { emitLine("i16.neg"); resultType = "i16"; }
+        else if (strEq(op, "NEG_I8"))  { emitLine("i8.neg");  resultType = "i8"; }
+        else if (strEq(op, "NEG_I16")) { emitLine("i16.neg"); resultType = "i16"; }
+        else if (strEq(op, "NEG_I32")) { emitLine("i32.neg"); resultType = "i32"; }
+        else if (strEq(op, "NEG_I64")) { emitLine("i64.neg"); resultType = "i64"; }
+        else if (strEq(op, "NEG_F32")) { emitLine("f32.neg"); resultType = "f32"; }
+        else if (strEq(op, "NEG_F64")) { emitLine("f64.neg"); resultType = "f64"; }
+        
+        // ABS variants (signed types only)
+        else if (strEq(op, "ABS")) { emitLine("i16.abs"); resultType = "i16"; }
+        else if (strEq(op, "ABS_I8"))  { emitLine("i8.abs");  resultType = "i8"; }
+        else if (strEq(op, "ABS_I16")) { emitLine("i16.abs"); resultType = "i16"; }
+        else if (strEq(op, "ABS_I32")) { emitLine("i32.abs"); resultType = "i32"; }
+        else if (strEq(op, "ABS_I64")) { emitLine("i64.abs"); resultType = "i64"; }
+        else if (strEq(op, "ABS_F32")) { emitLine("f32.abs"); resultType = "f32"; }
+        else if (strEq(op, "ABS_F64")) { emitLine("f64.abs"); resultType = "f64"; }
+        
+        // Extended typed ADD operations
+        else if (strEq(op, "ADD_U8"))  { emitLine("u8.add");  resultType = "u8"; }
+        else if (strEq(op, "ADD_U16")) { emitLine("u16.add"); resultType = "u16"; }
+        else if (strEq(op, "ADD_U32")) { emitLine("u32.add"); resultType = "u32"; }
+        else if (strEq(op, "ADD_U64")) { emitLine("u64.add"); resultType = "u64"; }
+        else if (strEq(op, "ADD_I8"))  { emitLine("i8.add");  resultType = "i8"; }
+        else if (strEq(op, "ADD_I16")) { emitLine("i16.add"); resultType = "i16"; }
+        else if (strEq(op, "ADD_I32")) { emitLine("i32.add"); resultType = "i32"; }
+        else if (strEq(op, "ADD_I64")) { emitLine("i64.add"); resultType = "i64"; }
+        else if (strEq(op, "ADD_F32")) { emitLine("f32.add"); resultType = "f32"; }
+        else if (strEq(op, "ADD_F64")) { emitLine("f64.add"); resultType = "f64"; }
+        
+        // Extended typed SUB operations
+        else if (strEq(op, "SUB_U8"))  { emitLine("u8.sub");  resultType = "u8"; }
+        else if (strEq(op, "SUB_U16")) { emitLine("u16.sub"); resultType = "u16"; }
+        else if (strEq(op, "SUB_U32")) { emitLine("u32.sub"); resultType = "u32"; }
+        else if (strEq(op, "SUB_U64")) { emitLine("u64.sub"); resultType = "u64"; }
+        else if (strEq(op, "SUB_I8"))  { emitLine("i8.sub");  resultType = "i8"; }
+        else if (strEq(op, "SUB_I16")) { emitLine("i16.sub"); resultType = "i16"; }
+        else if (strEq(op, "SUB_I32")) { emitLine("i32.sub"); resultType = "i32"; }
+        else if (strEq(op, "SUB_I64")) { emitLine("i64.sub"); resultType = "i64"; }
+        else if (strEq(op, "SUB_F32")) { emitLine("f32.sub"); resultType = "f32"; }
+        else if (strEq(op, "SUB_F64")) { emitLine("f64.sub"); resultType = "f64"; }
+        
+        // Extended typed MUL operations
+        else if (strEq(op, "MUL_U8"))  { emitLine("u8.mul");  resultType = "u8"; }
+        else if (strEq(op, "MUL_U16")) { emitLine("u16.mul"); resultType = "u16"; }
+        else if (strEq(op, "MUL_U32")) { emitLine("u32.mul"); resultType = "u32"; }
+        else if (strEq(op, "MUL_U64")) { emitLine("u64.mul"); resultType = "u64"; }
+        else if (strEq(op, "MUL_I8"))  { emitLine("i8.mul");  resultType = "i8"; }
+        else if (strEq(op, "MUL_I16")) { emitLine("i16.mul"); resultType = "i16"; }
+        else if (strEq(op, "MUL_I32")) { emitLine("i32.mul"); resultType = "i32"; }
+        else if (strEq(op, "MUL_I64")) { emitLine("i64.mul"); resultType = "i64"; }
+        else if (strEq(op, "MUL_F32")) { emitLine("f32.mul"); resultType = "f32"; }
+        else if (strEq(op, "MUL_F64")) { emitLine("f64.mul"); resultType = "f64"; }
+        
+        // Extended typed DIV operations
+        else if (strEq(op, "DIV_U8"))  { emitLine("u8.div");  resultType = "u8"; }
+        else if (strEq(op, "DIV_U16")) { emitLine("u16.div"); resultType = "u16"; }
+        else if (strEq(op, "DIV_U32")) { emitLine("u32.div"); resultType = "u32"; }
+        else if (strEq(op, "DIV_U64")) { emitLine("u64.div"); resultType = "u64"; }
+        else if (strEq(op, "DIV_I8"))  { emitLine("i8.div");  resultType = "i8"; }
+        else if (strEq(op, "DIV_I16")) { emitLine("i16.div"); resultType = "i16"; }
+        else if (strEq(op, "DIV_I32")) { emitLine("i32.div"); resultType = "i32"; }
+        else if (strEq(op, "DIV_I64")) { emitLine("i64.div"); resultType = "i64"; }
+        else if (strEq(op, "DIV_F32")) { emitLine("f32.div"); resultType = "f32"; }
+        else if (strEq(op, "DIV_F64")) { emitLine("f64.div"); resultType = "f64"; }
+        
+        // Track result type after math operation
+        if (resultType) {
+            setExprType(resultType);
+        }
     }
 
     // Handle compare operations
+    // Siemens STL: ==I/<>I/>I etc (16-bit), ==D etc (32-bit), ==R etc (float)
     void handleCompare(const char* op) {
-        if (strEq(op, "==I")) emitLine("u8.cmp_eq");
-        else if (strEq(op, "<>I")) emitLine("u8.cmp_neq");
-        else if (strEq(op, ">I")) emitLine("u8.cmp_gt");
-        else if (strEq(op, ">=I")) emitLine("u8.cmp_gte");
-        else if (strEq(op, "<I")) emitLine("u8.cmp_lt");
-        else if (strEq(op, "<=I")) emitLine("u8.cmp_lte");
+        // Standard Siemens STL 16-bit integer comparisons
+        if (strEq(op, "==I")) { emitLine("i16.cmp_eq");  network_has_rlo = true; setExprType("u8"); return; }
+        if (strEq(op, "<>I")) { emitLine("i16.cmp_neq"); network_has_rlo = true; setExprType("u8"); return; }
+        if (strEq(op, ">I"))  { emitLine("i16.cmp_gt");  network_has_rlo = true; setExprType("u8"); return; }
+        if (strEq(op, ">=I")) { emitLine("i16.cmp_gte"); network_has_rlo = true; setExprType("u8"); return; }
+        if (strEq(op, "<I"))  { emitLine("i16.cmp_lt");  network_has_rlo = true; setExprType("u8"); return; }
+        if (strEq(op, "<=I")) { emitLine("i16.cmp_lte"); network_has_rlo = true; setExprType("u8"); return; }
+        
+        // Siemens STL 32-bit integer comparisons (Double word)
+        if (strEq(op, "==D")) { emitLine("i32.cmp_eq");  network_has_rlo = true; setExprType("u8"); return; }
+        if (strEq(op, "<>D")) { emitLine("i32.cmp_neq"); network_has_rlo = true; setExprType("u8"); return; }
+        if (strEq(op, ">D"))  { emitLine("i32.cmp_gt");  network_has_rlo = true; setExprType("u8"); return; }
+        if (strEq(op, ">=D")) { emitLine("i32.cmp_gte"); network_has_rlo = true; setExprType("u8"); return; }
+        if (strEq(op, "<D"))  { emitLine("i32.cmp_lt");  network_has_rlo = true; setExprType("u8"); return; }
+        if (strEq(op, "<=D")) { emitLine("i32.cmp_lte"); network_has_rlo = true; setExprType("u8"); return; }
+        
+        // Siemens STL Real (float) comparisons
+        if (strEq(op, "==R")) { emitLine("f32.cmp_eq");  network_has_rlo = true; setExprType("u8"); return; }
+        if (strEq(op, "<>R")) { emitLine("f32.cmp_neq"); network_has_rlo = true; setExprType("u8"); return; }
+        if (strEq(op, ">R"))  { emitLine("f32.cmp_gt");  network_has_rlo = true; setExprType("u8"); return; }
+        if (strEq(op, ">=R")) { emitLine("f32.cmp_gte"); network_has_rlo = true; setExprType("u8"); return; }
+        if (strEq(op, "<R"))  { emitLine("f32.cmp_lt");  network_has_rlo = true; setExprType("u8"); return; }
+        if (strEq(op, "<=R")) { emitLine("f32.cmp_lte"); network_has_rlo = true; setExprType("u8"); return; }
+        
         network_has_rlo = true;
+        setExprType("u8"); // Comparisons return boolean
     }
 
     // Handle jumps
@@ -849,15 +1291,26 @@ public:
                 continue;
             }
             
-            // = (assign) instruction OR ==I comparison
+            // = (assign) instruction OR ==I/==D/==R comparison
             if (c == '=') {
                 advance();
-                // Check if this is ==I comparison
+                // Check if this is ==I/==D/==R comparison
                 if (peek() == '=') {
                     advance(); // consume second =
-                    if (peek() == 'I' || peek() == 'i') {
+                    char typeSuffix = peek();
+                    if (typeSuffix == 'I' || typeSuffix == 'i') {
                         advance();
                         processInstruction("==I");
+                        continue;
+                    }
+                    if (typeSuffix == 'D' || typeSuffix == 'd') {
+                        advance();
+                        processInstruction("==D");
+                        continue;
+                    }
+                    if (typeSuffix == 'R' || typeSuffix == 'r') {
+                        advance();
+                        processInstruction("==R");
                         continue;
                     }
                     emit("// Unknown comparison: ==\n");
@@ -871,15 +1324,18 @@ public:
                 continue;
             }
             
-            // Math operators (+I, -I, *I, /I)
+            // Math operators (+I/-I/*I//I, +D/-D/*D//D, +R/-R/*R//R)
             if (c == '+' || c == '-' || c == '*' || c == '/') {
                 char op[4];
                 op[0] = advance();
-                if (peek() == 'I' || peek() == 'i') {
+                char typeSuffix = peek();
+                if (typeSuffix == 'I' || typeSuffix == 'i' ||
+                    typeSuffix == 'D' || typeSuffix == 'd' ||
+                    typeSuffix == 'R' || typeSuffix == 'r') {
                     op[1] = advance();
                     op[2] = '\0';
                     // Convert to uppercase
-                    if (op[1] == 'i') op[1] = 'I';
+                    if (op[1] >= 'a' && op[1] <= 'z') op[1] -= 32;
                     processInstruction(op);
                     continue;
                 }
@@ -890,19 +1346,22 @@ public:
                 continue;
             }
             
-            // Comparison operators (==I, <>I, >I, >=I, <I, <=I)
+            // Comparison operators (==I/==D/==R, <>I/<>D/<>R, >I/>D/>R, >=I/>=D/>=R, <I/<D/<R, <=I/<=D/<=R)
             if (c == '<' || c == '>') {
                 char op[4];
                 op[0] = advance();
                 int idx = 1;
-                // Check for second char (=, >, or I)
+                // Check for second char (=, >, or I/D/R)
                 char c2 = peek();
                 if (c2 == '=' || c2 == '>') {
                     op[idx++] = advance();
                 }
-                // Now expect I
-                if (peek() == 'I' || peek() == 'i') {
-                    op[idx++] = 'I';
+                // Now expect I, D, or R type suffix
+                char typeSuffix = peek();
+                if (typeSuffix == 'I' || typeSuffix == 'i' ||
+                    typeSuffix == 'D' || typeSuffix == 'd' ||
+                    typeSuffix == 'R' || typeSuffix == 'r') {
+                    op[idx++] = (typeSuffix >= 'a' && typeSuffix <= 'z') ? typeSuffix - 32 : typeSuffix;
                     advance();
                     op[idx] = '\0';
                     processInstruction(op);
@@ -1143,18 +1602,55 @@ public:
         
         // ============ Math Operations ============
         
+        // Siemens STL standard operations
         if (strEq(upperInstr, "+I") || strEq(upperInstr, "-I") || 
             strEq(upperInstr, "*I") || strEq(upperInstr, "/I") ||
+            strEq(upperInstr, "+D") || strEq(upperInstr, "-D") || 
+            strEq(upperInstr, "*D") || strEq(upperInstr, "/D") ||
+            strEq(upperInstr, "+R") || strEq(upperInstr, "-R") || 
+            strEq(upperInstr, "*R") || strEq(upperInstr, "/R") ||
             strEq(upperInstr, "MOD") || strEq(upperInstr, "NEG") || strEq(upperInstr, "ABS")) {
+            handleMath(upperInstr);
+            return;
+        }
+        
+        // Extended typed MOD operations
+        if (startsWith(upperInstr, "MOD_")) {
+            handleMath(upperInstr);
+            return;
+        }
+        
+        // Extended typed NEG operations
+        if (startsWith(upperInstr, "NEG_")) {
+            handleMath(upperInstr);
+            return;
+        }
+        
+        // Extended typed ABS operations
+        if (startsWith(upperInstr, "ABS_")) {
+            handleMath(upperInstr);
+            return;
+        }
+        
+        // Extended typed ADD/SUB/MUL/DIV operations
+        if (startsWith(upperInstr, "ADD_") || startsWith(upperInstr, "SUB_") ||
+            startsWith(upperInstr, "MUL_") || startsWith(upperInstr, "DIV_")) {
             handleMath(upperInstr);
             return;
         }
         
         // ============ Compare Operations ============
         
+        // Siemens STL standard comparisons (I=16-bit, D=32-bit, R=float)
         if (strEq(upperInstr, "==I") || strEq(upperInstr, "<>I") ||
             strEq(upperInstr, ">I") || strEq(upperInstr, ">=I") ||
-            strEq(upperInstr, "<I") || strEq(upperInstr, "<=I")) {
+            strEq(upperInstr, "<I") || strEq(upperInstr, "<=I") ||
+            strEq(upperInstr, "==D") || strEq(upperInstr, "<>D") ||
+            strEq(upperInstr, ">D") || strEq(upperInstr, ">=D") ||
+            strEq(upperInstr, "<D") || strEq(upperInstr, "<=D") ||
+            strEq(upperInstr, "==R") || strEq(upperInstr, "<>R") ||
+            strEq(upperInstr, ">R") || strEq(upperInstr, ">=R") ||
+            strEq(upperInstr, "<R") || strEq(upperInstr, "<=R")) {
             handleCompare(upperInstr);
             return;
         }
