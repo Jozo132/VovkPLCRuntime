@@ -82,11 +82,12 @@ async function readStdin() {
 function detectLanguage(code) {
     const trimmed = code.trim()
     
-    // Check for JSON first - if it starts with { and contains "rungs", it's ladder
+    // Check for JSON first - if it starts with { and contains "rungs" or "networks", it's ladder
     if (trimmed.startsWith('{')) {
         try {
             const parsed = JSON.parse(trimmed)
-            if (parsed.rungs && Array.isArray(parsed.rungs)) {
+            if ((parsed.rungs && Array.isArray(parsed.rungs)) ||
+                (parsed.networks && Array.isArray(parsed.networks))) {
                 return 'ladder'
             }
         } catch (e) {

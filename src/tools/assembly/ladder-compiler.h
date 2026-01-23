@@ -556,7 +556,10 @@ public:
         }
         
         // It's an address - create a load expression
-        uint32_t sym_idx = nir::g_store.addSymbol(operand);
+        // Strip type prefix (MW10 -> 10) for consistent symbol lookup
+        char stripped[64];
+        stripTypePrefix(operand, stripped);
+        uint32_t sym_idx = nir::g_store.addSymbol(stripped);
         return nir::g_store.addLoad(sym_idx, dt);
     }
     
@@ -2764,6 +2767,91 @@ public:
     
     // ============ Action Emission ============
     
+    // Helper: Check if a MOVE action is an optimizable INC/DEC operation
+    // Returns: 1 for increment, -1 for decrement, 0 for not optimizable
+    int isOptimizableIncDec(nir::Action& action) {
+        if (action.kind != nir::ACT_MOVE) return 0;
+        if (action.value_expr == nir::NIR_NONE) return 0;
+        
+        nir::Expr& value_expr = nir::g_store.exprs[action.value_expr];
+        if (value_expr.kind != nir::EXPR_MATH) return 0;
+        
+        nir::MathExpr& math = nir::g_store.maths[value_expr.a];
+        
+        // Only ADD and SUB can be optimized
+        if (math.op != nir::MATH_ADD && math.op != nir::MATH_SUB) return 0;
+        
+        // Check if right operand is constant 1
+        if (math.right_expr == nir::NIR_NONE) return 0;
+        nir::Expr& right_expr = nir::g_store.exprs[math.right_expr];
+        if (right_expr.kind != nir::EXPR_CONST) return 0;
+        
+        nir::ConstExpr& const_val = nir::g_store.consts[right_expr.a];
+        // Check if the constant is 1 (for any supported type)
+        bool is_one = false;
+        switch (const_val.data_type) {
+            case nir::DT_I8:  case nir::DT_U8:
+            case nir::DT_I16: case nir::DT_U16:
+            case nir::DT_I32: case nir::DT_U32:
+                is_one = (const_val.i32_val == 1);
+                break;
+            case nir::DT_I64: case nir::DT_U64:
+                is_one = (const_val.i64_val == 1);
+                break;
+            case nir::DT_F32:
+                is_one = (const_val.f32_val == 1.0f);
+                break;
+            case nir::DT_F64:
+                is_one = (const_val.f64_val == 1.0);
+                break;
+            default: break;
+        }
+        if (!is_one) return 0;
+        
+        // Check if left operand is a LOAD from the same target symbol
+        if (math.left_expr == nir::NIR_NONE) return 0;
+        nir::Expr& left_expr = nir::g_store.exprs[math.left_expr];
+        if (left_expr.kind != nir::EXPR_LOAD) return 0;
+        
+        // Compare symbol indices - must be the same target
+        if (left_expr.a != action.target_sym) return 0;
+        
+        // All conditions met - return increment or decrement
+        return (math.op == nir::MATH_ADD) ? 1 : -1;
+    }
+    
+    // Build destination address with type prefix for a memory symbol
+    void buildDestAddress(char* dest, int max_len, uint32_t sym_idx, nir::DataType dt) {
+        const char* sym_name = nir::g_store.symbols[sym_idx].name;
+        int i = 0;
+        if (sym_name[0] == 'M' || sym_name[0] == 'm' || 
+            (sym_name[0] >= '0' && sym_name[0] <= '9')) {
+            // Memory address - add type prefix
+            dest[i++] = 'M';
+            switch (dt) {
+                case nir::DT_U8:  dest[i++] = 'B'; break;
+                case nir::DT_I16: case nir::DT_U16: dest[i++] = 'W'; break;
+                case nir::DT_I32: case nir::DT_U32: dest[i++] = 'D'; break;
+                case nir::DT_I64: case nir::DT_U64: dest[i++] = 'L'; break;
+                case nir::DT_F32: case nir::DT_F64: dest[i++] = 'R'; break;
+                default: dest[i++] = 'W'; break;
+            }
+            // Copy the number part
+            const char* num = sym_name;
+            if (sym_name[0] == 'M' || sym_name[0] == 'm') num++;
+            while (*num && i < max_len - 1) {
+                dest[i++] = *num++;
+            }
+        } else {
+            // Other address, copy as-is
+            const char* p = sym_name;
+            while (*p && i < max_len - 1) {
+                dest[i++] = *p++;
+            }
+        }
+        dest[i] = '\0';
+    }
+    
     void emitAction(nir::Action& action) {
         if (action.kind == nir::ACT_TAP) {
             // TAP - passthrough RLO to next network (no operand)
@@ -2772,43 +2860,40 @@ public:
         }
         
         if (action.kind == nir::ACT_MOVE) {
+            nir::DataType dt = (nir::DataType)action.data_type;
+            
+            // Check for optimizable INC/DEC operations
+            int inc_dec = isOptimizableIncDec(action);
+            if (inc_dec != 0) {
+                // Emit optimized INCI/DECI instruction instead of L+op+T sequence
+                char dest[64];
+                buildDestAddress(dest, sizeof(dest), action.target_sym, dt);
+                
+                emitIndent();
+                emit(inc_dec > 0 ? "INC" : "DEC");
+                // Add type suffix: I (word), D (dword), B (byte), R (real)
+                switch (dt) {
+                    case nir::DT_U8:  emit("B"); break;
+                    case nir::DT_I16: case nir::DT_U16: emit("I"); break;  // I for word (Siemens style)
+                    case nir::DT_I32: case nir::DT_U32: emit("D"); break;  // D for double-word
+                    case nir::DT_I64: case nir::DT_U64: emit("D"); break;  // Use D for 64-bit too
+                    case nir::DT_F32: case nir::DT_F64: emit("R"); break;  // R for real
+                    default: emit("I"); break;
+                }
+                emit(" ");
+                emit(dest);
+                emit("\n");
+                return;
+            }
+            
             // MOVE - emit value expression, then transfer to target
             if (action.value_expr != nir::NIR_NONE) {
                 emitExpr(action.value_expr, true);
             }
             
-            nir::DataType dt = (nir::DataType)action.data_type;
-            
             // Build destination address with type prefix (MW4, MD8, etc.)
             char dest[64];
-            const char* sym_name = nir::g_store.symbols[action.target_sym].name;
-            int i = 0;
-            if (sym_name[0] == 'M' || sym_name[0] == 'm' || 
-                (sym_name[0] >= '0' && sym_name[0] <= '9')) {
-                // Memory address - add type prefix
-                dest[i++] = 'M';
-                switch (dt) {
-                    case nir::DT_U8:  dest[i++] = 'B'; break;
-                    case nir::DT_I16: case nir::DT_U16: dest[i++] = 'W'; break;
-                    case nir::DT_I32: case nir::DT_U32: dest[i++] = 'D'; break;
-                    case nir::DT_I64: case nir::DT_U64: dest[i++] = 'L'; break;
-                    case nir::DT_F32: case nir::DT_F64: dest[i++] = 'R'; break;
-                    default: dest[i++] = 'W'; break;
-                }
-                // Copy the number part
-                const char* num = sym_name;
-                if (sym_name[0] == 'M' || sym_name[0] == 'm') num++;
-                while (*num && i < 62) {
-                    dest[i++] = *num++;
-                }
-            } else {
-                // Other address, copy as-is
-                const char* p = sym_name;
-                while (*p && i < 62) {
-                    dest[i++] = *p++;
-                }
-            }
-            dest[i] = '\0';
+            buildDestAddress(dest, sizeof(dest), action.target_sym, dt);
             
             // Emit T destination (Transfer)
             emitIndent();
