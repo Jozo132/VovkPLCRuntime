@@ -275,13 +275,19 @@ public:
     // ============ Ladder Element Parsing ============
     
     struct LadderElement {
-        char type[16];       // contact, coil, coil_set, coil_rset, etc.
-        char address[32];    // I0.0, Q0.0, M0.0, etc.
+        char type[16];       // contact, coil, coil_set, coil_rset, move, math_add, etc.
+        char address[32];    // I0.0, Q0.0, M0.0, MW10, MD20, etc.
         bool inverted;       // Normally closed for contacts, negated for coils
         char trigger[16];    // normal, rising, falling
         uint32_t preset;     // Timer/Counter preset value
         char preset_str[32]; // Timer preset as literal string (e.g. T#5s)
         uint32_t precompiled_expr; // For nested structures like OR blocks
+        
+        // Math operation support
+        char data_type[8];   // u8, u16, u32, i8, i16, i32, f32, f64 (for math ops)
+        char in1[32];        // First input operand (address or #constant)
+        char in2[32];        // Second input operand (for binary ops)
+        char out[32];        // Output address (for move, math result)
         
         void clear() {
             type[0] = '\0';
@@ -292,6 +298,10 @@ public:
             preset = 0;
             preset_str[0] = '\0';
             precompiled_expr = nir::NIR_NONE;
+            data_type[0] = '\0';
+            in1[0] = '\0';
+            in2[0] = '\0';
+            out[0] = '\0';
         }
     };
     
@@ -437,6 +447,185 @@ public:
     bool isCoil(const char* type) {
         return strEqI(type, "coil") || strEqI(type, "coil_set") ||
                strEqI(type, "coil_rset") || strEqI(type, "coil_n");
+    }
+    
+    // Check if element type is a math operation
+    bool isMathOp(const char* type) {
+        return strEqI(type, "math_add") || strEqI(type, "math_sub") ||
+               strEqI(type, "math_mul") || strEqI(type, "math_div") ||
+               strEqI(type, "math_mod") || strEqI(type, "math_neg") ||
+               strEqI(type, "math_abs") || strEqI(type, "add") ||
+               strEqI(type, "sub") || strEqI(type, "mul") ||
+               strEqI(type, "div") || strEqI(type, "mod") ||
+               strEqI(type, "neg") || strEqI(type, "abs");
+    }
+    
+    // Check if element type is a compare operation
+    bool isCompareOp(const char* type) {
+        return strEqI(type, "compare_eq") || strEqI(type, "compare_neq") ||
+               strEqI(type, "compare_gt") || strEqI(type, "compare_lt") ||
+               strEqI(type, "compare_gte") || strEqI(type, "compare_lte") ||
+               strEqI(type, "cmp_eq") || strEqI(type, "cmp_neq") ||
+               strEqI(type, "cmp_gt") || strEqI(type, "cmp_lt") ||
+               strEqI(type, "cmp_gte") || strEqI(type, "cmp_lte");
+    }
+    
+    // Check if element type is a move/transfer operation
+    bool isMoveOp(const char* type) {
+        return strEqI(type, "move") || strEqI(type, "transfer");
+    }
+    
+    // Convert data type string to DataType enum
+    nir::DataType parseDataType(const char* dt) {
+        if (strEqI(dt, "u8") || strEqI(dt, "byte")) return nir::DT_U8;
+        if (strEqI(dt, "u16") || strEqI(dt, "word")) return nir::DT_U16;
+        if (strEqI(dt, "u32") || strEqI(dt, "dword")) return nir::DT_U32;
+        if (strEqI(dt, "u64") || strEqI(dt, "lword")) return nir::DT_U64;
+        if (strEqI(dt, "i8") || strEqI(dt, "sint")) return nir::DT_I8;
+        if (strEqI(dt, "i16") || strEqI(dt, "int")) return nir::DT_I16;
+        if (strEqI(dt, "i32") || strEqI(dt, "dint")) return nir::DT_I32;
+        if (strEqI(dt, "i64") || strEqI(dt, "lint")) return nir::DT_I64;
+        if (strEqI(dt, "f32") || strEqI(dt, "real") || strEqI(dt, "float")) return nir::DT_F32;
+        if (strEqI(dt, "f64") || strEqI(dt, "lreal") || strEqI(dt, "double")) return nir::DT_F64;
+        return nir::DT_I16; // Default to i16 (Siemens INT)
+    }
+    
+    // Infer data type from address prefix (MB, MW, MD, MR, etc.)
+    nir::DataType inferDataTypeFromAddress(const char* addr) {
+        if (!addr || !addr[0]) return nir::DT_I16;
+        
+        char c0 = addr[0];
+        char c1 = addr[1];
+        if (c0 >= 'a' && c0 <= 'z') c0 -= 32;
+        if (c1 >= 'a' && c1 <= 'z') c1 -= 32;
+        
+        // Check two-letter prefix (MB, MW, MD, ML, MR, IW, ID, QW, QD, etc.)
+        if (c1 == 'B') return nir::DT_U8;   // Byte
+        if (c1 == 'W') return nir::DT_I16;  // Word (16-bit signed)
+        if (c1 == 'D') return nir::DT_I32;  // DWord (32-bit signed)
+        if (c1 == 'L') return nir::DT_I64;  // LWord (64-bit signed)
+        if (c1 == 'R') return nir::DT_F32;  // Real (32-bit float)
+        
+        return nir::DT_I16; // Default
+    }
+    
+    // Parse an operand (address or constant) and return expression index
+    uint32_t parseOperand(const char* operand, nir::DataType dt) {
+        if (!operand || !operand[0]) return nir::NIR_NONE;
+        
+        // Check if it's a constant (starts with # or is a number)
+        if (operand[0] == '#' || (operand[0] >= '0' && operand[0] <= '9') ||
+            (operand[0] == '-' && operand[1] >= '0' && operand[1] <= '9')) {
+            const char* num_start = (operand[0] == '#') ? operand + 1 : operand;
+            
+            // Parse based on data type
+            if (dt == nir::DT_F32 || dt == nir::DT_F64) {
+                // Parse float
+                float val = 0.0f;
+                bool neg = false;
+                int i = 0;
+                if (num_start[i] == '-') { neg = true; i++; }
+                while (num_start[i] >= '0' && num_start[i] <= '9') {
+                    val = val * 10 + (num_start[i] - '0');
+                    i++;
+                }
+                if (num_start[i] == '.') {
+                    i++;
+                    float frac = 0.1f;
+                    while (num_start[i] >= '0' && num_start[i] <= '9') {
+                        val += (num_start[i] - '0') * frac;
+                        frac *= 0.1f;
+                        i++;
+                    }
+                }
+                if (neg) val = -val;
+                return nir::g_store.addConstF32(val);
+            } else {
+                // Parse integer
+                int64_t val = 0;
+                bool neg = false;
+                int i = 0;
+                if (num_start[i] == '-') { neg = true; i++; }
+                while (num_start[i] >= '0' && num_start[i] <= '9') {
+                    val = val * 10 + (num_start[i] - '0');
+                    i++;
+                }
+                if (neg) val = -val;
+                return nir::g_store.addConst(dt, val);
+            }
+        }
+        
+        // It's an address - create a load expression
+        uint32_t sym_idx = nir::g_store.addSymbol(operand);
+        return nir::g_store.addLoad(sym_idx, dt);
+    }
+    
+    // Get MathOp from element type
+    nir::MathOp getMathOp(const char* type) {
+        if (strEqI(type, "math_add") || strEqI(type, "add")) return nir::MATH_ADD;
+        if (strEqI(type, "math_sub") || strEqI(type, "sub")) return nir::MATH_SUB;
+        if (strEqI(type, "math_mul") || strEqI(type, "mul")) return nir::MATH_MUL;
+        if (strEqI(type, "math_div") || strEqI(type, "div")) return nir::MATH_DIV;
+        if (strEqI(type, "math_mod") || strEqI(type, "mod")) return nir::MATH_MOD;
+        if (strEqI(type, "math_neg") || strEqI(type, "neg")) return nir::MATH_NEG;
+        if (strEqI(type, "math_abs") || strEqI(type, "abs")) return nir::MATH_ABS;
+        return nir::MATH_NONE;
+    }
+    
+    // Get CompareOp from element type
+    nir::CompareOp getCompareOp(const char* type) {
+        if (strEqI(type, "compare_eq") || strEqI(type, "cmp_eq")) return nir::CMP_EQ;
+        if (strEqI(type, "compare_neq") || strEqI(type, "cmp_neq")) return nir::CMP_NEQ;
+        if (strEqI(type, "compare_gt") || strEqI(type, "cmp_gt")) return nir::CMP_GT;
+        if (strEqI(type, "compare_lt") || strEqI(type, "cmp_lt")) return nir::CMP_LT;
+        if (strEqI(type, "compare_gte") || strEqI(type, "cmp_gte")) return nir::CMP_GTE;
+        if (strEqI(type, "compare_lte") || strEqI(type, "cmp_lte")) return nir::CMP_LTE;
+        return nir::CMP_NONE;
+    }
+    
+    // Strip type prefix from address (MW0 -> 0, MD4 -> 4, MR8 -> 8, M0.0 -> M0.0)
+    void stripTypePrefix(const char* addr, char* out) {
+        // Handle M prefix addresses (Memory area)
+        if (addr[0] == 'M' || addr[0] == 'm') {
+            char c1 = addr[1];
+            if (c1 >= 'a' && c1 <= 'z') c1 -= 32;
+            
+            // Check for typed addresses (MW, MD, MR, MB, ML)
+            if (c1 == 'W' || c1 == 'D' || c1 == 'R' || c1 == 'B' || c1 == 'L') {
+                // Skip the type prefix, copy the rest
+                int i = 0;
+                int j = 2;  // Start after type prefix
+                while (addr[j] != '\0') {
+                    out[i++] = addr[j++];
+                }
+                out[i] = '\0';
+                return;
+            }
+        }
+        // Handle I/Q prefix addresses
+        else if (addr[0] == 'I' || addr[0] == 'i' || addr[0] == 'Q' || addr[0] == 'q') {
+            char c1 = addr[1];
+            if (c1 >= 'a' && c1 <= 'z') c1 -= 32;
+            
+            // Check for typed addresses (IW, ID, QW, QD)
+            if (c1 == 'W' || c1 == 'D') {
+                int i = 0;
+                int j = 2;
+                while (addr[j] != '\0') {
+                    out[i++] = addr[j++];
+                }
+                out[i] = '\0';
+                return;
+            }
+        }
+        
+        // No type prefix, copy as-is
+        int i = 0;
+        while (addr[i] != '\0') {
+            out[i] = addr[i];
+            i++;
+        }
+        out[i] = '\0';
     }
 
     // Structure to hold parsed branch info (coils, TAPs, etc.)
@@ -660,6 +849,14 @@ public:
                 } else {
                     if (!readU32(elem.preset)) return false;
                 }
+            } else if (strEqI(key, "dataType") || strEqI(key, "data_type")) {
+                if (!readString(elem.data_type, sizeof(elem.data_type))) return false;
+            } else if (strEqI(key, "in1") || strEqI(key, "input1") || strEqI(key, "in")) {
+                if (!readString(elem.in1, sizeof(elem.in1))) return false;
+            } else if (strEqI(key, "in2") || strEqI(key, "input2")) {
+                if (!readString(elem.in2, sizeof(elem.in2))) return false;
+            } else if (strEqI(key, "out") || strEqI(key, "output")) {
+                if (!readString(elem.out, sizeof(elem.out))) return false;
             } else {
                 // Skip unknown property
                 skipValue();
@@ -959,9 +1156,14 @@ public:
         for (int i = 0; i < count; i++) {
             LadderElement& elem = elements[i];
             
-            // Skip coils
+            // Skip coils - they generate actions, not expressions
             if (strEqI(elem.type, "coil") || strEqI(elem.type, "coil_set") || 
                 strEqI(elem.type, "coil_rset") || strEqI(elem.type, "coil_n")) {
+                continue;
+            }
+            
+            // Skip math/compare/move elements - they generate actions, not boolean expressions
+            if (isMathOp(elem.type) || isCompareOp(elem.type) || isMoveOp(elem.type)) {
                 continue;
             }
             
@@ -1110,12 +1312,23 @@ public:
         int coil_indices[MAX_COILS];
         int coil_count = 0;
         
+        // Identify math/move elements for action generation  
+        static const int MAX_MATH_ELEMS = 16;
+        int math_indices[MAX_MATH_ELEMS];
+        int math_count = 0;
+        
         for (int i = 0; i < count; i++) {
             const char* type = elements[i].type;
             if (strEqI(type, "coil") || strEqI(type, "coil_set") || 
                 strEqI(type, "coil_rset") || strEqI(type, "coil_n")) {
                 if (coil_count < MAX_COILS) {
                     coil_indices[coil_count++] = i;
+                }
+            }
+            // Identify math, compare, and move elements
+            else if (isMathOp(type) || isCompareOp(type) || isMoveOp(type)) {
+                if (math_count < MAX_MATH_ELEMS) {
+                    math_indices[math_count++] = i;
                 }
             }
             // TAP elements are already handled by buildNetworkFromElements
@@ -1176,6 +1389,74 @@ public:
             uint32_t action_idx = nir::g_store.addAction(kind, target_sym);
             if (action_idx == nir::NIR_NONE) return false;
             action_cnt++;
+        }
+        
+        // Build actions from math/compare/move elements
+        for (int i = 0; i < math_count; i++) {
+            LadderElement& elem = elements[math_indices[i]];
+            
+            // Determine data type from element or infer from addresses
+            nir::DataType dt = nir::DT_I16; // Default
+            if (elem.data_type[0] != '\0') {
+                dt = parseDataType(elem.data_type);
+            } else {
+                // Try to infer from output address first
+                if (elem.out[0] != '\0') {
+                    dt = inferDataTypeFromAddress(elem.out);
+                }
+                // If still default, try input address
+                if (dt == nir::DT_I16 && elem.in1[0] != '\0') {
+                    nir::DataType in_dt = inferDataTypeFromAddress(elem.in1);
+                    if (in_dt != nir::DT_I16) dt = in_dt;
+                }
+            }
+            
+            // Parse operands
+            uint32_t in1_expr = nir::NIR_NONE;
+            uint32_t in2_expr = nir::NIR_NONE;
+            uint32_t out_sym = nir::NIR_NONE;
+            
+            if (elem.in1[0] != '\0') {
+                in1_expr = parseOperand(elem.in1, dt);
+            }
+            if (elem.in2[0] != '\0') {
+                in2_expr = parseOperand(elem.in2, dt);
+            }
+            if (elem.out[0] != '\0') {
+                // Strip type prefix from output address for symbol
+                char addr[32];
+                stripTypePrefix(elem.out, addr);
+                out_sym = nir::g_store.addSymbol(addr);
+            }
+            
+            if (out_sym == nir::NIR_NONE) continue;  // Skip if no output
+            
+            uint32_t value_expr = nir::NIR_NONE;
+            
+            if (isMoveOp(elem.type)) {
+                // MOVE: just transfer in1 to out
+                value_expr = in1_expr;
+            } else if (isMathOp(elem.type)) {
+                // Math operation
+                nir::MathOp op = getMathOp(elem.type);
+                if (op == nir::MATH_NEG || op == nir::MATH_ABS) {
+                    // Unary operation
+                    value_expr = nir::g_store.addMath(op, dt, in1_expr, nir::NIR_NONE);
+                } else {
+                    // Binary operation
+                    value_expr = nir::g_store.addMath(op, dt, in1_expr, in2_expr);
+                }
+            } else if (isCompareOp(elem.type)) {
+                // Compare operation - result is boolean, but operands use data type
+                nir::CompareOp op = getCompareOp(elem.type);
+                value_expr = nir::g_store.addCompare(op, dt, in1_expr, in2_expr);
+            }
+            
+            if (value_expr != nir::NIR_NONE) {
+                uint32_t action_idx = nir::g_store.addMoveAction(out_sym, value_expr, dt);
+                if (action_idx == nir::NIR_NONE) return false;
+                action_cnt++;
+            }
         }
         
         // Add TAP action if requested (passthrough RLO to next segment/network)
@@ -2011,6 +2292,22 @@ public:
             case nir::EXPR_COMPOUND:
                 emitCompoundBranch(expr);
                 break;
+                
+            case nir::EXPR_MATH:
+                emitMathExpr(expr);
+                break;
+                
+            case nir::EXPR_COMPARE:
+                emitCompareExpr(expr);
+                break;
+                
+            case nir::EXPR_LOAD:
+                emitLoadExpr(expr);
+                break;
+                
+            case nir::EXPR_CONST:
+                emitConstExpr(expr);
+                break;
         }
     }
     
@@ -2130,6 +2427,331 @@ public:
         }
     }
     
+    // ============ Data Type Helpers ============
+    
+    const char* dataTypeToPrefix(nir::DataType dt) {
+        switch (dt) {
+            case nir::DT_U8:  return "u8";
+            case nir::DT_U16: return "u16";
+            case nir::DT_U32: return "u32";
+            case nir::DT_U64: return "u64";
+            case nir::DT_I8:  return "i8";
+            case nir::DT_I16: return "i16";
+            case nir::DT_I32: return "i32";
+            case nir::DT_I64: return "i64";
+            case nir::DT_F32: return "f32";
+            case nir::DT_F64: return "f64";
+            default:         return "i16";
+        }
+    }
+    
+    char dataTypeToSuffix(nir::DataType dt) {
+        switch (dt) {
+            case nir::DT_I16: return 'I';  // INT
+            case nir::DT_I32: return 'D';  // DINT
+            case nir::DT_F32: return 'R';  // REAL
+            default:          return '\0'; // Use extended form
+        }
+    }
+    
+    // Strip type prefix from address (MW10 -> M10, MD20 -> M20)
+    void stripTypePrefix(const char* addr, char* out) {
+        if (!addr || !addr[0]) { out[0] = '\0'; return; }
+        
+        char c0 = addr[0];
+        char c1 = addr[1];
+        if (c0 >= 'a' && c0 <= 'z') c0 -= 32;
+        if (c1 >= 'a' && c1 <= 'z') c1 -= 32;
+        
+        int start = 0;
+        // Check two-letter prefix
+        if (c1 == 'B' || c1 == 'W' || c1 == 'D' || c1 == 'L' || c1 == 'R') {
+            out[0] = addr[0]; // Keep the first letter (M, I, Q, etc.)
+            start = 2;
+            int j = 1;
+            while (addr[start]) {
+                out[j++] = addr[start++];
+            }
+            out[j] = '\0';
+        } else {
+            // No type prefix to strip, copy as-is
+            int i = 0;
+            while (addr[i]) {
+                out[i] = addr[i];
+                i++;
+            }
+            out[i] = '\0';
+        }
+    }
+    
+    // ============ Math Expression Emission ============
+    
+    // Emit a single operand (for use within math operations)
+    // Returns: the operand string or empty if complex expression
+    void emitOperandToSTL(uint32_t expr_idx, char* operand_out, int max_len) {
+        operand_out[0] = '\0';
+        if (expr_idx == nir::NIR_NONE) return;
+        
+        nir::Expr& expr = nir::g_store.exprs[expr_idx];
+        
+        if (expr.kind == nir::EXPR_LOAD) {
+            // Memory address - the symbol already contains the full address (MW0, MD4, etc.)
+            const char* sym_name = nir::g_store.symbols[expr.a].name;
+            
+            // Just copy the symbol name as-is (it already has the prefix)
+            int i = 0;
+            while (sym_name[i] && i < max_len - 1) {
+                operand_out[i] = sym_name[i];
+                i++;
+            }
+            operand_out[i] = '\0';
+        }
+        else if (expr.kind == nir::EXPR_CONST) {
+            // Constant value
+            uint32_t const_idx = expr.a;
+            nir::ConstExpr& c = nir::g_store.consts[const_idx];
+            
+            if (c.data_type == nir::DT_F32) {
+                // Format float
+                int i = 0;
+                float v = c.f32_val;
+                if (v < 0) { operand_out[i++] = '-'; v = -v; }
+                int intPart = (int)v;
+                float fracPart = v - intPart;
+                
+                // Integer part
+                char ibuf[16];
+                int ilen = 0;
+                if (intPart == 0) ibuf[ilen++] = '0';
+                else while (intPart > 0 && ilen < 15) {
+                    ibuf[ilen++] = '0' + (intPart % 10);
+                    intPart /= 10;
+                }
+                while (ilen > 0) operand_out[i++] = ibuf[--ilen];
+                
+                operand_out[i++] = '.';
+                
+                // Fraction part (6 digits)
+                for (int d = 0; d < 6 && i < max_len - 1; d++) {
+                    fracPart *= 10;
+                    int digit = (int)fracPart;
+                    operand_out[i++] = '0' + digit;
+                    fracPart -= digit;
+                }
+                operand_out[i] = '\0';
+            } else {
+                // Format integer
+                int64_t val = c.i64_val;
+                int i = 0;
+                if (val < 0) { operand_out[i++] = '-'; val = -val; }
+                
+                char ibuf[24];
+                int ilen = 0;
+                if (val == 0) ibuf[ilen++] = '0';
+                else while (val > 0 && ilen < 23) {
+                    ibuf[ilen++] = '0' + (val % 10);
+                    val /= 10;
+                }
+                while (ilen > 0 && i < max_len - 1) operand_out[i++] = ibuf[--ilen];
+                operand_out[i] = '\0';
+            }
+        }
+    }
+    
+    void emitMathExpr(nir::Expr& expr) {
+        uint32_t math_idx = expr.a;
+        nir::MathExpr& math = nir::g_store.maths[math_idx];
+        
+        nir::DataType dt = (nir::DataType)math.data_type;
+        char suffix = dataTypeToSuffix(dt);
+        
+        // Get operand strings
+        char op1[64], op2[64];
+        emitOperandToSTL(math.left_expr, op1, sizeof(op1));
+        emitOperandToSTL(math.right_expr, op2, sizeof(op2));
+        
+        bool is_unary = (math.op == nir::MATH_NEG || math.op == nir::MATH_ABS);
+        
+        // Emit L first_operand
+        emitIndent();
+        emit("L ");
+        emit(op1);
+        emit("\n");
+        
+        // Emit operation with second operand (if binary)
+        emitIndent();
+        if (suffix != '\0' && !is_unary) {
+            // Siemens short form: +I operand, -D operand, etc.
+            switch (math.op) {
+                case nir::MATH_ADD: emit("+"); break;
+                case nir::MATH_SUB: emit("-"); break;
+                case nir::MATH_MUL: emit("*"); break;
+                case nir::MATH_DIV: emit("/"); break;
+                default: break;
+            }
+            char buf[2] = { suffix, '\0' };
+            emit(buf);
+            emit(" ");
+            emit(op2);
+        } else {
+            // Extended form or unary
+            const char* prefix = dataTypeToPrefix(dt);
+            emit(prefix);
+            emit(".");
+            switch (math.op) {
+                case nir::MATH_ADD: emit("add "); emit(op2); break;
+                case nir::MATH_SUB: emit("sub "); emit(op2); break;
+                case nir::MATH_MUL: emit("mul "); emit(op2); break;
+                case nir::MATH_DIV: emit("div "); emit(op2); break;
+                case nir::MATH_MOD: emit("mod "); emit(op2); break;
+                case nir::MATH_NEG: emit("neg"); break;
+                case nir::MATH_ABS: emit("abs"); break;
+                default: break;
+            }
+        }
+        emit("\n");
+    }
+    
+    void emit(const char* s, int len) {
+        for (int i = 0; i < len && *s && output_len < MAX_OUTPUT - 1; i++) {
+            output[output_len++] = *s++;
+        }
+        output[output_len] = '\0';
+    }
+    
+    // ============ Compare Expression Emission ============
+    
+    void emitCompareExpr(nir::Expr& expr) {
+        uint32_t cmp_idx = expr.a;
+        nir::CompareExpr& cmp = nir::g_store.compares[cmp_idx];
+        
+        nir::DataType dt = (nir::DataType)cmp.data_type;
+        char suffix = dataTypeToSuffix(dt);
+        
+        // Get operand strings
+        char op1[64], op2[64];
+        emitOperandToSTL(cmp.left_expr, op1, sizeof(op1));
+        emitOperandToSTL(cmp.right_expr, op2, sizeof(op2));
+        
+        // Emit L first_operand
+        emitIndent();
+        emit("L ");
+        emit(op1);
+        emit("\n");
+        
+        // Emit comparison with second operand
+        emitIndent();
+        if (suffix != '\0') {
+            // Siemens short form: ==I op, <>D op, etc.
+            switch (cmp.op) {
+                case nir::CMP_EQ:  emit("=="); break;
+                case nir::CMP_NEQ: emit("<>"); break;
+                case nir::CMP_GT:  emit(">"); break;
+                case nir::CMP_LT:  emit("<"); break;
+                case nir::CMP_GTE: emit(">="); break;
+                case nir::CMP_LTE: emit("<="); break;
+                default: break;
+            }
+            char buf[2] = { suffix, '\0' };
+            emit(buf);
+            emit(" ");
+            emit(op2);
+        } else {
+            // Extended form
+            const char* prefix = dataTypeToPrefix(dt);
+            emit(prefix);
+            emit(".");
+            switch (cmp.op) {
+                case nir::CMP_EQ:  emit("cmp_eq "); break;
+                case nir::CMP_NEQ: emit("cmp_neq "); break;
+                case nir::CMP_GT:  emit("cmp_gt "); break;
+                case nir::CMP_LT:  emit("cmp_lt "); break;
+                case nir::CMP_GTE: emit("cmp_gte "); break;
+                case nir::CMP_LTE: emit("cmp_lte "); break;
+                default: break;
+            }
+            emit(op2);
+        }
+        emit("\n");
+    }
+    
+    // ============ Load Expression Emission ============
+    
+    void emitLoadExpr(nir::Expr& expr) {
+        // The symbol already contains the full address (MW0, MD4, etc.)
+        const char* sym_name = nir::g_store.symbols[expr.a].name;
+        
+        emitIndent();
+        emit("L ");
+        emit(sym_name);
+        emit("\n");
+    }
+    
+    // ============ Const Expression Emission ============
+    
+    void emitConstExpr(nir::Expr& expr) {
+        uint32_t const_idx = expr.a;
+        nir::ConstExpr& c = nir::g_store.consts[const_idx];
+        
+        emitIndent();
+        emit("L ");
+        
+        if (c.data_type == nir::DT_F32) {
+            emitFloat(c.f32_val);
+        } else if (c.data_type == nir::DT_F64) {
+            emitDouble(c.f64_val);
+        } else {
+            emitInt64(c.i64_val);
+        }
+        emit("\n");
+    }
+    
+    void emitInt64(int64_t val) {
+        char buf[24];
+        int i = 0;
+        bool neg = val < 0;
+        if (neg) val = -val;
+        if (val == 0) buf[i++] = '0';
+        else {
+            while (val > 0) {
+                buf[i++] = '0' + (val % 10);
+                val /= 10;
+            }
+        }
+        if (neg) buf[i++] = '-';
+        while (i > 0) {
+            output[output_len++] = buf[--i];
+        }
+        output[output_len] = '\0';
+    }
+    
+    void emitFloat(float val) {
+        // Simple float to string
+        if (val < 0) { emit("-"); val = -val; }
+        int whole = (int)val;
+        emitInt(whole);
+        emit(".");
+        val -= whole;
+        val *= 1000000; // 6 decimal places
+        int frac = (int)val;
+        char buf[8];
+        for (int i = 5; i >= 0; i--) {
+            buf[i] = '0' + (frac % 10);
+            frac /= 10;
+        }
+        buf[6] = '\0';
+        // Trim trailing zeros
+        for (int i = 5; i > 0; i--) {
+            if (buf[i] == '0') buf[i] = '\0';
+            else break;
+        }
+        emit(buf);
+    }
+    
+    void emitDouble(double val) {
+        emitFloat((float)val); // Simplify for now
+    }
+    
     // ============ Action Emission ============
     
     void emitAction(nir::Action& action) {
@@ -2138,6 +2760,54 @@ public:
             emitIndentedLine("TAP");
             return;
         }
+        
+        if (action.kind == nir::ACT_MOVE) {
+            // MOVE - emit value expression, then transfer to target
+            if (action.value_expr != nir::NIR_NONE) {
+                emitExpr(action.value_expr, true);
+            }
+            
+            nir::DataType dt = (nir::DataType)action.data_type;
+            
+            // Build destination address with type prefix (MW4, MD8, etc.)
+            char dest[64];
+            const char* sym_name = nir::g_store.symbols[action.target_sym].name;
+            int i = 0;
+            if (sym_name[0] == 'M' || sym_name[0] == 'm' || 
+                (sym_name[0] >= '0' && sym_name[0] <= '9')) {
+                // Memory address - add type prefix
+                dest[i++] = 'M';
+                switch (dt) {
+                    case nir::DT_U8:  dest[i++] = 'B'; break;
+                    case nir::DT_I16: case nir::DT_U16: dest[i++] = 'W'; break;
+                    case nir::DT_I32: case nir::DT_U32: dest[i++] = 'D'; break;
+                    case nir::DT_I64: case nir::DT_U64: dest[i++] = 'L'; break;
+                    case nir::DT_F32: case nir::DT_F64: dest[i++] = 'R'; break;
+                    default: dest[i++] = 'W'; break;
+                }
+                // Copy the number part
+                const char* num = sym_name;
+                if (sym_name[0] == 'M' || sym_name[0] == 'm') num++;
+                while (*num && i < 62) {
+                    dest[i++] = *num++;
+                }
+            } else {
+                // Other address, copy as-is
+                const char* p = sym_name;
+                while (*p && i < 62) {
+                    dest[i++] = *p++;
+                }
+            }
+            dest[i] = '\0';
+            
+            // Emit T destination (Transfer)
+            emitIndent();
+            emit("T ");
+            emit(dest);
+            emit("\n");
+            return;
+        }
+        
         const char* instr = action.kind == nir::ACT_ASSIGN ? "=" :
                             action.kind == nir::ACT_SET ? "S" : "R";
         emitIndent();

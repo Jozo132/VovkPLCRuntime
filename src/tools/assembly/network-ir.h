@@ -58,6 +58,9 @@ static const uint32_t NIR_MAX_CHILDREN = 4096;
 static const uint32_t NIR_MAX_CALLS    = 256;
 static const uint32_t NIR_MAX_ACTIONS  = 512;
 static const uint32_t NIR_MAX_NETWORKS = 128;
+static const uint32_t NIR_MAX_MATHS    = 512;
+static const uint32_t NIR_MAX_COMPARES = 256;
+static const uint32_t NIR_MAX_CONSTS   = 512;
 static const uint32_t NIR_NAME_MAX     = 32;
 static const uint32_t NIR_PRESET_POOL_MAX = 2048;
 
@@ -89,6 +92,51 @@ enum ExprKind : uint8_t {
     EXPR_XOR       = 5,   // Logical XOR
     EXPR_CALL_BOOL = 6,   // Pass-through block (TON/TOF/TP/CTU/CTD/FP/FN)
     EXPR_COMPOUND  = 7,   // Compound branch: condition + inline actions + optional TAP
+    EXPR_MATH      = 8,   // Math operation (add, sub, mul, div, mod, neg, abs)
+    EXPR_COMPARE   = 9,   // Comparison producing boolean result
+    EXPR_LOAD      = 10,  // Load value onto stack (L instruction)
+    EXPR_CONST     = 11,  // Constant value
+};
+
+// ============ Math Operations (for EXPR_MATH) ============
+
+enum MathOp : uint8_t {
+    MATH_NONE = 0,
+    MATH_ADD  = 1,   // Addition
+    MATH_SUB  = 2,   // Subtraction
+    MATH_MUL  = 3,   // Multiplication
+    MATH_DIV  = 4,   // Division
+    MATH_MOD  = 5,   // Modulo
+    MATH_NEG  = 6,   // Negation (unary)
+    MATH_ABS  = 7,   // Absolute value (unary)
+};
+
+// ============ Comparison Operations (for EXPR_COMPARE) ============
+
+enum CompareOp : uint8_t {
+    CMP_NONE = 0,
+    CMP_EQ   = 1,   // Equal
+    CMP_NEQ  = 2,   // Not equal
+    CMP_GT   = 3,   // Greater than
+    CMP_LT   = 4,   // Less than
+    CMP_GTE  = 5,   // Greater than or equal
+    CMP_LTE  = 6,   // Less than or equal
+};
+
+// ============ Data Types for Math Operations ============
+
+enum DataType : uint8_t {
+    DT_NONE = 0,
+    DT_U8   = 1,
+    DT_U16  = 2,
+    DT_U32  = 3,
+    DT_U64  = 4,
+    DT_I8   = 5,
+    DT_I16  = 6,
+    DT_I32  = 7,
+    DT_I64  = 8,
+    DT_F32  = 9,
+    DT_F64  = 10,
 };
 
 // ============ Call Operations (for EXPR_CALL_BOOL) ============
@@ -114,6 +162,7 @@ enum ActionKind : uint8_t {
     ACT_SET    = 2,   // S symbol (set coil)
     ACT_RESET  = 3,   // R symbol (reset coil)
     ACT_TAP    = 4,   // TAP - passthrough RLO to next network (VovkPLCRuntime extension)
+    ACT_MOVE   = 5,   // T symbol (transfer/move value from stack to memory)
 };
 
 // ============ Preset Kinds ============
@@ -172,6 +221,10 @@ struct Expr {
     // EXPR_NOT:       a = child_expr_index
     // EXPR_AND/OR/XOR: child_ofs, child_cnt
     // EXPR_CALL_BOOL: a = call_index (into calls array)
+    // EXPR_MATH:      a = math_index (into maths array)
+    // EXPR_COMPARE:   a = compare_index (into compares array)
+    // EXPR_LOAD:      a = symbol_index, reserved8a = data_type
+    // EXPR_CONST:     a = const_index (into consts array)
     
     void clear() {
         kind = EXPR_NONE;
@@ -216,6 +269,62 @@ struct CallBool {
     }
 };
 
+// Math operation parameters (EXPR_MATH)
+struct MathExpr {
+    uint8_t op;           // MathOp (ADD, SUB, MUL, DIV, MOD, NEG, ABS)
+    uint8_t data_type;    // DataType (I16, I32, F32, etc.)
+    uint8_t reserved[2];
+    
+    uint32_t left_expr;   // Left operand expression (or sole operand for unary)
+    uint32_t right_expr;  // Right operand expression (NIR_NONE for unary)
+    
+    void clear() {
+        op = MATH_NONE;
+        data_type = DT_NONE;
+        reserved[0] = reserved[1] = 0;
+        left_expr = NIR_NONE;
+        right_expr = NIR_NONE;
+    }
+};
+
+// Compare operation parameters (EXPR_COMPARE)
+struct CompareExpr {
+    uint8_t op;           // CompareOp (EQ, NEQ, GT, LT, GTE, LTE)
+    uint8_t data_type;    // DataType for comparison
+    uint8_t reserved[2];
+    
+    uint32_t left_expr;   // Left operand expression
+    uint32_t right_expr;  // Right operand expression
+    
+    void clear() {
+        op = CMP_NONE;
+        data_type = DT_NONE;
+        reserved[0] = reserved[1] = 0;
+        left_expr = NIR_NONE;
+        right_expr = NIR_NONE;
+    }
+};
+
+// Constant value (EXPR_CONST)
+struct ConstExpr {
+    uint8_t data_type;    // DataType
+    uint8_t reserved[3];
+    
+    union {
+        int32_t i32_val;
+        uint32_t u32_val;
+        float f32_val;
+        int64_t i64_val;   // For larger types
+        double f64_val;
+    };
+    
+    void clear() {
+        data_type = DT_NONE;
+        reserved[0] = reserved[1] = reserved[2] = 0;
+        i64_val = 0;
+    }
+};
+
 // Compound Branch - branch with inline actions (coils, TAPs)
 // Used for EXPR_COMPOUND to represent branches like: A Y0.2 / R Y0.1 / TAP
 static const uint32_t NIR_MAX_COMPOUND_ACTIONS = 8;
@@ -248,19 +357,21 @@ struct CompoundBranch {
 
 static const uint32_t NIR_MAX_COMPOUNDS = 128;
 
-// Action (coil operation)
+// Action (coil operation or move/transfer)
 struct Action {
     uint8_t kind;       // ActionKind
-    uint8_t flags;      // Reserved
+    uint8_t data_type;  // DataType (for ACT_MOVE)
     uint16_t reserved16;
     
-    uint32_t target_sym; // Target symbol index (coil address)
+    uint32_t target_sym;  // Target symbol index (coil address or memory address)
+    uint32_t value_expr;  // Source expression index (for ACT_MOVE, else NIR_NONE)
     
     void clear() {
         kind = ACT_NONE;
-        flags = 0;
+        data_type = DT_NONE;
         reserved16 = 0;
         target_sym = NIR_NONE;
+        value_expr = NIR_NONE;
     }
 };
 
@@ -296,6 +407,9 @@ struct Store {
     uint32_t action_count;
     uint32_t network_count;
     uint32_t compound_count;
+    uint32_t math_count;
+    uint32_t compare_count;
+    uint32_t const_count;
     
     // Arenas
     Symbol   symbols[NIR_MAX_SYMBOLS];
@@ -305,6 +419,9 @@ struct Store {
     Action   actions[NIR_MAX_ACTIONS];
     Network  networks[NIR_MAX_NETWORKS];
     CompoundBranch compounds[NIR_MAX_COMPOUNDS];
+    MathExpr maths[NIR_MAX_MATHS];
+    CompareExpr compares[NIR_MAX_COMPARES];
+    ConstExpr consts[NIR_MAX_CONSTS];
     
     // String pools
     uint16_t preset_pool_len;
@@ -322,6 +439,9 @@ struct Store {
         action_count = 0;
         network_count = 0;
         compound_count = 0;
+        math_count = 0;
+        compare_count = 0;
+        const_count = 0;
         preset_pool_len = 0;
         has_error = false;
         error_msg[0] = '\0';
@@ -577,6 +697,126 @@ struct Store {
         return true;
     }
     
+    // ============ Math Expression Building ============
+    
+    // Add a constant expression
+    uint32_t addConstI32(int32_t value) {
+        if (expr_count >= NIR_MAX_EXPR || const_count >= NIR_MAX_CONSTS) {
+            setError("Const arena full");
+            return NIR_NONE;
+        }
+        
+        uint32_t const_idx = const_count++;
+        consts[const_idx].clear();
+        consts[const_idx].data_type = DT_I32;
+        consts[const_idx].i32_val = value;
+        
+        uint32_t expr_idx = expr_count++;
+        exprs[expr_idx].clear();
+        exprs[expr_idx].kind = EXPR_CONST;
+        exprs[expr_idx].a = const_idx;
+        
+        return expr_idx;
+    }
+    
+    uint32_t addConstF32(float value) {
+        if (expr_count >= NIR_MAX_EXPR || const_count >= NIR_MAX_CONSTS) {
+            setError("Const arena full");
+            return NIR_NONE;
+        }
+        
+        uint32_t const_idx = const_count++;
+        consts[const_idx].clear();
+        consts[const_idx].data_type = DT_F32;
+        consts[const_idx].f32_val = value;
+        
+        uint32_t expr_idx = expr_count++;
+        exprs[expr_idx].clear();
+        exprs[expr_idx].kind = EXPR_CONST;
+        exprs[expr_idx].a = const_idx;
+        
+        return expr_idx;
+    }
+    
+    uint32_t addConst(DataType dt, int64_t value) {
+        if (expr_count >= NIR_MAX_EXPR || const_count >= NIR_MAX_CONSTS) {
+            setError("Const arena full");
+            return NIR_NONE;
+        }
+        
+        uint32_t const_idx = const_count++;
+        consts[const_idx].clear();
+        consts[const_idx].data_type = dt;
+        consts[const_idx].i64_val = value;
+        
+        uint32_t expr_idx = expr_count++;
+        exprs[expr_idx].clear();
+        exprs[expr_idx].kind = EXPR_CONST;
+        exprs[expr_idx].a = const_idx;
+        
+        return expr_idx;
+    }
+    
+    // Add a load expression (load from memory address)
+    uint32_t addLoad(uint32_t sym_idx, DataType dt) {
+        if (expr_count >= NIR_MAX_EXPR) {
+            setError("Expression arena full");
+            return NIR_NONE;
+        }
+        
+        uint32_t expr_idx = expr_count++;
+        exprs[expr_idx].clear();
+        exprs[expr_idx].kind = EXPR_LOAD;
+        exprs[expr_idx].a = sym_idx;
+        exprs[expr_idx].reserved8a = dt;
+        
+        return expr_idx;
+    }
+    
+    // Add a math expression (binary: add, sub, mul, div, mod; unary: neg, abs)
+    uint32_t addMath(MathOp op, DataType dt, uint32_t left_expr, uint32_t right_expr = NIR_NONE) {
+        if (expr_count >= NIR_MAX_EXPR || math_count >= NIR_MAX_MATHS) {
+            setError("Math arena full");
+            return NIR_NONE;
+        }
+        
+        uint32_t math_idx = math_count++;
+        maths[math_idx].clear();
+        maths[math_idx].op = op;
+        maths[math_idx].data_type = dt;
+        maths[math_idx].left_expr = left_expr;
+        maths[math_idx].right_expr = right_expr;
+        
+        uint32_t expr_idx = expr_count++;
+        exprs[expr_idx].clear();
+        exprs[expr_idx].kind = EXPR_MATH;
+        exprs[expr_idx].a = math_idx;
+        
+        return expr_idx;
+    }
+    
+    // Add a comparison expression (produces boolean result)
+    uint32_t addCompare(CompareOp op, DataType dt, uint32_t left_expr, uint32_t right_expr) {
+        if (expr_count >= NIR_MAX_EXPR || compare_count >= NIR_MAX_COMPARES) {
+            setError("Compare arena full");
+            return NIR_NONE;
+        }
+        
+        uint32_t cmp_idx = compare_count++;
+        compares[cmp_idx].clear();
+        compares[cmp_idx].op = op;
+        compares[cmp_idx].data_type = dt;
+        compares[cmp_idx].left_expr = left_expr;
+        compares[cmp_idx].right_expr = right_expr;
+        
+        uint32_t expr_idx = expr_count++;
+        exprs[expr_idx].clear();
+        exprs[expr_idx].kind = EXPR_COMPARE;
+        exprs[expr_idx].a = cmp_idx;
+        
+        return expr_idx;
+    }
+    
     // ============ Action Building ============
     
     uint32_t addAction(ActionKind kind, uint32_t target_sym) {
@@ -588,6 +828,21 @@ struct Store {
         actions[idx].clear();
         actions[idx].kind = kind;
         actions[idx].target_sym = target_sym;
+        return idx;
+    }
+    
+    // Add move/transfer action (T instruction)
+    uint32_t addMoveAction(uint32_t target_sym, uint32_t value_expr, DataType dt) {
+        if (action_count >= NIR_MAX_ACTIONS) {
+            setError("Action arena full");
+            return NIR_NONE;
+        }
+        uint32_t idx = action_count++;
+        actions[idx].clear();
+        actions[idx].kind = ACT_MOVE;
+        actions[idx].data_type = dt;
+        actions[idx].target_sym = target_sym;
+        actions[idx].value_expr = value_expr;
         return idx;
     }
     
