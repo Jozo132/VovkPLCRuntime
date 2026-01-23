@@ -74,6 +74,11 @@ char __wasm_stream_in__[__WASM_STREAM_SIZE_IN__];
 int __wasm_stream_in_cursor__ = 0;
 int __wasm_stream_in_index__ = 0;
 
+WASM_EXPORT void streamClear() { // Clear the input stream buffer
+    __wasm_stream_in_cursor__ = 0;
+    __wasm_stream_in_index__ = 0;
+}
+
 WASM_EXPORT bool streamIn(char c) { // Retrun true if the char was written to the buffer
     int next = (__wasm_stream_in_index__ + 1) % __WASM_STREAM_SIZE_IN__;
     if (next == __wasm_stream_in_cursor__) return false;

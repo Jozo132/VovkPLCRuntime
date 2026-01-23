@@ -140,6 +140,8 @@ function detectLanguage(code) {
         /^>=I$/i,               // >=I
         /^<I$/i,                // <I
         /^<=I$/i,               // <=I
+        /^INC[IBDR]?\s+M/i,     // INC, INCI, INCB, INCD, INCR with memory address
+        /^DEC[IBDR]?\s+M/i,     // DEC, DECI, DECB, DECD, DECR with memory address
     ]
     
     // PLCASM-specific patterns

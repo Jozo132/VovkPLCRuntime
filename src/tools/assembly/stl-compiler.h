@@ -59,6 +59,13 @@
 // Load/Transfer:
 //   L, T                  - Load to accumulator, Transfer from accumulator
 //
+// Increment/Decrement:
+//   INC, DEC              - Increment/Decrement stack value (i16 default)
+//   INCI addr, DECI addr  - Increment/Decrement 16-bit integer at address
+//   INCD addr, DECD addr  - Increment/Decrement 32-bit integer at address
+//   INCB addr, DECB addr  - Increment/Decrement 8-bit byte at address
+//   INCR addr, DECR addr  - Increment/Decrement 32-bit float at address
+//
 // Math (Siemens STL style):
 //   +I, -I, *I, /I        - 16-bit signed integer math (maps to i16)
 //   +D, -D, *D, /D        - 32-bit signed integer math (maps to i32)
@@ -1219,6 +1226,50 @@ public:
         setExprType("u8"); // Comparisons return boolean
     }
 
+    // Handle INC/DEC operations
+    // Siemens STL: INC, DEC (operate on accumulator)
+    // Extended: INCI addr, INCD addr, DECI addr, DECD addr (increment/decrement memory location)
+    void handleIncDec(const char* op, const char* operand) {
+        bool isInc = (op[0] == 'I');
+        char suffix = '\0';
+        
+        // Determine type suffix (I=16-bit, D=32-bit, B=8-bit, R=32-bit float)
+        int len = 0;
+        while (op[len]) len++;
+        if (len >= 4) suffix = op[3]; // INCI, INCD, DECB, DECD, etc.
+        
+        const char* typePrefix = "i16"; // Default
+        if (suffix == 'B') typePrefix = "u8";
+        else if (suffix == 'I') typePrefix = "i16";
+        else if (suffix == 'D') typePrefix = "i32";
+        else if (suffix == 'R') typePrefix = "f32";
+        
+        if (operand && operand[0]) {
+            // Memory location operation: use optimized single-instruction INC_MEM/DEC_MEM
+            char plcAddr[64];
+            const char* addrType = nullptr;
+            convertTypedAddress(operand, plcAddr, &addrType);
+            
+            // Use specified type from instruction suffix, or infer from address
+            if (suffix != '\0') {
+                // Use the type from the instruction
+            } else if (addrType) {
+                typePrefix = addrType;
+            }
+            
+            // Emit optimized single instruction: <type>.inc <addr> or <type>.dec <addr>
+            emit(typePrefix);
+            emit(isInc ? ".inc " : ".dec ");
+            emitLine(plcAddr);
+        } else {
+            // Stack-only operation: push 1, add/sub
+            emit(typePrefix);
+            emitLine(".const 1");
+            emit(typePrefix);
+            emitLine(isInc ? ".add" : ".sub");
+        }
+    }
+
     // Handle jumps
     void handleJump(const char* type, const char* label) {
         if (strEq(type, "JU")) {
@@ -1647,6 +1698,26 @@ public:
         }
         if (strEq(upperInstr, "MOD") || strEq(upperInstr, "NEG") || strEq(upperInstr, "ABS")) {
             handleMath(upperInstr);
+            return;
+        }
+        
+        // ============ Increment/Decrement Operations ============
+        
+        // Siemens STL: INC, DEC (operate on stack/accumulator)
+        // Extended: INCI addr, INCD addr, INCB addr, INCR addr (with memory address)
+        //           DECI addr, DECD addr, DECB addr, DECR addr
+        if (strEq(upperInstr, "INC") || strEq(upperInstr, "DEC")) {
+            // Basic INC/DEC - operate on stack (i16 default)
+            handleIncDec(upperInstr, nullptr);
+            return;
+        }
+        if (strEq(upperInstr, "INCI") || strEq(upperInstr, "INCD") || 
+            strEq(upperInstr, "INCB") || strEq(upperInstr, "INCR") ||
+            strEq(upperInstr, "DECI") || strEq(upperInstr, "DECD") ||
+            strEq(upperInstr, "DECB") || strEq(upperInstr, "DECR")) {
+            skipWhitespace();
+            readIdentifier(operand1, sizeof(operand1));
+            handleIncDec(upperInstr, operand1);
             return;
         }
         

@@ -52,6 +52,7 @@ const SUPPORT = checkSupport()
  *     initialize: () => void, // Initializes the runtime environment and resets internal state.
  *     printInfo: () => void, // Prints runtime configuration and version info to stdout.
  *     streamIn: (char: number) => boolean, // Receives a character byte into the input stream buffer. Returns false if buffer full.
+ *     streamClear: () => void, // Clears the input stream buffer.
  *     loadAssembly: () => void, // Moves the streamed input buffer into the assembly compiler.
  *     downloadProgram: (size: number, crc: number) => number, // Loads a pre-compiled bytecode program from the input stream. Returns 0 on success, >0 on error (1=size, 2=crc).
  *     compileAssembly: (debug?: boolean) => boolean, // Compiles the loaded assembly code. Returns true if compilation failed.
@@ -290,6 +291,9 @@ class VovkPLC_class {
 
         try {
             // 1. Download assembly to Linter
+            // Clear any stale data in the stream buffer first
+            if (this.wasm_exports.streamClear) this.wasm_exports.streamClear()
+            
             let ok = true
             for (let i = 0; i < assembly.length && ok; i++) {
                 const char = assembly[i]
@@ -393,6 +397,9 @@ class VovkPLC_class {
 
         try {
             // 1. Stream STL code to linter
+            // Clear any stale data in the stream buffer first
+            if (this.wasm_exports.streamClear) this.wasm_exports.streamClear()
+            
             let ok = true
             for (let i = 0; i < stl.length && ok; i++) {
                 ok = this.wasm_exports.streamIn(stl.charCodeAt(i))
@@ -835,6 +842,9 @@ class VovkPLC_class {
         if (!this.wasm_exports.streamIn) throw new Error("'streamIn' function not found")
         if (!this.wasm_exports.loadAssembly) throw new Error("'loadAssembly' function not found")
 
+        // Clear any stale data in the stream buffer before loading new assembly
+        if (this.wasm_exports.streamClear) this.wasm_exports.streamClear()
+
         let ok = true
         for (let i = 0; i < assembly.length && ok; i++) {
             const char = assembly[i]
@@ -900,6 +910,9 @@ class VovkPLC_class {
         if (!this.wasm_exports.stl_get_output) throw new Error("'stl_get_output' function not found")
         if (!this.wasm_exports.stl_has_error) throw new Error("'stl_has_error' function not found")
 
+        // Clear any stale data in the stream buffer first
+        if (this.wasm_exports.streamClear) this.wasm_exports.streamClear()
+
         // Stream STL code to compiler
         let ok = true
         for (let i = 0; i < stl.length && ok; i++) {
@@ -951,6 +964,9 @@ class VovkPLC_class {
 
         // Convert object to JSON string if needed
         const ladderJson = typeof ladder === 'string' ? ladder : JSON.stringify(ladder)
+
+        // Clear any stale data in the stream buffer first
+        if (this.wasm_exports.streamClear) this.wasm_exports.streamClear()
 
         // Stream Ladder JSON to compiler
         let ok = true
@@ -1079,6 +1095,10 @@ class VovkPLC_class {
         const code = Array.isArray(program) ? program : this.parseHex(program)
         const size = code.length
         const crc = this.crc8(code)
+        
+        // Clear any stale data in the stream buffer first
+        if (this.wasm_exports.streamClear) this.wasm_exports.streamClear()
+        
         for (let i = 0; i < size; i++) {
             const c = code[i]
             this.wasm_exports.streamIn(c)
