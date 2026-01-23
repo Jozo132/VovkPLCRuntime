@@ -406,6 +406,7 @@ namespace PLCMethods {
     }
 
     // Load value from memory to stack using immediate address
+    // Memory is little-endian, stack is big-endian
     RuntimeError LOAD_FROM(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
         u32 size = 1 + sizeof(MY_PTR_t);
         if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
@@ -416,26 +417,61 @@ namespace PLCMethods {
         extract_status = ProgramExtract.type_pointer(program, prog_size, index, &address);
         if (extract_status != STATUS_SUCCESS) return extract_status;
         address = reverse_byte_order(address);
+        
+        // Read little-endian from memory, push big-endian to stack
         switch (data_type) {
-            case type_pointer: return load_from_memory_to_stack_at<MY_PTR_t>(stack, memory, address);
+            case type_pointer: {
+                if (address + sizeof(MY_PTR_t) > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
+                MY_PTR_t value = 0;
+                for (u32 i = 0; i < sizeof(MY_PTR_t); i++) {
+                    value |= ((MY_PTR_t)memory[address + i] << (8 * i));
+                }
+                return stack.push_pointer(value);
+            }
             case type_bool:
-            case type_u8:
-            case type_i8: return load_from_memory_to_stack_at<u8>(stack, memory, address);
+            case type_u8: {
+                if (address + 1 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
+                return stack.push_u8(memory[address]);
+            }
+            case type_i8: {
+                if (address + 1 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
+                return stack.push_i8((i8)memory[address]);
+            }
             case type_u16:
-            case type_i16: return load_from_memory_to_stack_at<u16>(stack, memory, address);
+            case type_i16: {
+                if (address + 2 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
+                // Read little-endian from memory
+                u16 value = memory[address] | ((u16)memory[address + 1] << 8);
+                return stack.push_u16(value);
+            }
             case type_u32:
             case type_i32:
-            case type_f32: return load_from_memory_to_stack_at<u32>(stack, memory, address);
+            case type_f32: {
+                if (address + 4 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
+                // Read little-endian from memory
+                u32 value = memory[address] | ((u32)memory[address + 1] << 8) |
+                            ((u32)memory[address + 2] << 16) | ((u32)memory[address + 3] << 24);
+                return stack.push_u32(value);
+            }
 #ifdef USE_X64_OPS
             case type_u64:
             case type_i64:
-            case type_f64: return load_from_memory_to_stack_at<u64>(stack, memory, address);
+            case type_f64: {
+                if (address + 8 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
+                // Read little-endian from memory
+                u64 value = memory[address] | ((u64)memory[address + 1] << 8) |
+                            ((u64)memory[address + 2] << 16) | ((u64)memory[address + 3] << 24) |
+                            ((u64)memory[address + 4] << 32) | ((u64)memory[address + 5] << 40) |
+                            ((u64)memory[address + 6] << 48) | ((u64)memory[address + 7] << 56);
+                return stack.push_u64(value);
+            }
 #endif // USE_X64_OPS
             default: return INVALID_DATA_TYPE;
         }
     }
 
     // Move value from stack to memory using immediate address
+    // Stack is big-endian, memory is little-endian
     RuntimeError MOVE_TO(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
         u32 size = 1 + sizeof(MY_PTR_t);
         if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
@@ -446,20 +482,67 @@ namespace PLCMethods {
         extract_status = ProgramExtract.type_pointer(program, prog_size, index, &address);
         if (extract_status != STATUS_SUCCESS) return extract_status;
         address = reverse_byte_order(address);
+        
+        // Pop big-endian from stack, write little-endian to memory
         switch (data_type) {
-            case type_pointer: return store_from_stack_to_memory_at<MY_PTR_t>(stack, memory, address);
+            case type_pointer: {
+                if (stack.size() < sizeof(MY_PTR_t)) return STACK_UNDERFLOW;
+                if (address + sizeof(MY_PTR_t) > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
+                MY_PTR_t value = stack.pop_pointer();
+                for (u32 i = 0; i < sizeof(MY_PTR_t); i++) {
+                    memory[address + i] = (value >> (8 * i)) & 0xFF;
+                }
+                return STATUS_SUCCESS;
+            }
             case type_bool:
             case type_u8:
-            case type_i8: return store_from_stack_to_memory_at<u8>(stack, memory, address);
+            case type_i8: {
+                if (stack.size() < 1) return STACK_UNDERFLOW;
+                if (address + 1 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
+                memory[address] = stack.pop_u8();
+                return STATUS_SUCCESS;
+            }
             case type_u16:
-            case type_i16: return store_from_stack_to_memory_at<u16>(stack, memory, address);
+            case type_i16: {
+                if (stack.size() < 2) return STACK_UNDERFLOW;
+                if (address + 2 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
+                u16 value = stack.pop_u16();
+                // Write little-endian to memory
+                memory[address] = value & 0xFF;
+                memory[address + 1] = (value >> 8) & 0xFF;
+                return STATUS_SUCCESS;
+            }
             case type_u32:
             case type_i32:
-            case type_f32: return store_from_stack_to_memory_at<u32>(stack, memory, address);
+            case type_f32: {
+                if (stack.size() < 4) return STACK_UNDERFLOW;
+                if (address + 4 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
+                u32 value = stack.pop_u32();
+                // Write little-endian to memory
+                memory[address] = value & 0xFF;
+                memory[address + 1] = (value >> 8) & 0xFF;
+                memory[address + 2] = (value >> 16) & 0xFF;
+                memory[address + 3] = (value >> 24) & 0xFF;
+                return STATUS_SUCCESS;
+            }
 #ifdef USE_X64_OPS
             case type_u64:
             case type_i64:
-            case type_f64: return store_from_stack_to_memory_at<u64>(stack, memory, address);
+            case type_f64: {
+                if (stack.size() < 8) return STACK_UNDERFLOW;
+                if (address + 8 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
+                u64 value = stack.pop_u64();
+                // Write little-endian to memory
+                memory[address] = value & 0xFF;
+                memory[address + 1] = (value >> 8) & 0xFF;
+                memory[address + 2] = (value >> 16) & 0xFF;
+                memory[address + 3] = (value >> 24) & 0xFF;
+                memory[address + 4] = (value >> 32) & 0xFF;
+                memory[address + 5] = (value >> 40) & 0xFF;
+                memory[address + 6] = (value >> 48) & 0xFF;
+                memory[address + 7] = (value >> 56) & 0xFF;
+                return STATUS_SUCCESS;
+            }
 #endif // USE_X64_OPS
             default: return INVALID_DATA_TYPE;
         }
