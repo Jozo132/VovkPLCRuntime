@@ -138,6 +138,8 @@ enum PLCRuntimeInstructionSet {
     CLEAR,              // Clear the stack
     LOAD_FROM,          // Load value from memory to stack using immediate address. Example: [ u8 LOAD_FROM, u8 type, u16 address ]
     MOVE_TO,            // Move value from stack to memory using immediate address. Example: [ u8 MOVE_TO, u8 type, u16 address ]
+    INC_MEM,            // Increment value in memory by 1. Example: [ u8 INC_MEM, u8 type, u16 address ]
+    DEC_MEM,            // Decrement value in memory by 1. Example: [ u8 DEC_MEM, u8 type, u16 address ]
 
     // Arithmetic operations
     ADD = 0x20,         // Addition, requires data type as argument

@@ -356,6 +356,22 @@ public:
         return 2 + sizeof(MY_PTR_t);
     }
 
+    // Increment value in memory by 1
+    static u8 push_inc(u8* location, PLCRuntimeInstructionSet type, MY_PTR_t address) {
+        location[0] = INC_MEM;
+        location[1] = type;
+        for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[i + 2] = (address >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
+        return 2 + sizeof(MY_PTR_t);
+    }
+
+    // Decrement value in memory by 1
+    static u8 push_dec(u8* location, PLCRuntimeInstructionSet type, MY_PTR_t address) {
+        location[0] = DEC_MEM;
+        location[1] = type;
+        for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[i + 2] = (address >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
+        return 2 + sizeof(MY_PTR_t);
+    }
+
     // Make a duplica of the top of the stack
     static u8 push_copy(u8* location, PLCRuntimeInstructionSet type = type_u8) {
         location[0] = COPY;

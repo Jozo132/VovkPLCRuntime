@@ -2453,6 +2453,26 @@ public:
                             }
                             i++; line.size = InstructionCompiler::push_move_to(bytecode, type, address_value); _line_push;
                         }
+                        if (hasNext && token.endsWith(".inc")) {
+                            int address_value = 0;
+                            bool e_addr = addressFromToken(token_p1, address_value);
+                            if (e_addr) {
+                                bool rewind = false;
+                                if (buildErrorExpectedIntSameLine(token, token_p1, rewind)) return true;
+                                if (rewind) continue;
+                            }
+                            i++; line.size = InstructionCompiler::push_inc(bytecode, type, address_value); _line_push;
+                        }
+                        if (hasNext && token.endsWith(".dec")) {
+                            int address_value = 0;
+                            bool e_addr = addressFromToken(token_p1, address_value);
+                            if (e_addr) {
+                                bool rewind = false;
+                                if (buildErrorExpectedIntSameLine(token, token_p1, rewind)) return true;
+                                if (rewind) continue;
+                            }
+                            i++; line.size = InstructionCompiler::push_dec(bytecode, type, address_value); _line_push;
+                        }
                         // if (hasNext && token.endsWith(".load")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::pushGET(bytecode, value_int, type); _line_push; }
                         // if (hasNext && token.endsWith(".store")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::pushPUT(bytecode, value_int, type); _line_push; }
                         if (hasNext && token.endsWith(".load")) { line.size = InstructionCompiler::push_load(bytecode, type); _line_push; }

@@ -548,6 +548,214 @@ namespace PLCMethods {
         }
     }
 
+    // Increment value in memory by 1
+    // Memory is little-endian
+    RuntimeError INC_MEM(u8* memory, u8* program, u32 prog_size, u32& index) {
+        u32 size = 1 + sizeof(MY_PTR_t);
+        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        u8 data_type = 0;
+        extract_status = ProgramExtract.type_u8(program, prog_size, index, &data_type);
+        if (extract_status != STATUS_SUCCESS) return extract_status;
+        MY_PTR_t address = 0;
+        extract_status = ProgramExtract.type_pointer(program, prog_size, index, &address);
+        if (extract_status != STATUS_SUCCESS) return extract_status;
+        address = reverse_byte_order(address);
+        
+        switch (data_type) {
+            case type_bool:
+            case type_u8: {
+                if (address + 1 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
+                memory[address]++;
+                return STATUS_SUCCESS;
+            }
+            case type_i8: {
+                if (address + 1 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
+                i8 value = (i8)memory[address];
+                value++;
+                memory[address] = (u8)value;
+                return STATUS_SUCCESS;
+            }
+            case type_u16:
+            case type_i16: {
+                if (address + 2 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
+                u16 value = memory[address] | ((u16)memory[address + 1] << 8);
+                value++;
+                memory[address] = value & 0xFF;
+                memory[address + 1] = (value >> 8) & 0xFF;
+                return STATUS_SUCCESS;
+            }
+            case type_u32:
+            case type_i32: {
+                if (address + 4 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
+                u32 value = memory[address] | ((u32)memory[address + 1] << 8) |
+                            ((u32)memory[address + 2] << 16) | ((u32)memory[address + 3] << 24);
+                value++;
+                memory[address] = value & 0xFF;
+                memory[address + 1] = (value >> 8) & 0xFF;
+                memory[address + 2] = (value >> 16) & 0xFF;
+                memory[address + 3] = (value >> 24) & 0xFF;
+                return STATUS_SUCCESS;
+            }
+            case type_f32: {
+                if (address + 4 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
+                u32 bits = memory[address] | ((u32)memory[address + 1] << 8) |
+                           ((u32)memory[address + 2] << 16) | ((u32)memory[address + 3] << 24);
+                float value; memcpy(&value, &bits, 4);
+                value += 1.0f;
+                memcpy(&bits, &value, 4);
+                memory[address] = bits & 0xFF;
+                memory[address + 1] = (bits >> 8) & 0xFF;
+                memory[address + 2] = (bits >> 16) & 0xFF;
+                memory[address + 3] = (bits >> 24) & 0xFF;
+                return STATUS_SUCCESS;
+            }
+#ifdef USE_X64_OPS
+            case type_u64:
+            case type_i64: {
+                if (address + 8 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
+                u64 value = memory[address] | ((u64)memory[address + 1] << 8) |
+                            ((u64)memory[address + 2] << 16) | ((u64)memory[address + 3] << 24) |
+                            ((u64)memory[address + 4] << 32) | ((u64)memory[address + 5] << 40) |
+                            ((u64)memory[address + 6] << 48) | ((u64)memory[address + 7] << 56);
+                value++;
+                memory[address] = value & 0xFF;
+                memory[address + 1] = (value >> 8) & 0xFF;
+                memory[address + 2] = (value >> 16) & 0xFF;
+                memory[address + 3] = (value >> 24) & 0xFF;
+                memory[address + 4] = (value >> 32) & 0xFF;
+                memory[address + 5] = (value >> 40) & 0xFF;
+                memory[address + 6] = (value >> 48) & 0xFF;
+                memory[address + 7] = (value >> 56) & 0xFF;
+                return STATUS_SUCCESS;
+            }
+            case type_f64: {
+                if (address + 8 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
+                u64 bits = memory[address] | ((u64)memory[address + 1] << 8) |
+                           ((u64)memory[address + 2] << 16) | ((u64)memory[address + 3] << 24) |
+                           ((u64)memory[address + 4] << 32) | ((u64)memory[address + 5] << 40) |
+                           ((u64)memory[address + 6] << 48) | ((u64)memory[address + 7] << 56);
+                double value; memcpy(&value, &bits, 8);
+                value += 1.0;
+                memcpy(&bits, &value, 8);
+                memory[address] = bits & 0xFF;
+                memory[address + 1] = (bits >> 8) & 0xFF;
+                memory[address + 2] = (bits >> 16) & 0xFF;
+                memory[address + 3] = (bits >> 24) & 0xFF;
+                memory[address + 4] = (bits >> 32) & 0xFF;
+                memory[address + 5] = (bits >> 40) & 0xFF;
+                memory[address + 6] = (bits >> 48) & 0xFF;
+                memory[address + 7] = (bits >> 56) & 0xFF;
+                return STATUS_SUCCESS;
+            }
+#endif // USE_X64_OPS
+            default: return INVALID_DATA_TYPE;
+        }
+    }
+
+    // Decrement value in memory by 1
+    // Memory is little-endian
+    RuntimeError DEC_MEM(u8* memory, u8* program, u32 prog_size, u32& index) {
+        u32 size = 1 + sizeof(MY_PTR_t);
+        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        u8 data_type = 0;
+        extract_status = ProgramExtract.type_u8(program, prog_size, index, &data_type);
+        if (extract_status != STATUS_SUCCESS) return extract_status;
+        MY_PTR_t address = 0;
+        extract_status = ProgramExtract.type_pointer(program, prog_size, index, &address);
+        if (extract_status != STATUS_SUCCESS) return extract_status;
+        address = reverse_byte_order(address);
+        
+        switch (data_type) {
+            case type_bool:
+            case type_u8: {
+                if (address + 1 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
+                memory[address]--;
+                return STATUS_SUCCESS;
+            }
+            case type_i8: {
+                if (address + 1 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
+                i8 value = (i8)memory[address];
+                value--;
+                memory[address] = (u8)value;
+                return STATUS_SUCCESS;
+            }
+            case type_u16:
+            case type_i16: {
+                if (address + 2 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
+                u16 value = memory[address] | ((u16)memory[address + 1] << 8);
+                value--;
+                memory[address] = value & 0xFF;
+                memory[address + 1] = (value >> 8) & 0xFF;
+                return STATUS_SUCCESS;
+            }
+            case type_u32:
+            case type_i32: {
+                if (address + 4 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
+                u32 value = memory[address] | ((u32)memory[address + 1] << 8) |
+                            ((u32)memory[address + 2] << 16) | ((u32)memory[address + 3] << 24);
+                value--;
+                memory[address] = value & 0xFF;
+                memory[address + 1] = (value >> 8) & 0xFF;
+                memory[address + 2] = (value >> 16) & 0xFF;
+                memory[address + 3] = (value >> 24) & 0xFF;
+                return STATUS_SUCCESS;
+            }
+            case type_f32: {
+                if (address + 4 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
+                u32 bits = memory[address] | ((u32)memory[address + 1] << 8) |
+                           ((u32)memory[address + 2] << 16) | ((u32)memory[address + 3] << 24);
+                float value; memcpy(&value, &bits, 4);
+                value -= 1.0f;
+                memcpy(&bits, &value, 4);
+                memory[address] = bits & 0xFF;
+                memory[address + 1] = (bits >> 8) & 0xFF;
+                memory[address + 2] = (bits >> 16) & 0xFF;
+                memory[address + 3] = (bits >> 24) & 0xFF;
+                return STATUS_SUCCESS;
+            }
+#ifdef USE_X64_OPS
+            case type_u64:
+            case type_i64: {
+                if (address + 8 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
+                u64 value = memory[address] | ((u64)memory[address + 1] << 8) |
+                            ((u64)memory[address + 2] << 16) | ((u64)memory[address + 3] << 24) |
+                            ((u64)memory[address + 4] << 32) | ((u64)memory[address + 5] << 40) |
+                            ((u64)memory[address + 6] << 48) | ((u64)memory[address + 7] << 56);
+                value--;
+                memory[address] = value & 0xFF;
+                memory[address + 1] = (value >> 8) & 0xFF;
+                memory[address + 2] = (value >> 16) & 0xFF;
+                memory[address + 3] = (value >> 24) & 0xFF;
+                memory[address + 4] = (value >> 32) & 0xFF;
+                memory[address + 5] = (value >> 40) & 0xFF;
+                memory[address + 6] = (value >> 48) & 0xFF;
+                memory[address + 7] = (value >> 56) & 0xFF;
+                return STATUS_SUCCESS;
+            }
+            case type_f64: {
+                if (address + 8 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
+                u64 bits = memory[address] | ((u64)memory[address + 1] << 8) |
+                           ((u64)memory[address + 2] << 16) | ((u64)memory[address + 3] << 24) |
+                           ((u64)memory[address + 4] << 32) | ((u64)memory[address + 5] << 40) |
+                           ((u64)memory[address + 6] << 48) | ((u64)memory[address + 7] << 56);
+                double value; memcpy(&value, &bits, 8);
+                value -= 1.0;
+                memcpy(&bits, &value, 8);
+                memory[address] = bits & 0xFF;
+                memory[address + 1] = (bits >> 8) & 0xFF;
+                memory[address + 2] = (bits >> 16) & 0xFF;
+                memory[address + 3] = (bits >> 24) & 0xFF;
+                memory[address + 4] = (bits >> 32) & 0xFF;
+                memory[address + 5] = (bits >> 40) & 0xFF;
+                memory[address + 6] = (bits >> 48) & 0xFF;
+                memory[address + 7] = (bits >> 56) & 0xFF;
+                return STATUS_SUCCESS;
+            }
+#endif // USE_X64_OPS
+            default: return INVALID_DATA_TYPE;
+        }
+    }
+
 
     // Duplicate the value on top of the stack
     RuntimeError COPY(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
