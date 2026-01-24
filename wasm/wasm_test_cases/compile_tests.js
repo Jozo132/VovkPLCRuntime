@@ -132,6 +132,7 @@ const readStream = () => {
 }
 
 const verbose = process.argv.includes('--verbose') || process.argv.includes('-v')
+const testFilter = process.argv.find(arg => !arg.startsWith('-') && arg !== process.argv[0] && arg !== process.argv[1])
 
 /** @param { string } file_name * @returns { Promise<any> } */
 const instantiate_wasm = async file_name => {
@@ -152,8 +153,16 @@ const instantiate_wasm = async file_name => {
 
 const main = async () => {
     const all_files = fs.readdirSync(__dirname)
-    const file_names = all_files.filter(file => file.endsWith('.cpp')).map(file => file.slice(0, -4))
+    let file_names = all_files.filter(file => file.endsWith('.cpp')).map(file => file.slice(0, -4))
     if (!file_names.length) throw new Error('No "*.cpp" files found')
+    
+    // Filter by test name if provided
+    if (testFilter) {
+        file_names = file_names.filter(name => name.toLowerCase().includes(testFilter.toLowerCase()))
+        if (!file_names.length) throw new Error(`No test files matching "${testFilter}" found`)
+        console.log(`Filtering tests by: "${testFilter}"`)
+    }
+    
     const head_1 = `################ Compiling ${file_names.length} test source file${file_names.length === 1 ? '' : 's'} ################`
     console.log(head_1)
     const build_dir_exists = fs.existsSync(path.join(__dirname, 'build'))

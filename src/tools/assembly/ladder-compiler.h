@@ -278,6 +278,7 @@ public:
         char type[16];       // contact, coil, coil_set, coil_rset, move, math_add, etc.
         char address[32];    // I0.0, Q0.0, M0.0, MW10, MD20, etc.
         bool inverted;       // Normally closed for contacts, negated for coils
+        bool passThrough;    // Element doesn't modify RLO (coils, math, inc/dec)
         char trigger[16];    // normal, rising, falling
         uint32_t preset;     // Timer/Counter preset value
         char preset_str[32]; // Timer preset as literal string (e.g. T#5s)
@@ -293,6 +294,7 @@ public:
             type[0] = '\0';
             address[0] = '\0';
             inverted = false;
+            passThrough = false;
             trigger[0] = 'n'; trigger[1] = 'o'; trigger[2] = 'r'; trigger[3] = 'm';
             trigger[4] = 'a'; trigger[5] = 'l'; trigger[6] = '\0';
             preset = 0;
@@ -478,6 +480,26 @@ public:
     // Check if element type is an increment/decrement operation
     bool isIncDecOp(const char* type) {
         return strEqI(type, "inc") || strEqI(type, "dec");
+    }
+    
+    // Check if element is a pass-through element (doesn't modify RLO)
+    // Pass-through elements: coil, coil_set, coil_rset, coil_n, inc, dec, 
+    // math_add, math_sub, math_mul, math_div, math_mod, math_neg, math_abs, move
+    bool isPassThroughType(const char* type) {
+        return isCoil(type) || isIncDecOp(type) || isMathOp(type) || isMoveOp(type);
+    }
+    
+    // Check if element is pass-through (explicit flag or by type)
+    bool isPassThrough(const LadderElement& elem) {
+        return elem.passThrough || isPassThroughType(elem.type);
+    }
+    
+    // Check if element type modifies RLO (contact, timer, counter, compare, or block)
+    bool modifiesRLO(const char* type) {
+        return strEqI(type, "contact") || strEqI(type, "contact_nc") || 
+               strEqI(type, "contact_no") || strEqI(type, "contact_inverted") ||
+               isTimerOrCounter(type) || isCompareOp(type) ||
+               strEqI(type, "or");
     }
     
     // Convert data type string to DataType enum
@@ -868,6 +890,8 @@ public:
                 if (!readString(elem.in2, sizeof(elem.in2))) return false;
             } else if (strEqI(key, "out") || strEqI(key, "output")) {
                 if (!readString(elem.out, sizeof(elem.out))) return false;
+            } else if (strEqI(key, "passThrough") || strEqI(key, "pass_through")) {
+                if (!readBool(elem.passThrough)) return false;
             } else {
                 // Skip unknown property
                 skipValue();
@@ -1285,9 +1309,9 @@ public:
             }
         }
         
-        // If no TAPs, process normally (old behavior)
+        // If no TAPs, process normally
         if (tap_count == 0) {
-            return buildNetworkSegment(elements, count, branches, branch_count, false);
+            return buildNetworkSegmentGrouped(elements, count, branches, branch_count, false);
         }
         
         // Process each segment
@@ -1304,7 +1328,7 @@ public:
                 Branch* seg_branches = (t == 0) ? branches : nullptr;
                 int seg_branch_count = (t == 0) ? branch_count : 0;
                 
-                if (!buildNetworkSegment(&elements[segment_start], segment_len, seg_branches, seg_branch_count, add_tap)) {
+                if (!buildNetworkSegmentGrouped(&elements[segment_start], segment_len, seg_branches, seg_branch_count, add_tap)) {
                     return false;
                 }
             }
@@ -1315,6 +1339,332 @@ public:
         return true;
     }
     
+    // Build a single action from an element and add it to the store
+    // Returns the action index or NIR_NONE on error
+    uint32_t buildActionFromElement(LadderElement& elem) {
+        if (isCoil(elem.type)) {
+            nir::ActionKind kind = nir::ACT_ASSIGN;
+            if (strEqI(elem.type, "coil_set")) {
+                kind = nir::ACT_SET;
+            } else if (strEqI(elem.type, "coil_rset")) {
+                kind = nir::ACT_RESET;
+            }
+            
+            uint32_t target_sym = nir::g_store.addSymbol(elem.address);
+            if (target_sym == nir::NIR_NONE) return nir::NIR_NONE;
+            
+            return nir::g_store.addAction(kind, target_sym);
+        }
+        else if (isMathOp(elem.type) || isMoveOp(elem.type) || isIncDecOp(elem.type)) {
+            // Determine data type
+            nir::DataType dt = nir::DT_I16;
+            if (elem.data_type[0] != '\0') {
+                dt = parseDataType(elem.data_type);
+            } else if (isIncDecOp(elem.type)) {
+                dt = inferDataTypeFromAddress(elem.address);
+            } else {
+                if (elem.out[0] != '\0') {
+                    dt = inferDataTypeFromAddress(elem.out);
+                }
+                if (dt == nir::DT_I16 && elem.in1[0] != '\0') {
+                    nir::DataType in_dt = inferDataTypeFromAddress(elem.in1);
+                    if (in_dt != nir::DT_I16) dt = in_dt;
+                }
+            }
+            
+            // Parse operands
+            uint32_t in1_expr = nir::NIR_NONE;
+            uint32_t in2_expr = nir::NIR_NONE;
+            uint32_t out_sym = nir::NIR_NONE;
+            
+            if (isIncDecOp(elem.type)) {
+                in1_expr = parseOperand(elem.address, dt);
+                char addr[32];
+                stripTypePrefix(elem.address, addr);
+                out_sym = nir::g_store.addSymbol(addr);
+            } else {
+                if (elem.in1[0] != '\0') {
+                    in1_expr = parseOperand(elem.in1, dt);
+                }
+                if (elem.in2[0] != '\0') {
+                    in2_expr = parseOperand(elem.in2, dt);
+                }
+                if (elem.out[0] != '\0') {
+                    char addr[32];
+                    stripTypePrefix(elem.out, addr);
+                    out_sym = nir::g_store.addSymbol(addr);
+                }
+            }
+            
+            if (out_sym == nir::NIR_NONE) return nir::NIR_NONE;
+            
+            uint32_t value_expr = nir::NIR_NONE;
+            
+            if (isMoveOp(elem.type)) {
+                value_expr = in1_expr;
+            } else if (isIncDecOp(elem.type)) {
+                uint32_t one_expr = parseOperand("#1", dt);
+                nir::MathOp op = strEqI(elem.type, "inc") ? nir::MATH_ADD : nir::MATH_SUB;
+                value_expr = nir::g_store.addMath(op, dt, in1_expr, one_expr);
+            } else if (isMathOp(elem.type)) {
+                nir::MathOp op = getMathOp(elem.type);
+                if (op == nir::MATH_NEG || op == nir::MATH_ABS) {
+                    value_expr = nir::g_store.addMath(op, dt, in1_expr, nir::NIR_NONE);
+                } else {
+                    value_expr = nir::g_store.addMath(op, dt, in1_expr, in2_expr);
+                }
+            }
+            
+            if (value_expr == nir::NIR_NONE) return nir::NIR_NONE;
+            return nir::g_store.addMoveAction(out_sym, value_expr, dt);
+        }
+        
+        return nir::NIR_NONE;
+    }
+    
+    // New implementation that groups pass-through elements
+    bool buildNetworkSegmentGrouped(LadderElement* elements, int count, Branch* branches, int branch_count, bool add_tap) {
+        if (count == 0 && branch_count == 0 && !add_tap) return true;
+        
+        // Track current condition expression (RLO source)
+        uint32_t current_condition = nir::NIR_NONE;
+        
+        // Accumulator for AND children when building condition
+        static const int MAX_AND_CHILDREN = 64;
+        uint32_t and_children[MAX_AND_CHILDREN];
+        int and_count = 0;
+        
+        // Track action start and count for current pass-through group
+        uint32_t action_start = nir::g_store.action_count;
+        uint16_t action_cnt = 0;
+        
+        // Helper to finalize condition from accumulated AND children
+        auto finalizeCondition = [&]() {
+            if (and_count == 0) return;
+            if (and_count == 1) {
+                current_condition = and_children[0];
+            } else {
+                current_condition = nir::g_store.addAnd(and_children, and_count);
+            }
+            and_count = 0;
+        };
+        
+        // Helper to flush pending pass-through actions as a network
+        auto flushPassThroughActions = [&](bool with_tap) {
+            // Create network with current condition and accumulated actions
+            if (action_cnt > 0 || current_condition != nir::NIR_NONE) {
+                nir::g_store.addNetwork(current_condition, action_start, action_cnt);
+            }
+            
+            // Reset for next group
+            action_start = nir::g_store.action_count;
+            action_cnt = 0;
+            
+            // Add TAP as a separate unconditional action AFTER the skip block
+            // TAP must execute regardless of condition to pass RLO forward
+            if (with_tap) {
+                uint32_t tap_action_start = nir::g_store.action_count;
+                uint32_t tap_idx = nir::g_store.addAction(nir::ACT_TAP, nir::NIR_NONE);
+                if (tap_idx != nir::NIR_NONE) {
+                    // TAP network has no condition - always executes
+                    nir::g_store.addNetwork(nir::NIR_NONE, tap_action_start, 1);
+                }
+                // Reset again after TAP
+                action_start = nir::g_store.action_count;
+            }
+        };
+        
+        // Process elements in order
+        for (int i = 0; i < count; i++) {
+            LadderElement& elem = elements[i];
+            
+            // Skip TAP elements - handled by buildNetworkFromElements
+            if (strEqI(elem.type, "tap")) continue;
+            
+            // Check if this is a pass-through element
+            if (isPassThrough(elem)) {
+                // Finalize any pending condition first
+                finalizeCondition();
+                
+                // Build action for this element
+                uint32_t action_idx = buildActionFromElement(elem);
+                if (action_idx != nir::NIR_NONE) {
+                    action_cnt++;
+                }
+            }
+            // Contact - modifies RLO, AND with current condition
+            else if (strEqI(elem.type, "contact") || strEqI(elem.type, "contact_nc") || 
+                     strEqI(elem.type, "contact_no")) {
+                // If we have pending pass-through actions with a condition, flush them first
+                finalizeCondition();
+                if (action_cnt > 0) {
+                    flushPassThroughActions(false);
+                    // Condition carries forward after flush
+                }
+                
+                // Build contact expression
+                bool inverted = elem.inverted || strEqI(elem.type, "contact_nc");
+                uint32_t sym_idx = nir::g_store.addSymbol(elem.address);
+                if (sym_idx == nir::NIR_NONE) return false;
+                
+                uint32_t leaf_expr = nir::g_store.addLeaf(sym_idx, inverted);
+                if (leaf_expr == nir::NIR_NONE) return false;
+                
+                // Handle edge detection
+                if (strEqI(elem.trigger, "rising") || strEqI(elem.trigger, "positive")) {
+                    char edge_mem[16];
+                    generateEdgeAddress(edge_mem);
+                    uint32_t edge_sym = nir::g_store.addSymbol(edge_mem, nir::SYM_EDGE);
+                    leaf_expr = nir::g_store.addCallBool(nir::CALL_FP, leaf_expr, edge_sym);
+                } else if (strEqI(elem.trigger, "falling") || strEqI(elem.trigger, "negative")) {
+                    char edge_mem[16];
+                    generateEdgeAddress(edge_mem);
+                    uint32_t edge_sym = nir::g_store.addSymbol(edge_mem, nir::SYM_EDGE);
+                    leaf_expr = nir::g_store.addCallBool(nir::CALL_FN, leaf_expr, edge_sym);
+                } else if (strEqI(elem.trigger, "change") || strEqI(elem.trigger, "any")) {
+                    char edge_mem[16];
+                    generateEdgeAddress(edge_mem);
+                    uint32_t edge_sym = nir::g_store.addSymbol(edge_mem, nir::SYM_EDGE);
+                    leaf_expr = nir::g_store.addCallBool(nir::CALL_FX, leaf_expr, edge_sym);
+                }
+                
+                // If we have an existing condition, AND with this contact
+                if (current_condition != nir::NIR_NONE) {
+                    and_children[and_count++] = current_condition;
+                    current_condition = nir::NIR_NONE;
+                }
+                if (and_count < MAX_AND_CHILDREN) {
+                    and_children[and_count++] = leaf_expr;
+                }
+            }
+            // OR block or precompiled expression
+            else if (strEqI(elem.type, "or") || elem.precompiled_expr != nir::NIR_NONE) {
+                finalizeCondition();
+                if (action_cnt > 0) {
+                    flushPassThroughActions(false);
+                }
+                
+                uint32_t expr = elementToExpr(elem);
+                if (expr != nir::NIR_NONE) {
+                    if (current_condition != nir::NIR_NONE) {
+                        and_children[and_count++] = current_condition;
+                        current_condition = nir::NIR_NONE;
+                    }
+                    if (and_count < MAX_AND_CHILDREN) {
+                        and_children[and_count++] = expr;
+                    }
+                }
+            }
+            // Timer/Counter - passes through RLO but Q output replaces RLO
+            else if (isTimerOrCounter(elem.type)) {
+                // Finalize current condition as input to timer/counter
+                finalizeCondition();
+                if (action_cnt > 0) {
+                    flushPassThroughActions(false);
+                }
+                
+                // Timer/counter takes current condition as input and produces new condition
+                uint32_t call_expr = elementToExpr(elem, current_condition);
+                if (call_expr != nir::NIR_NONE) {
+                    current_condition = call_expr;
+                }
+            }
+            // Compare operation - result replaces RLO
+            else if (isCompareOp(elem.type)) {
+                finalizeCondition();
+                if (action_cnt > 0) {
+                    flushPassThroughActions(false);
+                }
+                
+                // Compare operations produce a new boolean condition
+                // Build the compare expression and use it as the new condition
+                nir::DataType dt = nir::DT_I16;
+                if (elem.data_type[0] != '\0') {
+                    dt = parseDataType(elem.data_type);
+                } else if (elem.in1[0] != '\0') {
+                    dt = inferDataTypeFromAddress(elem.in1);
+                }
+                
+                uint32_t in1_expr = nir::NIR_NONE;
+                uint32_t in2_expr = nir::NIR_NONE;
+                if (elem.in1[0] != '\0') {
+                    in1_expr = parseOperand(elem.in1, dt);
+                }
+                if (elem.in2[0] != '\0') {
+                    in2_expr = parseOperand(elem.in2, dt);
+                }
+                
+                nir::CompareOp op = getCompareOp(elem.type);
+                uint32_t cmp_expr = nir::g_store.addCompare(op, dt, in1_expr, in2_expr);
+                
+                // AND the compare result with the existing condition if any
+                if (current_condition != nir::NIR_NONE && cmp_expr != nir::NIR_NONE) {
+                    uint32_t children[2] = { current_condition, cmp_expr };
+                    current_condition = nir::g_store.addAnd(children, 2);
+                } else if (cmp_expr != nir::NIR_NONE) {
+                    current_condition = cmp_expr;
+                }
+            }
+        }
+        
+        // Handle OR branches if present
+        if (branch_count > 0) {
+            finalizeCondition();
+            
+            uint32_t or_children[MAX_BRANCHES + 1];
+            int or_count = 0;
+            
+            // Current condition is first branch
+            if (current_condition != nir::NIR_NONE) {
+                or_children[or_count++] = current_condition;
+            }
+            
+            // Add each branch
+            for (int b = 0; b < branch_count && or_count < MAX_BRANCHES + 1; b++) {
+                Branch& br = branches[b];
+                uint32_t branch_expr = buildLogicExpression(br.elements, br.element_count);
+                if (branch_expr != nir::NIR_NONE) {
+                    or_children[or_count++] = branch_expr;
+                }
+            }
+            
+            // Create OR expression
+            if (or_count == 1) {
+                current_condition = or_children[0];
+            } else if (or_count > 1) {
+                current_condition = nir::g_store.addOr(or_children, or_count);
+            }
+        } else {
+            finalizeCondition();
+        }
+        
+        // Flush any remaining pass-through actions
+        flushPassThroughActions(add_tap);
+        
+        // Process deferred coil actions
+        for (int i = 0; i < deferred_action_count; i++) {
+            DeferredAction& da = deferred_actions[i];
+            if (strEqI(da.type, "tap")) continue;
+            
+            nir::ActionKind kind = nir::ACT_ASSIGN;
+            if (strEqI(da.type, "coil_set")) kind = nir::ACT_SET;
+            else if (strEqI(da.type, "coil_rset")) kind = nir::ACT_RESET;
+            
+            uint32_t target_sym = nir::g_store.addSymbol(da.address);
+            if (target_sym == nir::NIR_NONE) continue;
+            
+            uint32_t def_action_start = nir::g_store.action_count;
+            uint32_t action_idx = nir::g_store.addAction(kind, target_sym);
+            if (action_idx == nir::NIR_NONE) continue;
+            
+            nir::g_store.addNetwork(da.condition, def_action_start, 1);
+        }
+        
+        clearDeferredActions();
+        return true;
+    }
+    
+    // Legacy implementation kept for reference (now deprecated)
     bool buildNetworkSegment(LadderElement* elements, int count, Branch* branches, int branch_count, bool add_tap) {
         if (count == 0 && branch_count == 0 && !add_tap) return true;
         
@@ -2950,15 +3300,31 @@ public:
         return false;
     }
     
+    // Helper: check if we have only coil actions (no MOVE actions)
+    // Coil-only networks can be emitted without JCN since coils consume RLO
+    bool hasOnlyCoilActions(nir::Network& net) {
+        for (uint16_t i = 0; i < net.action_cnt; i++) {
+            nir::Action& action = nir::g_store.actions[net.action_ofs + i];
+            if (action.kind != nir::ACT_ASSIGN && action.kind != nir::ACT_SET && 
+                action.kind != nir::ACT_RESET && action.kind != nir::ACT_TAP) {
+                return false;  // Has non-coil action
+            }
+        }
+        return true;
+    }
+    
     void emitNetwork(nir::Network& net) {
         // Emit condition expression
         if (net.condition_expr != nir::NIR_NONE) {
             emitExpr(net.condition_expr, true);
         }
         
-        // Check if we need conditional execution for MOVE actions
-        // MOVE actions (math/transfer) don't naturally use RLO, so we need
-        // to wrap them with JCN to skip when RLO=0
+        // Determine if we need a JCN skip block
+        // JCN is needed when:
+        // - We have a condition AND
+        // - We have any MOVE actions (math/transfer) since they don't use RLO
+        // 
+        // Coil-only networks can use native RLO consumption without JCN
         bool needsConditionalSkip = (net.condition_expr != nir::NIR_NONE) && hasMoveAction(net);
         int skipLabel = 0;
         
