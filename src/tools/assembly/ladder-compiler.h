@@ -475,6 +475,11 @@ public:
         return strEqI(type, "move") || strEqI(type, "transfer");
     }
     
+    // Check if element type is an increment/decrement operation
+    bool isIncDecOp(const char* type) {
+        return strEqI(type, "inc") || strEqI(type, "dec");
+    }
+    
     // Convert data type string to DataType enum
     nir::DataType parseDataType(const char* dt) {
         if (strEqI(dt, "u8") || strEqI(dt, "byte")) return nir::DT_U8;
@@ -556,7 +561,7 @@ public:
         }
         
         // It's an address - create a load expression
-        // Strip type prefix (MW10 -> 10) for consistent symbol lookup
+        // Strip type prefix (MW10 -> M10) for consistent symbol lookup
         char stripped[64];
         stripTypePrefix(operand, stripped);
         uint32_t sym_idx = nir::g_store.addSymbol(stripped);
@@ -595,8 +600,9 @@ public:
             
             // Check for typed addresses (MW, MD, MR, MB, ML)
             if (c1 == 'W' || c1 == 'D' || c1 == 'R' || c1 == 'B' || c1 == 'L') {
-                // Skip the type prefix, copy the rest
-                int i = 0;
+                // Keep the first character, skip the type prefix, copy the rest
+                out[0] = addr[0];
+                int i = 1;
                 int j = 2;  // Start after type prefix
                 while (addr[j] != '\0') {
                     out[i++] = addr[j++];
@@ -612,7 +618,9 @@ public:
             
             // Check for typed addresses (IW, ID, QW, QD)
             if (c1 == 'W' || c1 == 'D') {
-                int i = 0;
+                // Keep the first character, skip the type prefix, copy the rest
+                out[0] = addr[0];
+                int i = 1;
                 int j = 2;
                 while (addr[j] != '\0') {
                     out[i++] = addr[j++];
@@ -1166,7 +1174,7 @@ public:
             }
             
             // Skip math/compare/move elements - they generate actions, not boolean expressions
-            if (isMathOp(elem.type) || isCompareOp(elem.type) || isMoveOp(elem.type)) {
+            if (isMathOp(elem.type) || isCompareOp(elem.type) || isMoveOp(elem.type) || isIncDecOp(elem.type)) {
                 continue;
             }
             
@@ -1329,7 +1337,7 @@ public:
                 }
             }
             // Identify math, compare, and move elements
-            else if (isMathOp(type) || isCompareOp(type) || isMoveOp(type)) {
+            else if (isMathOp(type) || isCompareOp(type) || isMoveOp(type) || isIncDecOp(type)) {
                 if (math_count < MAX_MATH_ELEMS) {
                     math_indices[math_count++] = i;
                 }
@@ -1402,6 +1410,9 @@ public:
             nir::DataType dt = nir::DT_I16; // Default
             if (elem.data_type[0] != '\0') {
                 dt = parseDataType(elem.data_type);
+            } else if (isIncDecOp(elem.type)) {
+                // Infer from address
+                 dt = inferDataTypeFromAddress(elem.address);
             } else {
                 // Try to infer from output address first
                 if (elem.out[0] != '\0') {
@@ -1419,17 +1430,25 @@ public:
             uint32_t in2_expr = nir::NIR_NONE;
             uint32_t out_sym = nir::NIR_NONE;
             
-            if (elem.in1[0] != '\0') {
-                in1_expr = parseOperand(elem.in1, dt);
-            }
-            if (elem.in2[0] != '\0') {
-                in2_expr = parseOperand(elem.in2, dt);
-            }
-            if (elem.out[0] != '\0') {
-                // Strip type prefix from output address for symbol
+            if (isIncDecOp(elem.type)) {
+                // INC/DEC: address is both input and output
+                in1_expr = parseOperand(elem.address, dt);
+                
                 char addr[32];
-                stripTypePrefix(elem.out, addr);
+                stripTypePrefix(elem.address, addr);
                 out_sym = nir::g_store.addSymbol(addr);
+            } else {
+                if (elem.in1[0] != '\0') {
+                    in1_expr = parseOperand(elem.in1, dt);
+                }
+                if (elem.in2[0] != '\0') {
+                    in2_expr = parseOperand(elem.in2, dt);
+                }
+                if (elem.out[0] != '\0') {
+                    char addr[32];
+                    stripTypePrefix(elem.out, addr);
+                    out_sym = nir::g_store.addSymbol(addr);
+                }
             }
             
             if (out_sym == nir::NIR_NONE) continue;  // Skip if no output
@@ -1439,6 +1458,13 @@ public:
             if (isMoveOp(elem.type)) {
                 // MOVE: just transfer in1 to out
                 value_expr = in1_expr;
+            } else if (isIncDecOp(elem.type)) {
+                // INC/DEC: value = address +/- 1
+                // Use parseOperand to create constant 1 with correct type
+                uint32_t one_expr = parseOperand("#1", dt);
+                
+                nir::MathOp op = strEqI(elem.type, "inc") ? nir::MATH_ADD : nir::MATH_SUB;
+                value_expr = nir::g_store.addMath(op, dt, in1_expr, one_expr);
             } else if (isMathOp(elem.type)) {
                 // Math operation
                 nir::MathOp op = getMathOp(elem.type);
