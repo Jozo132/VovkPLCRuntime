@@ -80,6 +80,9 @@ public:
     // Start at bit 800 = M100.0 to avoid conflict with user memory
     int edge_mem_counter;
     
+    // Current element index being parsed (for branch element tracking)
+    int current_element_index;
+    
     LadderJSONToIRParser() { reset(); }
     
     void reset() {
@@ -89,6 +92,9 @@ public:
         error_msg[0] = '\0';
         has_error = false;
         edge_mem_counter = 800; // Start at M100.0 (bit 800 = 100*8)
+        branch_element_storage_used = 0; // Reset branch element storage
+        branch_element_info_used = 0;    // Reset branch info storage
+        current_element_index = -1;
     }
     
     void setError(const char* msg) {
@@ -274,8 +280,48 @@ public:
     
     // ============ Ladder Element Parsing ============
     
+    struct LadderElement;
+    
+    // Forward-declared struct for branch element data (parallel output branches)
+    static const int MAX_PB_BRANCH_ELEMENTS = 16;  // Max elements per parallel output branch
+    static const int MAX_PARALLEL_BRANCHES = 8;     // Max branches in a parallel output
+    static const int MAX_TOTAL_PB_ELEMENTS = MAX_PARALLEL_BRANCHES * MAX_PB_BRANCH_ELEMENTS;  // 128
+    
+    // Branch element storage (static allocation for embedded compatibility)
+    // This is separate from LadderElement to avoid bloating every element
+    static LadderElement branch_element_storage[MAX_TOTAL_PB_ELEMENTS];
+    static int branch_element_storage_used;
+    
+    // BranchData stores pointer into branch_element_storage
+    struct BranchData {
+        int start_index;      // Index into branch_element_storage
+        int element_count;
+        
+        BranchData() : start_index(-1), element_count(0) {}
+    };
+    
+    // Separate storage for branch metadata (indexed by element that owns it)
+    // This keeps LadderElement size small for stack-allocated arrays
+    static const int MAX_BRANCH_ELEMENTS_TRACKED = 16;  // Max "branch" type elements per rung
+    struct BranchElementInfo {
+        int owner_index;  // Index of the "branch" element in the elements array
+        BranchData branches[MAX_PARALLEL_BRANCHES];
+        int branch_count;
+        
+        void clear() {
+            owner_index = -1;
+            branch_count = 0;
+            for (int i = 0; i < MAX_PARALLEL_BRANCHES; i++) {
+                branches[i].start_index = -1;
+                branches[i].element_count = 0;
+            }
+        }
+    };
+    static BranchElementInfo branch_element_info[MAX_BRANCH_ELEMENTS_TRACKED];
+    static int branch_element_info_used;
+    
     struct LadderElement {
-        char type[16];       // contact, coil, coil_set, coil_rset, move, math_add, etc.
+        char type[16];       // contact, coil, coil_set, coil_rset, move, math_add, branch, etc.
         char address[32];    // I0.0, Q0.0, M0.0, MW10, MD20, etc.
         bool inverted;       // Normally closed for contacts, negated for coils
         bool passThrough;    // Element doesn't modify RLO (coils, math, inc/dec)
@@ -289,6 +335,9 @@ public:
         char in1[32];        // First input operand (address or #constant)
         char in2[32];        // Second input operand (for binary ops)
         char out[32];        // Output address (for move, math result)
+        
+        // Branch element support: index into branch_element_info (-1 if not a branch)
+        int branch_info_index;
         
         void clear() {
             type[0] = '\0';
@@ -304,6 +353,7 @@ public:
             in1[0] = '\0';
             in2[0] = '\0';
             out[0] = '\0';
+            branch_info_index = -1;
         }
     };
     
@@ -500,6 +550,11 @@ public:
                strEqI(type, "contact_no") || strEqI(type, "contact_inverted") ||
                isTimerOrCounter(type) || isCompareOp(type) ||
                strEqI(type, "or");
+    }
+    
+    // Check if element type is a parallel output branch (uses BR stack)
+    bool isParallelOutputBranch(const char* type) {
+        return strEqI(type, "branch");
     }
     
     // Convert data type string to DataType enum
@@ -847,6 +902,86 @@ public:
         return true;
     }
     
+    // Parse branches array for "branch" type elements (parallel outputs using BR stack)
+    // This stores raw elements instead of compiling to expressions
+    bool parseParallelBranchesArray(LadderElement& elem, int elem_index) {
+        if (!expect('[')) { setError("Expected branches array"); return false; }
+        
+        // Allocate a BranchElementInfo entry for this "branch" element
+        if (branch_element_info_used >= MAX_BRANCH_ELEMENTS_TRACKED) {
+            setError("Too many branch elements");
+            return false;
+        }
+        
+        BranchElementInfo& info = branch_element_info[branch_element_info_used];
+        info.clear();
+        info.owner_index = elem_index;
+        elem.branch_info_index = branch_element_info_used;
+        branch_element_info_used++;
+        
+        while (peek() != ']' && peek() != '\0') {
+            if (info.branch_count >= MAX_PARALLEL_BRANCHES) {
+                setError("Too many parallel branches");
+                return false;
+            }
+            
+            // Allocate storage for this branch's elements
+            if (branch_element_storage_used + MAX_PB_BRANCH_ELEMENTS > MAX_TOTAL_PB_ELEMENTS) {
+                setError("Branch element storage exhausted");
+                return false;
+            }
+            
+            BranchData& branch = info.branches[info.branch_count];
+            branch.start_index = branch_element_storage_used;
+            branch.element_count = 0;
+            
+            skipWhitespace();
+            // Each branch is { "elements": [...] }
+            if (!expect('{')) { setError("Expected branch object"); return false; }
+            
+            while (peek() != '}' && peek() != '\0') {
+                char key[32];
+                if (!readString(key, sizeof(key))) return false;
+                if (!expect(':')) { setError("Expected ':'"); return false; }
+                
+                if (strEqI(key, "elements")) {
+                    // Parse elements array for this branch
+                    if (!expect('[')) { setError("Expected elements array"); return false; }
+                    
+                    while (peek() != ']' && peek() != '\0') {
+                        if (branch.element_count >= MAX_PB_BRANCH_ELEMENTS) {
+                            setError("Too many elements in branch");
+                            return false;
+                        }
+                        
+                        if (!parseElement(branch_element_storage[branch_element_storage_used])) return false;
+                        branch.element_count++;
+                        branch_element_storage_used++;
+                        
+                        skipWhitespace();
+                        if (peek() == ',') advance();
+                    }
+                    
+                    if (!expect(']')) { setError("Expected ] for elements"); return false; }
+                } else {
+                    skipValue();
+                }
+                
+                skipWhitespace();
+                if (peek() == ',') advance();
+            }
+            
+            if (!expect('}')) { setError("Expected } for branch"); return false; }
+            info.branch_count++;
+            
+            skipWhitespace();
+            if (peek() == ',') advance();
+        }
+        
+        if (!expect(']')) { setError("Expected ] for branches"); return false; }
+        return true;
+    }
+    
     bool parseElement(LadderElement& elem) {
         elem.clear();
         
@@ -867,8 +1002,16 @@ public:
             if (strEqI(key, "type")) {
                 if (!readString(elem.type, sizeof(elem.type))) return false;
             } else if (strEqI(key, "branches")) {
-                // Recursive OR branches within an element
-                if (!parseRecursiveBranches(elem.precompiled_expr)) return false;
+                // Check if this is a parallel output branch (type: "branch") or OR condition (type: "or")
+                // For "branch" type, we store raw elements in branch_data for BR stack emission
+                // For "or" type, we compile branches to a precompiled_expr
+                if (strEqI(elem.type, "branch")) {
+                    // Parse branches array for parallel output branch element (uses BR stack)
+                    if (!parseParallelBranchesArray(elem, current_element_index)) return false;
+                } else {
+                    // Recursive OR branches within an element (for "or" type)
+                    if (!parseRecursiveBranches(elem.precompiled_expr)) return false;
+                }
             } else if (strEqI(key, "address")) {
                 if (!readString(elem.address, sizeof(elem.address))) return false;
             } else if (strEqI(key, "inverted")) {
@@ -1030,6 +1173,7 @@ public:
                                 return false;
                             }
                             
+                            current_element_index = element_count;
                             if (!parseElement(elements[element_count])) return false;
                             element_count++;
                             
@@ -1042,6 +1186,7 @@ public:
                         }
                     } else {
                         // Parse single element
+                        current_element_index = element_count;
                         if (!parseElement(elements[element_count])) return false;
                         element_count++;
                     }
@@ -1090,6 +1235,7 @@ public:
                                             setError("Too many elements");
                                             return false;
                                         }
+                                        current_element_index = element_count;
                                         if (!parseElement(elements[element_count])) return false;
                                         element_count++;
                                         skipWhitespace();
@@ -1104,6 +1250,7 @@ public:
                                         setError("Too many elements");
                                         return false;
                                     }
+                                    current_element_index = element_count;
                                     if (!parseElement(elements[element_count])) return false;
                                     element_count++;
                                 }
@@ -1604,6 +1751,59 @@ public:
                 } else if (cmp_expr != nir::NIR_NONE) {
                     current_condition = cmp_expr;
                 }
+            }
+            // Parallel output branch element - uses BR stack (SAVE/L BR/DROP BR)
+            else if (isParallelOutputBranch(elem.type)) {
+                // Finalize any pending condition first
+                finalizeCondition();
+                
+                // Flush any pending pass-through actions with the current condition
+                if (action_cnt > 0 || current_condition != nir::NIR_NONE) {
+                    flushPassThroughActions(false);
+                }
+                
+                // Get branch info for this element
+                if (elem.branch_info_index < 0 || elem.branch_info_index >= branch_element_info_used) {
+                    // No branch info - skip this element
+                    continue;
+                }
+                BranchElementInfo& info = branch_element_info[elem.branch_info_index];
+                
+                // Now build the BR stack pattern:
+                // 1. SAVE - push current RLO to BR stack
+                // 2. For each branch: L BR (restore RLO) + branch actions
+                // 3. DROP BR - pop BR stack
+                
+                // Emit SAVE action
+                nir::g_store.addAction(nir::ACT_BR_SAVE, nir::NIR_NONE);
+                action_cnt++;
+                
+                // Process each branch
+                for (int b = 0; b < info.branch_count; b++) {
+                    BranchData& branch = info.branches[b];
+                    
+                    // Emit L BR action to restore RLO for this branch
+                    nir::g_store.addAction(nir::ACT_BR_READ, nir::NIR_NONE);
+                    action_cnt++;
+                    
+                    // Process branch elements (typically coils, inc/dec, etc.)
+                    for (int e = 0; e < branch.element_count; e++) {
+                        LadderElement& be = branch_element_storage[branch.start_index + e];
+                        
+                        // Build action for this branch element
+                        uint32_t branch_action_idx = buildActionFromElement(be);
+                        if (branch_action_idx != nir::NIR_NONE) {
+                            action_cnt++;
+                        }
+                    }
+                }
+                
+                // Emit DROP BR action to pop BR stack
+                nir::g_store.addAction(nir::ACT_BR_DROP, nir::NIR_NONE);
+                action_cnt++;
+                
+                // Reset condition after branch block (RLO is preserved by the BR stack mechanism)
+                current_condition = nir::NIR_NONE;
             }
         }
         
@@ -3235,6 +3435,24 @@ public:
             return;
         }
         
+        // BR stack actions for parallel output branches
+        if (action.kind == nir::ACT_BR_SAVE) {
+            emitIndentedLine("SAVE");
+            return;
+        }
+        if (action.kind == nir::ACT_BR_READ) {
+            emitIndentedLine("L BR");
+            return;
+        }
+        if (action.kind == nir::ACT_BR_DROP) {
+            emitIndentedLine("DROP BR");
+            return;
+        }
+        if (action.kind == nir::ACT_BR_CLR) {
+            emitIndentedLine("CLR BR");
+            return;
+        }
+        
         if (action.kind == nir::ACT_MOVE) {
             nir::DataType dt = (nir::DataType)action.data_type;
             
@@ -3367,6 +3585,15 @@ public:
 };
 
 // ============================================================================
+// Static Storage for Branch Elements (defined outside class)
+// ============================================================================
+
+LadderJSONToIRParser::LadderElement LadderJSONToIRParser::branch_element_storage[LadderJSONToIRParser::MAX_TOTAL_PB_ELEMENTS];
+int LadderJSONToIRParser::branch_element_storage_used = 0;
+LadderJSONToIRParser::BranchElementInfo LadderJSONToIRParser::branch_element_info[LadderJSONToIRParser::MAX_BRANCH_ELEMENTS_TRACKED];
+int LadderJSONToIRParser::branch_element_info_used = 0;
+
+// ============================================================================
 // Global Instances and WASM Exports
 // ============================================================================
 
@@ -3414,6 +3641,13 @@ WASM_EXPORT const char* ladder_get_error() {
     if (ladderJSONParser.has_error) return ladderJSONParser.error_msg;
     if (irToSTLEmitter.has_error) return irToSTLEmitter.error_msg;
     return "";
+}
+
+WASM_EXPORT void ladder_error_to_stream() {
+    const char* err = ladder_get_error();
+    for (int i = 0; err[i] != '\0'; i++) {
+        streamOut(err[i]);
+    }
 }
 
 // ============ Full Pipeline: Ladder JSON -> IR -> STL -> PLCASM -> Bytecode ============

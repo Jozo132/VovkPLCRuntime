@@ -163,6 +163,10 @@ enum ActionKind : uint8_t {
     ACT_RESET  = 3,   // R symbol (reset coil)
     ACT_TAP    = 4,   // TAP - passthrough RLO to next network (VovkPLCRuntime extension)
     ACT_MOVE   = 5,   // T symbol (transfer/move value from stack to memory)
+    ACT_BR_SAVE = 6,  // SAVE - push RLO to BR stack (for parallel output branches)
+    ACT_BR_READ = 7,  // L BR - read (peek) BR stack top and push to RLO
+    ACT_BR_DROP = 8,  // DROP BR - pop (discard) BR stack top
+    ACT_BR_CLR  = 9,  // CLR BR - clear BR stack (reset to 0)
 };
 
 // ============ Preset Kinds ============

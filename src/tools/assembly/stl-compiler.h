@@ -1550,6 +1550,18 @@ public:
             return;
         }
         if (strEq(upperInstr, "CLR") || strEq(upperInstr, "CLEAR")) {
+            // Check if next word is "BR" for CLR BR (clear BR stack)
+            skipWhitespace();
+            char nextWord[16] = "";
+            int lookAheadPos = pos;
+            readIdentifier(nextWord, sizeof(nextWord));
+            toUpper(nextWord);
+            if (strEq(nextWord, "BR")) {
+                emitLine("br.clr");
+                return;
+            }
+            // Not "CLR BR", restore position and handle as normal CLR (RLO=0)
+            pos = lookAheadPos;
             emitLine("u8.const 0");
             network_has_rlo = true;
             return;
@@ -1567,6 +1579,57 @@ public:
             network_has_rlo = true;
             return;
         }
+        
+        // ============ BR Stack Instructions ============
+        // SAVE - Save RLO to BR stack
+        // L BR - Load (read) RLO from BR stack (non-destructive)
+        // DROP BR - Drop top of BR stack
+        // CLR BR - Clear BR stack
+        
+        if (strEq(upperInstr, "SAVE")) {
+            emitLine("br.save");
+            return;
+        }
+        
+        // "L BR" - two tokens: "L" followed by "BR"
+        if (strEq(upperInstr, "L")) {
+            skipWhitespace();
+            char nextWord[16] = "";
+            // Check if next word is "BR"
+            int lookAheadPos = pos;
+            readIdentifier(nextWord, sizeof(nextWord));
+            toUpper(nextWord);
+            if (strEq(nextWord, "BR")) {
+                emitLine("br.read");
+                return;
+            }
+            // Not "L BR", restore position so normal L handler can process it
+            pos = lookAheadPos;
+            // Fall through to normal L handling below
+        }
+        
+        // "DROP BR" - two tokens
+        if (strEq(upperInstr, "DROP")) {
+            skipWhitespace();
+            char nextWord[16] = "";
+            readIdentifier(nextWord, sizeof(nextWord));
+            toUpper(nextWord);
+            if (strEq(nextWord, "BR")) {
+                emitLine("br.drop");
+                return;
+            }
+            // Not "DROP BR", this is an error - DROP without BR is not valid STL
+            setError("Expected 'BR' after 'DROP'");
+            return;
+        }
+        
+        // "CLR BR" - clear BR stack (note: "CLR" by itself is RLO=0, not BR)
+        // We already handled plain "CLR" above, this handles "CLR BR"
+        // Actually, need to check for this before the CLR handler above.
+        // For now, just handle as a special case if we see "CLR" and next is "BR"
+        // Let me move this check to before the CLR handler above
+        // Actually, the architecture here means we've already handled "CLR" above.
+        // We need to look ahead when we see "CLR" to check if "BR" follows.
         
         // = (assign)
         if (upperInstr[0] == '=' && upperInstr[1] == '\0') {
