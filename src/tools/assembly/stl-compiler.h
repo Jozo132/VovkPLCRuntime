@@ -1571,11 +1571,10 @@ public:
             return;
         }
         
-        // TAP (VovkPLCRuntime extension) - passthrough RLO to next rung
-        // The RLO was already preserved by the previous output instruction
-        // (because peekNextIsOutput() returned true for TAP)
-        // We just need to mark that RLO is still valid
+        // TAP (VovkPLCRuntime extension) - duplicate RLO on stack to preserve it
+        // This allows the next instruction to consume one copy while keeping one for further use
         if (strEq(upperInstr, "TAP")) {
+            emitLine("u8.copy");  // Duplicate top of stack (RLO)
             network_has_rlo = true;
             return;
         }

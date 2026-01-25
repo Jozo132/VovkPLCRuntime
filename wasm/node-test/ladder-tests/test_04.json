@@ -1,0 +1,13 @@
+{
+  "comment": "Network 3",
+  "nodes": [
+    { "id": "k85CYuoWFkHyq", "x": 0, "y": 0, "type": "contact", "symbol": "X0.0", "inverted": false, "trigger": "rising" },
+    { "id": "Y3XlL3XN1uCk9", "x": 2, "y": 0, "type": "fb_add", "symbol": "M14", "inverted": false, "dataType": "i16", "in1": "M14", "in2": "#1", "out": "M14" },
+    { "id": "fNLZCQRlQuK8N", "x": 2, "y": 1, "type": "fb_inc", "symbol": "M22", "inverted": false, "dataType": "i16", "address": "M22" },
+    { "id": "wKqJDxMm3JWxb", "x": 3, "y": 0, "type": "fb_add", "symbol": "M14", "inverted": false, "dataType": "i16", "in1": "M14", "in2": "#1", "out": "M14" }
+  ],
+  "connections": [
+    { "sources": [ "k85CYuoWFkHyq" ], "destinations": [ "Y3XlL3XN1uCk9", "fNLZCQRlQuK8N" ] },
+    { "sources": [ "Y3XlL3XN1uCk9" ], "destinations": [ "wKqJDxMm3JWxb" ] }
+  ]
+}

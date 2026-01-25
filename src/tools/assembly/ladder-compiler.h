@@ -76,6 +76,9 @@ public:
     // Edge memory counter for auto-generated edge state bits
     int edge_mem_counter;
     
+    // Label counter for conditional jumps
+    int label_counter;
+    
     // Indentation level for nested structures
     int indent_level;
     
@@ -90,6 +93,7 @@ public:
         output[0] = '\0';
         output_len = 0;
         edge_mem_counter = 800;
+        label_counter = 0;
         node_count = 0;
         connection_count = 0;
         indent_level = 0;
@@ -413,19 +417,46 @@ public:
                strEqI(type, "counter_u") || strEqI(type, "counter_d");
     }
     
-    // isTerminationNode: nodes that write output and can optionally pass through RLO
-    bool isTerminationNode(const char* type) {
-        return isCoil(type) || isTimer(type) || isCounter(type);
+    // Operation blocks: math and memory operations that execute conditionally
+    bool isOperationBlock(const char* type) {
+        // Math operations
+        if (strEqI(type, "fb_add") || strEqI(type, "fb_sub") ||
+            strEqI(type, "fb_mul") || strEqI(type, "fb_div") ||
+            strEqI(type, "fb_mod")) return true;
+        // Increment/decrement
+        if (strEqI(type, "fb_inc") || strEqI(type, "fb_dec")) return true;
+        // Bitwise operations
+        if (strEqI(type, "fb_and") || strEqI(type, "fb_or") ||
+            strEqI(type, "fb_xor") || strEqI(type, "fb_not") ||
+            strEqI(type, "fb_shl") || strEqI(type, "fb_shr")) return true;
+        // Move/copy operations
+        if (strEqI(type, "fb_move") || strEqI(type, "fb_copy")) return true;
+        return false;
     }
     
-    // isOutputNode: nodes that are actual outputs (coils only)
-    // Timers/counters are function blocks, not outputs - they are emitted as part of the condition chain
+    // Comparator blocks: compare values and produce boolean result (like contacts)
+    bool isComparator(const char* type) {
+        return strEqI(type, "cmp_eq") || strEqI(type, "cmp_ne") ||
+               strEqI(type, "cmp_gt") || strEqI(type, "cmp_lt") ||
+               strEqI(type, "cmp_ge") || strEqI(type, "cmp_le") ||
+               strEqI(type, "fb_cmp_eq") || strEqI(type, "fb_cmp_ne") ||
+               strEqI(type, "fb_cmp_gt") || strEqI(type, "fb_cmp_lt") ||
+               strEqI(type, "fb_cmp_ge") || strEqI(type, "fb_cmp_le");
+    }
+    
+    // isTerminationNode: nodes that write output and can optionally pass through RLO
+    bool isTerminationNode(const char* type) {
+        return isCoil(type) || isTimer(type) || isCounter(type) || isOperationBlock(type);
+    }
+    
+    // isOutputNode: nodes that are actual outputs (coils, operation blocks)
+    // Operation blocks are like coils - they execute conditionally and can pass through RLO
     bool isOutputNode(const char* type) {
-        return isCoil(type);
+        return isCoil(type) || isOperationBlock(type);
     }
     
     bool isInputNode(const char* type) {
-        return isContact(type);
+        return isContact(type) || isComparator(type);
     }
     
     bool isFunctionBlock(const char* type) {
@@ -492,7 +523,7 @@ public:
         }
     }
     
-    // Check if a node has a downstream chain (contact → coil sequences after it)
+    // Check if a node has a downstream chain (contact → output sequences after it)
     bool hasDownstreamChain(int nodeIdx) {
         if (nodeIdx < 0 || nodeIdx >= node_count) return false;
         
@@ -503,16 +534,16 @@ public:
         
         for (int d = 0; d < destCount; d++) {
             GraphNode& dest = nodes[destIndices[d]];
-            // If any destination is a contact (input node), there's a downstream chain
+            // If any destination is a contact/comparator (input node), there's a downstream chain
             if (isInputNode(dest.type)) return true;
-            // If destination is a coil, it's a direct coil-to-coil chain (passthrough)
-            if (isCoil(dest.type)) return true;
+            // If destination is an output (coil/operation block), it's a direct passthrough
+            if (isOutputNode(dest.type)) return true;
         }
         return false;
     }
 
     // Check if a node has a downstream contact (input node) - used to determine if TAP is needed
-    // TAP is only needed when the RLO will be read by a contact, not for coil-to-coil passthrough
+    // TAP is only needed when the RLO will be read by a contact, not for output-to-output passthrough
     bool hasDownstreamContact(int nodeIdx) {
         if (nodeIdx < 0 || nodeIdx >= node_count) return false;
         
@@ -523,8 +554,28 @@ public:
         
         for (int d = 0; d < destCount; d++) {
             GraphNode& dest = nodes[destIndices[d]];
-            // Only return true if any destination is a contact (input node)
+            // Only return true if any destination is a contact/comparator (input node)
             if (isInputNode(dest.type)) return true;
+        }
+        return false;
+    }
+    
+    // Check if a node has downstream output nodes (operations, coils, etc.)
+    // Used to determine if TAP is needed before an operation's JCN
+    bool hasDownstreamOutput(int nodeIdx) {
+        if (nodeIdx < 0 || nodeIdx >= node_count) return false;
+        
+        int destIndices[MAX_NODES];
+        int destCount;
+        getDestNodes(nodes[nodeIdx].id, destIndices, destCount, MAX_NODES);
+        
+        for (int d = 0; d < destCount; d++) {
+            GraphNode& dest = nodes[destIndices[d]];
+            if (isOutputNode(dest.type)) return true;
+            // Also check if there's a contact that leads to outputs
+            if (isInputNode(dest.type)) {
+                if (hasDownstreamChain(destIndices[d])) return true;
+            }
         }
         return false;
     }
@@ -543,35 +594,48 @@ public:
             GraphNode& dest = nodes[destIdx];
             
             if (isInputNode(dest.type)) {
-                // This is a contact - emit it and follow to its destinations
+                // This is a contact/comparator - emit it and follow to its destinations
                 emitContact(dest, true);  // useAnd = true (first in sub-chain)
                 
-                // Find coils that this contact feeds into
-                int coilIndices[MAX_NODES];
-                int coilCount;
-                getDestNodes(dest.id, coilIndices, coilCount, MAX_NODES);
+                // Find output nodes that this contact feeds into
+                int outputIndices[MAX_NODES];
+                int outputCount;
+                getDestNodes(dest.id, outputIndices, outputCount, MAX_NODES);
                 
-                for (int c = 0; c < coilCount; c++) {
-                    int coilIdx = coilIndices[c];
-                    GraphNode& coilNode = nodes[coilIdx];
+                for (int c = 0; c < outputCount; c++) {
+                    int outIdx = outputIndices[c];
+                    GraphNode& outNode = nodes[outIdx];
                     
-                    if (isCoil(coilNode.type) && !coilNode.emitted) {
-                        // Check if this coil has further downstream contacts (for TAP)
-                        bool needsTap = hasDownstreamContact(coilIdx);
-                        emitCoil(coilNode, needsTap);
-                        outputProcessed[coilIdx] = true;
-                        coilNode.emitted = true;
+                    if (isOutputNode(outNode.type) && !outNode.emitted) {
+                        // Check if this output has further downstream contacts (for TAP after)
+                        bool needsTapAfter = hasDownstreamContact(outIdx);
+                        // Check if there are more outputs after this one (for TAP before operation's JCN)
+                        bool hasMoreOutputs = (c < outputCount - 1) || hasDownstreamOutput(outIdx);
                         
-                        // Recurse if there's more downstream (contacts or coils)
-                        if (hasDownstreamChain(coilIdx)) {
-                            emitDownstreamChain(coilIdx, outputProcessed);
+                        if (isCoil(outNode.type)) {
+                            emitCoil(outNode, needsTapAfter);
+                        } else if (isOperationBlock(outNode.type)) {
+                            emitOperationBlock(outNode, hasMoreOutputs, needsTapAfter);
+                        }
+                        outputProcessed[outIdx] = true;
+                        outNode.emitted = true;
+                        
+                        // Recurse if there's more downstream (contacts or outputs)
+                        if (hasDownstreamChain(outIdx)) {
+                            emitDownstreamChain(outIdx, outputProcessed);
                         }
                     }
                 }
-            } else if (isCoil(dest.type) && !dest.emitted) {
-                // Direct coil-to-coil passthrough
-                bool needsTap = hasDownstreamContact(destIdx);
-                emitCoil(dest, needsTap);
+            } else if (isOutputNode(dest.type) && !dest.emitted) {
+                // Direct output-to-output passthrough
+                bool needsTapAfter = hasDownstreamContact(destIdx);
+                bool hasMoreOutputs = hasDownstreamOutput(destIdx);
+                
+                if (isCoil(dest.type)) {
+                    emitCoil(dest, needsTapAfter);
+                } else if (isOperationBlock(dest.type)) {
+                    emitOperationBlock(dest, hasMoreOutputs, needsTapAfter);
+                }
                 outputProcessed[destIdx] = true;
                 dest.emitted = true;
 
@@ -852,9 +916,15 @@ public:
         edge_mem[idx] = '\0';
     }
     
-    // Emit STL for a contact node
+    // Emit STL for a contact node (including comparators)
     // useOr: if true, emit O/ON instead of A/AN
     void emitContact(GraphNode& node, bool isFirst, bool useOr = false) {
+        // Handle comparator blocks separately
+        if (isComparator(node.type)) {
+            emitComparator(node, isFirst);
+            return;
+        }
+        
         // Determine instruction: A (and), AN (and not), O (or), ON (or not)
         bool inverted = node.inverted || strEqI(node.type, "contact_nc");
         bool isPositive = strEqI(node.type, "contact_pos") || strEqI(node.trigger, "rising") || strEqI(node.trigger, "positive");
@@ -955,6 +1025,237 @@ public:
         }
     }
     
+    // Get Siemens type suffix (I=16-bit int, D=32-bit int, R=32-bit float, B=8-bit)
+    char getSiemensTypeSuffix(const char* data_type) {
+        if (strEqI(data_type, "i16") || strEqI(data_type, "int16") ||
+            strEqI(data_type, "u16") || strEqI(data_type, "uint16")) return 'I';
+        if (strEqI(data_type, "i32") || strEqI(data_type, "int32") ||
+            strEqI(data_type, "u32") || strEqI(data_type, "uint32")) return 'D';
+        if (strEqI(data_type, "f32") || strEqI(data_type, "float")) return 'R';
+        if (strEqI(data_type, "i8") || strEqI(data_type, "int8") ||
+            strEqI(data_type, "u8") || strEqI(data_type, "uint8")) return 'B';
+        return 'I';  // Default to 16-bit integer
+    }
+    
+    // Get Siemens address size prefix (W=word/16-bit, D=dword/32-bit, B=byte/8-bit)
+    // For memory addresses like M14 -> MW14 (word), MD14 (dword), MB14 (byte)
+    char getSiemensAddressSizePrefix(char typeSuffix) {
+        switch (typeSuffix) {
+            case 'I': return 'W';  // Word (16-bit)
+            case 'D': return 'D';  // Double word (32-bit)
+            case 'R': return 'D';  // Real stored in double word
+            case 'B': return 'B';  // Byte (8-bit)
+            default: return 'W';
+        }
+    }
+    
+    // Emit address with proper Siemens type prefix
+    // Converts M14 -> MW14 (for word), MD14 (for dword), MB14 (for byte)
+    // Handles: M (memory), preserves #literals and already-typed addresses
+    void emitTypedAddress(const char* addr, char typeSuffix) {
+        if (!addr || addr[0] == '\0') return;
+        
+        // If it's a literal (starts with #), emit as-is
+        if (addr[0] == '#') {
+            emit(addr);
+            return;
+        }
+        
+        // If address already has a size prefix (MW, MD, MB), emit as-is
+        if (addr[0] == 'M' && (addr[1] == 'W' || addr[1] == 'D' || addr[1] == 'B')) {
+            emit(addr);
+            return;
+        }
+        
+        // For M addresses, insert the size prefix after M
+        if (addr[0] == 'M' && addr[1] >= '0' && addr[1] <= '9') {
+            char sizePrefix = getSiemensAddressSizePrefix(typeSuffix);
+            emitChar('M');
+            emitChar(sizePrefix);
+            emit(addr + 1);  // Rest of address after 'M'
+            return;
+        }
+        
+        // For other addresses (X, Y, etc.), emit as-is
+        emit(addr);
+    }
+    
+    // Emit STL for an operation block (math/memory operations)
+    // Uses standard Siemens STL syntax: L, T, +I/-I/*I//I, INCI/DECI, etc.
+    // Operations are wrapped in JCN to only execute when RLO is true
+    // emitTapBefore: if true, TAP is emitted before JCN to preserve RLO for subsequent operations
+    void emitOperationBlock(GraphNode& node, bool emitTapBefore = false, bool emitTapAfter = false) {
+        char typeSuffix = getSiemensTypeSuffix(node.data_type);
+        
+        // Generate unique label for this operation's skip point
+        int skipLabel = label_counter++;
+        
+        // TAP to preserve RLO if there are more operations after this one
+        if (emitTapBefore) {
+            emitIndent();
+            emit("TAP\n");
+        }
+        
+        // Emit JCN to skip operation if RLO is false (consumes RLO)
+        emitIndent();
+        emit("JCN _op");
+        emitInt(skipLabel);
+        emitChar('\n');
+        
+        // INC/DEC - use INCI/DECI/INCD/DECD/INCB/DECB/INCR/DECR
+        if (strEqI(node.type, "fb_inc") || strEqI(node.type, "fb_dec")) {
+            bool isInc = strEqI(node.type, "fb_inc");
+            emitIndent();
+            emit(isInc ? "INC" : "DEC");
+            emitChar(typeSuffix);
+            emit(" ");
+            emitTypedAddress(node.address, typeSuffix);
+            emitChar('\n');
+        }
+        // MOVE - use L and T
+        else if (strEqI(node.type, "fb_move") || strEqI(node.type, "fb_copy")) {
+            emitIndent();
+            emit("L ");
+            emitTypedAddress(node.in1, typeSuffix);
+            emitChar('\n');
+            
+            emitIndent();
+            emit("T ");
+            emitTypedAddress(node.out, typeSuffix);
+            emitChar('\n');
+        }
+        // Binary math operations: L in1, op in2, T out
+        else if (strEqI(node.type, "fb_add") || strEqI(node.type, "fb_sub") ||
+                 strEqI(node.type, "fb_mul") || strEqI(node.type, "fb_div")) {
+            const char* mathOp = nullptr;
+            if (strEqI(node.type, "fb_add")) mathOp = "+";
+            else if (strEqI(node.type, "fb_sub")) mathOp = "-";
+            else if (strEqI(node.type, "fb_mul")) mathOp = "*";
+            else if (strEqI(node.type, "fb_div")) mathOp = "/";
+            
+            // L in1
+            emitIndent();
+            emit("L ");
+            emitTypedAddress(node.in1, typeSuffix);
+            emitChar('\n');
+            
+            // +I in2 (or -I, *I, /I, +D, -D, etc.)
+            emitIndent();
+            emit(mathOp);
+            emitChar(typeSuffix);
+            emit(" ");
+            emitTypedAddress(node.in2, typeSuffix);
+            emitChar('\n');
+            
+            // T out
+            emitIndent();
+            emit("T ");
+            emitTypedAddress(node.out, typeSuffix);
+            emitChar('\n');
+        }
+        // MOD - use extended syntax
+        else if (strEqI(node.type, "fb_mod")) {
+            emitIndent();
+            emit("L ");
+            emitTypedAddress(node.in1, typeSuffix);
+            emitChar('\n');
+            
+            emitIndent();
+            emit("MOD ");
+            emitTypedAddress(node.in2, typeSuffix);
+            emitChar('\n');
+            
+            emitIndent();
+            emit("T ");
+            emitTypedAddress(node.out, typeSuffix);
+            emitChar('\n');
+        }
+        // Bitwise operations
+        else if (strEqI(node.type, "fb_and") || strEqI(node.type, "fb_or") ||
+                 strEqI(node.type, "fb_xor") || strEqI(node.type, "fb_shl") ||
+                 strEqI(node.type, "fb_shr") || strEqI(node.type, "fb_not")) {
+            const char* bitwiseOp = nullptr;
+            if (strEqI(node.type, "fb_and")) bitwiseOp = "AW";
+            else if (strEqI(node.type, "fb_or")) bitwiseOp = "OW";
+            else if (strEqI(node.type, "fb_xor")) bitwiseOp = "XOW";
+            else if (strEqI(node.type, "fb_shl")) bitwiseOp = "SLW";
+            else if (strEqI(node.type, "fb_shr")) bitwiseOp = "SRW";
+            else if (strEqI(node.type, "fb_not")) bitwiseOp = "INVW";
+            
+            emitIndent();
+            emit("L ");
+            emitTypedAddress(node.in1, typeSuffix);
+            emitChar('\n');
+            
+            if (!strEqI(node.type, "fb_not")) {
+                emitIndent();
+                emit(bitwiseOp);
+                emit(" ");
+                emitTypedAddress(node.in2, typeSuffix);
+                emitChar('\n');
+            } else {
+                emitIndent();
+                emit(bitwiseOp);
+                emitChar('\n');
+            }
+            
+            emitIndent();
+            emit("T ");
+            emitTypedAddress(node.out, typeSuffix);
+            emitChar('\n');
+        }
+        else {
+            setError("Unknown operation block type");
+            return;
+        }
+        
+        // Emit the skip label
+        emit("_op");
+        emitInt(skipLabel);
+        emit(":\n");
+        
+        if (emitTapAfter) {
+            emitLine("TAP");
+        }
+    }
+    
+    // Emit STL for a comparator block (produces boolean result like a contact)
+    // Uses Siemens-style comparisons: L, ==I/==D/==R, etc.
+    void emitComparator(GraphNode& node, bool asFirstCondition) {
+        char typeSuffix = getSiemensTypeSuffix(node.data_type);
+        
+        // Determine comparison operator
+        const char* op = nullptr;
+        if (strEqI(node.type, "cmp_eq") || strEqI(node.type, "fb_cmp_eq")) op = "==";
+        else if (strEqI(node.type, "cmp_ne") || strEqI(node.type, "fb_cmp_ne")) op = "<>";
+        else if (strEqI(node.type, "cmp_gt") || strEqI(node.type, "fb_cmp_gt")) op = ">";
+        else if (strEqI(node.type, "cmp_lt") || strEqI(node.type, "fb_cmp_lt")) op = "<";
+        else if (strEqI(node.type, "cmp_ge") || strEqI(node.type, "fb_cmp_ge")) op = ">=";
+        else if (strEqI(node.type, "cmp_le") || strEqI(node.type, "fb_cmp_le")) op = "<=";
+        
+        if (!op) {
+            setError("Unknown comparator type");
+            return;
+        }
+        
+        // Siemens STL comparison: L in1, L in2, ==I (or <=I, >=I, <I, >I, <>I)
+        // Result goes to RLO
+        emitIndent();
+        emit("L ");
+        emitTypedAddress(node.in1, typeSuffix);
+        emitChar('\n');
+        
+        emitIndent();
+        emit("L ");
+        emitTypedAddress(node.in2, typeSuffix);
+        emitChar('\n');
+        
+        emitIndent();
+        emit(op);
+        emitChar(typeSuffix);
+        emitChar('\n');
+    }
+
     // ============ Graph Traversal and Code Generation ============
     
     // Sort nodes by x,y coordinates (left-to-right, top-to-bottom)
@@ -1506,12 +1807,17 @@ public:
                 GraphNode& destNode = nodes[destIdx];
                 // Emit the coil with TAP only if it has downstream contacts (not for coil-to-coil)
                 bool hasContinuation = hasDownstreamContact(destIdx);
+                // For operations: TAP before JCN if there are more outputs downstream
+                bool hasMoreOutputs = hasDownstreamOutput(destIdx);
+                
                 if (isCoil(destNode.type)) {
                     emitCoil(destNode, hasContinuation);
                 } else if (isTimer(destNode.type)) {
                     emitTimer(destNode, hasContinuation);
                 } else if (isCounter(destNode.type)) {
                     emitCounter(destNode, hasContinuation);
+                } else if (isOperationBlock(destNode.type)) {
+                    emitOperationBlock(destNode, hasMoreOutputs, hasContinuation);
                 }
                 outputProcessed[destIdx] = true;
                 destNode.emitted = true;  // Mark as emitted
@@ -1574,13 +1880,18 @@ public:
             
             // Emit output - check if TAP is needed (downstream contact exists)
             // TAP is only needed if the RLO will be read by a downstream contact
-            bool needTap = hasDownstreamContact(destIdx);
+            bool needTapAfter = hasDownstreamContact(destIdx);
+            // For operations: TAP before JCN if there are more outputs downstream
+            bool hasMoreOutputs = hasDownstreamOutput(destIdx);
+            
             if (isCoil(destNode.type)) {
-                emitCoil(destNode, needTap);
+                emitCoil(destNode, needTapAfter);
             } else if (isTimer(destNode.type)) {
-                emitTimer(destNode, needTap);
+                emitTimer(destNode, needTapAfter);
             } else if (isCounter(destNode.type)) {
-                emitCounter(destNode, needTap);
+                emitCounter(destNode, needTapAfter);
+            } else if (isOperationBlock(destNode.type)) {
+                emitOperationBlock(destNode, hasMoreOutputs, needTapAfter);
             }
             outputProcessed[destIdx] = true;
             destNode.emitted = true;  // Mark as emitted
