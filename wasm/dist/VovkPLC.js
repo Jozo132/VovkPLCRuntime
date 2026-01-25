@@ -862,7 +862,19 @@ class VovkPLC_class {
      */
 
     /**
-     * @typedef {{ ladder?: string, stl?: string, plcasm?: string, bytecode?: string }} CompileAllResult
+     * @typedef {{ ladderGraph?: string, stl?: string, plcasm?: string, bytecode?: string }} CompileAllResult
+     */
+
+    /**
+     * @typedef {{ id: string, type: string, symbol: string, x: number, y: number, inverted?: boolean, trigger?: string, preset?: string }} LadderGraphNode
+     */
+
+    /**
+     * @typedef {{ id?: string, sources: string[], destinations: string[] }} LadderGraphConnection
+     */
+
+    /**
+     * @typedef {{ nodes: LadderGraphNode[], connections: LadderGraphConnection[] }} LadderGraph
      */
 
     /**
@@ -950,17 +962,18 @@ class VovkPLC_class {
     }
 
     /**
-     * Transpiles Ladder JSON to STL (Statement List) code.
+     * Transpiles Ladder Graph JSON to STL (Statement List) code.
+     * Uses the graph format with nodes and connections.
      *
-     * @param {string | object} ladder - The Ladder logic as JSON string or object.
+     * @param {string | LadderGraph} ladder - The Ladder Graph as JSON string or object.
      * @returns {CompileResult} - The compilation result with type='stl'.
      * @throws {Error} If transpilation fails.
      */
     compileLadder(ladder) {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
-        if (!this.wasm_exports.ladder_load_from_stream) throw new Error("'ladder_load_from_stream' function not found - Ladder compiler not available")
-        if (!this.wasm_exports.ladder_compile) throw new Error("'ladder_compile' function not found")
-        if (!this.wasm_exports.ladder_output_to_stream) throw new Error("'ladder_output_to_stream' function not found")
+        if (!this.wasm_exports.ladder_graph_load_from_stream) throw new Error("'ladder_graph_load_from_stream' function not found - Ladder Graph compiler not available")
+        if (!this.wasm_exports.ladder_graph_compile) throw new Error("'ladder_graph_compile' function not found")
+        if (!this.wasm_exports.ladder_graph_output_to_stream) throw new Error("'ladder_graph_output_to_stream' function not found")
 
         // Convert object to JSON string if needed
         const ladderJson = typeof ladder === 'string' ? ladder : JSON.stringify(ladder)
@@ -968,24 +981,24 @@ class VovkPLC_class {
         // Clear any stale data in the stream buffer first
         if (this.wasm_exports.streamClear) this.wasm_exports.streamClear()
 
-        // Stream Ladder JSON to compiler
+        // Stream Ladder Graph JSON to compiler
         let ok = true
         for (let i = 0; i < ladderJson.length && ok; i++) {
             ok = this.wasm_exports.streamIn(ladderJson.charCodeAt(i))
         }
-        if (!ok) throw new Error('Failed to stream Ladder JSON')
+        if (!ok) throw new Error('Failed to stream Ladder Graph JSON')
         this.wasm_exports.streamIn(0) // Null terminator
 
-        // Load from stream and compile Ladder to STL
-        this.wasm_exports.ladder_load_from_stream()
-        const ladderSuccess = this.wasm_exports.ladder_compile()
+        // Load from stream and compile Ladder Graph to STL
+        this.wasm_exports.ladder_graph_load_from_stream()
+        const ladderSuccess = this.wasm_exports.ladder_graph_compile()
 
         if (!ladderSuccess) {
-            throw new Error('Ladder compilation failed')
+            throw new Error('Ladder Graph compilation failed')
         }
 
         // Get the generated STL via stream
-        this.wasm_exports.ladder_output_to_stream()
+        this.wasm_exports.ladder_graph_output_to_stream()
         const stlCode = this.readStream()
 
         return {
@@ -996,15 +1009,15 @@ class VovkPLC_class {
     }
 
     /**
-     * @typedef {{ ladder?: string, stl?: string, plcasm?: string, bytecode?: string }} CompileAllResult
+     * @typedef {{ ladderGraph?: string, stl?: string, plcasm?: string, bytecode?: string }} CompileAllResult
      */
 
     /**
      * Compiles source code through the full pipeline based on starting language.
      * Returns all intermediate representations.
      *
-     * @param {string | object} source - The source code (Ladder JSON, STL, or PLCASM).
-     * @param {'ladder' | 'stl' | 'plcasm'} language - The source language.
+     * @param {string | LadderGraph} source - The source code (Ladder Graph JSON, STL, or PLCASM).
+     * @param {'ladder-graph' | 'stl' | 'plcasm'} language - The source language.
      * @returns {CompileAllResult} - Object containing all compilation stages.
      * @throws {Error} If any compilation step fails.
      */
@@ -1017,9 +1030,9 @@ class VovkPLC_class {
         let currentSource = typeof source === 'string' ? source : JSON.stringify(source)
         let currentLang = language
 
-        // Stage 1: Ladder → STL (if starting from ladder)
-        if (currentLang === 'ladder') {
-            result.ladder = currentSource
+        // Stage 1: Ladder Graph → STL (if starting from ladder-graph)
+        if (currentLang === 'ladder-graph') {
+            result.ladderGraph = currentSource
             const ladderResult = this.compileLadder(currentSource)
             result.stl = ladderResult.output
             currentSource = ladderResult.output
@@ -1049,10 +1062,10 @@ class VovkPLC_class {
      * Compiles source code based on the specified language.
      * - 'plcasm': Compiles directly to bytecode.
      * - 'stl': Transpiles to PLCASM (for further compilation by external editor).
-     * - 'ladder': Transpiles to STL (for further compilation).
+     * - 'ladder-graph': Transpiles to STL (for further compilation).
      *
-     * @param {string} source_code - The source code to compile.
-     * @param {boolean | { run?: boolean, language?: 'plcasm' | 'stl' | 'ladder' }} [options=false] - If boolean, whether to run after compile (only for plcasm). If object, contains options.
+     * @param {string | LadderGraph} source_code - The source code to compile.
+     * @param {boolean | { run?: boolean, language?: 'plcasm' | 'stl' | 'ladder-graph' }} [options=false] - If boolean, whether to run after compile (only for plcasm). If object, contains options.
      * @returns {CompileResult} - The compilation result.
      * @throws {Error} If compilation fails.
      */
@@ -1070,7 +1083,7 @@ class VovkPLC_class {
         }
 
         switch (language) {
-            case 'ladder':
+            case 'ladder-graph':
                 return this.compileLadder(source_code)
             case 'stl':
                 return this.compileSTL(source_code)
@@ -2234,15 +2247,15 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
     setRuntimeOffsets = (controlOffset, inputOffset, outputOffset, systemOffset, markerOffset) => this.call('setRuntimeOffsets', controlOffset, inputOffset, outputOffset, systemOffset, markerOffset)
     /** @type { (assembly: string) => Promise<any> } */
     downloadAssembly = assembly => this.call('downloadAssembly', assembly)
-    /** @type { (assembly: string, options?: boolean | { run?: boolean, language?: 'plcasm' | 'stl' | 'ladder' }) => Promise<CompileResult> } */
+    /** @type { (assembly: string, options?: boolean | { run?: boolean, language?: 'plcasm' | 'stl' | 'ladder-graph' }) => Promise<CompileResult> } */
     compile = (assembly, options = false) => this.call('compile', assembly, options)
     /** @type { (plcasm: string, options?: { run?: boolean }) => Promise<CompileResult> } */
     compilePLCASM = (plcasm, options = {}) => this.call('compilePLCASM', plcasm, options)
     /** @type { (stl: string) => Promise<CompileResult> } */
     compileSTL = stl => this.call('compileSTL', stl)
-    /** @type { (ladder: string | object) => Promise<CompileResult> } */
+    /** @type { (ladder: string | LadderGraph) => Promise<CompileResult> } */
     compileLadder = ladder => this.call('compileLadder', ladder)
-    /** @type { (source: string | object, language: 'ladder' | 'stl' | 'plcasm') => Promise<{ ladder?: string, stl?: string, plcasm?: string, bytecode?: string }> } */
+    /** @type { (source: string | LadderGraph, language: 'ladder-graph' | 'stl' | 'plcasm') => Promise<{ ladderGraph?: string, stl?: string, plcasm?: string, bytecode?: string }> } */
     compileAll = (source, language) => this.call('compileAll', source, language)
     /** @type { (program: string | number[]) => Promise<any> } */
     downloadBytecode = program => this.call('downloadBytecode', program)
