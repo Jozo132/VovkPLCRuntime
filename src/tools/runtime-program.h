@@ -310,6 +310,26 @@ public:
         return 3;
     }
 
+    // Metadata instructions for decompilation and debugging
+    
+    // Push a language marker instruction - identifies source language for decompilation
+    static u8 push_lang(u8* location, u8 lang_id) {
+        location[0] = LANG;
+        location[1] = lang_id;
+        return 2;
+    }
+
+    // Push a comment instruction - embeds ASCII comment for decompilation
+    // Returns total size: 2 + comment_length
+    static u8 push_comment(u8* location, const char* comment, u8 comment_length) {
+        location[0] = COMMENT;
+        location[1] = comment_length;
+        for (u8 i = 0; i < comment_length; i++) {
+            location[2 + i] = (u8) comment[i];
+        }
+        return 2 + comment_length;
+    }
+
 
     // Convert a data type to another data type
     static u8 push_cvt(u8* location, PLCRuntimeInstructionSet from, PLCRuntimeInstructionSet to) {
@@ -1068,6 +1088,42 @@ public:
             if (!exists) {
                 Serial.println(F("INVALID OPCODE\n"));
                 return;
+            }
+
+            // Handle special metadata instructions
+            if (opcode == LANG) {
+                // LANG instruction: opcode + language_id
+                u8 lang_id = (index + 1 < prog_size) ? program[index + 1] : 0;
+                Serial.print(F("LANG ----------- [size  2] "));
+                print_number_padStart(opcode, 2, '0', HEX);
+                print_number_padStart(lang_id, 2, '0', HEX);
+                Serial.print(F(" ("));
+                Serial.print(LANG_NAME(lang_id));
+                Serial.println(F(")"));
+                index += 2;
+                if (index >= prog_size) done = true;
+                continue;
+            }
+            
+            if (opcode == COMMENT) {
+                // COMMENT instruction: opcode + length + ASCII chars
+                u8 comment_len = (index + 1 < prog_size) ? program[index + 1] : 0;
+                u8 instruction_size = 2 + comment_len;
+                Serial.print(F("COMMENT -------- [size "));
+                if (instruction_size < 10) Serial.print(' ');
+                Serial.print(instruction_size);
+                Serial.print(F("] "));
+                print_number_padStart(opcode, 2, '0', HEX);
+                print_number_padStart(comment_len, 2, '0', HEX);
+                Serial.print(F(" \""));
+                for (u8 i = 0; i < comment_len && (index + 2 + i) < prog_size; i++) {
+                    char c = (char) program[index + 2 + i];
+                    Serial.print(c);
+                }
+                Serial.println(F("\""));
+                index += instruction_size;
+                if (index >= prog_size) done = true;
+                continue;
             }
 
             // Get current instruction size

@@ -1237,12 +1237,14 @@ public:
             Token& p1_token = tokens[token_count_temp - 1];
             Token& p2_token = tokens[token_count_temp - 2];
             // If [' , * , '] then change to [string]
+            // Before: tokens = [..., ', content, '] with token_count_temp pointing past content
+            // After:  tokens = [..., content_as_STRING] with token_count_temp pointing past the STRING
             if (token == "'" && p2_token == "'") {
                 p2_token.type = TOKEN_STRING;
                 p2_token.string = p1_token.string;
-                token_count_temp--;
-                token_count_temp--;
-                return false;
+                p2_token.length = p1_token.length;
+                token_count_temp--;  // Remove content token, keep the converted STRING token
+                return false;  // Don't add the closing quote
             }
         }
         if (token_count_temp >= 1) {
@@ -2201,6 +2203,37 @@ public:
                     if (token == "ret_if" || token == "return_if") { line.size = InstructionCompiler::push(bytecode, RET_IF); _line_push; }
                     if (token == "ret_if_not" || token == "return_if_not") { line.size = InstructionCompiler::push(bytecode, RET_IF_NOT); _line_push; }
                     if (token == "nop") { line.size = InstructionCompiler::push(bytecode, NOP); _line_push; }
+                    
+                    // Metadata instructions (for decompilation and debugging)
+                    if (hasNext && token == "lang") {
+                        u8 lang_id = LANG_UNKNOWN;
+                        if (token_p1 == "plcasm") lang_id = LANG_PLCASM;
+                        else if (token_p1 == "stl") lang_id = LANG_STL;
+                        else if (token_p1 == "ladder") lang_id = LANG_LADDER;
+                        else if (token_p1 == "fbd") lang_id = LANG_FBD;
+                        else if (token_p1 == "sfc") lang_id = LANG_SFC;
+                        else if (token_p1 == "st") lang_id = LANG_ST;
+                        else if (token_p1 == "il") lang_id = LANG_IL;
+                        else if (token_p1 == "custom") lang_id = LANG_CUSTOM;
+                        else if (!e_int) lang_id = (u8) value_int;
+                        else { if (buildError(token_p1, "expected language name or id")) return true; }
+                        i++;
+                        line.size = InstructionCompiler::push_lang(bytecode, lang_id);
+                        _line_push;
+                    }
+                    if (hasNext && token == "comment") {
+                        // Expect: comment 'string content'
+                        // The tokenizer collapses 'string' into a single TOKEN_STRING
+                        if (token_p1.type != TOKEN_STRING) {
+                            if (buildError(token_p1, "expected string for comment (e.g., comment 'text')")) return true; 
+                        }
+                        const char* raw = token_p1.string.data;
+                        int comment_len = token_p1.string.length;
+                        if (comment_len > 255) { if (buildError(token_p1, "comment too long (max 255 chars)")) return true; }
+                        i++; // Skip the string token
+                        line.size = InstructionCompiler::push_comment(bytecode, raw, comment_len);
+                        _line_push;
+                    }
                 }
 
                 { // Stack operations

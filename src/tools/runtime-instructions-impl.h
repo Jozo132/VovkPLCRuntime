@@ -46,6 +46,21 @@ void logRuntimeErrorList() {
 }
 #endif
 
+// Language name lookup for LANG instruction
+const FSH* LANG_NAME(u8 lang_id) {
+    switch (lang_id) {
+        case LANG_UNKNOWN: return F("UNKNOWN");
+        case LANG_PLCASM: return F("PLCASM");
+        case LANG_STL: return F("STL");
+        case LANG_LADDER: return F("LADDER");
+        case LANG_FBD: return F("FBD");
+        case LANG_SFC: return F("SFC");
+        case LANG_ST: return F("ST");
+        case LANG_IL: return F("IL");
+        case LANG_CUSTOM: return F("CUSTOM");
+        default: return F("UNDEFINED");
+    }
+}
 
 
 bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
@@ -258,6 +273,8 @@ bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
         case CTU_MEM:
         case CTD_CONST:
         case CTD_MEM:
+        case LANG:
+        case COMMENT:
         case EXIT: return true;
         default: break;
     }
@@ -472,6 +489,8 @@ const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
         case CTU_MEM: return F("CTU_MEM");
         case CTD_CONST: return F("CTD_CONST");
         case CTD_MEM: return F("CTD_MEM");
+        case LANG: return F("LANG");
+        case COMMENT: return F("COMMENT");
         case EXIT: return F("EXIT");
         default: break;
     }
@@ -708,6 +727,10 @@ u8 OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
         case RET_IF:
         case RET_IF_NOT:
         case EXIT: return 1;
+
+        case LANG: return 2; // Opcode + language_id
+        // COMMENT size is dynamic: 2 + comment_length (handled specially in explain)
+        case COMMENT: return 0; // Dynamic size, must be handled specially
         default: break;
     }
     return 0;

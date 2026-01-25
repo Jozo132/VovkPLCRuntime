@@ -109,6 +109,21 @@ enum PLCRuntimeMemoryLocation {
     MEMORY = 0x02,      // MEMORY - internal memory location
 };
 
+// Language IDs for LANG instruction (used for decompilation)
+enum PLCSourceLanguage {
+    LANG_UNKNOWN = 0x00,    // Unknown/unspecified source language
+    LANG_PLCASM = 0x01,     // PLCASM assembly
+    LANG_STL = 0x02,        // STL (Statement List)
+    LANG_LADDER = 0x03,     // Ladder diagram (via Network IR)
+    LANG_FBD = 0x04,        // Function Block Diagram
+    LANG_SFC = 0x05,        // Sequential Function Chart
+    LANG_ST = 0x06,         // Structured Text
+    LANG_IL = 0x07,         // Instruction List (IEC 61131-3)
+    LANG_CUSTOM = 0xFF,     // Custom/user-defined language
+};
+
+const FSH* LANG_NAME(u8 lang_id);
+
 // Instruction set:
 enum PLCRuntimeInstructionSet {
     NOP = 0x00,         // NOP - no operation
@@ -338,6 +353,10 @@ enum PLCRuntimeInstructionSet {
     CALL_REL,           // Call a function relative to the next instruction address (i16)
     CALL_IF_REL,        // Call a function relative to the next instruction address if the top of the stack is true (i16)
     CALL_IF_NOT_REL,    // Call a function relative to the next instruction address if the top of the stack is false (i16)
+
+    // Metadata instructions (for decompilation and debugging)
+    LANG = 0xFD,        // Language marker: [ LANG, u8 language_id ] - runtime skips 2 bytes, used to identify source language for decompilation
+    COMMENT,            // Comment: [ COMMENT, u8 length, ASCII chars... ] - runtime skips 2+length bytes, embeds comment for decompilation
 
     EXIT = 0xFF         // Exit the program. This will cease the execution of the program and return an optional exit error code (u8)
 };

@@ -1309,6 +1309,23 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
         case CMP_GTE: return PLCMethods::handle_CMP_GTE(this->stack, program, prog_size, index);
         case CMP_LT: return PLCMethods::handle_CMP_LT(this->stack, program, prog_size, index);
         case CMP_LTE: return PLCMethods::handle_CMP_LTE(this->stack, program, prog_size, index);
+        
+        // Metadata instructions - runtime skips over these (used for decompilation)
+        case LANG: {
+            // Skip over language_id byte
+            index += 1;
+            return STATUS_SUCCESS;
+        }
+        case COMMENT: {
+            // Skip over length byte + comment characters
+            if (index >= prog_size) return PROGRAM_SIZE_EXCEEDED;
+            u32 comment_len = program[index];
+            u32 index_end = index + 1 + comment_len;
+            if (index_end >= prog_size) return PROGRAM_SIZE_EXCEEDED;
+            index = index_end;
+            return STATUS_SUCCESS;
+        }
+        
         case EXIT: {
             return PROGRAM_EXITED;
             // return PLCMethods::handle_EXIT(this->stack, program, prog_size, index);
