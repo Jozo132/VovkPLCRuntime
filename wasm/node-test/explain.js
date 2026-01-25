@@ -201,12 +201,24 @@ function detectLanguage(code) {
     return 'plcasm'
 }
 
-// Stream code to runtime
-async function streamCode(runtime, code) {
+// Stream code to runtime (synchronous for direct VovkPLC)
+function streamCode(runtime, code) {
     for (let i = 0; i < code.length; i++) {
-        await runtime.callExport('streamIn', code.charCodeAt(i))
+        runtime.wasm_exports.streamIn(code.charCodeAt(i))
     }
-    await runtime.callExport('streamIn', 0)
+    runtime.wasm_exports.streamIn(0)
+}
+
+// Capture stdout output (debug output goes here, not to stream)
+let capturedOutput = ''
+function captureStdout(runtime) {
+    capturedOutput = ''
+    runtime.stdout_callback = msg => { capturedOutput += msg + '\n' }
+}
+function readCapturedOutput() {
+    const output = capturedOutput
+    capturedOutput = ''
+    return output
 }
 
 const run = async () => {
@@ -218,10 +230,17 @@ const run = async () => {
         process.exit(1)
     }
 
-    const runtime = await VovkPLC.createWorker(wasmPath)
+    // Use direct VovkPLC without worker for faster execution
+    const runtime = new VovkPLC(wasmPath)
     
-    // Clear initial banner
-    await runtime.readStream()
+    // Set up stdout capture BEFORE initialize to catch banner
+    captureStdout(runtime)
+    
+    await runtime.initialize(wasmPath, false, false) // not silent - we need debug output
+    
+    // Clear initial banner from both stream and captured stdout
+    runtime.readStream()
+    readCapturedOutput()
     
     try {
         const input = await readStdin()
@@ -264,18 +283,18 @@ const run = async () => {
             console.log('└─────────────────────────────────────────────────────────────────┘')
             console.log()
             
-            await streamCode(runtime, input)
-            await runtime.callExport('ladder_graph_load_from_stream')
+            streamCode(runtime, input)
+            runtime.wasm_exports.ladder_graph_load_from_stream()
             
-            const ladderSuccess = await runtime.callExport('ladder_graph_compile')
+            const ladderSuccess = runtime.wasm_exports.ladder_graph_compile()
             
             if (!ladderSuccess) {
                 console.error('  ✗ Ladder Graph compilation error')
                 process.exit(1)
             }
             
-            await runtime.callExport('ladder_graph_output_to_stream')
-            stl = await runtime.readStream()
+            runtime.wasm_exports.ladder_graph_output_to_stream()
+            stl = runtime.readStream()
             
             const stlLines = stl.split('\n')
             stlLines.forEach((line, i) => {
@@ -298,23 +317,23 @@ const run = async () => {
             console.log()
             
             const stlInput = stl || input
-            await streamCode(runtime, stlInput)
-            await runtime.callExport('stl_load_from_stream')
+            streamCode(runtime, stlInput)
+            runtime.wasm_exports.stl_load_from_stream()
             
-            const success = await runtime.callExport('stl_compile')
+            const success = runtime.wasm_exports.stl_compile()
             
             if (!success) {
-                const hasError = await runtime.callExport('stl_has_error')
+                const hasError = runtime.wasm_exports.stl_has_error()
                 if (hasError) {
-                    const errorLine = await runtime.callExport('stl_get_error_line')
-                    const errorCol = await runtime.callExport('stl_get_error_column')
+                    const errorLine = runtime.wasm_exports.stl_get_error_line()
+                    const errorCol = runtime.wasm_exports.stl_get_error_column()
                     console.error(`  ✗ STL compilation error at line ${errorLine}, column ${errorCol}`)
                     process.exit(1)
                 }
             }
             
-            await runtime.callExport('stl_output_to_stream')
-            plcasm = await runtime.readStream()
+            runtime.wasm_exports.stl_output_to_stream()
+            plcasm = runtime.readStream()
             
             // Filter out the header comment
             const plcasmLines = plcasm.split('\n').filter(l => !l.startsWith('// Generated from STL'))
@@ -335,11 +354,12 @@ const run = async () => {
         console.log('└─────────────────────────────────────────────────────────────────┘')
         console.log()
         
-        await runtime.downloadAssembly(plcasm)
-        const compileError = await runtime.callExport('compileAssembly', true)
+        readCapturedOutput() // clear any previous output
+        runtime.downloadAssembly(plcasm)
+        const compileError = runtime.wasm_exports.compileAssembly(true)
         
-        // Read compiler output (includes symbols, labels, bytecode)
-        const compileOutput = await runtime.readStream()
+        // Read compiler output (debug output goes to stdout, not stream)
+        const compileOutput = readCapturedOutput()
         if (compileOutput) {
             // Parse and format compiler output
             const lines = compileOutput.split('\n')
@@ -360,14 +380,14 @@ const run = async () => {
         console.log()
         
         // Step 4: Load and explain bytecode
-        const loadError = await runtime.callExport('loadCompiledProgram')
+        const loadError = runtime.wasm_exports.loadCompiledProgram()
         if (loadError) {
             console.error('  ✗ Failed to load compiled program')
             process.exit(1)
         }
         
         // Read load output
-        const loadOutput = await runtime.readStream()
+        const loadOutput = readCapturedOutput()
         if (loadOutput && loadOutput.trim()) {
             console.log(loadOutput)
         }
@@ -383,9 +403,10 @@ const run = async () => {
         // We'll use runFullProgramDebug but need to handle potential infinite loops
         // The runtime should output step-by-step execution
         
-        await runtime.callExport('runFullProgramDebug')
+        runtime.wasm_exports.runFullProgramDebug()
         
-        const execOutput = await runtime.readStream()
+        // Debug execution output goes to stdout
+        const execOutput = readCapturedOutput()
         if (execOutput) {
             const lines = execOutput.split('\n')
             let stepCount = 0
@@ -418,8 +439,7 @@ const run = async () => {
         console.error('Error:', e.message)
         process.exitCode = 1
     } finally {
-        await runtime.terminate()
-        await new Promise(res => setTimeout(res, 100))
+        // Direct VovkPLC doesn't need terminate()
         process.exit(process.exitCode || 0)
     }
 }

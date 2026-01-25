@@ -1,0 +1,24 @@
+{
+  "comment": "Network 2",
+  "nodes": [
+    { "id": "RXlGmfDaH3D1W", "x": 0, "y": 0, "type": "contact", "symbol": "M1.1", "inverted": false, "trigger": "rising" },
+    { "id": "VywFT6HeQ1jTd", "x": 1, "y": 0, "type": "counter_u", "symbol": "C0", "inverted": false, "preset": 10 },
+    { "id": "AcmaQYSsIQCiy", "x": 2, "y": 0, "type": "coil", "symbol": "Y0.5", "inverted": false },
+    { "id": "FSszoVFNARy0q", "x": 1, "y": 1, "type": "contact", "symbol": "M1.2", "inverted": false, "trigger": "normal" },
+    { "id": "MoNIr40Q0YleI", "x": 3, "y": 0, "type": "coil_set", "symbol": "Y0.6", "inverted": false },
+    { "id": "kfoANJa4RG44d", "x": 3, "y": 1, "type": "coil_set", "symbol": "Y0.7", "inverted": false },
+    { "id": "xBxIGwnzR2h7t", "x": 4, "y": 0, "type": "contact", "symbol": "X0.0", "inverted": false, "trigger": "normal" },
+    { "id": "jIqGiUsxD1hM0", "x": 4, "y": 1, "type": "contact", "symbol": "X0.1", "inverted": false, "trigger": "normal" },
+    { "id": "UdcrwgkRA9Txo", "x": 5, "y": 0, "type": "coil_rset", "symbol": "Y0.6", "inverted": false },
+    { "id": "xsniuWzg1S19l", "x": 5, "y": 1, "type": "coil_rset", "symbol": "Y0.7", "inverted": false }
+  ],
+  "connections": [
+    { "sources": [ "RXlGmfDaH3D1W" ], "destinations": [ "FSszoVFNARy0q", "VywFT6HeQ1jTd" ] },
+    { "sources": [ "FSszoVFNARy0q", "VywFT6HeQ1jTd" ], "destinations": [ "AcmaQYSsIQCiy" ] },
+    { "sources": [ "AcmaQYSsIQCiy" ], "destinations": [ "MoNIr40Q0YleI", "kfoANJa4RG44d" ] },
+    { "sources": [ "MoNIr40Q0YleI" ], "destinations": [ "xBxIGwnzR2h7t" ] },
+    { "sources": [ "kfoANJa4RG44d" ], "destinations": [ "jIqGiUsxD1hM0" ] },
+    { "sources": [ "xBxIGwnzR2h7t" ], "destinations": [ "UdcrwgkRA9Txo" ] },
+    { "sources": [ "jIqGiUsxD1hM0" ], "destinations": [ "xsniuWzg1S19l" ] }
+  ]
+}

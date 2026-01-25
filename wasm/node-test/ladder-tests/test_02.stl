@@ -1,0 +1,22 @@
+// Generated from Ladder Graph by VovkPLCRuntime
+
+A M1.1
+FP M100.0
+A(
+    CTU C0, 10
+    O M1.2
+)
+= Y0.5
+TAP
+SAVE
+    L BR
+    S Y0.6
+    TAP
+    A X0.0
+    R Y0.6
+    L BR
+    S Y0.7
+    TAP
+    A X0.1
+    R Y0.7
+DROP BR
