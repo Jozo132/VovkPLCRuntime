@@ -1,5 +1,5 @@
-// ladder-compiler.h - Ladder Logic ⇄ STL Transpiler using Network IR
-// Bidirectional conversion between Ladder Logic and Siemens-style STL
+// ladder-compiler.h - Ladder Graph to STL Compiler
+// Compiles graph-based ladder logic (nodes + connections) to Siemens-style STL
 //
 // Copyright (c) 2026 J.Vovk
 //
@@ -27,47 +27,39 @@
 #include "network-ir.h"
 #include "stl-compiler.h"
 
+
 // ============================================================================
-// Ladder JSON to Network IR Parser
+// Ladder Graph to STL Compiler
 // ============================================================================
 //
-// Parses JSON Ladder representation into Network IR.
+// Compiles ladder logic represented as a graph structure (nodes + connections)
+// directly to STL code. This is the new format used by VovkPLC Editor.
+//
 // JSON format:
 //   {
-//     "rungs": [
-//       {
-//         "comment": "optional comment",
-//         "elements": [
-//           { "type": "contact", "address": "I0.0", "inverted": false, "trigger": "normal" },
-//           { "type": "contact", "address": "I0.1", "inverted": true, "trigger": "rising" },
-//           { "type": "coil", "address": "Q0.0", "inverted": false },
-//           { "type": "coil_set", "address": "M0.0" },
-//           { "type": "coil_rset", "address": "M0.1" }
-//         ],
-//         "branches": [  // optional OR branches
-//           { "elements": [...] }
-//         ]
-//       }
+//     "nodes": [
+//       { "id": "n1", "type": "contact_no", "address": "X0.0", "x": 0, "y": 0 },
+//       { "id": "n2", "type": "coil", "address": "Y0.0", "x": 100, "y": 0 }
+//     ],
+//     "connections": [
+//       { "sources": ["n1"], "destinations": ["n2"] }
 //     ]
 //   }
 //
-// Element types:
-//   - contact:    Normally open contact (A operand)
-//   - contact_nc: Normally closed contact (AN operand)
-//   - coil:       Output coil (= operand)
-//   - coil_set:   Set coil (S operand)
-//   - coil_rset:  Reset coil (R operand)
-//   - coil_n:     Negated coil (inverted =)
-//   - tap:        RLO passthrough to next rung (VovkPLCRuntime extension)
+// Node types:
+//   Contacts: contact_no, contact_nc, contact_pos, contact_neg
+//   Coils: coil, coil_set, coil_rset, coil_neg
+//   Timers: timer_on, timer_off, timer_pulse
+//   Counters: counter_up, counter_down
+//   Special: tap
 //
-// Contact properties:
-//   - address:  Symbol address (I0.0, M0.0, etc.)
-//   - inverted: true for normally closed (AN)
-//   - trigger:  "normal", "rising" (FP), "falling" (FN), "change" (FX)
+// Connection semantics:
+//   - Multiple sources = OR logic (sources are ORed together)
+//   - Multiple destinations = Parallel branches (use SAVE/L BR/DROP BR)
 //
 // ============================================================================
 
-class LadderJSONToIRParser {
+class LadderGraphCompiler {
 public:
     const char* source;
     int length;
@@ -76,14 +68,18 @@ public:
     char error_msg[256];
     bool has_error;
     
+    // Output STL buffer
+    static const int MAX_OUTPUT = 32768;
+    char output[MAX_OUTPUT];
+    int output_len;
+    
     // Edge memory counter for auto-generated edge state bits
-    // Start at bit 800 = M100.0 to avoid conflict with user memory
     int edge_mem_counter;
     
-    // Current element index being parsed (for branch element tracking)
-    int current_element_index;
+    // Indentation level for nested structures
+    int indent_level;
     
-    LadderJSONToIRParser() { reset(); }
+    LadderGraphCompiler() { reset(); }
     
     void reset() {
         source = nullptr;
@@ -91,10 +87,12 @@ public:
         pos = 0;
         error_msg[0] = '\0';
         has_error = false;
-        edge_mem_counter = 800; // Start at M100.0 (bit 800 = 100*8)
-        branch_element_storage_used = 0; // Reset branch element storage
-        branch_element_info_used = 0;    // Reset branch info storage
-        current_element_index = -1;
+        output[0] = '\0';
+        output_len = 0;
+        edge_mem_counter = 800;
+        node_count = 0;
+        connection_count = 0;
+        indent_level = 0;
     }
     
     void setError(const char* msg) {
@@ -106,6 +104,52 @@ public:
             i++;
         }
         error_msg[i] = '\0';
+    }
+    
+    // ============ Output Helpers ============
+    
+    void emitIndent() {
+        for (int i = 0; i < indent_level; i++) {
+            emit("    ");  // 4 spaces per indent level
+        }
+    }
+    
+    void emit(const char* s) {
+        while (*s && output_len < MAX_OUTPUT - 1) {
+            output[output_len++] = *s++;
+        }
+        output[output_len] = '\0';
+    }
+    
+    void emitChar(char c) {
+        if (output_len < MAX_OUTPUT - 1) {
+            output[output_len++] = c;
+            output[output_len] = '\0';
+        }
+    }
+    
+    void emitLine(const char* s) {
+        emitIndent();
+        emit(s);
+        emitChar('\n');
+    }
+    
+    void emitInt(int val) {
+        char buf[16];
+        int i = 0;
+        bool neg = val < 0;
+        if (neg) val = -val;
+        if (val == 0) buf[i++] = '0';
+        else {
+            while (val > 0) {
+                buf[i++] = '0' + (val % 10);
+                val /= 10;
+            }
+        }
+        if (neg) buf[i++] = '-';
+        while (i > 0) {
+            emitChar(buf[--i]);
+        }
     }
     
     // ============ JSON Lexer Helpers ============
@@ -144,7 +188,6 @@ public:
             if (peek(i) != s[i]) return false;
             i++;
         }
-        // Advance past matched string
         for (int j = 0; j < i; j++) advance();
         return true;
     }
@@ -159,14 +202,13 @@ public:
         return *a == *b;
     }
     
-    // Read a JSON string value (expects opening quote already consumed or at current pos)
     bool readString(char* buf, int maxLen) {
         skipWhitespace();
         if (peek() != '"') {
             setError("Expected string");
             return false;
         }
-        advance(); // Skip opening quote
+        advance();
         
         int i = 0;
         while (i < maxLen - 1) {
@@ -176,13 +218,12 @@ public:
                 return false;
             }
             if (c == '"') {
-                advance(); // Skip closing quote
+                advance();
                 break;
             }
             if (c == '\\') {
                 advance();
                 c = peek();
-                // Handle escape sequences
                 if (c == 'n') c = '\n';
                 else if (c == 't') c = '\t';
                 else if (c == 'r') c = '\r';
@@ -193,22 +234,14 @@ public:
         return true;
     }
     
-    // Read a JSON boolean value
     bool readBool(bool& value) {
         skipWhitespace();
-        if (strMatch("true")) {
-            value = true;
-            return true;
-        }
-        if (strMatch("false")) {
-            value = false;
-            return true;
-        }
+        if (strMatch("true")) { value = true; return true; }
+        if (strMatch("false")) { value = false; return true; }
         setError("Expected boolean");
         return false;
     }
     
-    // Read a JSON number as u32
     bool readU32(uint32_t& value) {
         skipWhitespace();
         if (peek() < '0' || peek() > '9') {
@@ -222,13 +255,30 @@ public:
         return true;
     }
     
-    // Skip a JSON value (string, number, object, array, bool, null)
+    bool readInt(int& value) {
+        skipWhitespace();
+        bool neg = false;
+        if (peek() == '-') {
+            neg = true;
+            advance();
+        }
+        if (peek() < '0' || peek() > '9') {
+            setError("Expected number");
+            return false;
+        }
+        value = 0;
+        while (peek() >= '0' && peek() <= '9') {
+            value = value * 10 + (advance() - '0');
+        }
+        if (neg) value = -value;
+        return true;
+    }
+    
     void skipValue() {
         skipWhitespace();
         char c = peek();
         
         if (c == '"') {
-            // String
             advance();
             while (peek() && peek() != '"') {
                 if (peek() == '\\') advance();
@@ -236,7 +286,6 @@ public:
             }
             if (peek() == '"') advance();
         } else if (c == '{') {
-            // Object
             advance();
             int depth = 1;
             while (peek() && depth > 0) {
@@ -252,7 +301,6 @@ public:
                 advance();
             }
         } else if (c == '[') {
-            // Array
             advance();
             int depth = 1;
             while (peek() && depth > 0) {
@@ -268,844 +316,366 @@ public:
                 advance();
             }
         } else if ((c >= '0' && c <= '9') || c == '-') {
-            // Number
             while (peek() && ((peek() >= '0' && peek() <= '9') || peek() == '.' || peek() == '-' || peek() == 'e' || peek() == 'E')) {
                 advance();
             }
         } else if (c == 't' || c == 'f' || c == 'n') {
-            // true, false, null
             while (peek() && peek() >= 'a' && peek() <= 'z') advance();
         }
     }
     
-    // ============ Ladder Element Parsing ============
+    // ============ Graph Data Structures ============
     
-    struct LadderElement;
+    static const int MAX_NODES = 256;
+    static const int MAX_CONNECTIONS = 256;
+    static const int MAX_CONN_ENDPOINTS = 16;  // Max sources/destinations per connection
     
-    // Forward-declared struct for branch element data (parallel output branches)
-    static const int MAX_PB_BRANCH_ELEMENTS = 16;  // Max elements per parallel output branch
-    static const int MAX_PARALLEL_BRANCHES = 8;     // Max branches in a parallel output
-    static const int MAX_TOTAL_PB_ELEMENTS = MAX_PARALLEL_BRANCHES * MAX_PB_BRANCH_ELEMENTS;  // 128
-    
-    // Branch element storage (static allocation for embedded compatibility)
-    // This is separate from LadderElement to avoid bloating every element
-    static LadderElement branch_element_storage[MAX_TOTAL_PB_ELEMENTS];
-    static int branch_element_storage_used;
-    
-    // BranchData stores pointer into branch_element_storage
-    struct BranchData {
-        int start_index;      // Index into branch_element_storage
-        int element_count;
+    struct GraphNode {
+        char id[32];
+        char type[32];
+        char address[32];
+        int x, y;
+        bool inverted;
+        uint32_t preset;
+        char preset_str[32];
+        char trigger[16];
+        char data_type[8];
+        char in1[32];
+        char in2[32];
+        char out[32];
+        bool passThrough;
         
-        BranchData() : start_index(-1), element_count(0) {}
-    };
-    
-    // Separate storage for branch metadata (indexed by element that owns it)
-    // This keeps LadderElement size small for stack-allocated arrays
-    static const int MAX_BRANCH_ELEMENTS_TRACKED = 16;  // Max "branch" type elements per rung
-    struct BranchElementInfo {
-        int owner_index;  // Index of the "branch" element in the elements array
-        BranchData branches[MAX_PARALLEL_BRANCHES];
-        int branch_count;
+        // Runtime: flags for processing
+        bool visited;
+        bool emitted;
+        int order_index;  // Processing order
         
         void clear() {
-            owner_index = -1;
-            branch_count = 0;
-            for (int i = 0; i < MAX_PARALLEL_BRANCHES; i++) {
-                branches[i].start_index = -1;
-                branches[i].element_count = 0;
-            }
-        }
-    };
-    static BranchElementInfo branch_element_info[MAX_BRANCH_ELEMENTS_TRACKED];
-    static int branch_element_info_used;
-    
-    struct LadderElement {
-        char type[16];       // contact, coil, coil_set, coil_rset, move, math_add, branch, etc.
-        char address[32];    // I0.0, Q0.0, M0.0, MW10, MD20, etc.
-        bool inverted;       // Normally closed for contacts, negated for coils
-        bool passThrough;    // Element doesn't modify RLO (coils, math, inc/dec)
-        char trigger[16];    // normal, rising, falling
-        uint32_t preset;     // Timer/Counter preset value
-        char preset_str[32]; // Timer preset as literal string (e.g. T#5s)
-        uint32_t precompiled_expr; // For nested structures like OR blocks
-        
-        // Math operation support
-        char data_type[8];   // u8, u16, u32, i8, i16, i32, f32, f64 (for math ops)
-        char in1[32];        // First input operand (address or #constant)
-        char in2[32];        // Second input operand (for binary ops)
-        char out[32];        // Output address (for move, math result)
-        
-        // Branch element support: index into branch_element_info (-1 if not a branch)
-        int branch_info_index;
-        
-        void clear() {
+            id[0] = '\0';
             type[0] = '\0';
             address[0] = '\0';
+            x = 0; y = 0;
             inverted = false;
-            passThrough = false;
-            trigger[0] = 'n'; trigger[1] = 'o'; trigger[2] = 'r'; trigger[3] = 'm';
-            trigger[4] = 'a'; trigger[5] = 'l'; trigger[6] = '\0';
             preset = 0;
             preset_str[0] = '\0';
-            precompiled_expr = nir::NIR_NONE;
+            trigger[0] = 'n'; trigger[1] = 'o'; trigger[2] = 'r'; trigger[3] = 'm';
+            trigger[4] = 'a'; trigger[5] = 'l'; trigger[6] = '\0';
             data_type[0] = '\0';
             in1[0] = '\0';
             in2[0] = '\0';
             out[0] = '\0';
-            branch_info_index = -1;
+            passThrough = false;
+            visited = false;
+            emitted = false;
+            order_index = -1;
         }
     };
     
-    // ============ Deferred Actions from Nested Branches ============
-    // Actions (coils, TAPs) found inside OR branches need to be collected
-    // with their condition and processed after the main network is built.
-    
-    static const int MAX_DEFERRED_ACTIONS = 32;
-    
-    struct DeferredAction {
-        char type[16];      // coil, coil_set, coil_rset, coil_n, tap
-        char address[32];   // Output address
-        bool inverted;
-        uint32_t condition; // NIR expression for when this action should execute
+    struct Connection {
+        char sources[MAX_CONN_ENDPOINTS][32];
+        int source_count;
+        char destinations[MAX_CONN_ENDPOINTS][32];
+        int dest_count;
         
         void clear() {
-            type[0] = '\0';
-            address[0] = '\0';
-            inverted = false;
-            condition = nir::NIR_NONE;
+            source_count = 0;
+            dest_count = 0;
         }
     };
     
-    // Global collection for deferred actions during parsing
-    DeferredAction deferred_actions[MAX_DEFERRED_ACTIONS];
-    int deferred_action_count = 0;
+    GraphNode nodes[MAX_NODES];
+    int node_count;
     
-    void clearDeferredActions() {
-        deferred_action_count = 0;
-    }
+    Connection connections[MAX_CONNECTIONS];
+    int connection_count;
     
-    void addDeferredAction(const char* type, const char* address, bool inverted, uint32_t condition) {
-        if (deferred_action_count >= MAX_DEFERRED_ACTIONS) return;
-        DeferredAction& da = deferred_actions[deferred_action_count++];
-        da.clear();
-        
-        int i = 0;
-        while (type[i] && i < 15) { da.type[i] = type[i]; i++; }
-        da.type[i] = '\0';
-        
-        i = 0;
-        while (address[i] && i < 31) { da.address[i] = address[i]; i++; }
-        da.address[i] = '\0';
-        
-        da.inverted = inverted;
-        da.condition = condition;
-    };
-
-    // Helper to generate unique edge memory address
-    void generateEdgeAddress(char* edge_mem) {
-        int byte_addr = edge_mem_counter / 8;
-        int bit_addr = edge_mem_counter % 8;
-        edge_mem_counter++;
-        
-        int idx = 0;
-        edge_mem[idx++] = 'M';
-        int hundreds = byte_addr / 100;
-        int tens = (byte_addr / 10) % 10;
-        int ones = byte_addr % 10;
-        if (hundreds > 0) edge_mem[idx++] = '0' + hundreds;
-        if (hundreds > 0 || tens > 0) edge_mem[idx++] = '0' + tens;
-        edge_mem[idx++] = '0' + ones;
-        edge_mem[idx++] = '.';
-        edge_mem[idx++] = '0' + bit_addr;
-        edge_mem[idx] = '\0';
-    }
-
-    // Convert a single element to an expression (handles precompiled nested structures)
-    // in_expr is the accumulated input expression for timers/counters (can be NIR_NONE)
-    uint32_t elementToExpr(LadderElement& elem, uint32_t in_expr = nir::NIR_NONE) {
-        if (elem.precompiled_expr != nir::NIR_NONE) return elem.precompiled_expr;
-        
-        // Handle Timers (multiple name formats supported)
-        if (strEqI(elem.type, "timer_ton") || strEqI(elem.type, "timer_on") ||
-            strEqI(elem.type, "timer_tof") || strEqI(elem.type, "timer_off") ||
-            strEqI(elem.type, "timer_tp") || strEqI(elem.type, "timer_pulse")) {
-            nir::CallOp op = nir::CALL_TON;
-            if (strEqI(elem.type, "timer_tof") || strEqI(elem.type, "timer_off")) op = nir::CALL_TOF;
-            else if (strEqI(elem.type, "timer_tp") || strEqI(elem.type, "timer_pulse")) op = nir::CALL_TP;
-            
-            uint32_t sym_idx = nir::g_store.addSymbol(elem.address, nir::SYM_TIMER);
-            if (sym_idx == nir::NIR_NONE) return nir::NIR_NONE;
-            
-            uint32_t call_expr;
-            if (elem.preset_str[0] != '\0') {
-                call_expr = nir::g_store.addCallBoolLiteral(op, in_expr, sym_idx, elem.preset_str);
-            } else {
-                call_expr = nir::g_store.addCallBool(op, in_expr, sym_idx, elem.preset);
-            }
-            return call_expr;
-        }
-        
-        // Handle Counters (multiple name formats supported)
-        if (strEqI(elem.type, "counter_u") || strEqI(elem.type, "counter_up") ||
-            strEqI(elem.type, "counter_d") || strEqI(elem.type, "counter_down")) {
-            nir::CallOp op = (strEqI(elem.type, "counter_u") || strEqI(elem.type, "counter_up")) 
-                            ? nir::CALL_CTU : nir::CALL_CTD;
-            
-            uint32_t sym_idx = nir::g_store.addSymbol(elem.address, nir::SYM_COUNTER);
-            if (sym_idx == nir::NIR_NONE) return nir::NIR_NONE;
-            
-            uint32_t call_expr = nir::g_store.addCallBool(op, in_expr, sym_idx, elem.preset);
-            return call_expr;
-        }
-        
-        // Handle Contacts
-        bool inverted = elem.inverted || strEqI(elem.type, "contact_nc");
-        uint32_t sym_idx = nir::g_store.addSymbol(elem.address);
-        if (sym_idx == nir::NIR_NONE) return nir::NIR_NONE;
-        
-        uint32_t leaf_expr = nir::g_store.addLeaf(sym_idx, inverted);
-        
-        // Handle edge detection
-        if (strEqI(elem.trigger, "rising") || strEqI(elem.trigger, "positive")) {
-            char edge_mem[16];
-            generateEdgeAddress(edge_mem);
-            uint32_t edge_sym = nir::g_store.addSymbol(edge_mem, nir::SYM_EDGE);
-            leaf_expr = nir::g_store.addCallBool(nir::CALL_FP, leaf_expr, edge_sym);
-        } else if (strEqI(elem.trigger, "falling") || strEqI(elem.trigger, "negative")) {
-            char edge_mem[16];
-            generateEdgeAddress(edge_mem);
-            uint32_t edge_sym = nir::g_store.addSymbol(edge_mem, nir::SYM_EDGE);
-            leaf_expr = nir::g_store.addCallBool(nir::CALL_FN, leaf_expr, edge_sym);
-        } else if (strEqI(elem.trigger, "change") || strEqI(elem.trigger, "any")) {
-            char edge_mem[16];
-            generateEdgeAddress(edge_mem);
-            uint32_t edge_sym = nir::g_store.addSymbol(edge_mem, nir::SYM_EDGE);
-            leaf_expr = nir::g_store.addCallBool(nir::CALL_FX, leaf_expr, edge_sym);
-        }
-        return leaf_expr;
-    }
-
-    // Check if element type is a timer or counter
-    bool isTimerOrCounter(const char* type) {
-        return strEqI(type, "timer_ton") || strEqI(type, "timer_on") ||
-               strEqI(type, "timer_tof") || strEqI(type, "timer_off") ||
-               strEqI(type, "timer_tp") || strEqI(type, "timer_pulse") ||
-               strEqI(type, "counter_u") || strEqI(type, "counter_up") ||
-               strEqI(type, "counter_d") || strEqI(type, "counter_down");
+    // ============ Node Type Helpers ============
+    
+    bool isContact(const char* type) {
+        return strEqI(type, "contact_no") || strEqI(type, "contact_nc") ||
+               strEqI(type, "contact_pos") || strEqI(type, "contact_neg") ||
+               strEqI(type, "contact");
     }
     
-    // Check if element type is a coil
     bool isCoil(const char* type) {
         return strEqI(type, "coil") || strEqI(type, "coil_set") ||
-               strEqI(type, "coil_rset") || strEqI(type, "coil_n");
+               strEqI(type, "coil_rset") || strEqI(type, "coil_neg");
     }
     
-    // Check if element type is a math operation
-    bool isMathOp(const char* type) {
-        return strEqI(type, "math_add") || strEqI(type, "math_sub") ||
-               strEqI(type, "math_mul") || strEqI(type, "math_div") ||
-               strEqI(type, "math_mod") || strEqI(type, "math_neg") ||
-               strEqI(type, "math_abs") || strEqI(type, "add") ||
-               strEqI(type, "sub") || strEqI(type, "mul") ||
-               strEqI(type, "div") || strEqI(type, "mod") ||
-               strEqI(type, "neg") || strEqI(type, "abs");
+    bool isTimer(const char* type) {
+        return strEqI(type, "timer_on") || strEqI(type, "timer_off") ||
+               strEqI(type, "timer_pulse") || strEqI(type, "timer_ton") ||
+               strEqI(type, "timer_tof") || strEqI(type, "timer_tp");
     }
     
-    // Check if element type is a compare operation
-    bool isCompareOp(const char* type) {
-        return strEqI(type, "compare_eq") || strEqI(type, "compare_neq") ||
-               strEqI(type, "compare_gt") || strEqI(type, "compare_lt") ||
-               strEqI(type, "compare_gte") || strEqI(type, "compare_lte") ||
-               strEqI(type, "cmp_eq") || strEqI(type, "cmp_neq") ||
-               strEqI(type, "cmp_gt") || strEqI(type, "cmp_lt") ||
-               strEqI(type, "cmp_gte") || strEqI(type, "cmp_lte");
+    bool isCounter(const char* type) {
+        return strEqI(type, "counter_up") || strEqI(type, "counter_down") ||
+               strEqI(type, "counter_u") || strEqI(type, "counter_d");
     }
     
-    // Check if element type is a move/transfer operation
-    bool isMoveOp(const char* type) {
-        return strEqI(type, "move") || strEqI(type, "transfer");
+    // isTerminationNode: nodes that write output and can optionally pass through RLO
+    bool isTerminationNode(const char* type) {
+        return isCoil(type) || isTimer(type) || isCounter(type);
     }
     
-    // Check if element type is an increment/decrement operation
-    bool isIncDecOp(const char* type) {
-        return strEqI(type, "inc") || strEqI(type, "dec");
+    // isOutputNode: nodes that are actual outputs (coils only)
+    // Timers/counters are function blocks, not outputs - they are emitted as part of the condition chain
+    bool isOutputNode(const char* type) {
+        return isCoil(type);
     }
     
-    // Check if element is a pass-through element (doesn't modify RLO)
-    // Pass-through elements: coil, coil_set, coil_rset, coil_n, inc, dec, 
-    // math_add, math_sub, math_mul, math_div, math_mod, math_neg, math_abs, move
-    bool isPassThroughType(const char* type) {
-        return isCoil(type) || isIncDecOp(type) || isMathOp(type) || isMoveOp(type);
+    bool isInputNode(const char* type) {
+        return isContact(type);
     }
     
-    // Check if element is pass-through (explicit flag or by type)
-    bool isPassThrough(const LadderElement& elem) {
-        return elem.passThrough || isPassThroughType(elem.type);
+    bool isFunctionBlock(const char* type) {
+        return isTimer(type) || isCounter(type);
     }
     
-    // Check if element type modifies RLO (contact, timer, counter, compare, or block)
-    bool modifiesRLO(const char* type) {
-        return strEqI(type, "contact") || strEqI(type, "contact_nc") || 
-               strEqI(type, "contact_no") || strEqI(type, "contact_inverted") ||
-               isTimerOrCounter(type) || isCompareOp(type) ||
-               strEqI(type, "or");
-    }
-    
-    // Check if element type is a parallel output branch (uses BR stack)
-    bool isParallelOutputBranch(const char* type) {
-        return strEqI(type, "branch");
-    }
-    
-    // Convert data type string to DataType enum
-    nir::DataType parseDataType(const char* dt) {
-        if (strEqI(dt, "u8") || strEqI(dt, "byte")) return nir::DT_U8;
-        if (strEqI(dt, "u16") || strEqI(dt, "word")) return nir::DT_U16;
-        if (strEqI(dt, "u32") || strEqI(dt, "dword")) return nir::DT_U32;
-        if (strEqI(dt, "u64") || strEqI(dt, "lword")) return nir::DT_U64;
-        if (strEqI(dt, "i8") || strEqI(dt, "sint")) return nir::DT_I8;
-        if (strEqI(dt, "i16") || strEqI(dt, "int")) return nir::DT_I16;
-        if (strEqI(dt, "i32") || strEqI(dt, "dint")) return nir::DT_I32;
-        if (strEqI(dt, "i64") || strEqI(dt, "lint")) return nir::DT_I64;
-        if (strEqI(dt, "f32") || strEqI(dt, "real") || strEqI(dt, "float")) return nir::DT_F32;
-        if (strEqI(dt, "f64") || strEqI(dt, "lreal") || strEqI(dt, "double")) return nir::DT_F64;
-        return nir::DT_I16; // Default to i16 (Siemens INT)
-    }
-    
-    // Infer data type from address prefix (MB, MW, MD, MR, etc.)
-    nir::DataType inferDataTypeFromAddress(const char* addr) {
-        if (!addr || !addr[0]) return nir::DT_I16;
+    // Check if a termination node should emit TAP (has outgoing connections to continuation nodes)
+    // Only COILS need TAP because they consume the RLO
+    // Timers and counters push their Q output as the new RLO, so they don't need TAP
+    bool nodeNeedsTap(int nodeIdx) {
+        if (nodeIdx < 0 || nodeIdx >= node_count) return false;
+        GraphNode& node = nodes[nodeIdx];
         
-        char c0 = addr[0];
-        char c1 = addr[1];
-        if (c0 >= 'a' && c0 <= 'z') c0 -= 32;
-        if (c1 >= 'a' && c1 <= 'z') c1 -= 32;
+        // Only COILS need TAP - timers/counters push their Q output to the stack
+        if (!isCoil(node.type)) return false;
         
-        // Check two-letter prefix (MB, MW, MD, ML, MR, IW, ID, QW, QD, etc.)
-        if (c1 == 'B') return nir::DT_U8;   // Byte
-        if (c1 == 'W') return nir::DT_I16;  // Word (16-bit signed)
-        if (c1 == 'D') return nir::DT_I32;  // DWord (32-bit signed)
-        if (c1 == 'L') return nir::DT_I64;  // LWord (64-bit signed)
-        if (c1 == 'R') return nir::DT_F32;  // Real (32-bit float)
+        // Check if explicitly marked passThrough
+        if (node.passThrough) return true;
         
-        return nir::DT_I16; // Default
+        // Check if node has outgoing connections to input nodes (contacts)
+        // TAP is only needed if the coil's RLO is used as a condition input
+        int destIndices[MAX_NODES];
+        int destCount;
+        getDestNodes(node.id, destIndices, destCount, MAX_NODES);
+        
+        for (int d = 0; d < destCount; d++) {
+            GraphNode& dest = nodes[destIndices[d]];
+            // If destination is a contact (input), we need TAP
+            if (isInputNode(dest.type)) return true;
+            // Note: coil-to-coil passthrough does NOT need TAP - they share the same RLO
+        }
+        
+        return false;
     }
     
-    // Parse an operand (address or constant) and return expression index
-    uint32_t parseOperand(const char* operand, nir::DataType dt) {
-        if (!operand || !operand[0]) return nir::NIR_NONE;
+    // Emit any coils that are connected as passthrough from the given node
+    void emitPassthroughChain(int nodeIdx, bool* outputProcessed) {
+        if (nodeIdx < 0 || nodeIdx >= node_count) return;
         
-        // Check if it's a constant (starts with # or is a number)
-        if (operand[0] == '#' || (operand[0] >= '0' && operand[0] <= '9') ||
-            (operand[0] == '-' && operand[1] >= '0' && operand[1] <= '9')) {
-            const char* num_start = (operand[0] == '#') ? operand + 1 : operand;
+        // Find destination coils connected via passthrough
+        int destIndices[MAX_NODES];
+        int destCount;
+        getDestNodes(nodes[nodeIdx].id, destIndices, destCount, MAX_NODES);
+        
+        for (int d = 0; d < destCount; d++) {
+            int destIdx = destIndices[d];
+            GraphNode& destNode = nodes[destIdx];
             
-            // Parse based on data type
-            if (dt == nir::DT_F32 || dt == nir::DT_F64) {
-                // Parse float
-                float val = 0.0f;
-                bool neg = false;
-                int i = 0;
-                if (num_start[i] == '-') { neg = true; i++; }
-                while (num_start[i] >= '0' && num_start[i] <= '9') {
-                    val = val * 10 + (num_start[i] - '0');
-                    i++;
+            // Only process coils (not contacts used as passthrough sensing)
+            if (!isCoil(destNode.type)) continue;
+            
+            // Skip if already processed
+            if (outputProcessed[destIdx]) continue;
+            
+            // Emit this coil
+            bool needTap = nodeNeedsTap(destIdx);
+            emitCoil(destNode, needTap);
+            outputProcessed[destIdx] = true;
+            if (needTap) destNode.emitted = true;
+            
+            // Recursively emit any further passthrough chain
+            if (needTap) {
+                emitPassthroughChain(destIdx, outputProcessed);
+            }
+        }
+    }
+    
+    // ============ Node Lookup ============
+    
+    int findNodeById(const char* id) {
+        for (int i = 0; i < node_count; i++) {
+            if (strEqI(nodes[i].id, id)) return i;
+        }
+        return -1;
+    }
+    
+    // ============ Connection Helpers ============
+    
+    // Find all connections where this node is a destination (inputs to this node)
+    void getInputConnections(const char* nodeId, int* connIndices, int& count, int maxCount) {
+        count = 0;
+        for (int c = 0; c < connection_count && count < maxCount; c++) {
+            for (int d = 0; d < connections[c].dest_count; d++) {
+                if (strEqI(connections[c].destinations[d], nodeId)) {
+                    connIndices[count++] = c;
+                    break;
                 }
-                if (num_start[i] == '.') {
-                    i++;
-                    float frac = 0.1f;
-                    while (num_start[i] >= '0' && num_start[i] <= '9') {
-                        val += (num_start[i] - '0') * frac;
-                        frac *= 0.1f;
-                        i++;
+            }
+        }
+    }
+    
+    // Find all connections where this node is a source (outputs from this node)
+    void getOutputConnections(const char* nodeId, int* connIndices, int& count, int maxCount) {
+        count = 0;
+        for (int c = 0; c < connection_count && count < maxCount; c++) {
+            for (int s = 0; s < connections[c].source_count; s++) {
+                if (strEqI(connections[c].sources[s], nodeId)) {
+                    connIndices[count++] = c;
+                    break;
+                }
+            }
+        }
+    }
+    
+    // Get all source node IDs feeding into a given node
+    void getSourceNodes(const char* nodeId, int* nodeIndices, int& count, int maxCount) {
+        count = 0;
+        int connIndices[MAX_CONNECTIONS];
+        int connCount;
+        getInputConnections(nodeId, connIndices, connCount, MAX_CONNECTIONS);
+        
+        for (int c = 0; c < connCount; c++) {
+            Connection& conn = connections[connIndices[c]];
+            for (int s = 0; s < conn.source_count && count < maxCount; s++) {
+                int idx = findNodeById(conn.sources[s]);
+                if (idx >= 0) {
+                    // Check if already added
+                    bool found = false;
+                    for (int i = 0; i < count; i++) {
+                        if (nodeIndices[i] == idx) { found = true; break; }
                     }
+                    if (!found) nodeIndices[count++] = idx;
                 }
-                if (neg) val = -val;
-                return nir::g_store.addConstF32(val);
-            } else {
-                // Parse integer
-                int64_t val = 0;
-                bool neg = false;
-                int i = 0;
-                if (num_start[i] == '-') { neg = true; i++; }
-                while (num_start[i] >= '0' && num_start[i] <= '9') {
-                    val = val * 10 + (num_start[i] - '0');
-                    i++;
-                }
-                if (neg) val = -val;
-                return nir::g_store.addConst(dt, val);
             }
         }
-        
-        // It's an address - create a load expression
-        // Strip type prefix (MW10 -> M10) for consistent symbol lookup
-        char stripped[64];
-        stripTypePrefix(operand, stripped);
-        uint32_t sym_idx = nir::g_store.addSymbol(stripped);
-        return nir::g_store.addLoad(sym_idx, dt);
     }
     
-    // Get MathOp from element type
-    nir::MathOp getMathOp(const char* type) {
-        if (strEqI(type, "math_add") || strEqI(type, "add")) return nir::MATH_ADD;
-        if (strEqI(type, "math_sub") || strEqI(type, "sub")) return nir::MATH_SUB;
-        if (strEqI(type, "math_mul") || strEqI(type, "mul")) return nir::MATH_MUL;
-        if (strEqI(type, "math_div") || strEqI(type, "div")) return nir::MATH_DIV;
-        if (strEqI(type, "math_mod") || strEqI(type, "mod")) return nir::MATH_MOD;
-        if (strEqI(type, "math_neg") || strEqI(type, "neg")) return nir::MATH_NEG;
-        if (strEqI(type, "math_abs") || strEqI(type, "abs")) return nir::MATH_ABS;
-        return nir::MATH_NONE;
-    }
-    
-    // Get CompareOp from element type
-    nir::CompareOp getCompareOp(const char* type) {
-        if (strEqI(type, "compare_eq") || strEqI(type, "cmp_eq")) return nir::CMP_EQ;
-        if (strEqI(type, "compare_neq") || strEqI(type, "cmp_neq")) return nir::CMP_NEQ;
-        if (strEqI(type, "compare_gt") || strEqI(type, "cmp_gt")) return nir::CMP_GT;
-        if (strEqI(type, "compare_lt") || strEqI(type, "cmp_lt")) return nir::CMP_LT;
-        if (strEqI(type, "compare_gte") || strEqI(type, "cmp_gte")) return nir::CMP_GTE;
-        if (strEqI(type, "compare_lte") || strEqI(type, "cmp_lte")) return nir::CMP_LTE;
-        return nir::CMP_NONE;
-    }
-    
-    // Strip type prefix from address (MW0 -> 0, MD4 -> 4, MR8 -> 8, M0.0 -> M0.0)
-    void stripTypePrefix(const char* addr, char* out) {
-        // Handle M prefix addresses (Memory area)
-        if (addr[0] == 'M' || addr[0] == 'm') {
-            char c1 = addr[1];
-            if (c1 >= 'a' && c1 <= 'z') c1 -= 32;
-            
-            // Check for typed addresses (MW, MD, MR, MB, ML)
-            if (c1 == 'W' || c1 == 'D' || c1 == 'R' || c1 == 'B' || c1 == 'L') {
-                // Keep the first character, skip the type prefix, copy the rest
-                out[0] = addr[0];
-                int i = 1;
-                int j = 2;  // Start after type prefix
-                while (addr[j] != '\0') {
-                    out[i++] = addr[j++];
-                }
-                out[i] = '\0';
-                return;
-            }
-        }
-        // Handle I/Q prefix addresses
-        else if (addr[0] == 'I' || addr[0] == 'i' || addr[0] == 'Q' || addr[0] == 'q') {
-            char c1 = addr[1];
-            if (c1 >= 'a' && c1 <= 'z') c1 -= 32;
-            
-            // Check for typed addresses (IW, ID, QW, QD)
-            if (c1 == 'W' || c1 == 'D') {
-                // Keep the first character, skip the type prefix, copy the rest
-                out[0] = addr[0];
-                int i = 1;
-                int j = 2;
-                while (addr[j] != '\0') {
-                    out[i++] = addr[j++];
-                }
-                out[i] = '\0';
-                return;
-            }
-        }
+    // Get all destination node IDs this node feeds into
+    void getDestNodes(const char* nodeId, int* nodeIndices, int& count, int maxCount) {
+        count = 0;
+        int connIndices[MAX_CONNECTIONS];
+        int connCount;
+        getOutputConnections(nodeId, connIndices, connCount, MAX_CONNECTIONS);
         
-        // No type prefix, copy as-is
-        int i = 0;
-        while (addr[i] != '\0') {
-            out[i] = addr[i];
-            i++;
-        }
-        out[i] = '\0';
-    }
-
-    // Structure to hold parsed branch info (coils, TAPs, etc.)
-    struct BranchParseResult {
-        uint32_t condition_expr;
-        bool has_coils;
-        bool has_tap;
-        
-        // Collected coils
-        static const int MAX_BRANCH_COILS = 8;
-        struct CoilInfo {
-            char type[16];
-            char address[32];
-            bool inverted;
-        } coils[MAX_BRANCH_COILS];
-        int coil_count;
-        
-        void clear() {
-            condition_expr = nir::NIR_NONE;
-            has_coils = false;
-            has_tap = false;
-            coil_count = 0;
-        }
-    };
-
-    // Parse elements array to expression AND collect coils/TAPs for compound branch detection
-    bool parseElementsArrayWithActions(BranchParseResult& result) {
-        result.clear();
-        
-        if (!expect('[')) { setError("Expected elements array"); return false; }
-        
-        uint32_t children[32];
-        int count = 0;
-        uint32_t accumulated_expr = nir::NIR_NONE;
-        
-        while (peek() != ']' && peek() != '\0') {
-            if (count >= 32) { setError("Too many elements in nested block"); return false; }
-            
-            LadderElement elem;
-            if (!parseElement(elem)) return false;
-            
-            // Handle coils - collect them for compound branch
-            if (isCoil(elem.type)) {
-                if (result.coil_count < BranchParseResult::MAX_BRANCH_COILS) {
-                    BranchParseResult::CoilInfo& ci = result.coils[result.coil_count++];
-                    int i = 0;
-                    while (elem.type[i] && i < 15) { ci.type[i] = elem.type[i]; i++; }
-                    ci.type[i] = '\0';
-                    i = 0;
-                    while (elem.address[i] && i < 31) { ci.address[i] = elem.address[i]; i++; }
-                    ci.address[i] = '\0';
-                    ci.inverted = elem.inverted;
-                    result.has_coils = true;
-                }
-                skipWhitespace();
-                if (peek() == ',') advance();
-                continue;
-            }
-            
-            // Handle TAP - mark branch as having TAP
-            if (strEqI(elem.type, "tap")) {
-                result.has_tap = true;
-                skipWhitespace();
-                if (peek() == ',') advance();
-                continue;
-            }
-            
-            // Handle contacts, OR blocks, and precompiled expressions
-            if (strEqI(elem.type, "contact") || strEqI(elem.type, "contact_no") ||
-                strEqI(elem.type, "contact_nc") || 
-                strEqI(elem.type, "or") || elem.precompiled_expr != nir::NIR_NONE) {
-                uint32_t e = elementToExpr(elem);
-                if (e != nir::NIR_NONE) children[count++] = e;
-            }
-            // Handle timers and counters
-            else if (isTimerOrCounter(elem.type)) {
-                if (count > 0) {
-                    if (count == 1) accumulated_expr = children[0];
-                    else accumulated_expr = nir::g_store.addAnd(children, count);
-                    count = 0;
-                }
-                
-                uint32_t e = elementToExpr(elem, accumulated_expr);
-                if (e != nir::NIR_NONE) children[count++] = e;
-                accumulated_expr = nir::NIR_NONE;
-            }
-            
-            skipWhitespace();
-            if (peek() == ',') advance();
-        }
-        
-        if (!expect(']')) { setError("Expected ] close elements"); return false; }
-        
-        if (count == 0) result.condition_expr = nir::NIR_NONE;
-        else if (count == 1) result.condition_expr = children[0];
-        else result.condition_expr = nir::g_store.addAnd(children, count);
-        return true;
-    }
-    
-    // Simple version that doesn't collect actions (for backward compat)
-    bool parseElementsArrayToExpr(uint32_t& out_expr) {
-        BranchParseResult result;
-        if (!parseElementsArrayWithActions(result)) return false;
-        out_expr = result.condition_expr;
-        return true;
-    }
-    
-    // Parse branches array - creates compound expressions for branches with coils/TAPs
-    bool parseRecursiveBranches(uint32_t& out_expr) {
-        if (!expect('[')) { setError("Expected branches array"); return false; }
-        
-        uint32_t children[16];
-        int count = 0;
-        
-        while (peek() != ']' && peek() != '\0') {
-            if (count >= 16) { setError("Too many branches"); return false; }
-            
-            BranchParseResult br_result;
-            br_result.clear();
-            
-            skipWhitespace();
-            // Support both formats:
-            // 1. [ [...elements...], [...elements...] ]  (arrays directly)
-            // 2. [ {elements: [...]}, {elements: [...]} ]  (objects with elements)
-            if (peek() == '[') {
-                // Branch is an array of elements directly
-                if (!parseElementsArrayWithActions(br_result)) return false;
-            } else if (peek() == '{') {
-                // Branch is an object with elements key
-                advance(); // skip '{'
-            
-                while (peek() != '}' && peek() != '\0') {
-                    char key[32];
-                    if (!readString(key, sizeof(key))) return false;
-                    if (!expect(':')) { setError("Expected :"); return false; }
-                    
-                    if (strEqI(key, "elements")) {
-                        if (!parseElementsArrayWithActions(br_result)) return false;
-                    } else skipValue();
-                    
-                    skipWhitespace();
-                    if (peek() == ',') advance();
-                }
-                if (!expect('}')) { setError("Expected } close branch"); return false; }
-            } else {
-                setError("Expected branch ([ or {)");
-                return false;
-            }
-            
-            // If branch has coils or TAP, create a compound expression
-            if (br_result.has_coils || br_result.has_tap) {
-                uint32_t comp_expr = nir::g_store.addCompoundBranch(br_result.condition_expr, br_result.has_tap);
-                if (comp_expr == nir::NIR_NONE) return false;
-                
-                // Get the compound index from the expression
-                nir::Expr& expr = nir::g_store.exprs[comp_expr];
-                uint32_t comp_idx = expr.a;
-                
-                // Add inline actions
-                for (int i = 0; i < br_result.coil_count; i++) {
-                    BranchParseResult::CoilInfo& ci = br_result.coils[i];
-                    nir::ActionKind kind = nir::ACT_ASSIGN;
-                    if (strEqI(ci.type, "coil_set")) kind = nir::ACT_SET;
-                    else if (strEqI(ci.type, "coil_rset")) kind = nir::ACT_RESET;
-                    
-                    uint32_t target_sym = nir::g_store.addSymbol(ci.address);
-                    if (target_sym == nir::NIR_NONE) return false;
-                    
-                    nir::g_store.addCompoundAction(comp_idx, kind, target_sym);
-                }
-                
-                children[count++] = comp_expr;
-            } else if (br_result.condition_expr != nir::NIR_NONE) {
-                children[count++] = br_result.condition_expr;
-            }
-            
-            skipWhitespace();
-            if (peek() == ',') advance();
-        }
-        
-        if (!expect(']')) { setError("Expected ] close branches"); return false; }
-        
-        if (count == 0) out_expr = nir::NIR_NONE;
-        else if (count == 1) out_expr = children[0];
-        else out_expr = nir::g_store.addOr(children, count);
-        return true;
-    }
-    
-    // Parse branches array for "branch" type elements (parallel outputs using BR stack)
-    // This stores raw elements instead of compiling to expressions
-    bool parseParallelBranchesArray(LadderElement& elem, int elem_index) {
-        if (!expect('[')) { setError("Expected branches array"); return false; }
-        
-        // Allocate a BranchElementInfo entry for this "branch" element
-        if (branch_element_info_used >= MAX_BRANCH_ELEMENTS_TRACKED) {
-            setError("Too many branch elements");
-            return false;
-        }
-        
-        BranchElementInfo& info = branch_element_info[branch_element_info_used];
-        info.clear();
-        info.owner_index = elem_index;
-        elem.branch_info_index = branch_element_info_used;
-        branch_element_info_used++;
-        
-        while (peek() != ']' && peek() != '\0') {
-            if (info.branch_count >= MAX_PARALLEL_BRANCHES) {
-                setError("Too many parallel branches");
-                return false;
-            }
-            
-            // Allocate storage for this branch's elements
-            if (branch_element_storage_used + MAX_PB_BRANCH_ELEMENTS > MAX_TOTAL_PB_ELEMENTS) {
-                setError("Branch element storage exhausted");
-                return false;
-            }
-            
-            BranchData& branch = info.branches[info.branch_count];
-            branch.start_index = branch_element_storage_used;
-            branch.element_count = 0;
-            
-            skipWhitespace();
-            // Each branch is { "elements": [...] }
-            if (!expect('{')) { setError("Expected branch object"); return false; }
-            
-            while (peek() != '}' && peek() != '\0') {
-                char key[32];
-                if (!readString(key, sizeof(key))) return false;
-                if (!expect(':')) { setError("Expected ':'"); return false; }
-                
-                if (strEqI(key, "elements")) {
-                    // Parse elements array for this branch
-                    if (!expect('[')) { setError("Expected elements array"); return false; }
-                    
-                    while (peek() != ']' && peek() != '\0') {
-                        if (branch.element_count >= MAX_PB_BRANCH_ELEMENTS) {
-                            setError("Too many elements in branch");
-                            return false;
-                        }
-                        
-                        if (!parseElement(branch_element_storage[branch_element_storage_used])) return false;
-                        branch.element_count++;
-                        branch_element_storage_used++;
-                        
-                        skipWhitespace();
-                        if (peek() == ',') advance();
+        for (int c = 0; c < connCount; c++) {
+            Connection& conn = connections[connIndices[c]];
+            for (int d = 0; d < conn.dest_count && count < maxCount; d++) {
+                int idx = findNodeById(conn.destinations[d]);
+                if (idx >= 0) {
+                    bool found = false;
+                    for (int i = 0; i < count; i++) {
+                        if (nodeIndices[i] == idx) { found = true; break; }
                     }
-                    
-                    if (!expect(']')) { setError("Expected ] for elements"); return false; }
-                } else {
-                    skipValue();
+                    if (!found) nodeIndices[count++] = idx;
                 }
-                
-                skipWhitespace();
-                if (peek() == ',') advance();
             }
-            
-            if (!expect('}')) { setError("Expected } for branch"); return false; }
-            info.branch_count++;
-            
-            skipWhitespace();
-            if (peek() == ',') advance();
         }
-        
-        if (!expect(']')) { setError("Expected ] for branches"); return false; }
-        return true;
     }
     
-    bool parseElement(LadderElement& elem) {
-        elem.clear();
+    // ============ JSON Parsing ============
+    
+    bool parseNode(GraphNode& node) {
+        node.clear();
         
         if (!expect('{')) {
-            setError("Expected element object");
+            setError("Expected node object");
             return false;
         }
         
         while (peek() != '}' && peek() != '\0') {
             char key[32];
             if (!readString(key, sizeof(key))) return false;
+            if (!expect(':')) { setError("Expected ':'"); return false; }
             
-            if (!expect(':')) {
-                setError("Expected ':' after key");
-                return false;
-            }
-            
-            if (strEqI(key, "type")) {
-                if (!readString(elem.type, sizeof(elem.type))) return false;
-            } else if (strEqI(key, "branches")) {
-                // Check if this is a parallel output branch (type: "branch") or OR condition (type: "or")
-                // For "branch" type, we store raw elements in branch_data for BR stack emission
-                // For "or" type, we compile branches to a precompiled_expr
-                if (strEqI(elem.type, "branch")) {
-                    // Parse branches array for parallel output branch element (uses BR stack)
-                    if (!parseParallelBranchesArray(elem, current_element_index)) return false;
-                } else {
-                    // Recursive OR branches within an element (for "or" type)
-                    if (!parseRecursiveBranches(elem.precompiled_expr)) return false;
-                }
-            } else if (strEqI(key, "address")) {
-                if (!readString(elem.address, sizeof(elem.address))) return false;
+            if (strEqI(key, "id")) {
+                if (!readString(node.id, sizeof(node.id))) return false;
+            } else if (strEqI(key, "type")) {
+                if (!readString(node.type, sizeof(node.type))) return false;
+            } else if (strEqI(key, "address") || strEqI(key, "symbol")) {
+                if (!readString(node.address, sizeof(node.address))) return false;
+            } else if (strEqI(key, "x")) {
+                if (!readInt(node.x)) return false;
+            } else if (strEqI(key, "y")) {
+                if (!readInt(node.y)) return false;
             } else if (strEqI(key, "inverted")) {
-                if (!readBool(elem.inverted)) return false;
-            } else if (strEqI(key, "trigger")) {
-                if (!readString(elem.trigger, sizeof(elem.trigger))) return false;
+                if (!readBool(node.inverted)) return false;
             } else if (strEqI(key, "preset")) {
                 skipWhitespace();
                 if (peek() == '"') {
-                    if (!readString(elem.preset_str, sizeof(elem.preset_str))) return false;
+                    if (!readString(node.preset_str, sizeof(node.preset_str))) return false;
                 } else {
-                    if (!readU32(elem.preset)) return false;
+                    if (!readU32(node.preset)) return false;
                 }
+            } else if (strEqI(key, "trigger")) {
+                if (!readString(node.trigger, sizeof(node.trigger))) return false;
             } else if (strEqI(key, "dataType") || strEqI(key, "data_type")) {
-                if (!readString(elem.data_type, sizeof(elem.data_type))) return false;
+                if (!readString(node.data_type, sizeof(node.data_type))) return false;
             } else if (strEqI(key, "in1") || strEqI(key, "input1") || strEqI(key, "in")) {
-                if (!readString(elem.in1, sizeof(elem.in1))) return false;
+                if (!readString(node.in1, sizeof(node.in1))) return false;
             } else if (strEqI(key, "in2") || strEqI(key, "input2")) {
-                if (!readString(elem.in2, sizeof(elem.in2))) return false;
+                if (!readString(node.in2, sizeof(node.in2))) return false;
             } else if (strEqI(key, "out") || strEqI(key, "output")) {
-                if (!readString(elem.out, sizeof(elem.out))) return false;
+                if (!readString(node.out, sizeof(node.out))) return false;
             } else if (strEqI(key, "passThrough") || strEqI(key, "pass_through")) {
-                if (!readBool(elem.passThrough)) return false;
+                if (!readBool(node.passThrough)) return false;
             } else {
-                // Skip unknown property
                 skipValue();
             }
             
-            // Skip comma if present
             skipWhitespace();
             if (peek() == ',') advance();
         }
         
         if (!expect('}')) {
-            setError("Expected '}' to close element");
+            setError("Expected '}' to close node");
             return false;
         }
         
         return true;
     }
     
-    // ============ Rung Parsing ============
-    
-    // Branches structure for OR logic
-    static const int MAX_BRANCHES = 16;
-    static const int MAX_BRANCH_ELEMENTS = 32;
-    
-    struct Branch {
-        LadderElement elements[MAX_BRANCH_ELEMENTS];
-        int element_count;
-        
-        void clear() { element_count = 0; }
-    };
-    
-    bool parseBranch(Branch& branch) {
-        branch.clear();
+    bool parseConnection(Connection& conn) {
+        conn.clear();
         
         if (!expect('{')) {
-            setError("Expected branch object");
+            setError("Expected connection object");
             return false;
         }
         
         while (peek() != '}' && peek() != '\0') {
             char key[32];
             if (!readString(key, sizeof(key))) return false;
+            if (!expect(':')) { setError("Expected ':'"); return false; }
             
-            if (!expect(':')) {
-                setError("Expected ':' after key");
-                return false;
-            }
-            
-            if (strEqI(key, "elements")) {
-                if (!expect('[')) {
-                    setError("Expected elements array in branch");
-                    return false;
-                }
-                
+            if (strEqI(key, "sources")) {
+                if (!expect('[')) { setError("Expected sources array"); return false; }
                 while (peek() != ']' && peek() != '\0') {
-                    if (branch.element_count >= MAX_BRANCH_ELEMENTS) {
-                        setError("Too many elements in branch");
+                    if (conn.source_count >= MAX_CONN_ENDPOINTS) {
+                        setError("Too many sources");
                         return false;
                     }
-                    
-                    if (!parseElement(branch.elements[branch.element_count])) return false;
-                    branch.element_count++;
-                    
+                    if (!readString(conn.sources[conn.source_count], 32)) return false;
+                    conn.source_count++;
                     skipWhitespace();
                     if (peek() == ',') advance();
                 }
-                
-                if (!expect(']')) {
-                    setError("Expected ']' to close branch elements");
-                    return false;
+                if (!expect(']')) { setError("Expected ']'"); return false; }
+            } else if (strEqI(key, "destinations")) {
+                if (!expect('[')) { setError("Expected destinations array"); return false; }
+                while (peek() != ']' && peek() != '\0') {
+                    if (conn.dest_count >= MAX_CONN_ENDPOINTS) {
+                        setError("Too many destinations");
+                        return false;
+                    }
+                    if (!readString(conn.destinations[conn.dest_count], 32)) return false;
+                    conn.dest_count++;
+                    skipWhitespace();
+                    if (peek() == ',') advance();
                 }
+                if (!expect(']')) { setError("Expected ']'"); return false; }
             } else {
                 skipValue();
             }
@@ -1115,988 +685,14 @@ public:
         }
         
         if (!expect('}')) {
-            setError("Expected '}' to close branch");
+            setError("Expected '}' to close connection");
             return false;
         }
         
         return true;
     }
     
-    bool parseRung() {
-        if (!expect('{')) {
-            setError("Expected rung object");
-            return false;
-        }
-        
-        // Clear deferred actions from previous rung
-        clearDeferredActions();
-        
-        // Collect elements for this rung
-        static const int MAX_ELEMENTS = 64;
-        LadderElement elements[MAX_ELEMENTS];
-        int element_count = 0;
-        
-        // Branches for parallel (OR) logic
-        Branch branches[MAX_BRANCHES];
-        int branch_count = 0;
-        
-        while (peek() != '}' && peek() != '\0') {
-            char key[32];
-            if (!readString(key, sizeof(key))) return false;
-            
-            if (!expect(':')) {
-                setError("Expected ':' after key");
-                return false;
-            }
-            
-            if (strEqI(key, "elements")) {
-                // Parse elements array
-                if (!expect('[')) {
-                    setError("Expected elements array");
-                    return false;
-                }
-                
-                while (peek() != ']' && peek() != '\0') {
-                    if (element_count >= MAX_ELEMENTS) {
-                        setError("Too many elements in rung");
-                        return false;
-                    }
-                    
-                    // Check if this is a nested array (row of elements)
-                    skipWhitespace();
-                    if (peek() == '[') {
-                        // Parse nested array as a row of elements
-                        advance(); // skip '['
-                        while (peek() != ']' && peek() != '\0') {
-                            if (element_count >= MAX_ELEMENTS) {
-                                setError("Too many elements in nested row");
-                                return false;
-                            }
-                            
-                            current_element_index = element_count;
-                            if (!parseElement(elements[element_count])) return false;
-                            element_count++;
-                            
-                            skipWhitespace();
-                            if (peek() == ',') advance();
-                        }
-                        if (!expect(']')) {
-                            setError("Expected ']' to close nested row");
-                            return false;
-                        }
-                    } else {
-                        // Parse single element
-                        current_element_index = element_count;
-                        if (!parseElement(elements[element_count])) return false;
-                        element_count++;
-                    }
-                    
-                    skipWhitespace();
-                    if (peek() == ',') advance();
-                }
-                
-                if (!expect(']')) {
-                    setError("Expected ']' to close elements");
-                    return false;
-                }
-            } else if (strEqI(key, "segments")) {
-                // Parse segments array - each segment has elements
-                if (!expect('[')) {
-                    setError("Expected segments array");
-                    return false;
-                }
-                
-                while (peek() != ']' && peek() != '\0') {
-                    // Each segment is an object with elements
-                    if (!expect('{')) {
-                        setError("Expected segment object");
-                        return false;
-                    }
-                    
-                    while (peek() != '}' && peek() != '\0') {
-                        char segKey[32];
-                        if (!readString(segKey, sizeof(segKey))) return false;
-                        if (!expect(':')) { setError("Expected ':'"); return false; }
-                        
-                        if (strEqI(segKey, "elements")) {
-                            // Parse elements array within segment
-                            if (!expect('[')) {
-                                setError("Expected elements array in segment");
-                                return false;
-                            }
-                            
-                            while (peek() != ']' && peek() != '\0') {
-                                // Check if nested array
-                                skipWhitespace();
-                                if (peek() == '[') {
-                                    advance();
-                                    while (peek() != ']' && peek() != '\0') {
-                                        if (element_count >= MAX_ELEMENTS) {
-                                            setError("Too many elements");
-                                            return false;
-                                        }
-                                        current_element_index = element_count;
-                                        if (!parseElement(elements[element_count])) return false;
-                                        element_count++;
-                                        skipWhitespace();
-                                        if (peek() == ',') advance();
-                                    }
-                                    if (!expect(']')) {
-                                        setError("Expected ']' close nested");
-                                        return false;
-                                    }
-                                } else {
-                                    if (element_count >= MAX_ELEMENTS) {
-                                        setError("Too many elements");
-                                        return false;
-                                    }
-                                    current_element_index = element_count;
-                                    if (!parseElement(elements[element_count])) return false;
-                                    element_count++;
-                                }
-                                skipWhitespace();
-                                if (peek() == ',') advance();
-                            }
-                            
-                            if (!expect(']')) {
-                                setError("Expected ']' close segment elements");
-                                return false;
-                            }
-                        } else {
-                            skipValue();
-                        }
-                        
-                        skipWhitespace();
-                        if (peek() == ',') advance();
-                    }
-                    
-                    if (!expect('}')) {
-                        setError("Expected '}' close segment");
-                        return false;
-                    }
-                    
-                    skipWhitespace();
-                    if (peek() == ',') advance();
-                }
-                
-                if (!expect(']')) {
-                    setError("Expected ']' close segments");
-                    return false;
-                }
-            } else if (strEqI(key, "comment")) {
-                // Skip comment for now
-                skipValue();
-            } else if (strEqI(key, "branches")) {
-                // Parse branches array for OR logic
-                if (!expect('[')) {
-                    setError("Expected branches array");
-                    return false;
-                }
-                
-                while (peek() != ']' && peek() != '\0') {
-                    if (branch_count >= MAX_BRANCHES) {
-                        setError("Too many branches in rung");
-                        return false;
-                    }
-                    
-                    if (!parseBranch(branches[branch_count])) return false;
-                    branch_count++;
-                    
-                    skipWhitespace();
-                    if (peek() == ',') advance();
-                }
-                
-                if (!expect(']')) {
-                    setError("Expected ']' to close branches");
-                    return false;
-                }
-            } else {
-                skipValue();
-            }
-            
-            skipWhitespace();
-            if (peek() == ',') advance();
-        }
-        
-        if (!expect('}')) {
-            setError("Expected '}' to close rung");
-            return false;
-        }
-        
-        // Now build Network IR from elements and branches
-        return buildNetworkFromElements(elements, element_count, branches, branch_count);
-    }
-
-    // Build logic expression processing contacts and function blocks (timers/counters)
-    uint32_t buildLogicExpression(LadderElement* elements, int count) {
-        if (count == 0) return nir::NIR_NONE;
-        
-        static const int MAX_AND_CHILDREN = 64;
-        uint32_t and_children[MAX_AND_CHILDREN];
-        int and_count = 0;
-        
-        for (int i = 0; i < count; i++) {
-            LadderElement& elem = elements[i];
-            
-            // Skip coils - they generate actions, not expressions
-            if (strEqI(elem.type, "coil") || strEqI(elem.type, "coil_set") || 
-                strEqI(elem.type, "coil_rset") || strEqI(elem.type, "coil_n")) {
-                continue;
-            }
-            
-            // Skip math/compare/move elements - they generate actions, not boolean expressions
-            if (isMathOp(elem.type) || isCompareOp(elem.type) || isMoveOp(elem.type) || isIncDecOp(elem.type)) {
-                continue;
-            }
-            
-            // Handle elements with precompiled expressions (nested OR blocks)
-            if (elem.precompiled_expr != nir::NIR_NONE || strEqI(elem.type, "or")) {
-                uint32_t expr = elementToExpr(elem);
-                if (expr != nir::NIR_NONE && and_count < MAX_AND_CHILDREN) {
-                    and_children[and_count++] = expr;
-                }
-                continue;
-            }
-            
-            // Handle Contacts
-            if (strEqI(elem.type, "contact") || strEqI(elem.type, "contact_nc")) {
-                bool inverted = elem.inverted || strEqI(elem.type, "contact_nc");
-                
-                uint32_t sym_idx = nir::g_store.addSymbol(elem.address);
-                if (sym_idx == nir::NIR_NONE) return nir::NIR_NONE;
-                
-                uint32_t leaf_expr = nir::g_store.addLeaf(sym_idx, inverted);
-                if (leaf_expr == nir::NIR_NONE) return nir::NIR_NONE;
-                
-                // Handle edge detection
-                if (strEqI(elem.trigger, "rising") || strEqI(elem.trigger, "positive")) {
-                    char edge_mem[16];
-                    generateEdgeAddress(edge_mem);
-                    uint32_t edge_sym = nir::g_store.addSymbol(edge_mem, nir::SYM_EDGE);
-                    leaf_expr = nir::g_store.addCallBool(nir::CALL_FP, leaf_expr, edge_sym);
-                } else if (strEqI(elem.trigger, "falling") || strEqI(elem.trigger, "negative")) {
-                    char edge_mem[16];
-                    generateEdgeAddress(edge_mem);
-                    uint32_t edge_sym = nir::g_store.addSymbol(edge_mem, nir::SYM_EDGE);
-                    leaf_expr = nir::g_store.addCallBool(nir::CALL_FN, leaf_expr, edge_sym);
-                } else if (strEqI(elem.trigger, "change") || strEqI(elem.trigger, "any")) {
-                    char edge_mem[16];
-                    generateEdgeAddress(edge_mem);
-                    uint32_t edge_sym = nir::g_store.addSymbol(edge_mem, nir::SYM_EDGE);
-                    leaf_expr = nir::g_store.addCallBool(nir::CALL_FX, leaf_expr, edge_sym);
-                }
-                
-                if (and_count < MAX_AND_CHILDREN) {
-                    and_children[and_count++] = leaf_expr;
-                }
-            }
-            // Handle Timers/Counters
-            else if (strEqI(elem.type, "timer_ton") || strEqI(elem.type, "timer_on") ||
-                     strEqI(elem.type, "timer_tof") || strEqI(elem.type, "timer_off") ||
-                     strEqI(elem.type, "timer_tp") || strEqI(elem.type, "timer_pulse") ||
-                     strEqI(elem.type, "counter_u") || strEqI(elem.type, "counter_up") ||
-                     strEqI(elem.type, "counter_d") || strEqI(elem.type, "counter_down")) {
-                
-                // Collapse current AND terms to get the Input Expression
-                uint32_t in_expr = nir::NIR_NONE;
-                if (and_count == 1) {
-                    in_expr = and_children[0];
-                } else if (and_count > 1) {
-                    in_expr = nir::g_store.addAnd(and_children, and_count);
-                }
-                
-                // Reset AND accumulation
-                and_count = 0;
-                
-                nir::CallOp op = nir::CALL_NONE;
-                if (strEqI(elem.type, "timer_ton") || strEqI(elem.type, "timer_on")) op = nir::CALL_TON;
-                else if (strEqI(elem.type, "timer_tof") || strEqI(elem.type, "timer_off")) op = nir::CALL_TOF;
-                else if (strEqI(elem.type, "timer_tp") || strEqI(elem.type, "timer_pulse")) op = nir::CALL_TP;
-                else if (strEqI(elem.type, "counter_u") || strEqI(elem.type, "counter_up")) op = nir::CALL_CTU;
-                else if (strEqI(elem.type, "counter_d") || strEqI(elem.type, "counter_down")) op = nir::CALL_CTD;
-
-                uint32_t sym_idx = nir::g_store.addSymbol(elem.address, (op >= nir::CALL_CTU) ? nir::SYM_COUNTER : nir::SYM_TIMER);
-                
-                uint32_t call_expr;
-                if (elem.preset_str[0] != '\0') {
-                    call_expr = nir::g_store.addCallBoolLiteral(op, in_expr, sym_idx, elem.preset_str);
-                } else {
-                    call_expr = nir::g_store.addCallBool(op, in_expr, sym_idx, elem.preset);
-                }
-                
-                if (and_count < MAX_AND_CHILDREN) {
-                    and_children[and_count++] = call_expr;
-                }
-            }
-        }
-        
-        if (and_count == 1) return and_children[0];
-        if (and_count > 1) return nir::g_store.addAnd(and_children, and_count);
-        return nir::NIR_NONE;
-    }
-    
-    bool buildNetworkFromElements(LadderElement* elements, int count, Branch* branches, int branch_count) {
-        if (count == 0 && branch_count == 0) return true;
-        
-        // TAP splits elements into segments. Each segment before a TAP becomes its own network
-        // with a TAP action to pass RLO forward. The last segment doesn't need TAP.
-        //
-        // Example: [contact A, coil X, tap, contact B, coil Y]
-        // Becomes: Network 1: A -> X (with TAP action)
-        //          Network 2: B -> Y (RLO continues from Network 1)
-        //
-        // We process segments by finding TAP elements
-        
-        // Find TAP positions
-        int tap_positions[16];
-        int tap_count = 0;
-        for (int i = 0; i < count && tap_count < 16; i++) {
-            if (strEqI(elements[i].type, "tap")) {
-                tap_positions[tap_count++] = i;
-            }
-        }
-        
-        // If no TAPs, process normally
-        if (tap_count == 0) {
-            return buildNetworkSegmentGrouped(elements, count, branches, branch_count, false);
-        }
-        
-        // Process each segment
-        int segment_start = 0;
-        for (int t = 0; t <= tap_count; t++) {
-            int segment_end = (t < tap_count) ? tap_positions[t] : count;
-            int segment_len = segment_end - segment_start;
-            
-            if (segment_len > 0) {
-                // For segments before the last, add TAP action
-                bool add_tap = (t < tap_count);
-                
-                // Build this segment (only pass branches to first segment)
-                Branch* seg_branches = (t == 0) ? branches : nullptr;
-                int seg_branch_count = (t == 0) ? branch_count : 0;
-                
-                if (!buildNetworkSegmentGrouped(&elements[segment_start], segment_len, seg_branches, seg_branch_count, add_tap)) {
-                    return false;
-                }
-            }
-            
-            segment_start = segment_end + 1; // Skip the TAP element itself
-        }
-        
-        return true;
-    }
-    
-    // Build a single action from an element and add it to the store
-    // Returns the action index or NIR_NONE on error
-    uint32_t buildActionFromElement(LadderElement& elem) {
-        if (isCoil(elem.type)) {
-            nir::ActionKind kind = nir::ACT_ASSIGN;
-            if (strEqI(elem.type, "coil_set")) {
-                kind = nir::ACT_SET;
-            } else if (strEqI(elem.type, "coil_rset")) {
-                kind = nir::ACT_RESET;
-            }
-            
-            uint32_t target_sym = nir::g_store.addSymbol(elem.address);
-            if (target_sym == nir::NIR_NONE) return nir::NIR_NONE;
-            
-            return nir::g_store.addAction(kind, target_sym);
-        }
-        else if (isMathOp(elem.type) || isMoveOp(elem.type) || isIncDecOp(elem.type)) {
-            // Determine data type
-            nir::DataType dt = nir::DT_I16;
-            if (elem.data_type[0] != '\0') {
-                dt = parseDataType(elem.data_type);
-            } else if (isIncDecOp(elem.type)) {
-                dt = inferDataTypeFromAddress(elem.address);
-            } else {
-                if (elem.out[0] != '\0') {
-                    dt = inferDataTypeFromAddress(elem.out);
-                }
-                if (dt == nir::DT_I16 && elem.in1[0] != '\0') {
-                    nir::DataType in_dt = inferDataTypeFromAddress(elem.in1);
-                    if (in_dt != nir::DT_I16) dt = in_dt;
-                }
-            }
-            
-            // Parse operands
-            uint32_t in1_expr = nir::NIR_NONE;
-            uint32_t in2_expr = nir::NIR_NONE;
-            uint32_t out_sym = nir::NIR_NONE;
-            
-            if (isIncDecOp(elem.type)) {
-                in1_expr = parseOperand(elem.address, dt);
-                char addr[32];
-                stripTypePrefix(elem.address, addr);
-                out_sym = nir::g_store.addSymbol(addr);
-            } else {
-                if (elem.in1[0] != '\0') {
-                    in1_expr = parseOperand(elem.in1, dt);
-                }
-                if (elem.in2[0] != '\0') {
-                    in2_expr = parseOperand(elem.in2, dt);
-                }
-                if (elem.out[0] != '\0') {
-                    char addr[32];
-                    stripTypePrefix(elem.out, addr);
-                    out_sym = nir::g_store.addSymbol(addr);
-                }
-            }
-            
-            if (out_sym == nir::NIR_NONE) return nir::NIR_NONE;
-            
-            uint32_t value_expr = nir::NIR_NONE;
-            
-            if (isMoveOp(elem.type)) {
-                value_expr = in1_expr;
-            } else if (isIncDecOp(elem.type)) {
-                uint32_t one_expr = parseOperand("#1", dt);
-                nir::MathOp op = strEqI(elem.type, "inc") ? nir::MATH_ADD : nir::MATH_SUB;
-                value_expr = nir::g_store.addMath(op, dt, in1_expr, one_expr);
-            } else if (isMathOp(elem.type)) {
-                nir::MathOp op = getMathOp(elem.type);
-                if (op == nir::MATH_NEG || op == nir::MATH_ABS) {
-                    value_expr = nir::g_store.addMath(op, dt, in1_expr, nir::NIR_NONE);
-                } else {
-                    value_expr = nir::g_store.addMath(op, dt, in1_expr, in2_expr);
-                }
-            }
-            
-            if (value_expr == nir::NIR_NONE) return nir::NIR_NONE;
-            return nir::g_store.addMoveAction(out_sym, value_expr, dt);
-        }
-        
-        return nir::NIR_NONE;
-    }
-    
-    // New implementation that groups pass-through elements
-    bool buildNetworkSegmentGrouped(LadderElement* elements, int count, Branch* branches, int branch_count, bool add_tap) {
-        if (count == 0 && branch_count == 0 && !add_tap) return true;
-        
-        // Track current condition expression (RLO source)
-        uint32_t current_condition = nir::NIR_NONE;
-        
-        // Accumulator for AND children when building condition
-        static const int MAX_AND_CHILDREN = 64;
-        uint32_t and_children[MAX_AND_CHILDREN];
-        int and_count = 0;
-        
-        // Track action start and count for current pass-through group
-        uint32_t action_start = nir::g_store.action_count;
-        uint16_t action_cnt = 0;
-        
-        // Helper to finalize condition from accumulated AND children
-        auto finalizeCondition = [&]() {
-            if (and_count == 0) return;
-            if (and_count == 1) {
-                current_condition = and_children[0];
-            } else {
-                current_condition = nir::g_store.addAnd(and_children, and_count);
-            }
-            and_count = 0;
-        };
-        
-        // Helper to flush pending pass-through actions as a network
-        auto flushPassThroughActions = [&](bool with_tap) {
-            // Create network with current condition and accumulated actions
-            if (action_cnt > 0 || current_condition != nir::NIR_NONE) {
-                nir::g_store.addNetwork(current_condition, action_start, action_cnt);
-            }
-            
-            // Reset for next group
-            action_start = nir::g_store.action_count;
-            action_cnt = 0;
-            
-            // Add TAP as a separate unconditional action AFTER the skip block
-            // TAP must execute regardless of condition to pass RLO forward
-            if (with_tap) {
-                uint32_t tap_action_start = nir::g_store.action_count;
-                uint32_t tap_idx = nir::g_store.addAction(nir::ACT_TAP, nir::NIR_NONE);
-                if (tap_idx != nir::NIR_NONE) {
-                    // TAP network has no condition - always executes
-                    nir::g_store.addNetwork(nir::NIR_NONE, tap_action_start, 1);
-                }
-                // Reset again after TAP
-                action_start = nir::g_store.action_count;
-            }
-        };
-        
-        // Process elements in order
-        for (int i = 0; i < count; i++) {
-            LadderElement& elem = elements[i];
-            
-            // Skip TAP elements - handled by buildNetworkFromElements
-            if (strEqI(elem.type, "tap")) continue;
-            
-            // Check if this is a pass-through element
-            if (isPassThrough(elem)) {
-                // Finalize any pending condition first
-                finalizeCondition();
-                
-                // Build action for this element
-                uint32_t action_idx = buildActionFromElement(elem);
-                if (action_idx != nir::NIR_NONE) {
-                    action_cnt++;
-                }
-            }
-            // Contact - modifies RLO, AND with current condition
-            else if (strEqI(elem.type, "contact") || strEqI(elem.type, "contact_nc") || 
-                     strEqI(elem.type, "contact_no")) {
-                // If we have pending pass-through actions with a condition, flush them first
-                finalizeCondition();
-                if (action_cnt > 0) {
-                    flushPassThroughActions(false);
-                    // Condition carries forward after flush
-                }
-                
-                // Build contact expression
-                bool inverted = elem.inverted || strEqI(elem.type, "contact_nc");
-                uint32_t sym_idx = nir::g_store.addSymbol(elem.address);
-                if (sym_idx == nir::NIR_NONE) return false;
-                
-                uint32_t leaf_expr = nir::g_store.addLeaf(sym_idx, inverted);
-                if (leaf_expr == nir::NIR_NONE) return false;
-                
-                // Handle edge detection
-                if (strEqI(elem.trigger, "rising") || strEqI(elem.trigger, "positive")) {
-                    char edge_mem[16];
-                    generateEdgeAddress(edge_mem);
-                    uint32_t edge_sym = nir::g_store.addSymbol(edge_mem, nir::SYM_EDGE);
-                    leaf_expr = nir::g_store.addCallBool(nir::CALL_FP, leaf_expr, edge_sym);
-                } else if (strEqI(elem.trigger, "falling") || strEqI(elem.trigger, "negative")) {
-                    char edge_mem[16];
-                    generateEdgeAddress(edge_mem);
-                    uint32_t edge_sym = nir::g_store.addSymbol(edge_mem, nir::SYM_EDGE);
-                    leaf_expr = nir::g_store.addCallBool(nir::CALL_FN, leaf_expr, edge_sym);
-                } else if (strEqI(elem.trigger, "change") || strEqI(elem.trigger, "any")) {
-                    char edge_mem[16];
-                    generateEdgeAddress(edge_mem);
-                    uint32_t edge_sym = nir::g_store.addSymbol(edge_mem, nir::SYM_EDGE);
-                    leaf_expr = nir::g_store.addCallBool(nir::CALL_FX, leaf_expr, edge_sym);
-                }
-                
-                // If we have an existing condition, AND with this contact
-                if (current_condition != nir::NIR_NONE) {
-                    and_children[and_count++] = current_condition;
-                    current_condition = nir::NIR_NONE;
-                }
-                if (and_count < MAX_AND_CHILDREN) {
-                    and_children[and_count++] = leaf_expr;
-                }
-            }
-            // OR block or precompiled expression
-            else if (strEqI(elem.type, "or") || elem.precompiled_expr != nir::NIR_NONE) {
-                finalizeCondition();
-                if (action_cnt > 0) {
-                    flushPassThroughActions(false);
-                }
-                
-                uint32_t expr = elementToExpr(elem);
-                if (expr != nir::NIR_NONE) {
-                    if (current_condition != nir::NIR_NONE) {
-                        and_children[and_count++] = current_condition;
-                        current_condition = nir::NIR_NONE;
-                    }
-                    if (and_count < MAX_AND_CHILDREN) {
-                        and_children[and_count++] = expr;
-                    }
-                }
-            }
-            // Timer/Counter - passes through RLO but Q output replaces RLO
-            else if (isTimerOrCounter(elem.type)) {
-                // Finalize current condition as input to timer/counter
-                finalizeCondition();
-                if (action_cnt > 0) {
-                    flushPassThroughActions(false);
-                }
-                
-                // Timer/counter takes current condition as input and produces new condition
-                uint32_t call_expr = elementToExpr(elem, current_condition);
-                if (call_expr != nir::NIR_NONE) {
-                    current_condition = call_expr;
-                }
-            }
-            // Compare operation - result replaces RLO
-            else if (isCompareOp(elem.type)) {
-                finalizeCondition();
-                if (action_cnt > 0) {
-                    flushPassThroughActions(false);
-                }
-                
-                // Compare operations produce a new boolean condition
-                // Build the compare expression and use it as the new condition
-                nir::DataType dt = nir::DT_I16;
-                if (elem.data_type[0] != '\0') {
-                    dt = parseDataType(elem.data_type);
-                } else if (elem.in1[0] != '\0') {
-                    dt = inferDataTypeFromAddress(elem.in1);
-                }
-                
-                uint32_t in1_expr = nir::NIR_NONE;
-                uint32_t in2_expr = nir::NIR_NONE;
-                if (elem.in1[0] != '\0') {
-                    in1_expr = parseOperand(elem.in1, dt);
-                }
-                if (elem.in2[0] != '\0') {
-                    in2_expr = parseOperand(elem.in2, dt);
-                }
-                
-                nir::CompareOp op = getCompareOp(elem.type);
-                uint32_t cmp_expr = nir::g_store.addCompare(op, dt, in1_expr, in2_expr);
-                
-                // AND the compare result with the existing condition if any
-                if (current_condition != nir::NIR_NONE && cmp_expr != nir::NIR_NONE) {
-                    uint32_t children[2] = { current_condition, cmp_expr };
-                    current_condition = nir::g_store.addAnd(children, 2);
-                } else if (cmp_expr != nir::NIR_NONE) {
-                    current_condition = cmp_expr;
-                }
-            }
-            // Parallel output branch element - uses BR stack (SAVE/L BR/DROP BR)
-            else if (isParallelOutputBranch(elem.type)) {
-                // Finalize any pending condition first
-                finalizeCondition();
-                
-                // Flush any pending pass-through actions with the current condition
-                if (action_cnt > 0 || current_condition != nir::NIR_NONE) {
-                    flushPassThroughActions(false);
-                }
-                
-                // Get branch info for this element
-                if (elem.branch_info_index < 0 || elem.branch_info_index >= branch_element_info_used) {
-                    // No branch info - skip this element
-                    continue;
-                }
-                BranchElementInfo& info = branch_element_info[elem.branch_info_index];
-                
-                // Now build the BR stack pattern:
-                // 1. SAVE - push current RLO to BR stack
-                // 2. For each branch: L BR (restore RLO) + branch actions
-                // 3. DROP BR - pop BR stack
-                
-                // Emit SAVE action
-                nir::g_store.addAction(nir::ACT_BR_SAVE, nir::NIR_NONE);
-                action_cnt++;
-                
-                // Process each branch
-                for (int b = 0; b < info.branch_count; b++) {
-                    BranchData& branch = info.branches[b];
-                    
-                    // Emit L BR action to restore RLO for this branch
-                    nir::g_store.addAction(nir::ACT_BR_READ, nir::NIR_NONE);
-                    action_cnt++;
-                    
-                    // Process branch elements (typically coils, inc/dec, etc.)
-                    for (int e = 0; e < branch.element_count; e++) {
-                        LadderElement& be = branch_element_storage[branch.start_index + e];
-                        
-                        // Build action for this branch element
-                        uint32_t branch_action_idx = buildActionFromElement(be);
-                        if (branch_action_idx != nir::NIR_NONE) {
-                            action_cnt++;
-                        }
-                    }
-                }
-                
-                // Emit DROP BR action to pop BR stack
-                nir::g_store.addAction(nir::ACT_BR_DROP, nir::NIR_NONE);
-                action_cnt++;
-                
-                // Reset condition after branch block (RLO is preserved by the BR stack mechanism)
-                current_condition = nir::NIR_NONE;
-            }
-        }
-        
-        // Handle OR branches if present
-        if (branch_count > 0) {
-            finalizeCondition();
-            
-            uint32_t or_children[MAX_BRANCHES + 1];
-            int or_count = 0;
-            
-            // Current condition is first branch
-            if (current_condition != nir::NIR_NONE) {
-                or_children[or_count++] = current_condition;
-            }
-            
-            // Add each branch
-            for (int b = 0; b < branch_count && or_count < MAX_BRANCHES + 1; b++) {
-                Branch& br = branches[b];
-                uint32_t branch_expr = buildLogicExpression(br.elements, br.element_count);
-                if (branch_expr != nir::NIR_NONE) {
-                    or_children[or_count++] = branch_expr;
-                }
-            }
-            
-            // Create OR expression
-            if (or_count == 1) {
-                current_condition = or_children[0];
-            } else if (or_count > 1) {
-                current_condition = nir::g_store.addOr(or_children, or_count);
-            }
-        } else {
-            finalizeCondition();
-        }
-        
-        // Flush any remaining pass-through actions
-        flushPassThroughActions(add_tap);
-        
-        // Process deferred coil actions
-        for (int i = 0; i < deferred_action_count; i++) {
-            DeferredAction& da = deferred_actions[i];
-            if (strEqI(da.type, "tap")) continue;
-            
-            nir::ActionKind kind = nir::ACT_ASSIGN;
-            if (strEqI(da.type, "coil_set")) kind = nir::ACT_SET;
-            else if (strEqI(da.type, "coil_rset")) kind = nir::ACT_RESET;
-            
-            uint32_t target_sym = nir::g_store.addSymbol(da.address);
-            if (target_sym == nir::NIR_NONE) continue;
-            
-            uint32_t def_action_start = nir::g_store.action_count;
-            uint32_t action_idx = nir::g_store.addAction(kind, target_sym);
-            if (action_idx == nir::NIR_NONE) continue;
-            
-            nir::g_store.addNetwork(da.condition, def_action_start, 1);
-        }
-        
-        clearDeferredActions();
-        return true;
-    }
-    
-    // Legacy implementation kept for reference (now deprecated)
-    bool buildNetworkSegment(LadderElement* elements, int count, Branch* branches, int branch_count, bool add_tap) {
-        if (count == 0 && branch_count == 0 && !add_tap) return true;
-        
-        // Identify coils for action generation
-        static const int MAX_COILS = 16;
-        int coil_indices[MAX_COILS];
-        int coil_count = 0;
-        
-        // Identify math/move elements for action generation  
-        static const int MAX_MATH_ELEMS = 16;
-        int math_indices[MAX_MATH_ELEMS];
-        int math_count = 0;
-        
-        for (int i = 0; i < count; i++) {
-            const char* type = elements[i].type;
-            if (strEqI(type, "coil") || strEqI(type, "coil_set") || 
-                strEqI(type, "coil_rset") || strEqI(type, "coil_n")) {
-                if (coil_count < MAX_COILS) {
-                    coil_indices[coil_count++] = i;
-                }
-            }
-            // Identify math, compare, and move elements
-            else if (isMathOp(type) || isCompareOp(type) || isMoveOp(type) || isIncDecOp(type)) {
-                if (math_count < MAX_MATH_ELEMS) {
-                    math_indices[math_count++] = i;
-                }
-            }
-            // TAP elements are already handled by buildNetworkFromElements
-        }
-        
-        // Build main branch logic expression
-        uint32_t main_branch_expr = buildLogicExpression(elements, count);
-        
-        uint32_t condition_expr = nir::NIR_NONE;
-        
-        // If we have branches, build OR expression
-        if (branch_count > 0) {
-            uint32_t or_children[MAX_BRANCHES + 1];
-            int or_count = 0;
-            
-            // Main elements form the first branch
-            if (main_branch_expr != nir::NIR_NONE) {
-                or_children[or_count++] = main_branch_expr;
-            }
-            
-            // Add each branch as an OR alternative
-            for (int b = 0; b < branch_count && or_count < MAX_BRANCHES + 1; b++) {
-                Branch& br = branches[b];
-                // Build this branch's expression
-                uint32_t branch_expr = buildLogicExpression(br.elements, br.element_count);
-                if (branch_expr != nir::NIR_NONE) {
-                    or_children[or_count++] = branch_expr;
-                }
-            }
-            
-            // Create OR expression
-            if (or_count == 1) {
-                condition_expr = or_children[0];
-            } else if (or_count > 1) {
-                condition_expr = nir::g_store.addOr(or_children, or_count);
-            }
-        } else {
-            condition_expr = main_branch_expr;
-        }
-        
-        // Build actions from coils
-        uint32_t action_start = nir::g_store.action_count;
-        uint16_t action_cnt = 0;
-        
-        for (int i = 0; i < coil_count; i++) {
-            LadderElement& elem = elements[coil_indices[i]];
-            
-            nir::ActionKind kind = nir::ACT_ASSIGN;
-            if (strEqI(elem.type, "coil_set")) {
-                kind = nir::ACT_SET;
-            } else if (strEqI(elem.type, "coil_rset")) {
-                kind = nir::ACT_RESET;
-            }
-            
-            uint32_t target_sym = nir::g_store.addSymbol(elem.address);
-            if (target_sym == nir::NIR_NONE) return false;
-            
-            uint32_t action_idx = nir::g_store.addAction(kind, target_sym);
-            if (action_idx == nir::NIR_NONE) return false;
-            action_cnt++;
-        }
-        
-        // Build actions from math/compare/move elements
-        for (int i = 0; i < math_count; i++) {
-            LadderElement& elem = elements[math_indices[i]];
-            
-            // Determine data type from element or infer from addresses
-            nir::DataType dt = nir::DT_I16; // Default
-            if (elem.data_type[0] != '\0') {
-                dt = parseDataType(elem.data_type);
-            } else if (isIncDecOp(elem.type)) {
-                // Infer from address
-                 dt = inferDataTypeFromAddress(elem.address);
-            } else {
-                // Try to infer from output address first
-                if (elem.out[0] != '\0') {
-                    dt = inferDataTypeFromAddress(elem.out);
-                }
-                // If still default, try input address
-                if (dt == nir::DT_I16 && elem.in1[0] != '\0') {
-                    nir::DataType in_dt = inferDataTypeFromAddress(elem.in1);
-                    if (in_dt != nir::DT_I16) dt = in_dt;
-                }
-            }
-            
-            // Parse operands
-            uint32_t in1_expr = nir::NIR_NONE;
-            uint32_t in2_expr = nir::NIR_NONE;
-            uint32_t out_sym = nir::NIR_NONE;
-            
-            if (isIncDecOp(elem.type)) {
-                // INC/DEC: address is both input and output
-                in1_expr = parseOperand(elem.address, dt);
-                
-                char addr[32];
-                stripTypePrefix(elem.address, addr);
-                out_sym = nir::g_store.addSymbol(addr);
-            } else {
-                if (elem.in1[0] != '\0') {
-                    in1_expr = parseOperand(elem.in1, dt);
-                }
-                if (elem.in2[0] != '\0') {
-                    in2_expr = parseOperand(elem.in2, dt);
-                }
-                if (elem.out[0] != '\0') {
-                    char addr[32];
-                    stripTypePrefix(elem.out, addr);
-                    out_sym = nir::g_store.addSymbol(addr);
-                }
-            }
-            
-            if (out_sym == nir::NIR_NONE) continue;  // Skip if no output
-            
-            uint32_t value_expr = nir::NIR_NONE;
-            
-            if (isMoveOp(elem.type)) {
-                // MOVE: just transfer in1 to out
-                value_expr = in1_expr;
-            } else if (isIncDecOp(elem.type)) {
-                // INC/DEC: value = address +/- 1
-                // Use parseOperand to create constant 1 with correct type
-                uint32_t one_expr = parseOperand("#1", dt);
-                
-                nir::MathOp op = strEqI(elem.type, "inc") ? nir::MATH_ADD : nir::MATH_SUB;
-                value_expr = nir::g_store.addMath(op, dt, in1_expr, one_expr);
-            } else if (isMathOp(elem.type)) {
-                // Math operation
-                nir::MathOp op = getMathOp(elem.type);
-                if (op == nir::MATH_NEG || op == nir::MATH_ABS) {
-                    // Unary operation
-                    value_expr = nir::g_store.addMath(op, dt, in1_expr, nir::NIR_NONE);
-                } else {
-                    // Binary operation
-                    value_expr = nir::g_store.addMath(op, dt, in1_expr, in2_expr);
-                }
-            } else if (isCompareOp(elem.type)) {
-                // Compare operation - result is boolean, but operands use data type
-                nir::CompareOp op = getCompareOp(elem.type);
-                value_expr = nir::g_store.addCompare(op, dt, in1_expr, in2_expr);
-            }
-            
-            if (value_expr != nir::NIR_NONE) {
-                uint32_t action_idx = nir::g_store.addMoveAction(out_sym, value_expr, dt);
-                if (action_idx == nir::NIR_NONE) return false;
-                action_cnt++;
-            }
-        }
-        
-        // Add TAP action if requested (passthrough RLO to next segment/network)
-        if (add_tap) {
-            uint32_t action_idx = nir::g_store.addAction(nir::ACT_TAP, nir::NIR_NONE);
-            if (action_idx == nir::NIR_NONE) return false;
-            action_cnt++;
-        }
-        
-        // NOTE: Deferred TAPs from nested branches do NOT modify condition_expr.
-        // The branch expression already includes the TAP condition as part of the OR.
-        // TAP inside a branch just marks "this is what I contribute to the OR".
-        
-        // Create network
-        if (condition_expr != nir::NIR_NONE || action_cnt > 0) {
-            nir::g_store.addNetwork(condition_expr, action_start, action_cnt);
-        }
-        
-        // Process deferred coil actions - create separate networks for each
-        for (int i = 0; i < deferred_action_count; i++) {
-            DeferredAction& da = deferred_actions[i];
-            
-            // Skip TAPs - they don't generate separate networks
-            // (the branch expression already includes the TAP condition)
-            if (strEqI(da.type, "tap")) continue;
-            
-            // Create a network for this deferred coil
-            nir::ActionKind kind = nir::ACT_ASSIGN;
-            if (strEqI(da.type, "coil_set")) {
-                kind = nir::ACT_SET;
-            } else if (strEqI(da.type, "coil_rset")) {
-                kind = nir::ACT_RESET;
-            }
-            
-            uint32_t target_sym = nir::g_store.addSymbol(da.address);
-            if (target_sym == nir::NIR_NONE) continue;
-            
-            uint32_t def_action_start = nir::g_store.action_count;
-            uint32_t action_idx = nir::g_store.addAction(kind, target_sym);
-            if (action_idx == nir::NIR_NONE) continue;
-            
-            // Use the deferred condition for this action
-            nir::g_store.addNetwork(da.condition, def_action_start, 1);
-        }
-        
-        // Clear deferred actions after processing
-        clearDeferredActions();
-        
-        return true;
-    }
-    
-    // ============ Main Parser ============
-    
-    bool parse(const char* src, int len) {
-        reset();
-        source = src;
-        length = len;
-        
-        nir::g_store.reset();
-        
-        // Expect root object
+    bool parseGraph() {
         if (!expect('{')) {
             setError("Expected JSON object");
             return false;
@@ -2105,32 +701,35 @@ public:
         while (peek() != '}' && peek() != '\0') {
             char key[32];
             if (!readString(key, sizeof(key))) return false;
+            if (!expect(':')) { setError("Expected ':'"); return false; }
             
-            if (!expect(':')) {
-                setError("Expected ':' after key");
-                return false;
-            }
-            
-            if (strEqI(key, "rungs") || strEqI(key, "networks")) {
-                // Parse rungs/networks array
-                if (!expect('[')) {
-                    setError("Expected rungs/networks array");
-                    return false;
-                }
-                
+            if (strEqI(key, "nodes")) {
+                if (!expect('[')) { setError("Expected nodes array"); return false; }
                 while (peek() != ']' && peek() != '\0') {
-                    if (!parseRung()) return false;
-                    
+                    if (node_count >= MAX_NODES) {
+                        setError("Too many nodes");
+                        return false;
+                    }
+                    if (!parseNode(nodes[node_count])) return false;
+                    node_count++;
                     skipWhitespace();
                     if (peek() == ',') advance();
                 }
-                
-                if (!expect(']')) {
-                    setError("Expected ']' to close rungs");
-                    return false;
+                if (!expect(']')) { setError("Expected ']'"); return false; }
+            } else if (strEqI(key, "connections")) {
+                if (!expect('[')) { setError("Expected connections array"); return false; }
+                while (peek() != ']' && peek() != '\0') {
+                    if (connection_count >= MAX_CONNECTIONS) {
+                        setError("Too many connections");
+                        return false;
+                    }
+                    if (!parseConnection(connections[connection_count])) return false;
+                    connection_count++;
+                    skipWhitespace();
+                    if (peek() == ',') advance();
                 }
+                if (!expect(']')) { setError("Expected ']'"); return false; }
             } else {
-                // Skip unknown property
                 skipValue();
             }
             
@@ -2139,7 +738,633 @@ public:
         }
         
         if (!expect('}')) {
-            setError("Expected '}' to close root object");
+            setError("Expected '}'");
+            return false;
+        }
+        
+        return true;
+    }
+    
+    // ============ STL Generation ============
+    
+    // Helper to generate unique edge memory address
+    void generateEdgeAddress(char* edge_mem) {
+        int byte_addr = edge_mem_counter / 8;
+        int bit_addr = edge_mem_counter % 8;
+        edge_mem_counter++;
+        
+        int idx = 0;
+        edge_mem[idx++] = 'M';
+        if (byte_addr >= 100) edge_mem[idx++] = '0' + (byte_addr / 100);
+        if (byte_addr >= 10) edge_mem[idx++] = '0' + ((byte_addr / 10) % 10);
+        edge_mem[idx++] = '0' + (byte_addr % 10);
+        edge_mem[idx++] = '.';
+        edge_mem[idx++] = '0' + bit_addr;
+        edge_mem[idx] = '\0';
+    }
+    
+    // Emit STL for a contact node
+    // useOr: if true, emit O/ON instead of A/AN
+    void emitContact(GraphNode& node, bool isFirst, bool useOr = false) {
+        // Determine instruction: A (and), AN (and not), O (or), ON (or not)
+        bool inverted = node.inverted || strEqI(node.type, "contact_nc");
+        bool isPositive = strEqI(node.type, "contact_pos") || strEqI(node.trigger, "rising") || strEqI(node.trigger, "positive");
+        bool isNegative = strEqI(node.type, "contact_neg") || strEqI(node.trigger, "falling") || strEqI(node.trigger, "negative");
+        
+        const char* instr;
+        if (useOr) {
+            instr = inverted ? "ON " : "O ";
+        } else {
+            instr = inverted ? "AN " : "A ";
+        }
+        
+        emitIndent();
+        emit(instr);
+        emit(node.address);
+        emitChar('\n');
+        
+        // Handle edge detection
+        if (isPositive) {
+            char edge_mem[16];
+            generateEdgeAddress(edge_mem);
+            emitIndent();
+            emit("FP ");
+            emit(edge_mem);
+            emitChar('\n');
+        } else if (isNegative) {
+            char edge_mem[16];
+            generateEdgeAddress(edge_mem);
+            emitIndent();
+            emit("FN ");
+            emit(edge_mem);
+            emitChar('\n');
+        }
+    }
+    
+    // Emit STL for a coil node
+    // If emitTapAfter is true, emit TAP instruction after the coil (for passthrough)
+    void emitCoil(GraphNode& node, bool emitTapAfter = false) {
+        const char* instr = "= ";
+        if (strEqI(node.type, "coil_set")) instr = "S ";
+        else if (strEqI(node.type, "coil_rset")) instr = "R ";
+        else if (strEqI(node.type, "coil_neg")) {
+            // Negated coil: invert RLO before output
+            emitLine("NOT");
+            instr = "= ";
+        }
+        
+        emitIndent();
+        emit(instr);
+        emit(node.address);
+        emitChar('\n');
+        
+        if (emitTapAfter) {
+            emitLine("TAP");
+        }
+    }
+    
+    // Emit STL for a timer node
+    // If emitTapAfter is true, emit TAP instruction after the timer (for passthrough)
+    void emitTimer(GraphNode& node, bool emitTapAfter = false) {
+        const char* instr = "TON";
+        if (strEqI(node.type, "timer_off") || strEqI(node.type, "timer_tof")) instr = "TOF";
+        else if (strEqI(node.type, "timer_pulse") || strEqI(node.type, "timer_tp")) instr = "TP";
+        
+        emitIndent();
+        emit(instr);
+        emit(" ");
+        emit(node.address);
+        emit(", ");
+        if (node.preset_str[0] != '\0') {
+            emit(node.preset_str);
+        } else {
+            emitInt(node.preset);
+        }
+        emitChar('\n');
+        
+        if (emitTapAfter) {
+            emitLine("TAP");
+        }
+    }
+    
+    // Emit STL for a counter node
+    // If emitTapAfter is true, emit TAP instruction after the counter (for passthrough)
+    void emitCounter(GraphNode& node, bool emitTapAfter = false) {
+        const char* instr = "CTU";
+        if (strEqI(node.type, "counter_down") || strEqI(node.type, "counter_d")) instr = "CTD";
+        
+        emitIndent();
+        emit(instr);
+        emit(" ");
+        emit(node.address);
+        emit(", ");
+        emitInt(node.preset);
+        emitChar('\n');
+        
+        if (emitTapAfter) {
+            emitLine("TAP");
+        }
+    }
+    
+    // ============ Graph Traversal and Code Generation ============
+    
+    // Sort nodes by x,y coordinates (left-to-right, top-to-bottom)
+    void sortNodesByPosition() {
+        // Simple bubble sort for embedded compatibility
+        for (int i = 0; i < node_count - 1; i++) {
+            for (int j = 0; j < node_count - i - 1; j++) {
+                bool swap = false;
+                if (nodes[j].x > nodes[j + 1].x) {
+                    swap = true;
+                } else if (nodes[j].x == nodes[j + 1].x && nodes[j].y > nodes[j + 1].y) {
+                    swap = true;
+                }
+                if (swap) {
+                    GraphNode tmp = nodes[j];
+                    nodes[j] = nodes[j + 1];
+                    nodes[j + 1] = tmp;
+                }
+            }
+        }
+        
+        // Assign order indices
+        for (int i = 0; i < node_count; i++) {
+            nodes[i].order_index = i;
+        }
+    }
+    
+    // Find starting nodes (nodes with no input connections)
+    void findStartNodes(int* startNodes, int& count, int maxCount) {
+        count = 0;
+        for (int i = 0; i < node_count && count < maxCount; i++) {
+            int inputConns[MAX_CONNECTIONS];
+            int inputCount;
+            getInputConnections(nodes[i].id, inputConns, inputCount, MAX_CONNECTIONS);
+            if (inputCount == 0) {
+                startNodes[count++] = i;
+            }
+        }
+    }
+    
+    // Find ending nodes (nodes with no output connections)
+    void findEndNodes(int* endNodes, int& count, int maxCount) {
+        count = 0;
+        for (int i = 0; i < node_count && count < maxCount; i++) {
+            int outputConns[MAX_CONNECTIONS];
+            int outputCount;
+            getOutputConnections(nodes[i].id, outputConns, outputCount, MAX_CONNECTIONS);
+            if (outputCount == 0) {
+                endNodes[count++] = i;
+            }
+        }
+    }
+    
+    // Recursively emit condition logic leading to a node
+    // Returns true if something was emitted
+    // stopAtEmittedOutputs: if true, stop recursion at output nodes that have been emitted (with TAP)
+    bool emitConditionForNode(int nodeIdx, int depth, bool isOrBranch, bool stopAtEmittedOutputs = true) {
+        if (nodeIdx < 0 || nodeIdx >= node_count) return false;
+        GraphNode& node = nodes[nodeIdx];
+        
+        // Prevent infinite recursion
+        if (node.visited) return false;
+        node.visited = true;
+        
+        // If this is an output node that has been emitted (with TAP), stop here
+        // The RLO is already on the stack from the TAP
+        if (stopAtEmittedOutputs && node.emitted && isOutputNode(node.type)) {
+            node.visited = false;
+            return false;  // Don't emit anything - RLO is already on stack from TAP
+        }
+        
+        // Get all source nodes for this node
+        int sourceIndices[MAX_NODES];
+        int sourceCount;
+        getSourceNodes(node.id, sourceIndices, sourceCount, MAX_NODES);
+        
+        // If this is an input (contact), emit it
+        if (isContact(node.type)) {
+            // First, emit conditions from sources (if any)
+            if (sourceCount > 0) {
+                if (sourceCount > 1) {
+                    // Multiple sources = OR logic - use smart OR emission
+                    emitOrSources(sourceIndices, sourceCount, depth, stopAtEmittedOutputs);
+                } else {
+                    emitConditionForNode(sourceIndices[0], depth + 1, isOrBranch, stopAtEmittedOutputs);
+                }
+            }
+            
+            // Emit this contact
+            emitContact(node, sourceCount == 0);
+            node.visited = false;
+            return true;
+        }
+        
+        // If this is a function block (timer/counter), check if already emitted
+        if (isFunctionBlock(node.type)) {
+            // If already emitted, just read its Q output
+            if (node.emitted) {
+                // Timer Q is stored at timer address, read it
+                char line[64];
+                if (depth == 0 && !isOrBranch) {
+                    snprintf(line, sizeof(line), "A %s", node.address);
+                } else {
+                    snprintf(line, sizeof(line), "A %s", node.address);
+                }
+                emitLine(line);
+                node.visited = false;
+                return true;
+            }
+            
+            // Emit input conditions
+            if (sourceCount > 1) {
+                // Multiple sources = OR logic - use smart OR emission
+                emitOrSources(sourceIndices, sourceCount, depth, stopAtEmittedOutputs);
+            } else if (sourceCount == 1) {
+                emitConditionForNode(sourceIndices[0], depth + 1, isOrBranch, stopAtEmittedOutputs);
+            }
+            
+            // Emit the function block
+            if (isTimer(node.type)) {
+                emitTimer(node);
+                node.emitted = true;  // Mark as emitted
+            } else if (isCounter(node.type)) {
+                emitCounter(node);
+                node.emitted = true;  // Mark as emitted
+            }
+            node.visited = false;
+            return true;
+        }
+        
+        // If this is a coil used as source, we need to:
+        // 1. Emit its input conditions
+        // 2. Execute the coil instruction
+        // 3. TAP to pass the RLO to downstream logic
+        if (isCoil(node.type)) {
+            // If already emitted, just read its address state
+            if (node.emitted) {
+                emitContact(node, depth == 0 && !isOrBranch);
+                node.visited = false;
+                return true;
+            }
+            
+            // Emit input conditions for this coil
+            if (sourceCount > 1) {
+                emitOrSources(sourceIndices, sourceCount, depth, stopAtEmittedOutputs);
+            } else if (sourceCount == 1) {
+                emitConditionForNode(sourceIndices[0], depth + 1, isOrBranch, stopAtEmittedOutputs);
+            }
+            
+            // Emit the coil with TAP to pass RLO forward
+            emitCoil(node, true);  // TAP after coil
+            node.emitted = true;
+            node.visited = false;
+            return true;
+        }
+        
+        // For other nodes, just emit sources using OR pattern
+        if (sourceCount > 1) {
+            // Multiple sources = OR logic - use smart OR emission
+            emitOrSources(sourceIndices, sourceCount, depth, stopAtEmittedOutputs);
+        } else if (sourceCount == 1) {
+            emitConditionForNode(sourceIndices[0], depth + 1, isOrBranch, stopAtEmittedOutputs);
+        }
+        
+        node.visited = false;
+        return sourceCount > 0;
+    }
+    
+    // Check if all sources are simple contacts (no chains behind them)
+    bool allSourcesAreSimpleContacts(int* sourceIndices, int sourceCount) {
+        for (int i = 0; i < sourceCount; i++) {
+            GraphNode& node = nodes[sourceIndices[i]];
+            if (!isContact(node.type)) return false;
+            
+            // Check if this contact has sources of its own
+            int srcIndices[MAX_NODES];
+            int srcCount;
+            getSourceNodes(node.id, srcIndices, srcCount, MAX_NODES);
+            if (srcCount > 0) return false;  // Has chain behind it
+        }
+        return true;
+    }
+    
+    // Sort source indices by y position (top to bottom)
+    void sortSourcesByPosition(int* sourceIndices, int sourceCount) {
+        // Simple bubble sort
+        for (int i = 0; i < sourceCount - 1; i++) {
+            for (int j = 0; j < sourceCount - i - 1; j++) {
+                int yA = nodes[sourceIndices[j]].y;
+                int yB = nodes[sourceIndices[j + 1]].y;
+                // If same y, sort by x
+                if (yA > yB || (yA == yB && nodes[sourceIndices[j]].x > nodes[sourceIndices[j + 1]].x)) {
+                    int tmp = sourceIndices[j];
+                    sourceIndices[j] = sourceIndices[j + 1];
+                    sourceIndices[j + 1] = tmp;
+                }
+            }
+        }
+    }
+    
+    // Emit OR sources - handles both simple contacts and complex chains
+    void emitOrSources(int* sourceIndices, int sourceCount, int depth, bool stopAtEmittedOutputs) {
+        if (sourceCount == 0) return;
+        
+        // Sort sources by y position (top to bottom)
+        sortSourcesByPosition(sourceIndices, sourceCount);
+        
+        // If all sources are simple contacts (no chains), use inline OR format
+        if (allSourcesAreSimpleContacts(sourceIndices, sourceCount)) {
+            // First source uses A/AN
+            emitContact(nodes[sourceIndices[0]], true, false);
+            // Remaining sources use O/ON
+            for (int s = 1; s < sourceCount; s++) {
+                emitContact(nodes[sourceIndices[s]], false, true);
+            }
+        } else {
+            // Complex sources - each branch is OR'd with the previous
+            // First branch: emit normally (sets initial RLO)
+            emitConditionForNode(sourceIndices[0], depth + 1, false, stopAtEmittedOutputs);
+            
+            // Subsequent branches: wrap in O(...) to OR with previous result
+            for (int s = 1; s < sourceCount; s++) {
+                emitLine("O(");
+                indent_level++;
+                emitConditionForNode(sourceIndices[s], depth + 1, false, stopAtEmittedOutputs);
+                indent_level--;
+                emitLine(")");
+            }
+        }
+    }
+    
+    // Emit a simple contact as OR (O address instead of A address)
+    // Used for inline OR: A X0.0 / O X0.1 instead of O( A X0.0 O A X0.1 )
+    void emitConditionForNodeAsOr(int nodeIdx, int depth) {
+        if (nodeIdx < 0 || nodeIdx >= node_count) return;
+        GraphNode& node = nodes[nodeIdx];
+        
+        // Only handles simple contacts for now
+        if (isContact(node.type)) {
+            emitContact(node, false, true);  // useOr = true
+        }
+        // For non-contacts, fall back to regular emission (should not happen in simple OR cases)
+    }
+    
+    // Find all output nodes (coils, taps) that are destinations
+    void findOutputNodes(int* outputNodes, int& count, int maxCount) {
+        count = 0;
+        for (int i = 0; i < node_count && count < maxCount; i++) {
+            if (isOutputNode(nodes[i].type)) {
+                outputNodes[count++] = i;
+            }
+        }
+    }
+    
+    // Check if a node is a terminal (has no outgoing connections or only non-input destinations)
+    bool isTerminalOutput(int nodeIdx) {
+        if (nodeIdx < 0 || nodeIdx >= node_count) return false;
+        GraphNode& node = nodes[nodeIdx];
+        
+        // Must be an output/termination type
+        if (!isTerminationNode(node.type)) return false;
+        
+        // Check outgoing connections
+        int destIndices[MAX_NODES];
+        int destCount;
+        getDestNodes(node.id, destIndices, destCount, MAX_NODES);
+        
+        // If no outgoing connections, it's terminal
+        if (destCount == 0) return true;
+        
+        // If has outgoing connections to inputs/contacts, it's NOT terminal (it's passthrough)
+        for (int d = 0; d < destCount; d++) {
+            if (isInputNode(nodes[destIndices[d]].type)) return false;
+            if (isTerminationNode(nodes[destIndices[d]].type)) return false;
+        }
+        
+        return true;
+    }
+    
+    // Find all terminal output nodes (outputs with no outgoing connections that continue the chain)
+    void findTerminalOutputNodes(int* outputNodes, int& count, int maxCount) {
+        count = 0;
+        for (int i = 0; i < node_count && count < maxCount; i++) {
+            if (isTerminalOutput(i)) {
+                outputNodes[count++] = i;
+            }
+        }
+    }
+    
+    // Group output nodes by their shared input condition
+    // Returns groups where each group shares the same source chain
+    struct OutputGroup {
+        int nodeIndices[MAX_NODES];
+        int count;
+        int conditionSourceIdx;  // -1 if multiple sources
+        
+        void clear() {
+            count = 0;
+            conditionSourceIdx = -1;
+        }
+    };
+    
+    // Main compilation function
+    bool compile() {
+        emit("// Generated from Ladder Graph by VovkPLCRuntime\n\n");
+        
+        // Sort nodes by position (left-to-right, top-to-bottom)
+        sortNodesByPosition();
+        
+        // Find all output nodes (coils, timers, counters)
+        int outputNodes[MAX_NODES];
+        int outputCount;
+        findOutputNodes(outputNodes, outputCount, MAX_NODES);
+        
+        if (outputCount == 0) {
+            // No outputs - nothing to compile
+            return true;
+        }
+        
+        // Track which outputs have been processed
+        bool outputProcessed[MAX_NODES] = { false };
+        
+        // First pass: handle parallel output connections (same source -> multiple coils)
+        for (int c = 0; c < connection_count; c++) {
+            Connection& conn = connections[c];
+            
+            // Count how many destinations are output nodes
+            int outputDests[MAX_NODES];
+            int outputDestCount = 0;
+            for (int d = 0; d < conn.dest_count; d++) {
+                int destIdx = findNodeById(conn.destinations[d]);
+                if (destIdx >= 0 && isOutputNode(nodes[destIdx].type) && !outputProcessed[destIdx]) {
+                    outputDests[outputDestCount++] = destIdx;
+                }
+            }
+            
+            // Skip if not multiple output destinations
+            if (outputDestCount < 2) continue;
+            
+            // Emit condition chain from sources
+            if (conn.source_count > 1) {
+                // Multiple sources = OR logic
+                for (int s = 0; s < conn.source_count; s++) {
+                    int srcIdx = findNodeById(conn.sources[s]);
+                    if (srcIdx < 0) continue;
+                    for (int i = 0; i < node_count; i++) nodes[i].visited = false;
+                    if (s > 0) {
+                        emitConditionForNodeAsOr(srcIdx, 0);
+                    } else {
+                        emitConditionForNode(srcIdx, 0, false);
+                    }
+                }
+            } else if (conn.source_count == 1) {
+                int srcIdx = findNodeById(conn.sources[0]);
+                if (srcIdx >= 0) {
+                    for (int i = 0; i < node_count; i++) nodes[i].visited = false;
+                    emitConditionForNode(srcIdx, 0, false);
+                }
+            }
+            
+            // Sort output destinations by Y position (top to bottom)
+            for (int i = 0; i < outputDestCount - 1; i++) {
+                for (int j = i + 1; j < outputDestCount; j++) {
+                    if (nodes[outputDests[j]].y < nodes[outputDests[i]].y) {
+                        int tmp = outputDests[i];
+                        outputDests[i] = outputDests[j];
+                        outputDests[j] = tmp;
+                    }
+                }
+            }
+            
+            // Use branch stack for parallel outputs
+            emitLine("SAVE");
+            indent_level++;
+            for (int d = 0; d < outputDestCount; d++) {
+                int destIdx = outputDests[d];
+                emitLine("L BR");
+                
+                GraphNode& destNode = nodes[destIdx];
+                // No TAP needed - parallel outputs share the same RLO
+                if (isCoil(destNode.type)) {
+                    emitCoil(destNode, false);
+                } else if (isTimer(destNode.type)) {
+                    emitTimer(destNode, false);
+                } else if (isCounter(destNode.type)) {
+                    emitCounter(destNode, false);
+                }
+                outputProcessed[destIdx] = true;
+                destNode.emitted = true;  // Mark as emitted
+                
+                // Check for passthrough chain: coil -> coil
+                // Emit any coils that this coil directly connects to
+                for (int pc = 0; pc < connection_count; pc++) {
+                    Connection& passConn = connections[pc];
+                    // Check if this coil is a source
+                    bool isSource = false;
+                    for (int ps = 0; ps < passConn.source_count; ps++) {
+                        if (strcmp(passConn.sources[ps], destNode.id) == 0) {
+                            isSource = true;
+                            break;
+                        }
+                    }
+                    if (!isSource) continue;
+                    
+                    // Emit any coil destinations (passthrough)
+                    for (int pd = 0; pd < passConn.dest_count; pd++) {
+                        int passDestIdx = findNodeById(passConn.destinations[pd]);
+                        if (passDestIdx < 0) continue;
+                        GraphNode& passDestNode = nodes[passDestIdx];
+                        if (isCoil(passDestNode.type) && !passDestNode.emitted) {
+                            emitCoil(passDestNode, false);
+                            outputProcessed[passDestIdx] = true;
+                            passDestNode.emitted = true;
+                        }
+                    }
+                }
+            }
+            indent_level--;
+            emitLine("DROP BR");
+            emitChar('\n');
+        }
+        
+        // Second pass: process remaining outputs in position order
+        for (int o = 0; o < outputCount; o++) {
+            int destIdx = outputNodes[o];
+            if (outputProcessed[destIdx]) continue;
+            
+            GraphNode& destNode = nodes[destIdx];
+            
+            // Skip if already emitted (e.g., as passthrough in OR branch)
+            if (destNode.emitted) continue;
+            
+            // Get source nodes for this output
+            int sourceIndices[MAX_NODES];
+            int sourceCount;
+            getSourceNodes(destNode.id, sourceIndices, sourceCount, MAX_NODES);
+            
+            // Check if source is an already-executed output node (coil)
+            // If so, just read its address instead of re-emitting the entire chain
+            bool sourceIsEmittedCoil = false;
+            if (sourceCount == 1) {
+                GraphNode& srcNode = nodes[sourceIndices[0]];
+                if (isCoil(srcNode.type) && srcNode.emitted) {
+                    sourceIsEmittedCoil = true;
+                    // Just read the coil's address
+                    emitContact(srcNode, true);
+                }
+            }
+            
+            if (!sourceIsEmittedCoil) {
+                // Emit condition chain
+                if (sourceCount > 1) {
+                    // Multiple sources = OR logic
+                    for (int s = 0; s < sourceCount; s++) {
+                        for (int i = 0; i < node_count; i++) nodes[i].visited = false;
+                        if (s > 0) {
+                            emitConditionForNodeAsOr(sourceIndices[s], 0);
+                        } else {
+                            emitConditionForNode(sourceIndices[s], 0, false);
+                        }
+                    }
+                } else if (sourceCount == 1) {
+                    for (int i = 0; i < node_count; i++) nodes[i].visited = false;
+                    emitConditionForNode(sourceIndices[0], 0, false);
+                }
+            }
+            
+            // Emit output - NO TAP for passthrough coils, just emit sequentially
+            // TAP is only needed if the RLO is used as condition input elsewhere
+            bool needTap = false;  // Coil-to-coil passthrough doesn't need TAP
+            if (isCoil(destNode.type)) {
+                emitCoil(destNode, needTap);
+            } else if (isTimer(destNode.type)) {
+                emitTimer(destNode, needTap);
+            } else if (isCounter(destNode.type)) {
+                emitCounter(destNode, needTap);
+            }
+            outputProcessed[destIdx] = true;
+            destNode.emitted = true;  // Mark as emitted
+            emitChar('\n');
+        }
+        
+        return !has_error;
+    }
+    
+    // ============ Main Entry Point ============
+    
+    bool parse(const char* src, int len) {
+        reset();
+        source = src;
+        length = len;
+        
+        // Parse the graph JSON
+        if (!parseGraph()) {
+            return false;
+        }
+        
+        // Compile to STL
+        if (!compile()) {
             return false;
         }
         
@@ -3585,19 +2810,10 @@ public:
 };
 
 // ============================================================================
-// Static Storage for Branch Elements (defined outside class)
-// ============================================================================
-
-LadderJSONToIRParser::LadderElement LadderJSONToIRParser::branch_element_storage[LadderJSONToIRParser::MAX_TOTAL_PB_ELEMENTS];
-int LadderJSONToIRParser::branch_element_storage_used = 0;
-LadderJSONToIRParser::BranchElementInfo LadderJSONToIRParser::branch_element_info[LadderJSONToIRParser::MAX_BRANCH_ELEMENTS_TRACKED];
-int LadderJSONToIRParser::branch_element_info_used = 0;
-
-// ============================================================================
 // Global Instances and WASM Exports
 // ============================================================================
 
-static LadderJSONToIRParser ladderJSONParser;
+static LadderGraphCompiler ladderGraphCompiler;
 static STLToIRParser stlToIRParser;
 static IRToSTLEmitter irToSTLEmitter;
 static char ladder_input_buffer[32768];
@@ -3605,71 +2821,61 @@ static int ladder_input_length = 0;
 
 extern "C" {
 
-// ============ Ladder JSON to Network IR ============
+// ============ Ladder Graph to STL ============
 
-WASM_EXPORT void ladder_load_from_stream() {
+WASM_EXPORT void ladder_graph_load_from_stream() {
     streamRead(ladder_input_buffer, ladder_input_length, sizeof(ladder_input_buffer));
 }
 
-WASM_EXPORT bool ladder_compile() {
-    // Parse JSON Ladder into Network IR, then emit to STL
-    if (!ladderJSONParser.parse(ladder_input_buffer, ladder_input_length)) {
-        return false;
-    }
-    return irToSTLEmitter.emitAll();
+WASM_EXPORT bool ladder_graph_compile() {
+    // Parse and compile Ladder Graph JSON directly to STL
+    return ladderGraphCompiler.parse(ladder_input_buffer, ladder_input_length);
 }
 
-WASM_EXPORT const char* ladder_get_output() {
-    return irToSTLEmitter.output;
+WASM_EXPORT const char* ladder_graph_get_output() {
+    return ladderGraphCompiler.output;
 }
 
-WASM_EXPORT int ladder_get_output_length() {
-    return irToSTLEmitter.output_len;
+WASM_EXPORT int ladder_graph_get_output_length() {
+    return ladderGraphCompiler.output_len;
 }
 
-WASM_EXPORT void ladder_output_to_stream() {
-    for (int i = 0; i < irToSTLEmitter.output_len; i++) {
-        streamOut(irToSTLEmitter.output[i]);
+WASM_EXPORT void ladder_graph_output_to_stream() {
+    for (int i = 0; i < ladderGraphCompiler.output_len; i++) {
+        streamOut(ladderGraphCompiler.output[i]);
     }
 }
 
-WASM_EXPORT bool ladder_has_error() {
-    return ladderJSONParser.has_error || irToSTLEmitter.has_error;
+WASM_EXPORT bool ladder_graph_has_error() {
+    return ladderGraphCompiler.has_error;
 }
 
-WASM_EXPORT const char* ladder_get_error() {
-    if (ladderJSONParser.has_error) return ladderJSONParser.error_msg;
-    if (irToSTLEmitter.has_error) return irToSTLEmitter.error_msg;
-    return "";
+WASM_EXPORT const char* ladder_graph_get_error() {
+    return ladderGraphCompiler.error_msg;
 }
 
-WASM_EXPORT void ladder_error_to_stream() {
-    const char* err = ladder_get_error();
+WASM_EXPORT void ladder_graph_error_to_stream() {
+    const char* err = ladderGraphCompiler.error_msg;
     for (int i = 0; err[i] != '\0'; i++) {
         streamOut(err[i]);
     }
 }
 
-// ============ Full Pipeline: Ladder JSON -> IR -> STL -> PLCASM -> Bytecode ============
+// ============ Full Pipeline: Ladder Graph -> STL -> PLCASM -> Bytecode ============
 
-WASM_EXPORT bool ladder_compile_full() {
-    // Step 1: Parse JSON Ladder to Network IR
-    if (!ladderJSONParser.parse(ladder_input_buffer, ladder_input_length)) {
+WASM_EXPORT bool ladder_graph_compile_full() {
+    // Step 1: Parse Ladder Graph to STL
+    if (!ladderGraphCompiler.parse(ladder_input_buffer, ladder_input_length)) {
         return false;
     }
     
-    // Step 2: Emit Network IR to canonical STL
-    if (!irToSTLEmitter.emitAll()) {
-        return false;
-    }
-    
-    // Step 3: Compile STL to PLCASM
-    stlCompiler.setSource(irToSTLEmitter.output, irToSTLEmitter.output_len);
+    // Step 2: Compile STL to PLCASM
+    stlCompiler.setSource(ladderGraphCompiler.output, ladderGraphCompiler.output_len);
     if (!stlCompiler.compile()) {
         return false;
     }
     
-    // Step 4: Compile PLCASM to bytecode
+    // Step 3: Compile PLCASM to bytecode
     defaultCompiler.set_assembly_string((char*)stlCompiler.getOutput());
     return !defaultCompiler.compileAssembly(false, false);
 }

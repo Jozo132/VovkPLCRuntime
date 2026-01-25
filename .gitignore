@@ -12,3 +12,4 @@
 .vscode
 *.wasm
 wasm/web-server-test/package.json
+wasm/node-test/explain_output.txt

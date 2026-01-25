@@ -1,0 +1,33 @@
+{
+    "id": "A8uv4BZRuX10w",
+    "type": "ladder",
+    "name": "Network 4",
+    "comment": "",
+    "connections": [
+        {"id": "conn_0", "sources": ["FGftxzdjGzIdZ", "ysdkdW5WHrNZj"], "destinations": ["OZQBBuLgLyiau"]},
+        {"id": "conn_1", "sources": ["JydGjS4LvzorQ", "X4WcTremO8j3i"], "destinations": ["csSZopeZpDOCu"]},
+        {"id": "conn_2", "sources": ["yq0ydd3f7tt93"], "destinations": ["NHX3yKS6ek2zP", "Wl2ZZ1Iqp5caB"]},
+        {"id": "conn_3", "sources": ["OZQBBuLgLyiau"], "destinations": ["QvVMbac1MkaGa"]},
+        {"id": "conn_4", "sources": ["QvVMbac1MkaGa", "RKyNApYAcuNUU", "ZzoDAT0mRQaW0"], "destinations": ["yq0ydd3f7tt93"]},
+        {"id": "conn_5", "sources": ["csSZopeZpDOCu"], "destinations": ["ZzoDAT0mRQaW0"]},
+        {"id": "conn_6", "sources": ["qXA0LSGu23Kd5"], "destinations": ["RKyNApYAcuNUU"]},
+        {"id": "conn_Wl2ZZ1Iqp5caB_i4pbhWAXINbxw", "sources": ["Wl2ZZ1Iqp5caB"], "destinations": ["i4pbhWAXINbxw"]}
+    ],
+    "minimized": false,
+    "nodes": [
+        {"id": "ysdkdW5WHrNZj", "x": 0, "y": 0, "type": "contact", "inverted": false, "trigger": "normal", "symbol": "X0.0"},
+        {"id": "OZQBBuLgLyiau", "x": 3, "y": 0, "type": "contact", "inverted": false, "trigger": "normal", "symbol": "M0.0"},
+        {"id": "FGftxzdjGzIdZ", "x": 0, "y": 1, "type": "contact", "inverted": false, "trigger": "normal", "symbol": "Y0.1"},
+        {"id": "qXA0LSGu23Kd5", "x": 0, "y": 4, "type": "contact", "inverted": false, "trigger": "normal", "symbol": "Y0.2"},
+        {"id": "NHX3yKS6ek2zP", "x": 9, "y": 1, "type": "coil", "inverted": false, "trigger": "normal", "symbol": "Y0.4"},
+        {"id": "JydGjS4LvzorQ", "x": 0, "y": 2, "type": "contact", "inverted": false, "trigger": "normal", "symbol": "X0.1"},
+        {"id": "csSZopeZpDOCu", "x": 3, "y": 2, "type": "contact", "inverted": false, "trigger": "normal", "symbol": "M0.2"},
+        {"id": "X4WcTremO8j3i", "x": 0, "y": 3, "type": "contact", "inverted": false, "trigger": "normal", "symbol": "Y0.3"},
+        {"id": "yq0ydd3f7tt93", "x": 7, "y": 0, "type": "contact", "inverted": true, "trigger": "normal", "symbol": "M0.1"},
+        {"id": "QvVMbac1MkaGa", "x": 4, "y": 0, "type": "timer_ton", "inverted": false, "trigger": "normal", "symbol": "T0", "preset": "T#10s"},
+        {"id": "Wl2ZZ1Iqp5caB", "x": 9, "y": 0, "type": "coil", "inverted": false, "trigger": "normal", "symbol": "Y0.1"},
+        {"id": "ZzoDAT0mRQaW0", "x": 4, "y": 2, "type": "timer_ton", "inverted": false, "trigger": "normal", "symbol": "T1", "preset": "T#3s"},
+        {"id": "RKyNApYAcuNUU", "x": 5, "y": 4, "type": "coil_rset", "inverted": false, "trigger": "normal", "symbol": "Y0.1"},
+        {"id": "i4pbhWAXINbxw", "x": 10, "y": 0, "type": "coil", "inverted": false, "trigger": "normal", "symbol": "Y0.2"}
+    ]
+}

@@ -1,17 +1,17 @@
 #!/usr/bin/env node
-// compile.js - CLI tool for compiling PLCASM to bytecode, STL to PLCASM, or Ladder to STL
+// compile.js - CLI tool for compiling PLCASM to bytecode, STL to PLCASM, or Ladder Graph to STL
 //
 // Usage:
 //   npm run compile < input.asm           # Compile PLCASM, output raw bytecode
 //   npm run compile --stl < input.stl     # Compile STL, output PLCASM
-//   npm run compile --ladder < input.json # Compile Ladder JSON, output STL
+//   npm run compile --ladder < input.json # Compile Ladder Graph JSON, output STL
 //   echo "u8.const 1\nexit" | npm run compile
 //   echo "A I0.0\n= Q0.0" | npm run compile --stl
-//   echo '{"rungs":[...]}' | npm run compile --ladder
+//   echo '{"nodes":[...],"connections":[...]}' | npm run compile --ladder
 //
 // Options:
 //   --stl     Input is STL code, output PLCASM instead of bytecode
-//   --ladder  Input is Ladder JSON, output STL
+//   --ladder  Input is Ladder Graph JSON, output STL
 //   --hex     Output bytecode as hex string instead of raw bytes
 //   --help    Show this help message
 
@@ -32,18 +32,18 @@ const showHelp = args.includes('--help') || args.includes('-h')
 
 if (showHelp) {
     console.log(`
-compile.js - CLI tool for compiling PLCASM to bytecode, STL to PLCASM, or Ladder to STL
+compile.js - CLI tool for compiling PLCASM to bytecode, STL to PLCASM, or Ladder Graph to STL
 
 Usage:
   npm run compile < input.asm           # Compile PLCASM, output raw bytecode
   npm run compile --stl < input.stl     # Compile STL, output PLCASM
-  npm run compile --ladder < input.json # Compile Ladder JSON, output STL
+  npm run compile --ladder < input.json # Compile Ladder Graph JSON, output STL
   echo "u8.const 1" | npm run compile
   echo "A I0.0" | npm run compile --stl
 
 Options:
   --stl     Input is STL code, output PLCASM instead of bytecode
-  --ladder  Input is Ladder JSON, output STL
+  --ladder  Input is Ladder Graph JSON, output STL
   --hex     Output bytecode as hex string instead of raw bytes
   --help    Show this help message
 
@@ -57,8 +57,8 @@ Examples:
   # Convert STL to PLCASM
   echo -e "A I0.0\\n= Q0.0" | npm run compile -- --stl
   
-  # Convert Ladder JSON to STL
-  echo '{"rungs":[{"elements":[{"type":"contact","address":"I0.0"},{"type":"coil","address":"Q0.0"}]}]}' | npm run compile -- --ladder
+  # Convert Ladder Graph JSON to STL
+  echo '{"nodes":[{"id":"n1","type":"contact","symbol":"X0.0","x":0,"y":0}],"connections":[]}' | npm run compile -- --ladder
 `)
     process.exit(0)
 }
@@ -114,19 +114,19 @@ const run = async () => {
         }
         
         if (isLadder) {
-            // Ladder mode: compile Ladder JSON to STL and output STL
+            // Ladder mode: compile Ladder Graph JSON to STL and output STL
             await streamCode(runtime, input)
-            await runtime.callExport('ladder_load_from_stream')
+            await runtime.callExport('ladder_graph_load_from_stream')
             
-            const success = await runtime.callExport('ladder_compile')
+            const success = await runtime.callExport('ladder_graph_compile')
             
             if (!success) {
-                console.error('Ladder compilation error')
+                console.error('Ladder Graph compilation error')
                 process.exit(1)
             }
             
             // Output STL to stream and read it
-            await runtime.callExport('ladder_output_to_stream')
+            await runtime.callExport('ladder_graph_output_to_stream')
             const stl = await runtime.readStream()
             
             // Output STL to stdout

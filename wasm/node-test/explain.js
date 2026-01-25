@@ -4,13 +4,13 @@
 // Usage:
 //   npm run explain < input.asm           # Explain PLCASM code
 //   npm run explain < input.stl           # Explain STL code (auto-detected)
-//   npm run explain < input.json          # Explain Ladder JSON (auto-detected)
+//   npm run explain < input.json          # Explain Ladder Graph JSON (auto-detected)
 //   echo "A I0.0\n= Q0.0" | npm run explain
-//   echo '{"rungs":[...]}' | npm run explain
+//   echo '{"nodes":[...],"connections":[...]}' | npm run explain
 //
 // The script will:
-//   1. Auto-detect the input language (Ladder JSON, STL, or PLCASM)
-//   2. If Ladder, show the Ladder->STL transpilation
+//   1. Auto-detect the input language (Ladder Graph JSON, STL, or PLCASM)
+//   2. If Ladder Graph, show the Ladder->STL transpilation
 //   3. If STL, show the STL->PLCASM transpilation
 //   4. Show the PLCASM->Bytecode compilation with symbol/label resolution
 //   5. Run the bytecode in full debug mode showing stack state at each step
@@ -36,13 +36,13 @@ explain.js - CLI tool for explaining PLC code compilation and execution
 Usage:
   npm run explain < input.asm           # Explain PLCASM code
   npm run explain < input.stl           # Explain STL code (auto-detected)
-  npm run explain < input.json          # Explain Ladder JSON (auto-detected)
+  npm run explain < input.json          # Explain Ladder Graph JSON (auto-detected)
   echo "A I0.0" | npm run explain
-  echo '{"rungs":[...]}' | npm run explain
+  echo '{"nodes":[...],"connections":[...]}' | npm run explain
 
 The script will:
-  1. Auto-detect the input language (Ladder JSON, STL, or PLCASM)
-  2. If Ladder, show the Ladder->STL transpilation
+  1. Auto-detect the input language (Ladder Graph JSON, STL, or PLCASM)
+  2. If Ladder Graph, show the Ladder->STL transpilation
   3. If STL, show the STL->PLCASM transpilation
   4. Show the PLCASM->Bytecode compilation with symbol/label resolution
   5. Run the bytecode in full debug mode showing stack state at each step
@@ -55,7 +55,7 @@ Options:
 Examples:
   echo -e "A I0.0\\n= Q0.0" | npm run explain
   echo -e "u8.const 1\\nu8.const 2\\nu8.add\\nexit" | npm run explain
-  echo '{"rungs":[{"elements":[{"type":"contact","address":"I0.0"},{"type":"coil","address":"Q0.0"}]}]}' | npm run explain
+  echo '{"nodes":[{"id":"n1","type":"contact","symbol":"X0.0","x":0,"y":0},{"id":"n2","type":"coil","symbol":"Y0.0","x":1,"y":0}],"connections":[{"sources":["n1"],"destinations":["n2"]}]}' | npm run explain
 `)
     process.exit(0)
 }
@@ -78,17 +78,18 @@ async function readStdin() {
     })
 }
 
-// Detect if input is Ladder JSON, STL, or PLCASM
+// Detect if input is Ladder Graph JSON, STL, or PLCASM
 function detectLanguage(code) {
     const trimmed = code.trim()
     
-    // Check for JSON first - if it starts with { and contains "rungs" or "networks", it's ladder
+    // Check for JSON first - if it starts with { and contains nodes + connections, it's ladder graph
     if (trimmed.startsWith('{')) {
         try {
             const parsed = JSON.parse(trimmed)
-            if ((parsed.rungs && Array.isArray(parsed.rungs)) ||
-                (parsed.networks && Array.isArray(parsed.networks))) {
-                return 'ladder'
+            // Check for ladder graph format (nodes + connections)
+            if ((parsed.nodes && Array.isArray(parsed.nodes)) &&
+                (parsed.connections && Array.isArray(parsed.connections))) {
+                return 'ladder-graph'
             }
         } catch (e) {
             // Not valid JSON, continue with other detection
@@ -256,24 +257,24 @@ const run = async () => {
         let stl = null
         let stepOffset = 0
         
-        // Step 2: If Ladder, transpile to STL first
-        if (language === 'ladder') {
+        // Step 2: If Ladder Graph, transpile to STL first
+        if (language === 'ladder-graph') {
             console.log('┌─────────────────────────────────────────────────────────────────┐')
-            console.log('│ STEP 2: Ladder → STL Transpilation                             │')
+            console.log('│ STEP 2: Ladder Graph → STL Transpilation                       │')
             console.log('└─────────────────────────────────────────────────────────────────┘')
             console.log()
             
             await streamCode(runtime, input)
-            await runtime.callExport('ladder_load_from_stream')
+            await runtime.callExport('ladder_graph_load_from_stream')
             
-            const ladderSuccess = await runtime.callExport('ladder_compile')
+            const ladderSuccess = await runtime.callExport('ladder_graph_compile')
             
             if (!ladderSuccess) {
-                console.error('  ✗ Ladder compilation error')
+                console.error('  ✗ Ladder Graph compilation error')
                 process.exit(1)
             }
             
-            await runtime.callExport('ladder_output_to_stream')
+            await runtime.callExport('ladder_graph_output_to_stream')
             stl = await runtime.readStream()
             
             const stlLines = stl.split('\n')
@@ -283,13 +284,13 @@ const run = async () => {
                 }
             })
             console.log()
-            console.log('  ✓ Ladder transpiled to STL successfully')
+            console.log('  ✓ Ladder Graph transpiled to STL successfully')
             console.log()
             stepOffset = 1
         }
         
-        // Step 2/3: If STL (or from ladder), transpile to PLCASM
-        if (language === 'stl' || language === 'ladder') {
+        // Step 2/3: If STL (or from ladder graph), transpile to PLCASM
+        if (language === 'stl' || language === 'ladder-graph') {
             const stepNum = 2 + stepOffset
             console.log('┌─────────────────────────────────────────────────────────────────┐')
             console.log(`│ STEP ${stepNum}: STL → PLCASM Transpilation                             │`)
