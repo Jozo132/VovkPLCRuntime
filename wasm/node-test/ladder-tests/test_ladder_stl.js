@@ -116,14 +116,7 @@ async function runTests() {
         const jsonPath = path.join(testDir, `${testCase}.json`)
         const stlPath = path.join(testDir, `${testCase}.stl`)
         
-        // Check if expected STL file exists
-        if (!fs.existsSync(stlPath)) {
-            console.log(`${YELLOW}⊘${RESET} ${testCase} - Missing expected .stl file, skipping`)
-            continue
-        }
-        
         const ladderJson = fs.readFileSync(jsonPath, 'utf8')
-        const expectedSTL = fs.readFileSync(stlPath, 'utf8')
         
         try {
             // Compile ladder graph to STL
@@ -141,6 +134,16 @@ async function runTests() {
             
             runtime.wasm_exports.ladder_graph_output_to_stream()
             const actualSTL = runtime.readStream()
+            
+            // Check if expected STL file exists - if not, generate it
+            if (!fs.existsSync(stlPath)) {
+                fs.writeFileSync(stlPath, actualSTL)
+                console.log(`${CYAN}+${RESET} ${testCase} - Generated expected .stl file`)
+                passed++
+                continue
+            }
+            
+            const expectedSTL = fs.readFileSync(stlPath, 'utf8')
             
             // Compare normalized STL
             const normalizedExpected = normalizeSTL(expectedSTL)

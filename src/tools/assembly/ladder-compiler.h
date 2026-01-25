@@ -1572,9 +1572,9 @@ public:
                 }
             }
             
-            // Emit output - NO TAP for passthrough coils, just emit sequentially
-            // TAP is only needed if the RLO is used as condition input elsewhere
-            bool needTap = false;  // Coil-to-coil passthrough doesn't need TAP
+            // Emit output - check if TAP is needed (downstream contact exists)
+            // TAP is only needed if the RLO will be read by a downstream contact
+            bool needTap = hasDownstreamContact(destIdx);
             if (isCoil(destNode.type)) {
                 emitCoil(destNode, needTap);
             } else if (isTimer(destNode.type)) {
@@ -1584,6 +1584,12 @@ public:
             }
             outputProcessed[destIdx] = true;
             destNode.emitted = true;  // Mark as emitted
+            
+            // Follow and emit any downstream chain (contact → coil sequences)
+            if (hasDownstreamChain(destIdx)) {
+                emitDownstreamChain(destIdx, outputProcessed);
+            }
+            
             emitChar('\n');
         }
         

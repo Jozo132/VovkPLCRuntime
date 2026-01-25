@@ -1,0 +1,14 @@
+{
+  "comment": "Network 4",
+  "nodes": [
+    { "id": "wwcqQ3xh5EAOp", "x": 0, "y": 0, "type": "contact", "symbol": "X1.5", "inverted": false, "trigger": "normal" },
+    { "id": "Y5QZtxZvNKMcf", "x": 3, "y": 0, "type": "coil_rset", "symbol": "Y1.5", "inverted": false },
+    { "id": "Z8hVwuP33iZCY", "x": 2, "y": 0, "type": "contact", "symbol": "X1.6", "inverted": false, "trigger": "normal" },
+    { "id": "Sz8pyGuEBUXIO", "x": 1, "y": 0, "type": "coil_set", "symbol": "Y1.5", "inverted": false }
+  ],
+  "connections": [
+    { "sources": [ "wwcqQ3xh5EAOp" ], "destinations": [ "Sz8pyGuEBUXIO" ] },
+    { "sources": [ "Sz8pyGuEBUXIO" ], "destinations": [ "Z8hVwuP33iZCY" ] },
+    { "sources": [ "Z8hVwuP33iZCY" ], "destinations": [ "Y5QZtxZvNKMcf" ] }
+  ]
+}
