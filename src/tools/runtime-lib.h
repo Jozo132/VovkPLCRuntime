@@ -163,6 +163,7 @@ public:
     RuntimeStack stack = RuntimeStack(); // Active memory stack for PLC execution
     u8 memory[PLCRUNTIME_MAX_MEMORY_SIZE]; // PLC memory to manipulate
     RuntimeProgram program = RuntimeProgram(); // Active PLC program
+    u32 BR = 0; // Binary RLO branch stack (32 bits for up to 32 levels of parallel branch nesting)
     u32 last_cycle_time_us = 0;
     u32 min_cycle_time_us = 1000000000;
     u32 max_cycle_time_us = 0;
@@ -1284,6 +1285,30 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
         case STACK_DU: return PLCMethods::handle_STACK_DU(this->stack, this->memory, program, prog_size, index);
         case STACK_DD: return PLCMethods::handle_STACK_DD(this->stack, this->memory, program, prog_size, index);
         case STACK_DC: return PLCMethods::handle_STACK_DC(this->stack, this->memory, program, prog_size, index);
+
+        // Branch stack operations for parallel branches in ladder logic
+        case BR_SAVE: {
+            // Pop u8 from stack, push bit to BR: BR = (BR << 1) | (pop_u8() ? 1 : 0)
+            u8 value = this->stack.pop_u8();
+            this->BR = (this->BR << 1) | (value ? 1 : 0);
+            return STATUS_SUCCESS;
+        }
+        case BR_READ: {
+            // Peek BR top, push u8 to stack: push_u8((BR & 1) ? 1 : 0)
+            u8 value = (this->BR & 1) ? 1 : 0;
+            this->stack.push(value);
+            return STATUS_SUCCESS;
+        }
+        case BR_DROP: {
+            // Pop/discard BR top: BR >>= 1
+            this->BR >>= 1;
+            return STATUS_SUCCESS;
+        }
+        case BR_CLR: {
+            // Clear BR stack: BR = 0
+            this->BR = 0;
+            return STATUS_SUCCESS;
+        }
 
         case BW_AND_X8: return PLCMethods::handle_BW_AND_X8(this->stack);
         case BW_AND_X16: return PLCMethods::handle_BW_AND_X16(this->stack);

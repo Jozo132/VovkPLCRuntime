@@ -2240,6 +2240,13 @@ public:
                     if (token == "clear") { line.size = InstructionCompiler::push(bytecode, CLEAR); _line_push; }
                 }
 
+                { // Branch stack operations (for parallel branches in ladder logic)
+                    if (token == "br.save") { line.size = InstructionCompiler::push_br_save(bytecode); _line_push; }
+                    if (token == "br.read") { line.size = InstructionCompiler::push_br_read(bytecode); _line_push; }
+                    if (token == "br.drop") { line.size = InstructionCompiler::push_br_drop(bytecode); _line_push; }
+                    if (token == "br.clr") { line.size = InstructionCompiler::push_br_clr(bytecode); _line_push; }
+                }
+
                 { // Handle Bit operations (PLC specific)
 
                     if (data_type) {

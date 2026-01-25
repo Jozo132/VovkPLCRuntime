@@ -291,6 +291,12 @@ enum PLCRuntimeInstructionSet {
     STACK_DD,
     STACK_DC,  // Differentiate Change - triggers on any state change
 
+    // Branch stack operations (u32 Binary RLO Stack for parallel branches in ladder logic)
+    BR_SAVE = 0x90,     // Save RLO to branch stack: BR = (BR << 1) | (pop_u8() ? 1 : 0)
+    BR_READ,            // Read top of branch stack to RLO: push_u8((BR & 1) ? 1 : 0)
+    BR_DROP,            // Drop top of branch stack: BR >>= 1
+    BR_CLR,             // Clear branch stack: BR = 0
+
     // Bitwise operations
     BW_AND_X8 = 0xA0,   // Bitwise AND for 1 byte size values (x, y)
     BW_AND_X16,         // Bitwise AND for 2 byte size values (x, y)

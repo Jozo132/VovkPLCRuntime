@@ -330,6 +330,32 @@ public:
         return 2 + comment_length;
     }
 
+    // Branch stack operations for parallel branches in ladder logic
+    
+    // Push BR_SAVE instruction - pops u8 from stack, pushes bit to branch stack
+    static u8 push_br_save(u8* location) {
+        location[0] = BR_SAVE;
+        return 1;
+    }
+
+    // Push BR_READ instruction - peeks branch stack top, pushes u8 to stack
+    static u8 push_br_read(u8* location) {
+        location[0] = BR_READ;
+        return 1;
+    }
+
+    // Push BR_DROP instruction - pops/discards top of branch stack
+    static u8 push_br_drop(u8* location) {
+        location[0] = BR_DROP;
+        return 1;
+    }
+
+    // Push BR_CLR instruction - clears branch stack
+    static u8 push_br_clr(u8* location) {
+        location[0] = BR_CLR;
+        return 1;
+    }
+
 
     // Convert a data type to another data type
     static u8 push_cvt(u8* location, PLCRuntimeInstructionSet from, PLCRuntimeInstructionSet to) {
