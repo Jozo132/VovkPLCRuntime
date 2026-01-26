@@ -2,10 +2,13 @@
 
 A M1.1
 FP M100.0
+SAVE
 A(
+    L BR
     CTU C0, 10
     O M1.2
 )
+DROP BR
 = Y0.5
 TAP
 SAVE

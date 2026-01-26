@@ -1,15 +1,19 @@
 // Generated from Ladder Graph by VovkPLCRuntime
 
 A X0.0
+SAVE
 A(
     O(
+        L BR
         A M0.1
         TON T4, T#1s
     )
     O(
+        L BR
         A M0.2
         TON T5, T#1s
     )
     O M0.3
 )
+DROP BR
 = Y0.0

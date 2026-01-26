@@ -1601,7 +1601,7 @@ public:
         
         // Check for common ancestor pattern:
         // If all sources share a common ancestor, emit:
-        //   <common chain> A( <first unique part> O <second unique part> )
+        //   <common chain> SAVE A( O( L BR <first unique part> ) O( L BR <second unique part> ) ) DROP BR
         int commonAncestorIdx = findCommonAncestor(sourceIndices, sourceCount);
         
         if (commonAncestorIdx >= 0) {
@@ -1620,6 +1620,9 @@ public:
             for (int i = 0; i < emittedCount; i++) {
                 nodes[emittedChain[i]].emitted = true;
             }
+            
+            // Save RLO before branching so each branch can access it with L BR
+            emitLine("SAVE");
             
             // Emit A( <unique parts OR'd together> )
             emitLine("A(");
@@ -1697,14 +1700,17 @@ public:
                 if (needOrWrappers) {
                     emitLine("O(");
                     indent_level++;
+                    emitLine("L BR");  // Load saved RLO for this branch
                     emitConditionForNode(sourceIndices[s], depth + 2, false, stopAtEmittedOutputs);
                     indent_level--;
                     emitLine(")");
                 } else if (s == 0) {
+                    emitLine("L BR");  // Load saved RLO for single branch
                     emitConditionForNode(sourceIndices[s], depth + 1, false, stopAtEmittedOutputs);
                 } else {
                     emitLine("O(");
                     indent_level++;
+                    emitLine("L BR");  // Load saved RLO for this branch
                     emitConditionForNode(sourceIndices[s], depth + 2, false, stopAtEmittedOutputs);
                     indent_level--;
                     emitLine(")");
@@ -1713,6 +1719,7 @@ public:
             
             indent_level--;
             emitLine(")");
+            emitLine("DROP BR");  // Clean up the saved RLO
             
             // Unmark emitted nodes
             for (int i = 0; i < emittedCount; i++) {
