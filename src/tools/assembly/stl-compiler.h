@@ -131,6 +131,9 @@ public:
 
     // RLO tracking - tracks if we're at the start of a network (first boolean op)
     bool network_has_rlo = false;
+    
+    // Track when BR is loaded to stack (L BR) for combining with comparison results
+    bool br_loaded_for_comparison = false;
 
     // Nesting stack for A(, O(, X( operations
     char nesting_ops[STL_MAX_NESTING_DEPTH]; // 'A', 'O', 'X'
@@ -174,6 +177,7 @@ public:
         current_column = 1;
         pos = 0;
         network_has_rlo = false;
+        br_loaded_for_comparison = false;
         nesting_depth = 0;
         label_counter = 0;
         compilation_hash = 0;
@@ -849,6 +853,8 @@ public:
         nesting_depth++;
         // Reset RLO for the inner expression
         network_has_rlo = false;
+        // Clear br_loaded_for_comparison - the nesting mechanism handles combining
+        br_loaded_for_comparison = false;
     }
 
     // Handle nesting close: )
@@ -1199,28 +1205,32 @@ public:
     // Siemens STL: ==I/<>I/>I etc (16-bit), ==D etc (32-bit), ==R etc (float)
     void handleCompare(const char* op) {
         // Standard Siemens STL 16-bit integer comparisons
-        if (strEq(op, "==I")) { emitLine("i16.cmp_eq");  network_has_rlo = true; setExprType("u8"); return; }
-        if (strEq(op, "<>I")) { emitLine("i16.cmp_neq"); network_has_rlo = true; setExprType("u8"); return; }
-        if (strEq(op, ">I"))  { emitLine("i16.cmp_gt");  network_has_rlo = true; setExprType("u8"); return; }
-        if (strEq(op, ">=I")) { emitLine("i16.cmp_gte"); network_has_rlo = true; setExprType("u8"); return; }
-        if (strEq(op, "<I"))  { emitLine("i16.cmp_lt");  network_has_rlo = true; setExprType("u8"); return; }
-        if (strEq(op, "<=I")) { emitLine("i16.cmp_lte"); network_has_rlo = true; setExprType("u8"); return; }
-        
+        if (strEq(op, "==I")) { emitLine("i16.cmp_eq"); }
+        else if (strEq(op, "<>I")) { emitLine("i16.cmp_neq"); }
+        else if (strEq(op, ">I"))  { emitLine("i16.cmp_gt"); }
+        else if (strEq(op, ">=I")) { emitLine("i16.cmp_gte"); }
+        else if (strEq(op, "<I"))  { emitLine("i16.cmp_lt"); }
+        else if (strEq(op, "<=I")) { emitLine("i16.cmp_lte"); }
         // Siemens STL 32-bit integer comparisons (Double word)
-        if (strEq(op, "==D")) { emitLine("i32.cmp_eq");  network_has_rlo = true; setExprType("u8"); return; }
-        if (strEq(op, "<>D")) { emitLine("i32.cmp_neq"); network_has_rlo = true; setExprType("u8"); return; }
-        if (strEq(op, ">D"))  { emitLine("i32.cmp_gt");  network_has_rlo = true; setExprType("u8"); return; }
-        if (strEq(op, ">=D")) { emitLine("i32.cmp_gte"); network_has_rlo = true; setExprType("u8"); return; }
-        if (strEq(op, "<D"))  { emitLine("i32.cmp_lt");  network_has_rlo = true; setExprType("u8"); return; }
-        if (strEq(op, "<=D")) { emitLine("i32.cmp_lte"); network_has_rlo = true; setExprType("u8"); return; }
-        
+        else if (strEq(op, "==D")) { emitLine("i32.cmp_eq"); }
+        else if (strEq(op, "<>D")) { emitLine("i32.cmp_neq"); }
+        else if (strEq(op, ">D"))  { emitLine("i32.cmp_gt"); }
+        else if (strEq(op, ">=D")) { emitLine("i32.cmp_gte"); }
+        else if (strEq(op, "<D"))  { emitLine("i32.cmp_lt"); }
+        else if (strEq(op, "<=D")) { emitLine("i32.cmp_lte"); }
         // Siemens STL Real (float) comparisons
-        if (strEq(op, "==R")) { emitLine("f32.cmp_eq");  network_has_rlo = true; setExprType("u8"); return; }
-        if (strEq(op, "<>R")) { emitLine("f32.cmp_neq"); network_has_rlo = true; setExprType("u8"); return; }
-        if (strEq(op, ">R"))  { emitLine("f32.cmp_gt");  network_has_rlo = true; setExprType("u8"); return; }
-        if (strEq(op, ">=R")) { emitLine("f32.cmp_gte"); network_has_rlo = true; setExprType("u8"); return; }
-        if (strEq(op, "<R"))  { emitLine("f32.cmp_lt");  network_has_rlo = true; setExprType("u8"); return; }
-        if (strEq(op, "<=R")) { emitLine("f32.cmp_lte"); network_has_rlo = true; setExprType("u8"); return; }
+        else if (strEq(op, "==R")) { emitLine("f32.cmp_eq"); }
+        else if (strEq(op, "<>R")) { emitLine("f32.cmp_neq"); }
+        else if (strEq(op, ">R"))  { emitLine("f32.cmp_gt"); }
+        else if (strEq(op, ">=R")) { emitLine("f32.cmp_gte"); }
+        else if (strEq(op, "<R"))  { emitLine("f32.cmp_lt"); }
+        else if (strEq(op, "<=R")) { emitLine("f32.cmp_lte"); }
+        
+        // If BR was loaded for comparison (L BR pattern), AND result with BR
+        if (br_loaded_for_comparison) {
+            emitLine("u8.and");
+            br_loaded_for_comparison = false;
+        }
         
         network_has_rlo = true;
         setExprType("u8"); // Comparisons return boolean
@@ -1600,6 +1610,8 @@ public:
             toUpper(nextWord);
             if (strEq(nextWord, "BR")) {
                 emitLine("br.read");
+                network_has_rlo = true;  // BR value is now on stack as RLO
+                br_loaded_for_comparison = true;  // Track that BR was loaded for combining with comparison
                 return;
             }
             // Not "L BR", restore position so normal L handler can process it

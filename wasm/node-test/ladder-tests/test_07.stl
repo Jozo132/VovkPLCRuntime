@@ -4,15 +4,19 @@ A X0.0
 FP M100.0
 SAVE
     L BR
-    L MW10
-    <I #10
+    A(
+        L MW10
+        <I #10
+    )
     TAP
     JCN _op0
     INCI MW10
 _op0:
     S Y0.0
     L BR
-    L MW10
-    >=I #10
+    A(
+        L MW10
+        >=I #10
+    )
     R Y0.0
 DROP BR

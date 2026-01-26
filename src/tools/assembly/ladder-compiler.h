@@ -1898,7 +1898,12 @@ public:
                 
                 // Handle comparators first (they're like contacts, emit and continue)
                 if (isComparator(destNode.type)) {
+                    // Wrap comparator in A(...) block so it gets AND'ed with L BR
+                    emitLine("A(");
+                    indent_level++;
                     emitComparator(destNode, true);  // isFirst = true
+                    indent_level--;
+                    emitLine(")");
                     // Follow the chain from this comparator
                     int compDestIndices[MAX_NODES];
                     int compDestCount;
