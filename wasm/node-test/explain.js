@@ -7,14 +7,16 @@
 //   npm run explain < input.json          # Explain Ladder Graph JSON (auto-detected)
 //   echo "A I0.0\n= Q0.0" | npm run explain
 //   echo '{"nodes":[...],"connections":[...]}' | npm run explain
+//   echo "58004090..." | npm run explain  # Explain raw bytecode in hex format
 //
 // The script will:
-//   1. Auto-detect the input language (Ladder Graph JSON, STL, or PLCASM)
-//   2. If Ladder Graph, show the Ladder->STL transpilation
-//   3. If STL, show the STL->PLCASM transpilation
-//   4. Show the PLCASM->Bytecode compilation with symbol/label resolution
-//   5. Run the bytecode in full debug mode showing stack state at each step
-//   6. Limit execution to 100 steps to prevent infinite loops
+//   1. Auto-detect the input language (Bytecode Hex, Ladder Graph JSON, STL, or PLCASM)
+//   2. If Bytecode Hex, load directly and execute
+//   3. If Ladder Graph, show the Ladder->STL transpilation
+//   4. If STL, show the STL->PLCASM transpilation
+//   5. Show the PLCASM->Bytecode compilation with symbol/label resolution
+//   6. Run the bytecode in full debug mode showing stack state at each step
+//   7. Limit execution to 100 steps to prevent infinite loops
 
 import VovkPLC from '../dist/VovkPLC.js'
 import path from 'path'
@@ -39,14 +41,16 @@ Usage:
   npm run explain < input.json          # Explain Ladder Graph JSON (auto-detected)
   echo "A I0.0" | npm run explain
   echo '{"nodes":[...],"connections":[...]}' | npm run explain
+  echo "58004090..." | npm run explain  # Explain raw bytecode in hex format
 
 The script will:
-  1. Auto-detect the input language (Ladder Graph JSON, STL, or PLCASM)
-  2. If Ladder Graph, show the Ladder->STL transpilation
-  3. If STL, show the STL->PLCASM transpilation
-  4. Show the PLCASM->Bytecode compilation with symbol/label resolution
-  5. Run the bytecode in full debug mode showing stack state at each step
-  6. Limit execution to ${maxSteps} steps to prevent infinite loops
+  1. Auto-detect the input language (Bytecode Hex, Ladder Graph JSON, STL, or PLCASM)
+  2. If Bytecode Hex, load directly and execute
+  3. If Ladder Graph, show the Ladder->STL transpilation
+  4. If STL, show the STL->PLCASM transpilation
+  5. Show the PLCASM->Bytecode compilation with symbol/label resolution
+  6. Run the bytecode in full debug mode showing stack state at each step
+  7. Limit execution to ${maxSteps} steps to prevent infinite loops
 
 Options:
   --max-steps=N   Maximum execution steps (default: 100)
@@ -56,6 +60,7 @@ Examples:
   echo -e "A I0.0\\n= Q0.0" | npm run explain
   echo -e "u8.const 1\\nu8.const 2\\nu8.add\\nexit" | npm run explain
   echo '{"nodes":[{"id":"n1","type":"contact","symbol":"X0.0","x":0,"y":0},{"id":"n2","type":"coil","symbol":"Y0.0","x":1,"y":0}],"connections":[{"sources":["n1"],"destinations":["n2"]}]}' | npm run explain
+  echo "58 00 40 60 00 80 FF" | npm run explain  # Raw bytecode hex
 `)
     process.exit(0)
 }
@@ -78,9 +83,18 @@ async function readStdin() {
     })
 }
 
-// Detect if input is Ladder Graph JSON, STL, or PLCASM
+// Detect if input is Bytecode Hex, Ladder Graph JSON, STL, or PLCASM
 function detectLanguage(code) {
     const trimmed = code.trim()
+    
+    // Check for raw bytecode hex first - string of hex digits (with optional spaces/newlines)
+    // Must be a valid hex string that looks like bytecode (not STL/PLCASM)
+    const hexOnly = trimmed.replace(/[\s\r\n]/g, '')
+    if (/^[0-9A-Fa-f]+$/.test(hexOnly) && hexOnly.length >= 2 && hexOnly.length % 2 === 0) {
+        // Additional check: make sure it's not accidentally matching something else
+        // Hex bytecode typically ends with FF (EXIT opcode) or has recognizable opcodes
+        return 'bytecode-hex'
+    }
     
     // Check for JSON first - if it starts with { and contains nodes + connections, it's ladder graph
     if (trimmed.startsWith('{')) {
@@ -221,6 +235,19 @@ function readCapturedOutput() {
     return output
 }
 
+// CRC8 calculation (polynomial 0x31) to match the runtime's crc8_simple
+function crc8Simple(bytes) {
+    let crc = 0
+    for (const byte of bytes) {
+        crc ^= byte
+        for (let k = 0; k < 8; k++) {
+            crc = (crc & 0x80) ? ((crc << 1) ^ 0x31) : (crc << 1)
+        }
+        crc &= 0xff
+    }
+    return crc
+}
+
 const run = async () => {
     const wasmPath = path.resolve(__dirname, '../dist/VovkPLC.wasm')
     
@@ -275,6 +302,61 @@ const run = async () => {
         let plcasm = input
         let stl = null
         let stepOffset = 0
+        let bytecodeLoaded = false
+        
+        // Handle raw bytecode hex - skip compilation, go straight to execution
+        if (language === 'bytecode-hex') {
+            console.log('┌─────────────────────────────────────────────────────────────────┐')
+            console.log('│ STEP 2: Load Bytecode from Hex                                 │')
+            console.log('└─────────────────────────────────────────────────────────────────┘')
+            console.log()
+            
+            // Parse hex string (ignore spaces and newlines)
+            const hexOnly = input.replace(/[\s\r\n]/g, '')
+            const bytes = []
+            for (let i = 0; i < hexOnly.length; i += 2) {
+                bytes.push(parseInt(hexOnly.substr(i, 2), 16))
+            }
+            
+            console.log(`  Parsed ${bytes.length} bytes from hex input`)
+            console.log()
+            
+            // Format bytecode display
+            const bytecodeHex = bytes.map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' ')
+            console.log(`  Bytecode[${bytes.length}]: ${bytecodeHex}`)
+            console.log()
+            
+            // Calculate CRC8 checksum (polynomial 0x31)
+            const checksum = crc8Simple(bytes)
+            console.log(`  CRC8 Checksum: 0x${checksum.toString(16).toUpperCase().padStart(2, '0')}`)
+            console.log()
+            
+            // Stream bytes to input and use downloadProgram
+            for (const b of bytes) {
+                runtime.wasm_exports.streamIn(b)
+            }
+            
+            readCapturedOutput() // clear any previous output
+            const loadError = runtime.wasm_exports.downloadProgram(bytes.length, checksum)
+            
+            const loadOutput = readCapturedOutput()
+            if (loadOutput && loadOutput.trim()) {
+                for (const line of loadOutput.split('\n')) {
+                    if (line.trim()) console.log(`  ${line}`)
+                }
+                console.log()
+            }
+            
+            if (loadError) {
+                console.error(`  ✗ Failed to load bytecode (error code: ${loadError})`)
+                process.exit(1)
+            }
+            
+            console.log('  ✓ Bytecode loaded successfully')
+            console.log()
+            
+            bytecodeLoaded = true
+        }
         
         // Step 2: If Ladder Graph, transpile to STL first
         if (language === 'ladder-graph') {
@@ -347,53 +429,55 @@ const run = async () => {
             console.log()
         }
         
-        // Step 3/4: Compile PLCASM to bytecode
-        const plcasmStepNum = language === 'ladder' ? 4 : (language === 'stl' ? 3 : 2)
-        console.log('┌─────────────────────────────────────────────────────────────────┐')
-        console.log(`│ STEP ${plcasmStepNum}: PLCASM → Bytecode Compilation                           │`)
-        console.log('└─────────────────────────────────────────────────────────────────┘')
-        console.log()
-        
-        readCapturedOutput() // clear any previous output
-        runtime.downloadAssembly(plcasm)
-        const compileError = runtime.wasm_exports.compileAssembly(true)
-        
-        // Read compiler output (debug output goes to stdout, not stream)
-        const compileOutput = readCapturedOutput()
-        if (compileOutput) {
-            // Parse and format compiler output
-            const lines = compileOutput.split('\n')
-            for (const line of lines) {
-                if (line.trim()) {
-                    console.log(`  ${line}`)
+        // Step 3/4: Compile PLCASM to bytecode (skip if bytecode was loaded directly)
+        if (!bytecodeLoaded) {
+            const plcasmStepNum = language === 'ladder' ? 4 : (language === 'stl' ? 3 : 2)
+            console.log('┌─────────────────────────────────────────────────────────────────┐')
+            console.log(`│ STEP ${plcasmStepNum}: PLCASM → Bytecode Compilation                           │`)
+            console.log('└─────────────────────────────────────────────────────────────────┘')
+            console.log()
+            
+            readCapturedOutput() // clear any previous output
+            runtime.downloadAssembly(plcasm)
+            const compileError = runtime.wasm_exports.compileAssembly(true)
+            
+            // Read compiler output (debug output goes to stdout, not stream)
+            const compileOutput = readCapturedOutput()
+            if (compileOutput) {
+                // Parse and format compiler output
+                const lines = compileOutput.split('\n')
+                for (const line of lines) {
+                    if (line.trim()) {
+                        console.log(`  ${line}`)
+                    }
                 }
+            }
+            
+            if (compileError) {
+                console.error('  ✗ PLCASM compilation failed')
+                process.exit(1)
+            }
+            
+            console.log()
+            console.log('  ✓ Compiled to bytecode successfully')
+            console.log()
+            
+            // Load the compiled program
+            const loadError = runtime.wasm_exports.loadCompiledProgram()
+            if (loadError) {
+                console.error('  ✗ Failed to load compiled program')
+                process.exit(1)
+            }
+            
+            // Read load output
+            const loadOutput = readCapturedOutput()
+            if (loadOutput && loadOutput.trim()) {
+                console.log(loadOutput)
             }
         }
         
-        if (compileError) {
-            console.error('  ✗ PLCASM compilation failed')
-            process.exit(1)
-        }
-        
-        console.log()
-        console.log('  ✓ Compiled to bytecode successfully')
-        console.log()
-        
-        // Step 4: Load and explain bytecode
-        const loadError = runtime.wasm_exports.loadCompiledProgram()
-        if (loadError) {
-            console.error('  ✗ Failed to load compiled program')
-            process.exit(1)
-        }
-        
-        // Read load output
-        const loadOutput = readCapturedOutput()
-        if (loadOutput && loadOutput.trim()) {
-            console.log(loadOutput)
-        }
-        
-        // Step 4/5: Execute with debug
-        const execStepNum = language === 'ladder' ? 5 : (language === 'stl' ? 4 : 3)
+        // Execution step
+        const execStepNum = language === 'bytecode-hex' ? 3 : (language === 'ladder-graph' ? 5 : (language === 'stl' ? 4 : 3))
         console.log('┌─────────────────────────────────────────────────────────────────┐')
         console.log(`│ STEP ${execStepNum}: Bytecode Execution (Debug Mode, max ${maxSteps} steps)          │`)
         console.log('└─────────────────────────────────────────────────────────────────┘')
