@@ -1625,6 +1625,45 @@ public:
                 nodes[emittedChain[i]].emitted = true;
             }
             
+            // Check if all sources are simple contacts with all their sources already emitted
+            // If so, we can use standard nesting without SAVE
+            bool allSimpleContacts = true;
+            for (int s = 0; s < sourceCount && allSimpleContacts; s++) {
+                if (!isContact(nodes[sourceIndices[s]].type)) {
+                    allSimpleContacts = false;
+                    break;
+                }
+                // Check if all sources of this contact are in the emitted chain
+                int srcIndices[MAX_NODES];
+                int srcCount;
+                getSourceNodes(nodes[sourceIndices[s]].id, srcIndices, srcCount, MAX_NODES);
+                for (int i = 0; i < srcCount && allSimpleContacts; i++) {
+                    bool found = false;
+                    for (int j = 0; j < emittedCount; j++) {
+                        if (srcIndices[i] == emittedChain[j]) { found = true; break; }
+                    }
+                    if (!found) allSimpleContacts = false;
+                }
+            }
+            
+            if (allSimpleContacts) {
+                // All sources are simple contacts directly connected to the common chain
+                // Use standard nesting without SAVE: A( A M0.1 O M0.2 O M0.3 )
+                emitLine("A(");
+                indent_level++;
+                for (int s = 0; s < sourceCount; s++) {
+                    emitContact(nodes[sourceIndices[s]], s == 0, s > 0);
+                }
+                indent_level--;
+                emitLine(")");
+                
+                // Unmark emitted nodes
+                for (int i = 0; i < emittedCount; i++) {
+                    nodes[emittedChain[i]].emitted = false;
+                }
+                return;
+            }
+            
             // Save RLO before branching so each branch can access it with L BR
             emitLine("SAVE");
             
@@ -1695,7 +1734,14 @@ public:
                     }
                     
                     if (allEmitted) {
-                        emitContact(nodes[sourceIndices[s]], s == 0, s > 0);  // A or O depending on first
+                        // Simple contacts inside the OR group should be OR'd together
+                        // The outer AND with BR happens when the A(...) block closes
+                        if (s == 0) {
+                            // First contact: just load its value (no AND/OR prefix)
+                            emitContact(nodes[sourceIndices[s]], true, false);  // Uses A prefix but no prior RLO
+                        } else {
+                            emitContact(nodes[sourceIndices[s]], false, true);  // OR with previous
+                        }
                         continue;
                     }
                 }

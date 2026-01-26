@@ -1,0 +1,10 @@
+// Generated from Ladder Graph by VovkPLCRuntime
+
+AN X0.0
+A(
+    A M0.1
+    ON M0.2
+    O M0.3
+)
+= Y0.0
+

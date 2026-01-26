@@ -1619,6 +1619,7 @@ public:
         
         if (strEq(upperInstr, "SAVE")) {
             emitLine("br.save");
+            network_has_rlo = false;  // SAVE moves RLO from stack to BR, so stack is now empty
             return;
         }
         
