@@ -1,14 +1,14 @@
 {
   "success": 1,
   "project": { "name": "STLTimer", "version": "1.0" },
-  "bytecode": "FD 02 58 00 40 30 02 C0 00 00 13 88 58 02 C0 C0 60 00 80 FF",
-  "bytecodeLength": 20,
-  "checksum": 194,
+  "bytecode": "58 00 14 E2 00 06 FD 02 58 00 40 30 02 C0 00 00 13 88 58 02 C0 C0 60 00 80 FF",
+  "bytecodeLength": 26,
+  "checksum": 226,
   "files": [
     { "path": "Timer", "firstBlockIndex": 0, "blockCount": 1, "executionOrder": 0 }
   ],
   "blocks": [
-    { "file": "Timer", "name": "TimerLogic", "language": "STL", "offset": 0, "size": 20 }
+    { "file": "Timer", "name": "TimerLogic", "language": "STL", "offset": 0, "size": 0 }
   ],
   "symbols": [],
   "memoryAreas": [
@@ -20,6 +20,6 @@
     { "name": "T", "start": 704, "end": 1023 },
     { "name": "CT", "start": 1024, "end": 1279 }
   ],
-  "execution": { "steps": 7, "stackSize": 0 },
+  "execution": { "steps": 9, "stackSize": 0 },
   "problems": []
 }

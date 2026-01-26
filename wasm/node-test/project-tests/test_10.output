@@ -1,14 +1,14 @@
 {
   "success": 1,
   "project": { "name": "AllMemoryAreas", "version": "1.0" },
-  "bytecode": "FD 01 03 2A FF",
-  "bytecodeLength": 5,
-  "checksum": 203,
+  "bytecode": "58 00 14 E2 00 06 FD 01 03 2A FF",
+  "bytecodeLength": 11,
+  "checksum": 136,
   "files": [
     { "path": "Main", "firstBlockIndex": 0, "blockCount": 1, "executionOrder": 0 }
   ],
   "blocks": [
-    { "file": "Main", "name": "Init", "language": "PLCASM", "offset": 0, "size": 5 }
+    { "file": "Main", "name": "Init", "language": "PLCASM", "offset": 0, "size": 0 }
   ],
   "symbols": [],
   "memoryAreas": [
@@ -18,7 +18,7 @@
     { "name": "T", "start": 768, "end": 1023 },
     { "name": "C", "start": 1024, "end": 1279 }
   ],
-  "execution": { "steps": 3, "stackSize": 1 },
+  "execution": { "steps": 5, "stackSize": 1 },
   "problems": [
     { "severity": "warning", "message": "Stack leak: 1 byte(s) remaining after execution", "line": 0, "column": 0 }
   ]

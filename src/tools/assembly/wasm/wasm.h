@@ -62,17 +62,53 @@ void delayMicroseconds(int us) {}
 
 WASM_IMPORT void stdout(char c);
 WASM_IMPORT void stderr(char c);
-WASM_IMPORT void streamOut(char c);
 
 #ifndef __WASM_STREAM_SIZE_IN__
 constexpr unsigned long __WASM_STREAM_SIZE_IN__SIZE_CONSTEXPR = 32 * (1024 * 1024); // 32 MB
 #define __WASM_STREAM_SIZE_IN__ __WASM_STREAM_SIZE_IN__SIZE_CONSTEXPR
 #endif // __WASM_STREAM_SIZE_IN__
 
-// Circular buffer
+#ifndef __WASM_STREAM_SIZE_OUT__
+constexpr unsigned long __WASM_STREAM_SIZE_OUT__SIZE_CONSTEXPR = 10 * (1024 * 1024); // 10 MB
+#define __WASM_STREAM_SIZE_OUT__ __WASM_STREAM_SIZE_OUT__SIZE_CONSTEXPR
+#endif // __WASM_STREAM_SIZE_OUT__
+
+// Circular buffer for INPUT (Shared Memory Buffer Input)
 char __wasm_stream_in__[__WASM_STREAM_SIZE_IN__];
 int __wasm_stream_in_cursor__ = 0;
 int __wasm_stream_in_index__ = 0;
+
+// Linear buffer for OUTPUT (Shared Memory Buffer Output)
+char __wasm_stream_out__[__WASM_STREAM_SIZE_OUT__];
+int __wasm_stream_out_index__ = 0;
+
+// Input Buffer Exports
+WASM_EXPORT char* get_in_buffer_ptr() { return __wasm_stream_in__; }
+WASM_EXPORT int get_in_buffer_size() { return __WASM_STREAM_SIZE_IN__; }
+WASM_EXPORT int get_in_index() { return __wasm_stream_in_index__; }
+WASM_EXPORT void set_in_index(int index) { 
+    if (index >= 0 && index < __WASM_STREAM_SIZE_IN__) __wasm_stream_in_index__ = index; 
+}
+WASM_EXPORT int get_in_cursor() { return __wasm_stream_in_cursor__; }
+WASM_EXPORT void set_in_cursor(int cursor) { 
+    if (cursor >= 0 && cursor < __WASM_STREAM_SIZE_IN__) __wasm_stream_in_cursor__ = cursor; 
+}
+
+// Output Buffer Exports
+WASM_EXPORT char* get_out_buffer_ptr() { return __wasm_stream_out__; }
+WASM_EXPORT int get_out_buffer_size() { return __WASM_STREAM_SIZE_OUT__; }
+WASM_EXPORT int get_out_index() { return __wasm_stream_out_index__; }
+WASM_EXPORT void set_out_index(int index) { 
+    if (index >= 0 && index < __WASM_STREAM_SIZE_OUT__) __wasm_stream_out_index__ = index; 
+}
+WASM_EXPORT void flush_out_buffer() { __wasm_stream_out_index__ = 0; }
+
+// Helper for streamOut (replacing import)
+void streamOut(char c) {
+    if (__wasm_stream_out_index__ < __WASM_STREAM_SIZE_OUT__) {
+        __wasm_stream_out__[__wasm_stream_out_index__++] = c;
+    }
+}
 
 WASM_EXPORT void streamClear() { // Clear the input stream buffer
     __wasm_stream_in_cursor__ = 0;

@@ -248,7 +248,7 @@ class VovkPLC_class {
         this.wasm_exports.initialize()
         this.wasm_exports.downloadAssembly = assembly => this.downloadAssembly(assembly)
         this.wasm_exports.extractProgram = () => this.extractProgram()
-        const required_methods = ['printInfo', 'run_unit_test', 'run_custom_test', 'get_free_memory', 'doNothing', 'compileAssembly', 'loadCompiledProgram', 'runFullProgramDebug', 'runFullProgram', 'uploadProgram', 'getMemoryArea', 'writeMemoryByte']
+        const required_methods = ['printInfo', 'run_unit_test', 'run_custom_test', 'memoryReset', 'get_free_memory', 'doNothing', 'compileAssembly', 'loadCompiledProgram', 'runFullProgramDebug', 'runFullProgram', 'uploadProgram', 'getMemoryArea', 'writeMemoryByte']
         for (let i = 0; i < required_methods.length; i++) {
             const method = required_methods[i] // @ts-ignore
             if (!this.wasm_exports[method]) throw new Error(`${method} function not found`)

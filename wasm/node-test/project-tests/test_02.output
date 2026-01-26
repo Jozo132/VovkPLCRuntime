@@ -1,14 +1,14 @@
 {
   "success": 1,
   "project": { "name": "STLBasic", "version": "1.0" },
-  "bytecode": "FD 02 58 00 40 60 00 80 FF",
-  "bytecodeLength": 9,
-  "checksum": 76,
+  "bytecode": "58 00 14 E2 00 06 FD 02 58 00 40 60 00 80 FF",
+  "bytecodeLength": 15,
+  "checksum": 48,
   "files": [
     { "path": "Network1", "firstBlockIndex": 0, "blockCount": 1, "executionOrder": 0 }
   ],
   "blocks": [
-    { "file": "Network1", "name": "Logic", "language": "STL", "offset": 0, "size": 9 }
+    { "file": "Network1", "name": "Logic", "language": "STL", "offset": 0, "size": 0 }
   ],
   "symbols": [],
   "memoryAreas": [
@@ -20,6 +20,6 @@
     { "name": "T", "start": 704, "end": 1023 },
     { "name": "CT", "start": 1024, "end": 1279 }
   ],
-  "execution": { "steps": 4, "stackSize": 0 },
+  "execution": { "steps": 6, "stackSize": 0 },
   "problems": []
 }

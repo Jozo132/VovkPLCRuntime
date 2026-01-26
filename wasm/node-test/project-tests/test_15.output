@@ -1,14 +1,14 @@
 {
   "success": 1,
   "project": { "name": "BitwiseOps", "version": "1.0" },
-  "bytecode": "FD 01 03 FF 03 0F C0 FF",
-  "bytecodeLength": 8,
-  "checksum": 129,
+  "bytecode": "58 00 14 E2 00 06 FD 01 03 FF 03 0F C0 FF",
+  "bytecodeLength": 14,
+  "checksum": 185,
   "files": [
     { "path": "Main", "firstBlockIndex": 0, "blockCount": 1, "executionOrder": 0 }
   ],
   "blocks": [
-    { "file": "Main", "name": "BitOps", "language": "PLCASM", "offset": 0, "size": 8 }
+    { "file": "Main", "name": "BitOps", "language": "PLCASM", "offset": 0, "size": 0 }
   ],
   "symbols": [],
   "memoryAreas": [
@@ -20,7 +20,7 @@
     { "name": "T", "start": 704, "end": 1023 },
     { "name": "CT", "start": 1024, "end": 1279 }
   ],
-  "execution": { "steps": 5, "stackSize": 1 },
+  "execution": { "steps": 7, "stackSize": 1 },
   "problems": [
     { "severity": "warning", "message": "Stack leak: 1 byte(s) remaining after execution", "line": 0, "column": 0 }
   ]

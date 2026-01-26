@@ -349,3 +349,11 @@ WASM_EXPORT void clearStack() {
 // WASM_EXPORT void printStreamTest() {
 //     Stream.print("{ \"test\": \"This is a test stream message.\" }");
 // }
+
+WASM_EXPORT int project_loadToRuntime() {
+    return (int)runtime.program.load(project_compiler.getBytecode(), project_compiler.getBytecodeLength(), project_compiler.getChecksum());
+}
+
+WASM_EXPORT void memoryReset() {
+    runtime.resetFirstCycle();
+}

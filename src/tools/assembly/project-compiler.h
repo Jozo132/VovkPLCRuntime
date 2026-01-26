@@ -147,19 +147,25 @@ struct ProgramFile {
 struct ProjectSymbol {
     char name[64];          // Symbol name (owned storage)
     char type[32];          // Type name (owned storage)
+    char address_str[32];   // Original address string (e.g. "M10.0")
     u32 address;            // Memory address or byte offset
     u8 bit;                 // Bit position (0-7) or 255 if not a bit type
     bool is_bit;            // True if this is a bit address
     u8 type_size;           // Size in bytes
+    char default_value[32]; // Optional default value (e.g. "0", "1", "123.45")
+    bool has_default;
     bool used;
     
     void reset() {
         name[0] = '\0';
         type[0] = '\0';
+        address_str[0] = '\0';
         address = 0;
         bit = 255;
         is_bit = false;
         type_size = 0;
+        default_value[0] = '\0';
+        has_default = false;
         used = false;
     }
 };
@@ -934,6 +940,29 @@ public:
         
         // Parse address (simplified - handles numeric and prefixed addresses)
         psym.address = parseAddress(address, &psym.bit, &psym.is_bit);
+        
+        // Save original address string
+        int k = 0;
+        while(address[k] && k < 31) {
+            psym.address_str[k] = address[k];
+            k++;
+        }
+        psym.address_str[k] = '\0';
+
+        // Check for default value
+        skipWhitespaceNotNewline();
+        if (peek() == '=') {
+            advance(); // Consume '='
+            skipWhitespace();
+            
+            // Read default value
+            if (!readWord(psym.default_value, 31)) {
+                setError("Expected default value after '='");
+                return false;
+            }
+            psym.has_default = true;
+        }
+
         psym.used = true;
         
         symbol_count++;
@@ -958,6 +987,14 @@ public:
             sym.type.length = 0;
             while (psym.type[sym.type.length]) sym.type.length++;
             
+            // Copy address string
+            int k = 0;
+            while(psym.address_str[k] && k < 31) {
+                sym.address_str[k] = psym.address_str[k];
+                k++;
+            }
+            sym.address_str[k] = '\0';
+
             sym.address = psym.address;
             sym.bit = psym.bit;
             sym.is_bit = psym.is_bit;
@@ -1244,6 +1281,246 @@ public:
         return !has_error;
     }
     
+    // Generate startup block for default values and initialization
+    void generateStartupBlock() {
+        appendToCombinedPLCASM("// --- STARTUP INITIALIZATION ---\n");
+        // Check P_First_Cycle (Offset 20, bit 0). If NOT set, jump to end.
+        // P_First_Cycle is automatically managed by runtime at global offset 20 (base+20)
+        // bit 0 is set on first cycle.
+        
+        // Code:
+        // u8.readBit K20.0
+        // jmp_if_not __SKIP_STARTUP
+        
+        appendToCombinedPLCASM("u8.readBit K20.0\njmp_if_not __SKIP_STARTUP\n\n");
+        appendToCombinedPLCASM("// Write default values\n");
+
+        for (int i = 0; i < symbol_count; i++) {
+            ProjectSymbol& sym = symbols[i];
+            if (sym.has_default) {
+                // Generate write instruction
+                // "u8.const <val> \n ptr.const <addr> \n u8.store \n"
+                // Need to handle types?
+                // For now assuming u8/basic numeric types that parse directly or bit writes
+                
+                if (sym.is_bit) {
+                   // Bit write
+                   if (sym.default_value[0] == '1' || sym.default_value[0] == 't' || sym.default_value[0] == 'T') {
+                       appendToCombinedPLCASM("u8.writeBitOn ");
+                   } else {
+                       appendToCombinedPLCASM("u8.writeBitOff ");
+                   }
+                   
+                   // Use original address string if available, otherwise computed address
+                   if (sym.address_str[0] != '\0') {
+                        appendToCombinedPLCASM(sym.address_str);
+                   } else {
+                        appendCombinedPLCASMInt(sym.address);
+                        appendToCombinedPLCASM(".");
+                        appendCombinedPLCASMInt(sym.bit);
+                   }
+                   appendToCombinedPLCASM("\n");
+                } else {
+                    // Byte/Word write
+                    // Check type size
+                    // If f32/u32, need different store? 
+                    // PLCASM usually has specific store instructions or just typed stores.
+                    // Let's use simple stores for now assuming standard types
+                    const char* type_prefix = "u8";
+                    if (sym.type_size == 2) type_prefix = "u16";
+                    else if (sym.type_size == 4) type_prefix = "u32"; // or f32? PLCASM usually distinguishes
+                    else if (sym.type_size == 8) type_prefix = "u64";
+                    
+                    if (strEqI(sym.type, "f32")) type_prefix = "f32";
+                    else if (strEqI(sym.type, "f64")) type_prefix = "f64";
+                    
+                    // Value
+                    appendToCombinedPLCASM(type_prefix);
+                    appendToCombinedPLCASM(".const ");
+                    appendToCombinedPLCASM(sym.default_value);
+                    appendToCombinedPLCASM("\n");
+                    
+                    // Store (move_to)
+                    appendToCombinedPLCASM(type_prefix);
+                    appendToCombinedPLCASM(".move_to ");
+
+                   // Use original address string if available, otherwise computed address
+                   if (sym.address_str[0] != '\0') {
+                        appendToCombinedPLCASM(sym.address_str);
+                   } else {
+                        appendCombinedPLCASMInt(sym.address);
+                   }
+                    appendToCombinedPLCASM("\n");
+                }
+            }
+        }
+        
+        appendToCombinedPLCASM("\n// Initialize Differentiation Bits (Safety Skip)\n");
+        // Scan for edge detections in raw source or parsed blocks?
+        // We can iterate program_blocks, look for "FP"/"FN" (STL) or "RE"/"FE" (PLCASM)
+        // And attempt to initialize the memory bit with the input value.
+        // This is complex because we need to parse the input expression.
+        // Simplification: Look for "A <input>" followed immediately by "FP <mem>" in STL
+        
+        for (int i = 0; i < program_block_count; i++) {
+            ProgramBlock& block = program_blocks[i];
+            
+            // Extract source for this block
+            int len = block.source_end - block.source_start;
+            if (len > PROJECT_MAX_SOURCE_SIZE - 1) len = PROJECT_MAX_SOURCE_SIZE - 1;
+            
+            for (int k = 0; k < len; k++) block_source[k] = source[block.source_start + k];
+            block_source[len] = '\0';
+            
+            if (block.language == LANG_STL) {
+                // STL Scanner
+                // Look for:  A <symbol/addr> ... FP <symbol/addr>
+                // We parse tokens.
+                // Simple token scanner
+                char token[64];
+                char prev_token[64]; prev_token[0] = '\0';
+                char prev_prev_token[64]; prev_prev_token[0] = '\0';
+                
+                int ptr = 0;
+                while(ptr < len) {
+                    // Skip whitespace
+                    while(ptr < len && block_source[ptr] <= 32) ptr++;
+                    if (ptr >= len) break;
+                    
+                    // Skip comments (;)
+                    if (block_source[ptr] == ';') {
+                         while(ptr < len && block_source[ptr] != '\n') ptr++;
+                         continue;
+                    }
+                    
+                    // Read token
+                    int tstart = ptr;
+                    
+                    // Simplified isalnum
+                    char c = block_source[ptr];
+                    bool is_ident = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '.';
+
+                    while(ptr < len && is_ident) {
+                         ptr++;
+                         if(ptr < len) {
+                            c = block_source[ptr];
+                            is_ident = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '.';
+                         }
+                    }
+                    
+                    int tlen = ptr - tstart;
+                    
+                    if (tlen == 0) {
+                        // Not an identifier start (e.g. operator or garbage), skip one char
+                        ptr++;
+                        continue;
+                    }
+                    
+                    if (tlen > 63) tlen = 63;
+                    
+                    for(int j=0; j<tlen; j++) token[j] = block_source[tstart+j];
+                    token[tlen] = '\0';
+                    
+                    // Check logic: A <input> FP <mem>
+                    if (strEqI(token, "FP") || strEqI(token, "FN")) {
+                        // Check if previous was an address/symbol
+                        // And pre-previous was 'A' (Load) or 'AN' (Load Not) or 'L' (Load)
+                        if (prev_token[0] != '\0' && (strEqI(prev_prev_token, "A") || strEqI(prev_prev_token, "L"))) {
+                            // "Safely skip": Initialize <mem> with <input>
+                            // Generate: A <input> = <mem>
+                            
+                            // Find 'prev_token' in symbols
+                            // Find 'next token' (parameter to FP)
+                            
+                            // Read next token (memory bit)
+                            while(ptr < len && block_source[ptr] <= 32) ptr++;
+                            int mstart = ptr;
+                            // Read mem token
+                            c = block_source[ptr];
+                            is_ident = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '.';
+                            while(ptr < len && is_ident) {
+                                ptr++;
+                                if(ptr < len) {
+                                    c = block_source[ptr];
+                                    is_ident = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '.';
+                                }
+                            }
+
+                            int mlen = ptr - mstart;
+                             char mem_token[64];
+                             if (mlen < 64 && mlen > 0) {
+                                for(int j=0; j<mlen; j++) mem_token[j] = block_source[mstart+j];
+                                mem_token[mlen] = '\0';
+                                
+                                int in_idx = findSymbolIndex(prev_token);
+                                int mem_idx = findSymbolIndex(mem_token);
+                                
+                                if (mem_idx >= 0 && symbols[mem_idx].is_bit) {
+                                    // We found the memory bit.
+                                    // Now result source.
+                                    if (in_idx >= 0 && symbols[in_idx].is_bit) {
+                                         // Copy Bit Input -> Bit Memory
+                                         appendToCombinedPLCASM("u8.readBit "); 
+                                         appendCombinedPLCASMInt(symbols[in_idx].address);
+                                         appendToCombinedPLCASM("."); 
+                                         appendCombinedPLCASMInt(symbols[in_idx].bit);
+                                         appendToCombinedPLCASM("\n");
+                                         
+                                         appendToCombinedPLCASM("u8.writeBit "); 
+                                         appendCombinedPLCASMInt(symbols[mem_idx].address);
+                                         appendToCombinedPLCASM("."); 
+                                         appendCombinedPLCASMInt(symbols[mem_idx].bit);
+                                         appendToCombinedPLCASM("\n");
+                                    }
+                                }
+                             }
+                        }
+                    }
+                    
+                    // Shift tokens
+                    copyString(prev_prev_token, prev_token, 64);
+                    copyString(prev_token, token, 64);
+                }
+            }
+        }
+        
+        appendToCombinedPLCASM("__SKIP_STARTUP:\n// --- END STARTUP ---\n\n");
+    }
+
+    int findSymbolIndex(const char* name) {
+        for (int i = 0; i < symbol_count; i++) {
+            if (strEqI(symbols[i].name, name)) return i;
+            // Also check if name matches raw address? 
+            // Maybe user used raw address in code like "I0.0".
+            // Currently symbol table has defined symbols.
+            // If code has "I0.0", it's not in symbols table by name.
+        }
+        return -1;
+    }
+
+    void appendCombinedPLCASMInt(int v) {
+        char buf[16];
+        int i = 0;
+        bool neg = v < 0;
+        if(neg) v = -v;
+        if(v == 0) buf[i++] = '0';
+        else {
+            while(v > 0) {
+                buf[i++] = (v % 10) + '0';
+                v /= 10;
+            }
+        }
+        if(neg) buf[i++] = '-';
+        buf[i] = '\0';
+        // reverse
+        for(int j=0; j<i/2; j++) {
+            char t = buf[j];
+            buf[j] = buf[i-1-j];
+            buf[i-1-j] = t;
+        }
+        appendToCombinedPLCASM(buf);
+    }
+
     // Sort program files: main first, then alphabetically by path
     void sortFilesByExecutionOrder() {
         // Simple bubble sort for small arrays
@@ -1588,6 +1865,9 @@ public:
         combined_plcasm[0] = '\0';
         combined_plcasm_line = 1;
         
+        // Generate Startup code for default values and differentiation logic
+        generateStartupBlock();
+
         for (int i = 0; i < program_block_count && !has_error; i++) {
             if (!convertBlockToPLCASM(program_blocks[i])) {
                 return false;

@@ -1,14 +1,14 @@
 {
   "success": 1,
   "project": { "name": "WithSymbols", "version": "2.0" },
-  "bytecode": "FD 02 58 00 40 59 00 40 C0 60 00 80 FF",
-  "bytecodeLength": 13,
-  "checksum": 9,
+  "bytecode": "58 00 14 E2 00 06 FD 02 58 00 40 59 00 40 C0 60 00 80 FF",
+  "bytecodeLength": 19,
+  "checksum": 179,
   "files": [
     { "path": "Network1", "firstBlockIndex": 0, "blockCount": 1, "executionOrder": 0 }
   ],
   "blocks": [
-    { "file": "Network1", "name": "Logic", "language": "STL", "offset": 0, "size": 13 }
+    { "file": "Network1", "name": "Logic", "language": "STL", "offset": 0, "size": 0 }
   ],
   "symbols": [
     { "name": "input1", "type": "bit", "address": "64.0" },
@@ -24,6 +24,6 @@
     { "name": "T", "start": 704, "end": 1023 },
     { "name": "CT", "start": 1024, "end": 1279 }
   ],
-  "execution": { "steps": 6, "stackSize": 0 },
+  "execution": { "steps": 8, "stackSize": 0 },
   "problems": []
 }

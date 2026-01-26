@@ -1,14 +1,14 @@
 {
   "success": 1,
   "project": { "name": "NestedSymbols", "version": "1.0" },
-  "bytecode": "FD 02 58 00 40 59 00 40 C1 5A 00 40 C1 60 00 80 5A 00 40 C3 61 00 80 FF",
-  "bytecodeLength": 24,
-  "checksum": 249,
+  "bytecode": "58 00 14 E2 00 06 FD 02 58 00 40 59 00 40 C1 5A 00 40 C1 60 00 80 5A 00 40 C3 61 00 80 FF",
+  "bytecodeLength": 30,
+  "checksum": 137,
   "files": [
     { "path": "Control", "firstBlockIndex": 0, "blockCount": 1, "executionOrder": 0 }
   ],
   "blocks": [
-    { "file": "Control", "name": "Logic", "language": "STL", "offset": 0, "size": 24 }
+    { "file": "Control", "name": "Logic", "language": "STL", "offset": 0, "size": 0 }
   ],
   "symbols": [
     { "name": "sensor1", "type": "bit", "address": "64.0" },
@@ -26,6 +26,6 @@
     { "name": "T", "start": 704, "end": 1023 },
     { "name": "CT", "start": 1024, "end": 1279 }
   ],
-  "execution": { "steps": 11, "stackSize": 0 },
+  "execution": { "steps": 13, "stackSize": 0 },
   "problems": []
 }

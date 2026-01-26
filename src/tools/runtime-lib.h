@@ -130,6 +130,7 @@ struct DeviceHealth {
 class VovkPLCRuntime {
 private:
     bool started_up = false;
+    bool is_first_cycle = true;
     void updateRamStats() {
         int free_mem = freeMemory();
         u32 free_u32 = free_mem < 0 ? 0u : (u32) free_mem;
@@ -215,6 +216,11 @@ public:
 
     void formatMemory() {
         for (u32 i = 0; i < PLCRUNTIME_MAX_MEMORY_SIZE; i++) memory[i] = 0;
+        is_first_cycle = true;
+    }
+
+    void resetFirstCycle() {
+        is_first_cycle = true;
     }
 
     VovkPLCRuntime() {}
@@ -1097,6 +1103,14 @@ void VovkPLCRuntime::updateGlobals() {
         memory[base + 19] = (t_current >> 24) & 0xFF;
     }
     _last_P_1s = P_1s;
+
+    // First Cycle Flag - Offset 20 (1 bit / byte)
+    // 1 during the first cycle, 0 otherwise
+    if (is_first_cycle) {
+        memory[base + 20] |= 1; // Set bit 0
+    } else {
+        memory[base + 20] &= ~1; // Clear bit 0
+    }
 }
 
 // Execute the whole PLC program, returns an erro code (0 on success)
@@ -1143,6 +1157,13 @@ RuntimeError VovkPLCRuntime::run(u8* program, u32 prog_size) {
     last_instruction_count = instruction_count;
     if (status == STATUS_SUCCESS) updateCycleStats((u32) (micros() - start_us));
     else updateRamStats();
+    
+    // Note: is_first_cycle is cleared here, but the memory flag 
+    // at Offset 20 is NOT cleared. It remains set (if it was set) 
+    // until the NEXT call to run(), where updateGlobals() will clear it 
+    // if is_first_cycle is false.
+    if (is_first_cycle) is_first_cycle = false;
+    
     return status;
 }
 

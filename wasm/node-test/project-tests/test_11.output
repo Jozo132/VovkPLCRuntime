@@ -1,16 +1,16 @@
 {
   "success": 1,
   "project": { "name": "MultiProgram", "version": "2.0" },
-  "bytecode": "FD 01 03 01 FF FD 02 58 00 40 60 00 80 FF",
-  "bytecodeLength": 14,
-  "checksum": 18,
+  "bytecode": "58 00 14 E2 00 06 FD 01 03 01 FF FD 02 58 00 40 60 00 80 FF",
+  "bytecodeLength": 20,
+  "checksum": 118,
   "files": [
     { "path": "MainLogic", "firstBlockIndex": 1, "blockCount": 1, "executionOrder": 0 },
     { "path": "Startup", "firstBlockIndex": 0, "blockCount": 1, "executionOrder": 1 }
   ],
   "blocks": [
-    { "file": "Startup", "name": "Initialize", "language": "PLCASM", "offset": 0, "size": 5 },
-    { "file": "MainLogic", "name": "Process", "language": "STL", "offset": 5, "size": 9 }
+    { "file": "Startup", "name": "Initialize", "language": "PLCASM", "offset": 0, "size": 0 },
+    { "file": "MainLogic", "name": "Process", "language": "STL", "offset": 0, "size": 0 }
   ],
   "symbols": [],
   "memoryAreas": [
@@ -22,7 +22,7 @@
     { "name": "T", "start": 704, "end": 1023 },
     { "name": "CT", "start": 1024, "end": 1279 }
   ],
-  "execution": { "steps": 3, "stackSize": 1 },
+  "execution": { "steps": 5, "stackSize": 1 },
   "problems": [
     { "severity": "warning", "message": "Stack leak: 1 byte(s) remaining after execution", "line": 0, "column": 0 }
   ]

@@ -1,9 +1,9 @@
 {
   "success": 1,
   "project": { "name": "MultiBlockWithSymbols", "version": "3.0" },
-  "bytecode": "FD 01 58 00 40 59 00 40 C3 C0 E2 00 10 68 00 80 FD 02 59 00 40 EB 00 03 70 00 80 FD 03 58 00 40 59 00 40 C0 61 00 80 FF",
-  "bytecodeLength": 40,
-  "checksum": 16,
+  "bytecode": "58 00 14 E2 00 06 FD 01 58 00 40 59 00 40 C3 C0 E2 00 16 68 00 80 FD 02 59 00 40 EB 00 03 70 00 80 FD 03 58 00 40 59 00 40 C0 61 00 80 FF",
+  "bytecodeLength": 46,
+  "checksum": 54,
   "files": [
     { "path": "Main", "firstBlockIndex": 0, "blockCount": 3, "executionOrder": 0 }
   ],
@@ -24,6 +24,6 @@
     { "name": "Q", "start": 128, "end": 191 },
     { "name": "T", "start": 704, "end": 1023 }
   ],
-  "execution": { "steps": 15, "stackSize": 0 },
+  "execution": { "steps": 17, "stackSize": 0 },
   "problems": []
 }

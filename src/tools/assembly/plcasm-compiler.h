@@ -654,6 +654,7 @@ const int data_type_keywords_count = sizeof(data_type_keywords) / sizeof(data_ty
 struct Symbol {
     StringView name;
     StringView type;
+    char address_str[32]; // Original address string (e.g. "M10.0") - Added for better debug output
     u32 address;        // Memory address or byte offset
     u8 bit;             // Bit position (0-7) or 255 if not a bit type
     bool is_bit;        // True if this is a bit address (X0.1, Y0.1, etc.)
@@ -666,7 +667,9 @@ struct Symbol {
         name.print();
         printf("' type=");
         type.print();
-        if (is_bit) {
+        if (address_str[0] != '\0') {
+             printf(" addr=%s", address_str);
+        } else if (is_bit) {
             printf(" addr=%u.%u", address, bit);
         } else {
             printf(" addr=%u (size=%u)", address, type_size);
