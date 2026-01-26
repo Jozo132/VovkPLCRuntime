@@ -25,7 +25,9 @@
 #ifdef __WASM__
 
 #include "plcasm-compiler.h"
+#include "plcasm-linter.h"
 #include "stl-compiler.h"
+#include "stl-linter.h"
 #include "ladder-compiler.h"
 
 // ============================================================================
@@ -34,7 +36,7 @@
 //
 // Accepts a project definition string with the following format:
 //
-// PROJECT <name>
+// VOVKPLCPROJECT <name>
 // VERSION <version>
 //
 // MEMORY
@@ -104,6 +106,8 @@ struct ProgramBlock {
     int source_end;         // End position in project source
     u32 bytecode_offset;    // Offset in final bytecode
     u32 bytecode_size;      // Size of compiled bytecode
+    int combined_line_start; // Start line in combined PLCASM (1-based)
+    int combined_line_end;   // End line in combined PLCASM (1-based)
     bool compiled;          // Has been compiled
     bool used;              // Is this entry used?
     
@@ -115,6 +119,8 @@ struct ProgramBlock {
         source_end = 0;
         bytecode_offset = 0;
         bytecode_size = 0;
+        combined_line_start = 0;
+        combined_line_end = 0;
         compiled = false;
         used = false;
     }
@@ -136,6 +142,29 @@ struct ProgramFile {
         used = false;
     }
 };
+
+// Symbol with owned string storage (unlike PLCASM's Symbol which uses StringView pointers)
+struct ProjectSymbol {
+    char name[64];          // Symbol name (owned storage)
+    char type[32];          // Type name (owned storage)
+    u32 address;            // Memory address or byte offset
+    u8 bit;                 // Bit position (0-7) or 255 if not a bit type
+    bool is_bit;            // True if this is a bit address
+    u8 type_size;           // Size in bytes
+    bool used;
+    
+    void reset() {
+        name[0] = '\0';
+        type[0] = '\0';
+        address = 0;
+        bit = 255;
+        is_bit = false;
+        type_size = 0;
+        used = false;
+    }
+};
+
+#define PROJECT_MAX_SYMBOLS 256
 
 // Label reference for cross-block jumps
 struct ProjectLabel {
@@ -164,6 +193,10 @@ public:
     MemoryArea memory_areas[PROJECT_MAX_MEMORY_AREAS];
     int memory_area_count;
     
+    // Symbols (with owned storage)
+    ProjectSymbol symbols[PROJECT_MAX_SYMBOLS];
+    int symbol_count;
+    
     // Program files
     ProgramFile program_files[PROJECT_MAX_FILES];
     int program_file_count;
@@ -186,6 +219,11 @@ public:
     // Temporary source buffer for extracting block source
     char block_source[PROJECT_MAX_SOURCE_SIZE];
     
+    // Combined PLCASM buffer (all blocks converted to PLCASM and concatenated)
+    char combined_plcasm[PROJECT_MAX_SOURCE_SIZE];
+    int combined_plcasm_length;
+    int combined_plcasm_line;  // Current line number in combined output (1-based)
+    
     // Output bytecode
     u8 output[PROJECT_MAX_OUTPUT_SIZE];
     int output_length;
@@ -196,6 +234,10 @@ public:
     char error_file[PROJECT_MAX_PATH_LEN];    // File where error occurred
     char error_block[PROJECT_MAX_NAME_LEN];   // Block where error occurred
     u8 error_block_language;                  // Language of the block where error occurred
+    char error_compiler[64];                  // Which compiler reported the error
+    char error_source_line[256];              // The source line content where error occurred
+    char error_token[64];                     // The specific token that caused the error
+    int error_token_length;                   // Length of the error token
     int error_line;
     int error_column;
     bool has_error;
@@ -205,9 +247,9 @@ public:
     char current_block[PROJECT_MAX_NAME_LEN];
     u8 current_block_language;
     
-    // Child compilers
-    PLCASMCompiler plcasm_compiler;
-    STLCompiler stl_compiler;
+    // Child compilers (using linter variants for better error messages)
+    PLCASMLinter plcasm_compiler;
+    STLLinter stl_compiler;
     LadderGraphCompiler ladder_compiler;
     
     // Debug output
@@ -225,6 +267,11 @@ public:
             memory_areas[i].reset();
         }
         memory_area_count = 0;
+        
+        for (int i = 0; i < PROJECT_MAX_SYMBOLS; i++) {
+            symbols[i].reset();
+        }
+        symbol_count = 0;
         
         for (int i = 0; i < PROJECT_MAX_FILES; i++) {
             program_files[i].reset();
@@ -249,6 +296,10 @@ public:
         
         block_source[0] = '\0';
         
+        combined_plcasm[0] = '\0';
+        combined_plcasm_length = 0;
+        combined_plcasm_line = 1;
+        
         memset(output, 0, sizeof(output));
         output_length = 0;
         output_checksum = 0;
@@ -257,6 +308,10 @@ public:
         error_file[0] = '\0';
         error_block[0] = '\0';
         error_block_language = LANG_UNKNOWN;
+        error_compiler[0] = '\0';
+        error_source_line[0] = '\0';
+        error_token[0] = '\0';
+        error_token_length = 0;
         error_line = 0;
         error_column = 0;
         has_error = false;
@@ -266,6 +321,10 @@ public:
         current_block_language = LANG_UNKNOWN;
         
         debug_mode = false;
+        
+        // Reset child compilers' symbol tables
+        plcasm_compiler.symbol_count = 0;
+        plcasm_compiler.base_symbol_count = 0;
     }
     
     // ============ Error Handling ============
@@ -279,6 +338,10 @@ public:
         copyString(error_file, current_file, PROJECT_MAX_PATH_LEN);
         copyString(error_block, current_block, PROJECT_MAX_NAME_LEN);
         error_block_language = current_block_language;
+        copyString(error_compiler, "Project Parser", 64);
+        error_source_line[0] = '\0';
+        error_token[0] = '\0';
+        error_token_length = 0;
         int i = 0;
         while (msg[i] && i < PROJECT_MAX_ERROR_LEN - 1) {
             error_msg[i] = msg[i];
@@ -296,12 +359,82 @@ public:
         copyString(error_file, current_file, PROJECT_MAX_PATH_LEN);
         copyString(error_block, current_block, PROJECT_MAX_NAME_LEN);
         error_block_language = current_block_language;
+        copyString(error_compiler, "Project Parser", 64);
+        error_source_line[0] = '\0';
+        error_token[0] = '\0';
+        error_token_length = 0;
         int i = 0;
         while (msg[i] && i < PROJECT_MAX_ERROR_LEN - 1) {
             error_msg[i] = msg[i];
             i++;
         }
         error_msg[i] = '\0';
+    }
+    
+    // Set error with full details including compiler, source line, and token
+    void setErrorFull(const char* compiler_name, const char* msg, int l, int c, 
+                      const char* source_text, int source_len, 
+                      const char* token_text, int token_len) {
+        if (has_error) return;
+        has_error = true;
+        error_line = l;
+        error_column = c;
+        
+        // Copy current context
+        copyString(error_file, current_file, PROJECT_MAX_PATH_LEN);
+        copyString(error_block, current_block, PROJECT_MAX_NAME_LEN);
+        error_block_language = current_block_language;
+        copyString(error_compiler, compiler_name, 64);
+        
+        // Copy error message
+        int i = 0;
+        while (msg[i] && i < PROJECT_MAX_ERROR_LEN - 1) {
+            error_msg[i] = msg[i];
+            i++;
+        }
+        error_msg[i] = '\0';
+        
+        // Copy token
+        if (token_text && token_len > 0) {
+            int tlen = token_len < 63 ? token_len : 63;
+            for (i = 0; i < tlen; i++) {
+                error_token[i] = token_text[i];
+            }
+            error_token[i] = '\0';
+            error_token_length = tlen;
+        } else {
+            error_token[0] = '\0';
+            error_token_length = 0;
+        }
+        
+        // Extract source line containing the error
+        if (source_text && source_len > 0 && l > 0) {
+            int line_num = 1;
+            int line_start = 0;
+            
+            // Find start of the line
+            for (int j = 0; j < source_len && line_num < l; j++) {
+                if (source_text[j] == '\n') {
+                    line_num++;
+                    line_start = j + 1;
+                }
+            }
+            
+            // Find end of the line and copy
+            int line_end = line_start;
+            while (line_end < source_len && source_text[line_end] != '\n' && source_text[line_end] != '\r') {
+                line_end++;
+            }
+            
+            int line_len = line_end - line_start;
+            if (line_len > 255) line_len = 255;
+            for (i = 0; i < line_len; i++) {
+                error_source_line[i] = source_text[line_start + i];
+            }
+            error_source_line[i] = '\0';
+        } else {
+            error_source_line[0] = '\0';
+        }
     }
     
     void copyString(char* dest, const char* src, int maxLen) {
@@ -488,10 +621,10 @@ public:
     bool parseProject() {
         skipComments();
         
-        // PROJECT keyword is optional
-        if (matchKeyword("PROJECT")) {
+        // VOVKPLCPROJECT keyword is optional
+        if (matchKeyword("VOVKPLCPROJECT")) {
             if (!readWord(project_name, PROJECT_MAX_NAME_LEN)) {
-                setError("Expected project name after PROJECT");
+                setError("Expected project name after VOVKPLCPROJECT");
                 return false;
             }
         } else {
@@ -680,6 +813,16 @@ public:
                 return false;
             }
             
+            if (debug_mode) {
+                Serial.print(F("Parsed symbol: name='"));
+                Serial.print(name);
+                Serial.print(F("' type='"));
+                Serial.print(type);
+                Serial.print(F("' address='"));
+                Serial.print(address);
+                Serial.println(F("'"));
+            }
+            
             // Add symbol to PLCASM compiler's symbol table
             // Convert to the internal format
             if (!addSymbolToCompiler(name, type, address)) {
@@ -693,59 +836,119 @@ public:
     }
     
     bool addSymbolToCompiler(const char* name, const char* type, const char* address) {
-        // Parse the address and add to PLCASM compiler's symbol table
-        // This is a simplified version - the full implementation would use
-        // the existing PLCASM symbol parsing
+        // Store symbol in project's own storage (with owned strings)
+        // Then copy to PLCASM compiler before each compilation
         
-        if (plcasm_compiler.symbol_count >= MAX_NUM_OF_TOKENS) {
+        if (symbol_count >= PROJECT_MAX_SYMBOLS) {
             setError("Too many symbols");
             return false;
         }
         
-        Symbol& sym = plcasm_compiler.symbols[plcasm_compiler.symbol_count];
+        ProjectSymbol& psym = symbols[symbol_count];
         
-        // Copy name
+        // Copy name (owned storage)
         int i = 0;
         while (name[i] && i < 63) {
-            sym.name.data[i] = name[i];
+            psym.name[i] = name[i];
             i++;
         }
-        sym.name.data[i] = '\0';
-        sym.name.length = i;
+        psym.name[i] = '\0';
         
-        // Copy type
+        // Copy type (owned storage)
         i = 0;
         while (type[i] && i < 31) {
-            sym.type.data[i] = type[i];
+            psym.type[i] = type[i];
             i++;
         }
-        sym.type.data[i] = '\0';
-        sym.type.length = i;
+        psym.type[i] = '\0';
         
         // Determine type size
         if (strEqI(type, "bit") || strEqI(type, "bool")) {
-            sym.type_size = 0;
-            sym.is_bit = true;
+            psym.type_size = 0;
+            psym.is_bit = true;
         } else if (strEqI(type, "u8") || strEqI(type, "i8") || strEqI(type, "byte")) {
-            sym.type_size = 1;
+            psym.type_size = 1;
         } else if (strEqI(type, "u16") || strEqI(type, "i16")) {
-            sym.type_size = 2;
+            psym.type_size = 2;
         } else if (strEqI(type, "u32") || strEqI(type, "i32") || strEqI(type, "f32")) {
-            sym.type_size = 4;
+            psym.type_size = 4;
         } else if (strEqI(type, "u64") || strEqI(type, "i64") || strEqI(type, "f64")) {
-            sym.type_size = 8;
+            psym.type_size = 8;
         } else {
-            sym.type_size = 1; // Default to byte
+            psym.type_size = 1; // Default to byte
         }
         
         // Parse address (simplified - handles numeric and prefixed addresses)
-        sym.address = parseAddress(address, &sym.bit, &sym.is_bit);
+        psym.address = parseAddress(address, &psym.bit, &psym.is_bit);
+        psym.used = true;
         
-        sym.line = line;
-        sym.column = column;
-        
-        plcasm_compiler.symbol_count++;
+        symbol_count++;
         return true;
+    }
+    
+    // Copy project symbols to PLCASM compiler's symbol table
+    void copySymbolsToPLCASM() {
+        plcasm_compiler.symbol_count = 0;
+        plcasm_compiler.base_symbol_count = 0;
+        
+        for (int i = 0; i < symbol_count; i++) {
+            ProjectSymbol& psym = symbols[i];
+            Symbol& sym = plcasm_compiler.symbols[i];
+            
+            // Point StringView data to project's owned storage
+            sym.name.data = psym.name;
+            sym.name.length = 0;
+            while (psym.name[sym.name.length]) sym.name.length++;
+            
+            sym.type.data = psym.type;
+            sym.type.length = 0;
+            while (psym.type[sym.type.length]) sym.type.length++;
+            
+            sym.address = psym.address;
+            sym.bit = psym.bit;
+            sym.is_bit = psym.is_bit;
+            sym.type_size = psym.type_size;
+            sym.line = line;
+            sym.column = column;
+        }
+        
+        plcasm_compiler.symbol_count = symbol_count;
+        plcasm_compiler.base_symbol_count = symbol_count;
+    }
+    
+    // Copy project symbols to STL compiler's symbol table
+    void copySymbolsToSTL() {
+        stl_compiler.symbol_count = 0;
+        
+        for (int i = 0; i < symbol_count && i < STL_MAX_SYMBOLS; i++) {
+            ProjectSymbol& psym = symbols[i];
+            STLSymbol& ssym = stl_compiler.symbols[i];
+            
+            // Copy name
+            int j = 0;
+            while (psym.name[j] && j < 63) {
+                ssym.name[j] = psym.name[j];
+                j++;
+            }
+            ssym.name[j] = '\0';
+            
+            // Copy type
+            j = 0;
+            while (psym.type[j] && j < 15) {
+                ssym.type[j] = psym.type[j];
+                j++;
+            }
+            ssym.type[j] = '\0';
+            
+            ssym.address = psym.address;
+            ssym.bit = psym.bit;
+            ssym.is_bit = psym.is_bit;
+            ssym.type_size = psym.type_size;
+            ssym.line = line;
+            ssym.column = column;
+        }
+        
+        stl_compiler.symbol_count = symbol_count < STL_MAX_SYMBOLS ? symbol_count : STL_MAX_SYMBOLS;
     }
     
     u32 parseAddress(const char* addr, u8* bit, bool* is_bit) {
@@ -1043,6 +1246,46 @@ public:
     
     // ============ Compilation Functions ============
     
+    // Find the block that contains a given line number in the combined PLCASM
+    // Returns the block index, or -1 if not found
+    // Also calculates the relative line within that block
+    int findBlockForCombinedLine(int combined_line, int& relative_line) {
+        for (int i = 0; i < program_block_count; i++) {
+            ProgramBlock& block = program_blocks[i];
+            if (combined_line >= block.combined_line_start && combined_line <= block.combined_line_end) {
+                relative_line = combined_line - block.combined_line_start + 1;
+                return i;
+            }
+        }
+        relative_line = combined_line;
+        return -1;
+    }
+    
+    // Set error with context from a combined PLCASM line number
+    // Now includes full error details with token info from the linter problem
+    void setErrorFromCombinedLine(const char* msg, int combined_line, int col, 
+                                  const char* token_text = nullptr, int token_len = 0) {
+        int relative_line = 0;
+        int block_idx = findBlockForCombinedLine(combined_line, relative_line);
+        
+        if (block_idx >= 0) {
+            ProgramBlock& block = program_blocks[block_idx];
+            copyString(current_file, block.file_path, PROJECT_MAX_PATH_LEN);
+            copyString(current_block, block.name, PROJECT_MAX_NAME_LEN);
+            current_block_language = block.language;
+            // Use setErrorFull with combined_plcasm as source to extract the line
+            setErrorFull("PLCASM Compiler", msg, relative_line, col,
+                         combined_plcasm, combined_plcasm_length,
+                         token_text, token_len);
+        } else {
+            // Couldn't map to a block, just use the combined line number
+            copyString(error_compiler, "PLCASM Compiler", 64);
+            setErrorFull("PLCASM Compiler", msg, combined_line, col,
+                         combined_plcasm, combined_plcasm_length,
+                         token_text, token_len);
+        }
+    }
+    
     // Extract block source to temporary buffer
     bool extractBlockSource(ProgramBlock& block) {
         int len = block.source_end - block.source_start;
@@ -1059,8 +1302,36 @@ public:
         return true;
     }
     
-    // Compile a single block
-    bool compileBlock(ProgramBlock& block, bool firstPass) {
+    // Append string to combined PLCASM buffer, tracking line count
+    bool appendToCombinedPLCASM(const char* str) {
+        int len = string_len(str);
+        if (combined_plcasm_length + len >= PROJECT_MAX_SOURCE_SIZE - 1) {
+            setError("Combined PLCASM buffer overflow");
+            return false;
+        }
+        for (int i = 0; i < len; i++) {
+            if (str[i] == '\n') combined_plcasm_line++;
+            combined_plcasm[combined_plcasm_length++] = str[i];
+        }
+        combined_plcasm[combined_plcasm_length] = '\0';
+        return true;
+    }
+    
+    // Append character to combined PLCASM buffer, tracking line count
+    bool appendCharToCombinedPLCASM(char c) {
+        if (combined_plcasm_length >= PROJECT_MAX_SOURCE_SIZE - 1) {
+            setError("Combined PLCASM buffer overflow");
+            return false;
+        }
+        if (c == '\n') combined_plcasm_line++;
+        combined_plcasm[combined_plcasm_length++] = c;
+        combined_plcasm[combined_plcasm_length] = '\0';
+        return true;
+    }
+    
+    // Convert a block to PLCASM and append to combined buffer
+    // This is the first pass - just gathering PLCASM from all blocks
+    bool convertBlockToPLCASM(ProgramBlock& block) {
         // Set error context
         copyString(current_file, block.file_path, PROJECT_MAX_PATH_LEN);
         copyString(current_block, block.name, PROJECT_MAX_NAME_LEN);
@@ -1070,8 +1341,8 @@ public:
             return false;
         }
         
-        if (debug_mode && !firstPass) {
-            Serial.print(F("Compiling block: "));
+        if (debug_mode) {
+            Serial.print(F("Converting block: "));
             Serial.print(block.file_path);
             Serial.print(F("/"));
             Serial.print(block.name);
@@ -1080,22 +1351,37 @@ public:
             Serial.println(F(")"));
         }
         
-        u8* bytecode_ptr = output + output_length;
-        u32 available_space = PROJECT_MAX_OUTPUT_SIZE - output_length;
+        // Add block comment marker (use // which is a valid PLCASM comment)
+        if (!appendToCombinedPLCASM("// ===== ")) return false;
+        if (!appendToCombinedPLCASM(block.file_path)) return false;
+        if (!appendToCombinedPLCASM("/")) return false;
+        if (!appendToCombinedPLCASM(block.name)) return false;
+        if (!appendToCombinedPLCASM(" =====\n")) return false;
         
-        bool success = false;
+        // Add language directive to preserve original source language in bytecode
+        // This ensures each block retains its source language marker (FD xx)
+        if (!appendToCombinedPLCASM("lang ")) return false;
+        if (!appendToCombinedPLCASM(LANG_NAME_LOWER(block.language))) return false;
+        if (!appendCharToCombinedPLCASM('\n')) return false;
+        
+        // Record the starting line for this block's actual content
+        block.combined_line_start = combined_plcasm_line;
         
         switch (block.language) {
             case LANG_PLCASM:
-                success = compilePLCASM(block, bytecode_ptr, available_space, firstPass);
+                // PLCASM block - append directly
+                if (!appendToCombinedPLCASM(block_source)) return false;
+                if (!appendCharToCombinedPLCASM('\n')) return false;
                 break;
                 
             case LANG_STL:
-                success = compileSTL(block, bytecode_ptr, available_space, firstPass);
+                // STL block - convert to PLCASM first
+                if (!convertSTLToPLCASM(block)) return false;
                 break;
                 
             case LANG_LADDER:
-                success = compileLadder(block, bytecode_ptr, available_space, firstPass);
+                // Ladder block - convert to STL then to PLCASM
+                if (!convertLadderToPLCASM(block)) return false;
                 break;
                 
             default:
@@ -1103,227 +1389,106 @@ public:
                 return false;
         }
         
-        if (!success) {
-            return false;
-        }
+        // Record the ending line for this block
+        block.combined_line_end = combined_plcasm_line - 1;  // -1 because we just added a newline
         
         return true;
     }
     
-    bool compilePLCASM(ProgramBlock& block, u8* dest, u32 max_size, bool firstPass) {
-        // Reset PLCASM compiler but preserve symbols
-        int saved_symbol_count = plcasm_compiler.symbol_count;
-        
-        plcasm_compiler.set_assembly_string(block_source);
-        
-        // Prepend LANG instruction
-        char lang_prefix[64];
-        int pi = 0;
-        const char* lp = "lang plcasm\n";
-        while (*lp) lang_prefix[pi++] = *lp++;
-        lang_prefix[pi] = '\0';
-        
-        // Build combined source
-        char combined[PROJECT_MAX_SOURCE_SIZE];
-        int ci = 0;
-        for (int i = 0; lang_prefix[i] && ci < PROJECT_MAX_SOURCE_SIZE - 1; i++) {
-            combined[ci++] = lang_prefix[i];
-        }
-        for (int i = 0; block_source[i] && ci < PROJECT_MAX_SOURCE_SIZE - 1; i++) {
-            combined[ci++] = block_source[i];
-        }
-        combined[ci] = '\0';
-        
-        plcasm_compiler.set_assembly_string(combined);
-        plcasm_compiler.symbol_count = saved_symbol_count;
-        
-        bool error = plcasm_compiler.compileAssembly(!firstPass, false);
-        
-        if (error) {
-            setError("PLCASM compilation failed");
-            return false;
-        }
-        
-        // Copy bytecode to output
-        if (!firstPass) {
-            block.bytecode_offset = output_length;
-            block.bytecode_size = plcasm_compiler.built_bytecode_length;
-            
-            if (block.bytecode_size > max_size) {
-                setError("Output buffer overflow");
-                return false;
-            }
-            
-            for (int i = 0; i < (int)block.bytecode_size; i++) {
-                dest[i] = plcasm_compiler.built_bytecode[i];
-                crc8_simple(output_checksum, plcasm_compiler.built_bytecode[i]);
-            }
-            output_length += block.bytecode_size;
-            block.compiled = true;
-        }
-        
-        return true;
-    }
-    
-    bool compileSTL(ProgramBlock& block, u8* dest, u32 max_size, bool firstPass) {
-        // Compile STL to PLCASM first
+    // Convert STL block to PLCASM and append to combined buffer
+    bool convertSTLToPLCASM(ProgramBlock& block) {
         stl_compiler.reset();
-        stl_compiler.setSource(block_source, string_len(block_source));
+        stl_compiler.clearProblems();
+        copySymbolsToSTL();
         
-        // Compile STL to PLCASM
+        if (debug_mode) {
+            Serial.print(F("STL symbols copied: "));
+            Serial.println(stl_compiler.symbol_count);
+            for (int i = 0; i < stl_compiler.symbol_count; i++) {
+                Serial.print(F("  Symbol "));
+                Serial.print(i);
+                Serial.print(F(": '"));
+                Serial.print(stl_compiler.symbols[i].name);
+                Serial.println(F("'"));
+            }
+        }
+        
+        int source_len = string_len(block_source);
+        stl_compiler.setSource(block_source, source_len);
+        
         bool success = stl_compiler.compile();
         
         if (!success || stl_compiler.has_error) {
-            char err[256];
-            int ei = 0;
-            const char* prefix = "STL error: ";
-            while (*prefix) err[ei++] = *prefix++;
-            for (int i = 0; stl_compiler.error_message[i] && ei < 250; i++) {
-                err[ei++] = stl_compiler.error_message[i];
+            if (stl_compiler.problem_count > 0) {
+                LinterProblem& prob = stl_compiler.problems[0];
+                // Set error with full details including token
+                setErrorFull("STL Compiler", prob.message, prob.line, prob.column,
+                             block_source, source_len,
+                             prob.token_text, prob.length);
+            } else if (stl_compiler.error_message[0]) {
+                setErrorFull("STL Compiler", stl_compiler.error_message, 
+                             stl_compiler.error_line, stl_compiler.error_column,
+                             block_source, source_len,
+                             nullptr, 0);
+            } else {
+                setErrorFull("STL Compiler", "STL compilation failed", 1, 1,
+                             block_source, source_len, nullptr, 0);
             }
-            err[ei] = '\0';
-            setError(err);
             return false;
         }
         
-        // Now compile the generated PLCASM
-        char lang_prefix[64];
-        int pi = 0;
-        const char* lp = "lang stl\n";
-        while (*lp) lang_prefix[pi++] = *lp++;
-        lang_prefix[pi] = '\0';
-        
-        // Build combined source
-        char combined[PROJECT_MAX_SOURCE_SIZE];
-        int ci = 0;
-        for (int i = 0; lang_prefix[i] && ci < PROJECT_MAX_SOURCE_SIZE - 1; i++) {
-            combined[ci++] = lang_prefix[i];
-        }
-        for (int i = 0; stl_compiler.output[i] && ci < PROJECT_MAX_SOURCE_SIZE - 1; i++) {
-            combined[ci++] = stl_compiler.output[i];
-        }
-        combined[ci] = '\0';
-        
-        int saved_symbol_count = plcasm_compiler.symbol_count;
-        plcasm_compiler.set_assembly_string(combined);
-        plcasm_compiler.symbol_count = saved_symbol_count;
-        
-        bool error = plcasm_compiler.compileAssembly(!firstPass, false);
-        
-        if (error) {
-            setError("PLCASM compilation of STL output failed");
-            return false;
-        }
-        
-        // Copy bytecode to output
-        if (!firstPass) {
-            block.bytecode_offset = output_length;
-            block.bytecode_size = plcasm_compiler.built_bytecode_length;
-            
-            if (block.bytecode_size > max_size) {
-                setError("Output buffer overflow");
-                return false;
-            }
-            
-            for (int i = 0; i < (int)block.bytecode_size; i++) {
-                dest[i] = plcasm_compiler.built_bytecode[i];
-                crc8_simple(output_checksum, plcasm_compiler.built_bytecode[i]);
-            }
-            output_length += block.bytecode_size;
-            block.compiled = true;
-        }
+        // Append the generated PLCASM to combined buffer
+        if (!appendToCombinedPLCASM(stl_compiler.output)) return false;
+        if (!appendCharToCombinedPLCASM('\n')) return false;
         
         return true;
     }
     
-    bool compileLadder(ProgramBlock& block, u8* dest, u32 max_size, bool firstPass) {
+    // Convert Ladder block to PLCASM and append to combined buffer
+    bool convertLadderToPLCASM(ProgramBlock& block) {
         // Compile Ladder JSON to STL first
         ladder_compiler.reset();
-        ladder_compiler.source = block_source;
-        ladder_compiler.length = string_len(block_source);
-        ladder_compiler.pos = 0;
+        int source_len = string_len(block_source);
         
-        // Compile Ladder to STL
-        bool success = ladder_compiler.compile();
+        // Use parse() which calls parseGraph() then compile()
+        bool success = ladder_compiler.parse(block_source, source_len);
         
         if (!success || ladder_compiler.has_error) {
-            char err[256];
-            int ei = 0;
-            const char* prefix = "Ladder error: ";
-            while (*prefix) err[ei++] = *prefix++;
-            for (int i = 0; ladder_compiler.error_msg[i] && ei < 250; i++) {
-                err[ei++] = ladder_compiler.error_msg[i];
-            }
-            err[ei] = '\0';
-            setError(err);
+            // Ladder compiler doesn't track line/col well, use position in JSON
+            setErrorFull("Ladder Compiler", ladder_compiler.error_msg, 1, 1,
+                         block_source, source_len, nullptr, 0);
             return false;
         }
         
-        // Now compile the generated STL
+        // Now compile STL to PLCASM
+        // Note: errors from STL compilation of ladder output are internal errors
+        // since the ladder compiler generated the STL
         stl_compiler.reset();
+        stl_compiler.clearProblems();
+        copySymbolsToSTL();
         stl_compiler.setSource(ladder_compiler.output, ladder_compiler.output_len);
         
         success = stl_compiler.compile();
         
         if (!success || stl_compiler.has_error) {
-            char err[256];
-            int ei = 0;
-            const char* prefix = "STL (from Ladder) error: ";
-            while (*prefix) err[ei++] = *prefix++;
-            for (int i = 0; stl_compiler.error_message[i] && ei < 250; i++) {
-                err[ei++] = stl_compiler.error_message[i];
+            // Internal error: STL generated from ladder failed
+            if (stl_compiler.problem_count > 0) {
+                LinterProblem& prob = stl_compiler.problems[0];
+                setErrorFull("Ladder Compiler (STL stage)", prob.message, prob.line, prob.column,
+                             ladder_compiler.output, ladder_compiler.output_len,
+                             prob.token_text, prob.length);
+            } else {
+                setErrorFull("Ladder Compiler (STL stage)", stl_compiler.error_message,
+                             stl_compiler.error_line, stl_compiler.error_column,
+                             ladder_compiler.output, ladder_compiler.output_len,
+                             nullptr, 0);
             }
-            err[ei] = '\0';
-            setError(err);
             return false;
         }
         
-        // Now compile the generated PLCASM
-        char lang_prefix[64];
-        int pi = 0;
-        const char* lp = "lang ladder\n";
-        while (*lp) lang_prefix[pi++] = *lp++;
-        lang_prefix[pi] = '\0';
-        
-        // Build combined source
-        char combined[PROJECT_MAX_SOURCE_SIZE];
-        int ci = 0;
-        for (int i = 0; lang_prefix[i] && ci < PROJECT_MAX_SOURCE_SIZE - 1; i++) {
-            combined[ci++] = lang_prefix[i];
-        }
-        for (int i = 0; stl_compiler.output[i] && ci < PROJECT_MAX_SOURCE_SIZE - 1; i++) {
-            combined[ci++] = stl_compiler.output[i];
-        }
-        combined[ci] = '\0';
-        
-        int saved_symbol_count = plcasm_compiler.symbol_count;
-        plcasm_compiler.set_assembly_string(combined);
-        plcasm_compiler.symbol_count = saved_symbol_count;
-        
-        bool error = plcasm_compiler.compileAssembly(!firstPass, false);
-        
-        if (error) {
-            setError("PLCASM compilation of Ladder output failed");
-            return false;
-        }
-        
-        // Copy bytecode to output
-        if (!firstPass) {
-            block.bytecode_offset = output_length;
-            block.bytecode_size = plcasm_compiler.built_bytecode_length;
-            
-            if (block.bytecode_size > max_size) {
-                setError("Output buffer overflow");
-                return false;
-            }
-            
-            for (int i = 0; i < (int)block.bytecode_size; i++) {
-                dest[i] = plcasm_compiler.built_bytecode[i];
-                crc8_simple(output_checksum, plcasm_compiler.built_bytecode[i]);
-            }
-            output_length += block.bytecode_size;
-            block.compiled = true;
-        }
+        // Append the generated PLCASM to combined buffer
+        if (!appendToCombinedPLCASM(stl_compiler.output)) return false;
+        if (!appendCharToCombinedPLCASM('\n')) return false;
         
         return true;
     }
@@ -1356,34 +1521,72 @@ public:
             Serial.print(F("Project: ")); Serial.println(project_name);
             Serial.print(F("Version: ")); Serial.println(project_version);
             Serial.print(F("Memory areas: ")); Serial.println(memory_area_count);
-            Serial.print(F("Symbols: ")); Serial.println(plcasm_compiler.symbol_count);
+            Serial.print(F("Symbols: ")); Serial.println(symbol_count);
             Serial.print(F("Program blocks: ")); Serial.println(program_block_count);
         }
         
-        // Pass 1: Parse all blocks, collect labels
+        // Pass 1: Convert all blocks to PLCASM and concatenate
         if (debug_mode) {
-            Serial.println(F("Pass 1: Analyzing blocks..."));
+            Serial.println(F("Pass 1: Converting blocks to PLCASM..."));
         }
         
+        combined_plcasm_length = 0;
+        combined_plcasm[0] = '\0';
+        combined_plcasm_line = 1;
+        
         for (int i = 0; i < program_block_count && !has_error; i++) {
-            if (!compileBlock(program_blocks[i], true)) {
+            if (!convertBlockToPLCASM(program_blocks[i])) {
                 return false;
             }
         }
         
-        // Pass 2: Compile all blocks, patch labels
         if (debug_mode) {
-            Serial.println(F("Pass 2: Compiling blocks..."));
+            Serial.println(F("Combined PLCASM:"));
+            Serial.println(combined_plcasm);
+        }
+        
+        // Pass 2: Compile the combined PLCASM to bytecode
+        if (debug_mode) {
+            Serial.println(F("Pass 2: Compiling combined PLCASM..."));
         }
         
         output_length = 0;
         output_checksum = 0;
         
-        for (int i = 0; i < program_block_count && !has_error; i++) {
-            if (!compileBlock(program_blocks[i], false)) {
-                return false;
+        // Copy project symbols to PLCASM compiler
+        copySymbolsToPLCASM();
+        
+        // The combined PLCASM already has 'lang' directives for each block
+        // to preserve the original source language in the bytecode
+        plcasm_compiler.set_assembly_string(combined_plcasm);
+        plcasm_compiler.clearArray();
+        
+        bool error = plcasm_compiler.compileAssembly(true, false);  // true = real compile, not just analysis
+        
+        if (error) {
+            if (plcasm_compiler.problem_count > 0) {
+                LinterProblem& prob = plcasm_compiler.problems[0];
+                // Error line is directly from combined PLCASM (no prefix line)
+                setErrorFromCombinedLine(prob.message, prob.line, prob.column,
+                                         prob.token_text, prob.length);
+            } else {
+                copyString(error_compiler, "PLCASM Compiler", 64);
+                setError("PLCASM compilation failed");
             }
+            return false;
         }
+        
+        // Copy bytecode to output
+        if ((int)plcasm_compiler.built_bytecode_length > PROJECT_MAX_OUTPUT_SIZE) {
+            setError("Output buffer overflow");
+            return false;
+        }
+        
+        for (int i = 0; i < (int)plcasm_compiler.built_bytecode_length; i++) {
+            output[i] = plcasm_compiler.built_bytecode[i];
+            crc8_simple(output_checksum, plcasm_compiler.built_bytecode[i]);
+        }
+        output_length = plcasm_compiler.built_bytecode_length;
         
         if (debug_mode) {
             Serial.print(F("Compilation complete. Output size: "));
@@ -1618,6 +1821,22 @@ WASM_EXPORT u8 project_getErrorBlockLanguage() {
     return project_compiler.error_block_language;
 }
 
+WASM_EXPORT const char* project_getErrorCompiler() {
+    return project_compiler.error_compiler;
+}
+
+WASM_EXPORT const char* project_getErrorSourceLine() {
+    return project_compiler.error_source_line;
+}
+
+WASM_EXPORT const char* project_getErrorToken() {
+    return project_compiler.error_token;
+}
+
+WASM_EXPORT int project_getErrorTokenLength() {
+    return project_compiler.error_token_length;
+}
+
 // Get number of memory areas
 WASM_EXPORT int project_getMemoryAreaCount() {
     return project_compiler.memory_area_count;
@@ -1647,7 +1866,7 @@ WASM_EXPORT u32 project_getMemoryAreaEnd(int index) {
 
 // Symbol accessor functions
 WASM_EXPORT int project_getSymbolCount() {
-    return project_compiler.plcasm_compiler.symbol_count;
+    return project_compiler.symbol_count;
 }
 
 // Static buffers for symbol string returns
@@ -1656,36 +1875,24 @@ static char symbol_type_buffer[64];
 static char symbol_address_buffer[32];
 
 WASM_EXPORT const char* project_getSymbolName(int index) {
-    if (index < 0 || index >= project_compiler.plcasm_compiler.symbol_count) {
+    if (index < 0 || index >= project_compiler.symbol_count) {
         return "";
     }
-    Symbol& sym = project_compiler.plcasm_compiler.symbols[index];
-    int len = sym.name.length < 127 ? sym.name.length : 127;
-    for (int i = 0; i < len; i++) {
-        symbol_name_buffer[i] = sym.name.data[i];
-    }
-    symbol_name_buffer[len] = '\0';
-    return symbol_name_buffer;
+    return project_compiler.symbols[index].name;
 }
 
 WASM_EXPORT const char* project_getSymbolType(int index) {
-    if (index < 0 || index >= project_compiler.plcasm_compiler.symbol_count) {
+    if (index < 0 || index >= project_compiler.symbol_count) {
         return "";
     }
-    Symbol& sym = project_compiler.plcasm_compiler.symbols[index];
-    int len = sym.type.length < 63 ? sym.type.length : 63;
-    for (int i = 0; i < len; i++) {
-        symbol_type_buffer[i] = sym.type.data[i];
-    }
-    symbol_type_buffer[len] = '\0';
-    return symbol_type_buffer;
+    return project_compiler.symbols[index].type;
 }
 
 WASM_EXPORT const char* project_getSymbolAddress(int index) {
-    if (index < 0 || index >= project_compiler.plcasm_compiler.symbol_count) {
+    if (index < 0 || index >= project_compiler.symbol_count) {
         return "";
     }
-    Symbol& sym = project_compiler.plcasm_compiler.symbols[index];
+    ProjectSymbol& sym = project_compiler.symbols[index];
     // Format address as string
     if (sym.is_bit) {
         // Format as "X0.0" style
@@ -1732,31 +1939,31 @@ WASM_EXPORT const char* project_getSymbolAddress(int index) {
 }
 
 WASM_EXPORT u32 project_getSymbolByteAddress(int index) {
-    if (index < 0 || index >= project_compiler.plcasm_compiler.symbol_count) {
+    if (index < 0 || index >= project_compiler.symbol_count) {
         return 0;
     }
-    return project_compiler.plcasm_compiler.symbols[index].address;
+    return project_compiler.symbols[index].address;
 }
 
 WASM_EXPORT u8 project_getSymbolBit(int index) {
-    if (index < 0 || index >= project_compiler.plcasm_compiler.symbol_count) {
+    if (index < 0 || index >= project_compiler.symbol_count) {
         return 0;
     }
-    return project_compiler.plcasm_compiler.symbols[index].bit;
+    return project_compiler.symbols[index].bit;
 }
 
 WASM_EXPORT bool project_getSymbolIsBit(int index) {
-    if (index < 0 || index >= project_compiler.plcasm_compiler.symbol_count) {
+    if (index < 0 || index >= project_compiler.symbol_count) {
         return false;
     }
-    return project_compiler.plcasm_compiler.symbols[index].is_bit;
+    return project_compiler.symbols[index].is_bit;
 }
 
 WASM_EXPORT u8 project_getSymbolTypeSize(int index) {
-    if (index < 0 || index >= project_compiler.plcasm_compiler.symbol_count) {
+    if (index < 0 || index >= project_compiler.symbol_count) {
         return 0;
     }
-    return project_compiler.plcasm_compiler.symbols[index].type_size;
+    return project_compiler.symbols[index].type_size;
 }
 
 // Load compiled project into runtime

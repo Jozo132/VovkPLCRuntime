@@ -123,6 +123,7 @@ enum PLCSourceLanguage {
 };
 
 const FSH* LANG_NAME(u8 lang_id);
+const char* LANG_NAME_LOWER(u8 lang_id);
 
 // Instruction set:
 enum PLCRuntimeInstructionSet {

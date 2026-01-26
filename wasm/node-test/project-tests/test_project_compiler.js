@@ -5,8 +5,14 @@
 // the generated output against expected .output JSON files.
 //
 // Usage:
-//   node wasm/node-test/project-tests/test_project_compiler.js
+//   node wasm/node-test/project-tests/test_project_compiler.js [test_name] [--update] [--verbose]
 //   npm run test:project
+//
+// Examples:
+//   node test_project_compiler.js           # Run all tests
+//   node test_project_compiler.js test_03   # Run only test_03
+//   node test_project_compiler.js test_03 --update  # Update expected output for test_03
+//   node test_project_compiler.js test_03 --verbose # Run with debug output from compiler
 //
 // Test files:
 //   - test_XX.project - Project definition input
@@ -394,6 +400,12 @@ async function runTests() {
     // Check for --update flag to force regeneration of expected outputs
     const updateMode = process.argv.includes('--update') || process.argv.includes('-u')
     
+    // Check for --verbose flag to show debug output from compiler
+    const verboseMode = process.argv.includes('--verbose') || process.argv.includes('-v')
+    
+    // Check for specific test name argument (not a flag)
+    const testFilter = process.argv.slice(2).find(arg => !arg.startsWith('-'))
+    
     if (!fs.existsSync(wasmPath)) {
         console.error(`${RED}Error: WASM file not found at ${wasmPath}${RESET}`)
         console.error('Run "npm run build" first.')
@@ -403,18 +415,31 @@ async function runTests() {
     // Initialize runtime
     const runtime = new VovkPLC(wasmPath)
     
-    // Suppress stdout during initialization
-    runtime.stdout_callback = () => {}
+    // Suppress stdout during initialization (unless verbose)
+    if (!verboseMode) {
+        runtime.stdout_callback = () => {}
+    }
     await runtime.initialize(wasmPath, false, false)
     runtime.readStream()
     
     // Find all test files
     const testDir = __dirname
     const files = fs.readdirSync(testDir)
-    const testCases = files
+    let testCases = files
         .filter(f => f.match(/^test_\d+\.project$/))
         .map(f => f.replace('.project', ''))
         .sort()
+    
+    // Filter to specific test if provided
+    if (testFilter) {
+        const filterName = testFilter.replace('.project', '').replace('.output', '')
+        testCases = testCases.filter(t => t === filterName)
+        if (testCases.length === 0) {
+            console.error(`${RED}No test found matching '${testFilter}'${RESET}`)
+            console.error(`Available tests: ${files.filter(f => f.endsWith('.project')).map(f => f.replace('.project', '')).join(', ')}`)
+            process.exit(1)
+        }
+    }
     
     if (testCases.length === 0) {
         console.error(`${RED}No test cases found in ${testDir}${RESET}`)
@@ -429,7 +454,15 @@ async function runTests() {
         console.log(`${YELLOW}Running in UPDATE mode - regenerating expected outputs${RESET}`)
         console.log()
     }
-    console.log(`Found ${testCases.length} test case(s)`)
+    if (verboseMode) {
+        console.log(`${YELLOW}Running in VERBOSE mode - showing compiler debug output${RESET}`)
+        console.log()
+    }
+    if (testFilter) {
+        console.log(`Running test: ${testFilter}`)
+    } else {
+        console.log(`Found ${testCases.length} test case(s)`)
+    }
     console.log()
     
     let passed = 0
@@ -448,7 +481,20 @@ async function runTests() {
             wasm.project_reset()
             streamCode(runtime, projectCode)
             
-            const result = wasm.project_compile(0) // 0 = no debug output
+            if (verboseMode) {
+                console.log(`\n${CYAN}─── Compiling ${testCase} ───${RESET}`)
+                console.log(`${YELLOW}Project source:${RESET}`)
+                console.log(projectCode)
+                console.log(`${YELLOW}Compilation output:${RESET}`)
+            }
+            
+            const result = wasm.project_compile(verboseMode ? 1 : 0) // 1 = debug output
+            
+            if (verboseMode) {
+                // Read any output from the stream
+                const output = runtime.readStream()
+                if (output) console.log(output)
+            }
             
             // Generate actual output
             const actualOutput = generateOutput(runtime, result)

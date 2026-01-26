@@ -84,7 +84,10 @@ public:
     
     LadderGraphCompiler() { reset(); }
     
-    void reset() {
+    // Virtual destructor for proper cleanup in derived classes
+    virtual ~LadderGraphCompiler() = default;
+    
+    virtual void reset() {
         source = nullptr;
         length = 0;
         pos = 0;
@@ -99,7 +102,8 @@ public:
         indent_level = 0;
     }
     
-    void setError(const char* msg) {
+    // Virtual so LadderLinter can override to capture multiple errors
+    virtual void setError(const char* msg) {
         if (has_error) return;
         has_error = true;
         int i = 0;

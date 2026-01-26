@@ -698,6 +698,7 @@ public:
 
     struct Symbol symbols[MAX_NUM_OF_TOKENS];
     int symbol_count = 0;
+    int base_symbol_count = 0; // Symbols added externally (before compilation)
 
     u8 built_bytecode[PLCRUNTIME_MAX_PROGRAM_SIZE];
 
@@ -1929,7 +1930,7 @@ public:
         // First pass: parse symbol definitions ($$)
         // Also parse in lint mode to show symbol errors in the linter
         if (!finalPass || lintMode) {
-            symbol_count = 0; // Reset symbol table
+            symbol_count = base_symbol_count; // Reset to base symbols (preserve external symbols)
             for (int i = 0; i < token_count; i++) {
                 Token& token = tokens[i];
                 if (str_cmp(token.string, "$$")) {

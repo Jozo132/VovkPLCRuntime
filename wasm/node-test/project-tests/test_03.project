@@ -1,4 +1,4 @@
-PROJECT MultiBlockWithSymbols
+VOVKPLCPROJECT MultiBlockWithSymbols
 VERSION 3.0
 
 MEMORY
@@ -12,10 +12,11 @@ SYMBOLS
     start_btn : bit : X0.0
     stop_btn : bit : X0.1
     motor : bit : Y0.0
+    error_led : bit : Y0.1
 END_SYMBOLS
 
 PROGRAM Main
-    BLOCK Init LANG=PLCASM
+    BLOCK PLCASM_sample LANG=PLCASM
 u8.readBit start_btn
 u8.readBit stop_btn
 u8.not
@@ -23,11 +24,25 @@ u8.and
 jump_if_not skip_set
 u8.writeBitOn motor
 skip_set:
-exit
     END_BLOCK
 
-    BLOCK Logic LANG=STL
+    BLOCK STL_sample LANG=STL
 A stop_btn
 R motor
+    END_BLOCK
+
+    BLOCK Ladder_sample LANG=LADDER
+{
+  "comment": "Network 1",
+  "nodes": [
+    { "id": "gzFIdmMFsKIZe", "x": 2, "y": 0, "type": "coil", "symbol": "error_led", "inverted": false },
+    { "id": "dkK9jduUKYAnf", "x": 0, "y": 0, "type": "contact", "symbol": "start_btn", "inverted": false, "trigger": "normal" },
+    { "id": "yUcYfCm0pKygR", "x": 1, "y": 0, "type": "contact", "symbol": "stop_btn", "inverted": false, "trigger": "normal" }
+  ],
+  "connections": [
+    { "sources": [ "dkK9jduUKYAnf" ], "destinations": [ "yUcYfCm0pKygR" ] }, 
+    { "sources": [ "yUcYfCm0pKygR" ], "destinations": [ "gzFIdmMFsKIZe" ] }
+  ]
+}
     END_BLOCK
 END_PROGRAM

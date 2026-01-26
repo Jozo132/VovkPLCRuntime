@@ -1,15 +1,15 @@
 {
   "success": 1,
   "project": { "name": "STLComplex", "version": "1.0" },
-  "bytecode": "FD 02 58 00 40 59 00 40 C1 5A 00 40 C3 C0 60 00 80 FF FD 02 58 00 41 60 00 81 FF",
-  "bytecodeLength": 27,
-  "checksum": 35,
+  "bytecode": "FD 02 58 00 40 59 00 40 C1 5A 00 40 C3 C0 60 00 80 FD 02 58 00 41 60 00 81 FF",
+  "bytecodeLength": 26,
+  "checksum": 227,
   "files": [
     { "path": "Logic", "firstBlockIndex": 0, "blockCount": 2, "executionOrder": 0 }
   ],
   "blocks": [
-    { "file": "Logic", "name": "Network1", "language": "STL", "offset": 0, "size": 18 },
-    { "file": "Logic", "name": "Network2", "language": "STL", "offset": 18, "size": 9 }
+    { "file": "Logic", "name": "Network1", "language": "STL", "offset": 0, "size": 0 },
+    { "file": "Logic", "name": "Network2", "language": "STL", "offset": 0, "size": 0 }
   ],
   "symbols": [],
   "memoryAreas": [
@@ -21,6 +21,6 @@
     { "name": "T", "start": 704, "end": 1023 },
     { "name": "CT", "start": 1024, "end": 1279 }
   ],
-  "execution": { "steps": 9, "stackSize": 0 },
+  "execution": { "steps": 12, "stackSize": 0 },
   "problems": []
 }

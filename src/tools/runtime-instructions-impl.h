@@ -62,6 +62,22 @@ const FSH* LANG_NAME(u8 lang_id) {
     }
 }
 
+// Lowercase language name for PLCASM 'lang' directive
+const char* LANG_NAME_LOWER(u8 lang_id) {
+    switch (lang_id) {
+        case LANG_UNKNOWN: return "unknown";
+        case LANG_PLCASM: return "plcasm";
+        case LANG_STL: return "stl";
+        case LANG_LADDER: return "ladder";
+        case LANG_FBD: return "fbd";
+        case LANG_SFC: return "sfc";
+        case LANG_ST: return "st";
+        case LANG_IL: return "il";
+        case LANG_CUSTOM: return "custom";
+        default: return "undefined";
+    }
+}
+
 
 bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
     switch (opcode) {

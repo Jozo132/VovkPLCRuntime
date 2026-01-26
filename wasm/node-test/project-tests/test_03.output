@@ -1,15 +1,29 @@
 {
-  "success": 0,
-  "project": { "name": "MultiBlock", "version": "3.0" },
-  "bytecode": "",
-  "bytecodeLength": 0,
-  "checksum": 0,
-  "files": [],
-  "blocks": [],
-  "symbols": [],
-  "memoryAreas": [],
-  "execution": { "steps": 0, "stackSize": 0 },
-  "problems": [
-    { "severity": "error", "message": "PLCASM compilation failed", "line": 34, "column": 1, "file": "Main", "block": "Init", "language": "PLCASM" }
-  ]
+  "success": 1,
+  "project": { "name": "MultiBlockWithSymbols", "version": "3.0" },
+  "bytecode": "FD 01 58 00 40 59 00 40 C3 C0 E2 00 10 68 00 80 FD 02 59 00 40 EB 00 03 70 00 80 FD 03 58 00 40 59 00 40 C0 61 00 80 FF",
+  "bytecodeLength": 40,
+  "checksum": 16,
+  "files": [
+    { "path": "Main", "firstBlockIndex": 0, "blockCount": 3, "executionOrder": 0 }
+  ],
+  "blocks": [
+    { "file": "Main", "name": "PLCASM_sample", "language": "PLCASM", "offset": 0, "size": 0 },
+    { "file": "Main", "name": "STL_sample", "language": "STL", "offset": 0, "size": 0 },
+    { "file": "Main", "name": "Ladder_sample", "language": "LADDER", "offset": 0, "size": 0 }
+  ],
+  "symbols": [
+    { "name": "start_btn", "type": "bit", "address": "64.0" },
+    { "name": "stop_btn", "type": "bit", "address": "64.1" },
+    { "name": "motor", "type": "bit", "address": "128.0" },
+    { "name": "error_led", "type": "bit", "address": "128.1" }
+  ],
+  "memoryAreas": [
+    { "name": "M", "start": 448, "end": 703 },
+    { "name": "I", "start": 64, "end": 127 },
+    { "name": "Q", "start": 128, "end": 191 },
+    { "name": "T", "start": 704, "end": 1023 }
+  ],
+  "execution": { "steps": 15, "stackSize": 0 },
+  "problems": []
 }

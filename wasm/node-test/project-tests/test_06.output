@@ -1,14 +1,14 @@
 {
   "success": 1,
   "project": { "name": "LadderSimple", "version": "1.0" },
-  "bytecode": "FD 03 FF",
-  "bytecodeLength": 3,
-  "checksum": 70,
+  "bytecode": "FD 03 58 00 40 60 00 80 FF",
+  "bytecodeLength": 9,
+  "checksum": 5,
   "files": [
     { "path": "Network1", "firstBlockIndex": 0, "blockCount": 1, "executionOrder": 0 }
   ],
   "blocks": [
-    { "file": "Network1", "name": "Rung1", "language": "LADDER", "offset": 0, "size": 3 }
+    { "file": "Network1", "name": "Rung1", "language": "LADDER", "offset": 0, "size": 0 }
   ],
   "symbols": [],
   "memoryAreas": [
@@ -20,6 +20,6 @@
     { "name": "T", "start": 704, "end": 1023 },
     { "name": "CT", "start": 1024, "end": 1279 }
   ],
-  "execution": { "steps": 2, "stackSize": 0 },
+  "execution": { "steps": 4, "stackSize": 0 },
   "problems": []
 }

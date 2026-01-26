@@ -83,9 +83,14 @@ async function readStdin() {
     })
 }
 
-// Detect if input is Bytecode Hex, Ladder Graph JSON, STL, or PLCASM
+// Detect if input is Project, Bytecode Hex, Ladder Graph JSON, STL, or PLCASM
 function detectLanguage(code) {
     const trimmed = code.trim()
+    
+    // Check for project file format first (starts with PROJECT keyword)
+    if (/^PROJECT\s+\w+/i.test(trimmed)) {
+        return 'project'
+    }
     
     // Check for raw bytecode hex first - string of hex digits (with optional spaces/newlines)
     // Must be a valid hex string that looks like bytecode (not STL/PLCASM)
@@ -358,6 +363,107 @@ const run = async () => {
             bytecodeLoaded = true
         }
         
+        // Handle project file - compile entire project
+        if (language === 'project') {
+            console.log('┌─────────────────────────────────────────────────────────────────┐')
+            console.log('│ STEP 2: Project Compilation                                    │')
+            console.log('└─────────────────────────────────────────────────────────────────┘')
+            console.log()
+            
+            // Reset project compiler
+            runtime.wasm_exports.project_reset()
+            
+            // Stream project source
+            runtime.wasm_exports.streamClear()
+            for (let i = 0; i < input.length; i++) {
+                runtime.wasm_exports.streamIn(input.charCodeAt(i))
+            }
+            
+            readCapturedOutput() // clear any previous output
+            
+            // Compile with debug output
+            const success = runtime.wasm_exports.project_compile(1) // 1 = debug mode
+            
+            const compileOutput = readCapturedOutput()
+            if (compileOutput && compileOutput.trim()) {
+                for (const line of compileOutput.split('\n')) {
+                    if (line.trim()) console.log(`  ${line}`)
+                }
+                console.log()
+            }
+            
+            if (!success || runtime.wasm_exports.project_hasError()) {
+                // Get error details
+                const getString = (ptr) => {
+                    if (!ptr) return ''
+                    const memory = new Uint8Array(runtime.wasm.exports.memory.buffer)
+                    let str = ''
+                    let i = ptr
+                    while (memory[i] !== 0 && i < memory.length) {
+                        str += String.fromCharCode(memory[i])
+                        i++
+                    }
+                    return str
+                }
+                
+                const errorMsg = getString(runtime.wasm_exports.project_getError())
+                const errorCompiler = getString(runtime.wasm_exports.project_getErrorCompiler())
+                const errorFile = getString(runtime.wasm_exports.project_getErrorFile())
+                const errorBlock = getString(runtime.wasm_exports.project_getErrorBlock())
+                const errorLine = runtime.wasm_exports.project_getErrorLine()
+                const errorCol = runtime.wasm_exports.project_getErrorColumn()
+                const errorToken = getString(runtime.wasm_exports.project_getErrorToken())
+                const errorSourceLine = getString(runtime.wasm_exports.project_getErrorSourceLine())
+                
+                console.error('  ✗ Project compilation failed')
+                console.error()
+                console.error(`  Compiler: ${errorCompiler}`)
+                console.error(`  Location: ${errorFile}/${errorBlock} at line ${errorLine}, col ${errorCol}`)
+                console.error(`  Error: ${errorMsg}`)
+                if (errorToken) {
+                    console.error(`  Token: "${errorToken}"`)
+                }
+                if (errorSourceLine) {
+                    console.error()
+                    console.error(`  Source: ${errorSourceLine}`)
+                    if (errorCol > 0) {
+                        console.error(`          ${' '.repeat(errorCol - 1)}^`)
+                    }
+                }
+                process.exit(1)
+            }
+            
+            // Get bytecode info
+            const bytecodeLen = runtime.wasm_exports.project_getBytecodeLength()
+            const checksum = runtime.wasm_exports.project_getChecksum()
+            const bytecodePtr = runtime.wasm_exports.project_getBytecode()
+            
+            // Read bytecode for display
+            const memory = new Uint8Array(runtime.wasm.exports.memory.buffer)
+            const bytes = []
+            for (let i = 0; i < bytecodeLen; i++) {
+                bytes.push(memory[bytecodePtr + i])
+            }
+            const bytecodeHex = bytes.map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' ')
+            
+            console.log(`  Bytecode[${bytecodeLen}]: ${bytecodeHex}`)
+            console.log(`  Checksum: 0x${checksum.toString(16).toUpperCase().padStart(2, '0')}`)
+            console.log()
+            
+            // Load the compiled project into runtime
+            const loadSuccess = runtime.wasm_exports.project_load()
+            if (!loadSuccess) {
+                console.error('  ✗ Failed to load compiled project')
+                process.exit(1)
+            }
+            
+            console.log('  ✓ Project compiled and loaded successfully')
+            console.log()
+            
+            bytecodeLoaded = true
+            stepOffset = 1
+        }
+        
         // Step 2: If Ladder Graph, transpile to STL first
         if (language === 'ladder-graph') {
             console.log('┌─────────────────────────────────────────────────────────────────┐')
@@ -477,7 +583,12 @@ const run = async () => {
         }
         
         // Execution step
-        const execStepNum = language === 'bytecode-hex' ? 3 : (language === 'ladder-graph' ? 5 : (language === 'stl' ? 4 : 3))
+        let execStepNum = 3
+        if (language === 'bytecode-hex') execStepNum = 3
+        else if (language === 'project') execStepNum = 3
+        else if (language === 'ladder-graph') execStepNum = 5
+        else if (language === 'stl') execStepNum = 4
+        
         console.log('┌─────────────────────────────────────────────────────────────────┐')
         console.log(`│ STEP ${execStepNum}: Bytecode Execution (Debug Mode, max ${maxSteps} steps)          │`)
         console.log('└─────────────────────────────────────────────────────────────────┘')

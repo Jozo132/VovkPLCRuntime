@@ -10,7 +10,11 @@
   "blocks": [
     { "file": "Network1", "name": "Logic", "language": "STL", "offset": 0, "size": 13 }
   ],
-  "symbols": [],
+  "symbols": [
+    { "name": "input1", "type": "bit", "address": "64.0" },
+    { "name": "input2", "type": "bit", "address": "64.1" },
+    { "name": "output1", "type": "bit", "address": "128.0" }
+  ],
   "memoryAreas": [
     { "name": "C", "start": 0, "end": 63 },
     { "name": "I", "start": 64, "end": 127 },

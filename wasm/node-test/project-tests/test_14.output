@@ -10,7 +10,13 @@
   "blocks": [
     { "file": "Control", "name": "Logic", "language": "STL", "offset": 0, "size": 24 }
   ],
-  "symbols": [],
+  "symbols": [
+    { "name": "sensor1", "type": "bit", "address": "64.0" },
+    { "name": "sensor2", "type": "bit", "address": "64.1" },
+    { "name": "sensor3", "type": "bit", "address": "64.2" },
+    { "name": "actuator1", "type": "bit", "address": "128.0" },
+    { "name": "actuator2", "type": "bit", "address": "128.1" }
+  ],
   "memoryAreas": [
     { "name": "C", "start": 0, "end": 63 },
     { "name": "I", "start": 64, "end": 127 },
