@@ -251,6 +251,10 @@ public:
     PLCASMLinter plcasm_compiler;
     STLLinter stl_compiler;
     LadderGraphCompiler ladder_compiler;
+
+    // Problems array for multiple error tracking
+    LinterProblem problems[MAX_LINT_PROBLEMS];
+    int problem_count = 0;
     
     // Debug output
     bool debug_mode;
@@ -287,6 +291,19 @@ public:
             labels[i].reset();
         }
         label_count = 0;
+
+        // Reset problems
+        problem_count = 0;
+        for (int i = 0; i < MAX_LINT_PROBLEMS; i++) {
+            problems[i].type = 0;
+            problems[i].line = 0;
+            problems[i].column = 0;
+            problems[i].length = 0;
+            problems[i].message[0] = '\0';
+            problems[i].block[0] = '\0';
+            problems[i].lang = 0; 
+            problems[i].token_text = nullptr;
+        }
         
         source = nullptr;
         source_length = 0;
@@ -328,12 +345,40 @@ public:
     }
     
     // ============ Error Handling ============
+
+    void addProblem(uint32_t type, const char* msg, int l, int c, int length = 0, const char* token = nullptr) {
+        if (problem_count >= MAX_LINT_PROBLEMS) return;
+
+        LinterProblem& p = problems[problem_count++];
+        p.type = type;
+        p.line = l;
+        p.column = c;
+        p.length = length;
+        p.token_text = (char*)token;
+        
+        // Copy current context
+        copyString(p.block, current_block, 64);
+        p.lang = (uint32_t)current_block_language;
+
+        // Copy message
+        int i = 0;
+        const char * src = msg;
+        while (*src && i < 63) {
+            p.message[i++] = *src++;
+        }
+        p.message[i] = '\0';
+    }
     
     void setError(const char* msg) {
-        if (has_error) return;
+        if (has_error) return; // Still keep first error behavior for compilation failure
+        
         has_error = true;
         error_line = line;
         error_column = column;
+        
+        // Add to problems list
+        addProblem(LINT_ERROR, msg, line, column);
+
         // Copy current context
         copyString(error_file, current_file, PROJECT_MAX_PATH_LEN);
         copyString(error_block, current_block, PROJECT_MAX_NAME_LEN);
@@ -352,9 +397,14 @@ public:
     
     void setErrorAt(const char* msg, int l, int c) {
         if (has_error) return;
+        
         has_error = true;
         error_line = l;
         error_column = c;
+
+        // Add to problems list
+        addProblem(LINT_ERROR, msg, l, c);
+
         // Copy current context
         copyString(error_file, current_file, PROJECT_MAX_PATH_LEN);
         copyString(error_block, current_block, PROJECT_MAX_NAME_LEN);
@@ -375,6 +425,10 @@ public:
     void setErrorFull(const char* compiler_name, const char* msg, int l, int c, 
                       const char* source_text, int source_len, 
                       const char* token_text, int token_len) {
+
+        // Always add to problems list regardless of has_error state
+        addProblem(LINT_ERROR, msg, l, c, token_len, token_text);
+
         if (has_error) return;
         has_error = true;
         error_line = l;
@@ -1563,12 +1617,14 @@ public:
         
         bool error = plcasm_compiler.compileAssembly(true, false);  // true = real compile, not just analysis
         
-        if (error) {
+        if (error || plcasm_compiler.problem_count > 0) {
+            // Copy all problems from PLCASM compilter to project problems
             if (plcasm_compiler.problem_count > 0) {
-                LinterProblem& prob = plcasm_compiler.problems[0];
-                // Error line is directly from combined PLCASM (no prefix line)
-                setErrorFromCombinedLine(prob.message, prob.line, prob.column,
-                                         prob.token_text, prob.length);
+                // Determine block from line number
+                for(int i=0; i<plcasm_compiler.problem_count; i++) {
+                    LinterProblem& prob = plcasm_compiler.problems[i];
+                    setErrorFromCombinedLine(prob.message, prob.line, prob.column, prob.token_text, prob.length);
+                }
             } else {
                 copyString(error_compiler, "PLCASM Compiler", 64);
                 setError("PLCASM compilation failed");
@@ -1806,6 +1862,16 @@ WASM_EXPORT u32 project_getBlockSize(int index) {
         return 0;
     }
     return project_compiler.program_blocks[index].bytecode_size;
+}
+
+// Get problem count from project linter
+WASM_EXPORT int project_getProblemCount() {
+    return project_compiler.problem_count;
+}
+
+// Get pointer to problems array
+WASM_EXPORT LinterProblem* project_getProblems() {
+    return project_compiler.problems;
 }
 
 // Error context functions

@@ -19,8 +19,10 @@ struct LinterProblem {
     uint32_t line;      // Line number (1-based)
     uint32_t column;    // Column number (1-based)
     uint32_t length;    // Length of the token causing the issue
-    char message[64]; // Text description
-    char* token_text; // Text of the token (only useful for internal debugging)
+    char message[64];   // Text description
+    char block[64];     // Block name (optional)
+    uint32_t lang;      // Language ID (optional)
+    char* token_text;   // Text of the token (only useful for internal debugging)
 };
 
 #define MAX_LINT_PROBLEMS 100
@@ -68,6 +70,8 @@ public:
         p.column = token.column;
         p.length = token.length;
         p.token_text = token.string.data;
+        p.lang = 0; // Unknown/Default
+        p.block[0] = '\0'; // Default empty block
 
         // Reset message buffer
         for(int k=0; k<64; k++) p.message[k] = 0;

@@ -1094,6 +1094,389 @@ class VovkPLC_class {
     }
 
     /**
+     * @typedef {{
+     *     message: string,
+     *     line: number,
+     *     column: number,
+     *     block?: string,
+     *     compiler?: string
+     * }} ProjectCompileProblem
+     */
+
+    /**
+     * @typedef {{ bytecode: string, problem: null } | { bytecode: null, problem: ProjectCompileProblem }} ProjectCompileResult
+     */
+
+    /**
+     * Compiles a complete PLC project definition into bytecode.
+     * The project format supports multiple files, blocks, symbols, and mixed languages (PLCASM, STL, LADDER).
+     *
+     * @param {string} projectSource - The project definition string (starts with VOVKPLCPROJECT).
+     * @returns {ProjectCompileResult} - Object with either { bytecode, problem: null } on success or { bytecode: null, problem } on failure.
+     *
+     * @example
+     * const result = runtime.compileProject(`
+     * VOVKPLCPROJECT MyProject
+     * VERSION 1.0
+     *
+     * PROGRAM Main
+     *     BLOCK Code LANG=PLCASM
+     *         u8.const 42
+     *         exit
+     *     END_BLOCK
+     * END_PROGRAM
+     * `)
+     *
+     * if (result.problem) {
+     *     console.error(`Error at line ${result.problem.line}: ${result.problem.message}`)
+     * } else {
+     *     console.log('Bytecode:', result.bytecode)
+     * }
+     */
+    compileProject = (projectSource) => {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        if (!this.wasm_exports.project_compile) throw new Error("'project_compile' function not found - Project compiler not available")
+        if (!this.wasm_exports.project_reset) throw new Error("'project_reset' function not found")
+        if (!this.wasm_exports.project_hasError) throw new Error("'project_hasError' function not found")
+        if (!this.wasm_exports.project_getBytecode) throw new Error("'project_getBytecode' function not found")
+        if (!this.wasm_exports.project_getBytecodeLength) throw new Error("'project_getBytecodeLength' function not found")
+
+        // Reset compiler state
+        this.wasm_exports.project_reset()
+
+        // Clear any stale data in the stream buffer first
+        if (this.wasm_exports.streamClear) this.wasm_exports.streamClear()
+
+        // Stream project source to compiler
+        let ok = true
+        for (let i = 0; i < projectSource.length && ok; i++) {
+            ok = this.wasm_exports.streamIn(projectSource.charCodeAt(i))
+        }
+        if (!ok) {
+            return {
+                bytecode: null,
+                problem: {
+                    message: 'Failed to stream project source - buffer overflow',
+                    line: 0,
+                    column: 0
+                }
+            }
+        }
+
+        // Compile the project (reads from stream buffer)
+        const success = this.wasm_exports.project_compile(false)
+
+        // Check for errors
+        if (!success || this.wasm_exports.project_hasError()) {
+            const errorPtr = this.wasm_exports.project_getError ? this.wasm_exports.project_getError() : 0
+            const errorLine = this.wasm_exports.project_getErrorLine ? this.wasm_exports.project_getErrorLine() : 0
+            const errorColumn = this.wasm_exports.project_getErrorColumn ? this.wasm_exports.project_getErrorColumn() : 0
+            const errorBlock = this.wasm_exports.project_getErrorBlock ? this.wasm_exports.project_getErrorBlock() : 0
+            const errorCompiler = this.wasm_exports.project_getErrorCompiler ? this.wasm_exports.project_getErrorCompiler() : 0
+
+            // Read error message from memory
+            let message = 'Unknown compilation error'
+            if (errorPtr) {
+                const memory = new Uint8Array(this.wasm_exports.memory.buffer)
+                let str = ''
+                let i = errorPtr
+                while (memory[i] !== 0 && i < memory.length && str.length < 512) {
+                    str += String.fromCharCode(memory[i])
+                    i++
+                }
+                if (str) message = str
+            }
+
+            // Read block name if available
+            let block = undefined
+            if (errorBlock) {
+                const memory = new Uint8Array(this.wasm_exports.memory.buffer)
+                let str = ''
+                let i = errorBlock
+                while (memory[i] !== 0 && i < memory.length && str.length < 64) {
+                    str += String.fromCharCode(memory[i])
+                    i++
+                }
+                if (str) block = str
+            }
+
+            // Read compiler name if available
+            let compiler = undefined
+            if (errorCompiler) {
+                const memory = new Uint8Array(this.wasm_exports.memory.buffer)
+                let str = ''
+                let i = errorCompiler
+                while (memory[i] !== 0 && i < memory.length && str.length < 64) {
+                    str += String.fromCharCode(memory[i])
+                    i++
+                }
+                if (str) compiler = str
+            }
+
+            return {
+                bytecode: null,
+                problem: {
+                    message,
+                    line: errorLine,
+                    column: errorColumn,
+                    ...(block && { block }),
+                    ...(compiler && { compiler })
+                }
+            }
+        }
+
+        // Get bytecode
+        const bytecodePtr = this.wasm_exports.project_getBytecode()
+        const bytecodeLen = this.wasm_exports.project_getBytecodeLength()
+
+        if (!bytecodePtr || bytecodeLen === 0) {
+            return {
+                bytecode: null,
+                problem: {
+                    message: 'Compilation produced no bytecode',
+                    line: 0,
+                    column: 0
+                }
+            }
+        }
+
+        // Convert bytecode to hex string
+        const memory = new Uint8Array(this.wasm_exports.memory.buffer)
+        let hex = ''
+        for (let i = 0; i < bytecodeLen; i++) {
+            hex += memory[bytecodePtr + i].toString(16).padStart(2, '0').toUpperCase()
+            if (i < bytecodeLen - 1) hex += ' '
+        }
+
+        return {
+            bytecode: hex,
+            problem: null
+        }
+    }
+
+    /**
+     * @typedef {{
+     *     type: 'error' | 'warning' | 'info',
+     *     message: string,
+     *     line: number,
+     *     column: number,
+     *     length: number,
+     *     block: string | undefined,
+     *     lang: number,
+     *     compiler?: string,
+     *     token?: string,
+     *     sourceLine?: string
+     * }} ProjectLinterProblem
+     */
+
+    /**
+     * Lints a complete PLC project definition and returns all problems found.
+     * The project format supports multiple files, blocks, symbols, and mixed languages (PLCASM, STL, LADDER).
+     *
+     * @param {string} projectSource - The project definition string (starts with VOVKPLCPROJECT).
+     * @returns {ProjectLinterProblem[]} - Array of problems found (empty if valid).
+     *
+     * @example
+     * const problems = runtime.lintProject(`
+     * VOVKPLCPROJECT MyProject
+     * VERSION 1.0
+     *
+     * PROGRAM Main
+     *     BLOCK Code LANG=PLCASM
+     *         invalid_instruction
+     *         exit
+     *     END_BLOCK
+     * END_PROGRAM
+     * `)
+     *
+     * for (const problem of problems) {
+     *     console.log(`${problem.type} at line ${problem.line}: ${problem.message}`)
+     * }
+     */
+    lintProject = (projectSource) => {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        if (!this.wasm_exports.project_compile) throw new Error("'project_compile' function not found - Project compiler not available")
+        if (!this.wasm_exports.project_reset) throw new Error("'project_reset' function not found")
+        if (!this.wasm_exports.project_hasError) throw new Error("'project_hasError' function not found")
+        if (!this.wasm_exports.project_getProblemCount) throw new Error("'project_getProblemCount' function not found")
+        if (!this.wasm_exports.project_getProblems) throw new Error("'project_getProblems' function not found")
+
+        // Reset compiler state
+        this.wasm_exports.project_reset()
+
+        // Clear any stale data in the stream buffer first
+        if (this.wasm_exports.streamClear) this.wasm_exports.streamClear()
+
+        // Stream project source to compiler
+        let ok = true
+        for (let i = 0; i < projectSource.length && ok; i++) {
+            ok = this.wasm_exports.streamIn(projectSource.charCodeAt(i))
+        }
+        if (!ok) {
+            return [{
+                type: 'error',
+                message: 'Failed to stream project source - buffer overflow',
+                line: 0,
+                column: 0,
+                length: 0
+            }]
+        }
+        this.wasm_exports.streamIn(0) // Null terminator
+
+        // Compile the project (reads from stream buffer)
+        const success = this.wasm_exports.project_compile(false)
+
+        // Check for accumulated problems first
+        const count = this.wasm_exports.project_getProblemCount()
+        /** @type {ProjectLinterProblem[]} */
+        const problems = []
+
+        if (count > 0) {
+            const pointer = this.wasm_exports.project_getProblems()
+            // Struct size = 152 bytes (4+4+4+4+64+64+4+4)
+            const struct_size = 152
+
+            const memory = new Uint8Array(this.wasm_exports.memory.buffer)
+            const view = new DataView(this.wasm_exports.memory.buffer)
+
+             // Helper to read C string from memory
+             const readString = (ptr, maxLen = 512) => {
+                if (!ptr) return undefined
+                let str = ''
+                let i = ptr
+                while (memory[i] !== 0 && i < memory.length && str.length < maxLen) {
+                    str += String.fromCharCode(memory[i])
+                    i++
+                }
+                return str
+            }
+
+            for (let i = 0; i < count; i++) {
+                const offset = pointer + i * struct_size
+                const type_int = view.getUint32(offset + 0, true)
+                const line = view.getUint32(offset + 4, true)
+                const column = view.getUint32(offset + 8, true)
+                const length = view.getUint32(offset + 12, true)
+
+                // message is 64 bytes at offset 16
+                let message = ''
+                for (let j = 0; j < 64; j++) {
+                    const charCode = view.getUint8(offset + 16 + j)
+                    if (charCode === 0) break
+                    message += String.fromCharCode(charCode)
+                }
+
+                // block is 64 bytes at offset 80
+                let block = ''
+                for (let j = 0; j < 64; j++) {
+                    const charCode = view.getUint8(offset + 80 + j)
+                    if (charCode === 0) break
+                    block += String.fromCharCode(charCode)
+                }
+
+                // lang is 4 bytes at offset 144
+                const lang = view.getUint32(offset + 144, true)
+
+                // token_text pointer at offset 148
+                const token_ptr = view.getUint32(offset + 148, true)
+                let token = undefined
+                
+                if (token_ptr !== 0) {
+                     if (length > 0) {
+                        try {
+                            const token_buf = new Uint8Array(memory.buffer, token_ptr, length)
+                            token = new TextDecoder().decode(token_buf)
+                        } catch (e) {
+                            token = readString(token_ptr, 128)
+                        }
+                     } else {
+                        token = readString(token_ptr, 128)
+                     }
+                }
+
+                // Map integer language ID to string name if possible
+                const LANG_MAP = {
+                    0: 'UNKNOWN',
+                    1: 'PLCASM',
+                    2: 'STL',
+                    3: 'LADDER'
+                }
+                const langName = LANG_MAP[lang] || 'UNKNOWN'
+
+                problems.push({
+                    type: type_int === 2 ? 'error' : type_int === 1 ? 'warning' : 'info',
+                    message: message,
+                    line: line,
+                    column: column,
+                    length: length,
+                    block: block || undefined,
+                    lang: lang,
+                    compiler: langName, 
+                    token: token
+                })
+            }
+        }
+
+        // If compile failed but no problems recorded (e.g. fatal parser error not using addProblem), fallback to old error method
+        if ((!success || this.wasm_exports.project_hasError()) && problems.length === 0) {
+            const errorPtr = this.wasm_exports.project_getError ? this.wasm_exports.project_getError() : 0
+            const errorLine = this.wasm_exports.project_getErrorLine ? this.wasm_exports.project_getErrorLine() : 0
+            const errorColumn = this.wasm_exports.project_getErrorColumn ? this.wasm_exports.project_getErrorColumn() : 0
+            const errorBlock = this.wasm_exports.project_getErrorBlock ? this.wasm_exports.project_getErrorBlock() : 0
+            const errorCompiler = this.wasm_exports.project_getErrorCompiler ? this.wasm_exports.project_getErrorCompiler() : 0
+            const errorToken = this.wasm_exports.project_getErrorToken ? this.wasm_exports.project_getErrorToken() : 0
+            const errorTokenLength = this.wasm_exports.project_getErrorTokenLength ? this.wasm_exports.project_getErrorTokenLength() : 0
+            const errorSourceLine = this.wasm_exports.project_getErrorSourceLine ? this.wasm_exports.project_getErrorSourceLine() : 0
+
+            const memory = new Uint8Array(this.wasm_exports.memory.buffer)
+
+            // Helper to read C string from memory
+            const readString = (ptr, maxLen = 512) => {
+                if (!ptr) return ''
+                let str = ''
+                let i = ptr
+                while (memory[i] !== 0 && i < memory.length && str.length < maxLen) {
+                    str += String.fromCharCode(memory[i])
+                    i++
+                }
+                return str
+            }
+
+            const message = readString(errorPtr) || 'Unknown compilation error'
+            const block = readString(errorBlock, 64) || undefined
+            const compiler = readString(errorCompiler, 64) || undefined
+            
+            let token = undefined
+            if (errorToken) {
+                 if (errorTokenLength > 0) {
+                     // errorToken is a buffer in C, so it is null terminated there likely, but we can use length if provided
+                     // Actually project_getErrorToken returns pointer to char array error_token[64]
+                     // So we can safely use readString(errorToken) as it is null terminated in C++
+                     token = readString(errorToken, 128)
+                 } else {
+                     token = readString(errorToken, 128)
+                 }
+            }
+            
+            const sourceLine = readString(errorSourceLine, 256) || undefined
+
+            problems.push({
+                type: 'error',
+                message,
+                line: errorLine,
+                column: errorColumn,
+                length: errorTokenLength || (token ? token.length : 0),
+                ...(block && { block }),
+                ...(compiler && { compiler }),
+                ...(token && { token }),
+                ...(sourceLine && { sourceLine })
+            })
+        }
+
+        return problems
+    }
+
+    /**
      * Downloads pre-compiled bytecode to the PLC.
      * Verifies size and CRC checksum during upload.
      *
@@ -2257,6 +2640,10 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
     compileLadder = ladder => this.call('compileLadder', ladder)
     /** @type { (source: string | LadderGraph, language: 'ladder-graph' | 'stl' | 'plcasm') => Promise<{ ladderGraph?: string, stl?: string, plcasm?: string, bytecode?: string }> } */
     compileAll = (source, language) => this.call('compileAll', source, language)
+    /** @type { (projectSource: string) => Promise<ProjectCompileResult> } */
+    compileProject = projectSource => this.call('compileProject', projectSource)
+    /** @type { (projectSource: string) => Promise<ProjectLinterProblem[]> } */
+    lintProject = projectSource => this.call('lintProject', projectSource)
     /** @type { (program: string | number[]) => Promise<any> } */
     downloadBytecode = program => this.call('downloadBytecode', program)
     /** @type { () => Promise<any> } */
