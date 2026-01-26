@@ -1,0 +1,12 @@
+// Generated from Ladder Graph by VovkPLCRuntime
+
+A X0.0
+O Y0.0
+AN M0.0
+AN M0.1
+SAVE
+    L BR
+    S Y0.0
+    L BR
+    S Y0.7
+DROP BR

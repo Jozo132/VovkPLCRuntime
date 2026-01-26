@@ -1,0 +1,32 @@
+{
+    "comment": "Network 2",
+    "nodes": [
+        {"id": "KB6YU3AbVHrST","x": 1,"y": 0,"type": "timer_ton","symbol": "T0","inverted": false,"preset": "T#5s" },
+        {"id": "yRKcaawGYG7V4","x": 3,"y": 0,"type": "timer_tof","symbol": "T1","inverted": false,"preset": "T#10s" },
+        {"id": "zDZmkY1qwfaGc","x": 0,"y": 0,"type": "contact","symbol": "Y0.0","inverted": false,"trigger": "normal" },
+        {"id": "zxWmT1H5qp8V3","x": 4,"y": 0,"type": "coil_rset","symbol": "Y0.0","inverted": false },
+        {"id": "Ur9UWmjouH7Pe","x": 1,"y": 1,"type": "timer_tp","symbol": "T2","inverted": false,"preset": "T#7s" },
+        {"id": "ZIQvG84bXUDQE","x": 4,"y": 2,"type": "coil","symbol": "Y1.0","inverted": false },
+        {"id": "M8iLzWYSf7F2g","x": 4,"y": 3,"type": "coil","symbol": "Y1.1","inverted": false },
+        {"id": "NlYZbIAjEtdhV","x": 4,"y": 4,"type": "coil","symbol": "Y1.2","inverted": false },
+        {"id": "Jjvqho7WmPCFD","x": 2,"y": 2,"type": "timer_ton","symbol": "T3","inverted": false,"preset": "T#2s" },
+        {"id": "IGY7nWXOfkSX5","x": 2,"y": 3,"type": "timer_tof","symbol": "T4","inverted": false,"preset": "T#2s" },
+        {"id": "ZaIfQbPW0T2pK","x": 2,"y": 4,"type": "timer_tp","symbol": "T5","inverted": false,"preset": "T#2s" },
+        {"id": "yKSXU83HakDKc","x": 0,"y": 2,"type": "contact","symbol": "X0.0","inverted": false,"trigger": "normal" },
+        {"id": "GEGMEnUKkpyQT","x": 0,"y": 3,"type": "contact","symbol": "X0.0","inverted": false,"trigger": "normal" },
+        {"id": "htfxPow4Qs9KW","x": 0,"y": 4,"type": "contact","symbol": "X0.0","inverted": false,"trigger": "normal" },
+        {"id": "Iyj4ui75pYeoE","x": 4,"y": 1,"type": "coil","symbol": "Y0.7","inverted": false }
+    ],
+    "connections": [
+        { "sources": [ "KB6YU3AbVHrST" ], "destinations": [ "yRKcaawGYG7V4" ] },
+        { "sources": [ "zDZmkY1qwfaGc" ], "destinations": [ "KB6YU3AbVHrST", "Ur9UWmjouH7Pe" ] },
+        { "sources": [ "yRKcaawGYG7V4" ], "destinations": [ "zxWmT1H5qp8V3" ] },
+        { "sources": [ "Jjvqho7WmPCFD" ], "destinations": [ "ZIQvG84bXUDQE" ] },
+        { "sources": [ "IGY7nWXOfkSX5" ], "destinations": [ "M8iLzWYSf7F2g" ] },
+        { "sources": [ "ZaIfQbPW0T2pK" ], "destinations": [ "NlYZbIAjEtdhV" ] },
+        { "sources": [ "yKSXU83HakDKc" ], "destinations": [ "Jjvqho7WmPCFD" ] },
+        { "sources": [ "GEGMEnUKkpyQT" ], "destinations": [ "IGY7nWXOfkSX5" ] },
+        { "sources": [ "htfxPow4Qs9KW" ], "destinations": [ "ZaIfQbPW0T2pK" ] },
+        { "sources": [ "Ur9UWmjouH7Pe" ], "destinations": [ "Iyj4ui75pYeoE" ] }
+    ]
+}

@@ -439,9 +439,11 @@ public:
         return strEqI(type, "cmp_eq") || strEqI(type, "cmp_ne") ||
                strEqI(type, "cmp_gt") || strEqI(type, "cmp_lt") ||
                strEqI(type, "cmp_ge") || strEqI(type, "cmp_le") ||
+               strEqI(type, "cmp_gte") || strEqI(type, "cmp_lte") ||
                strEqI(type, "fb_cmp_eq") || strEqI(type, "fb_cmp_ne") ||
                strEqI(type, "fb_cmp_gt") || strEqI(type, "fb_cmp_lt") ||
-               strEqI(type, "fb_cmp_ge") || strEqI(type, "fb_cmp_le");
+               strEqI(type, "fb_cmp_ge") || strEqI(type, "fb_cmp_le") ||
+               strEqI(type, "fb_cmp_gte") || strEqI(type, "fb_cmp_lte");
     }
     
     // isTerminationNode: nodes that write output and can optionally pass through RLO
@@ -538,6 +540,8 @@ public:
             if (isInputNode(dest.type)) return true;
             // If destination is an output (coil/operation block), it's a direct passthrough
             if (isOutputNode(dest.type)) return true;
+            // Timers and counters pass through RLO like contacts, so they're part of the chain
+            if (isTimer(dest.type) || isCounter(dest.type)) return true;
         }
         return false;
     }
@@ -635,6 +639,21 @@ public:
                     emitCoil(dest, needsTapAfter);
                 } else if (isOperationBlock(dest.type)) {
                     emitOperationBlock(dest, hasMoreOutputs, needsTapAfter);
+                }
+                outputProcessed[destIdx] = true;
+                dest.emitted = true;
+
+                if (hasDownstreamChain(destIdx)) {
+                    emitDownstreamChain(destIdx, outputProcessed);
+                }
+            } else if ((isTimer(dest.type) || isCounter(dest.type)) && !dest.emitted) {
+                // Timers and counters pass through RLO like contacts
+                bool needsTapAfter = hasDownstreamContact(destIdx);
+                
+                if (isTimer(dest.type)) {
+                    emitTimer(dest, needsTapAfter);
+                } else {
+                    emitCounter(dest, needsTapAfter);
                 }
                 outputProcessed[destIdx] = true;
                 dest.emitted = true;
@@ -1220,7 +1239,7 @@ public:
     }
     
     // Emit STL for a comparator block (produces boolean result like a contact)
-    // Uses Siemens-style comparisons: L, ==I/==D/==R, etc.
+    // Uses Siemens-style comparisons: L value, <I #literal or L val1, L val2, <I
     void emitComparator(GraphNode& node, bool asFirstCondition) {
         char typeSuffix = getSiemensTypeSuffix(node.data_type);
         
@@ -1230,30 +1249,56 @@ public:
         else if (strEqI(node.type, "cmp_ne") || strEqI(node.type, "fb_cmp_ne")) op = "<>";
         else if (strEqI(node.type, "cmp_gt") || strEqI(node.type, "fb_cmp_gt")) op = ">";
         else if (strEqI(node.type, "cmp_lt") || strEqI(node.type, "fb_cmp_lt")) op = "<";
-        else if (strEqI(node.type, "cmp_ge") || strEqI(node.type, "fb_cmp_ge")) op = ">=";
-        else if (strEqI(node.type, "cmp_le") || strEqI(node.type, "fb_cmp_le")) op = "<=";
+        else if (strEqI(node.type, "cmp_ge") || strEqI(node.type, "fb_cmp_ge") ||
+                 strEqI(node.type, "cmp_gte") || strEqI(node.type, "fb_cmp_gte")) op = ">=";
+        else if (strEqI(node.type, "cmp_le") || strEqI(node.type, "fb_cmp_le") ||
+                 strEqI(node.type, "cmp_lte") || strEqI(node.type, "fb_cmp_lte")) op = "<=";
         
         if (!op) {
             setError("Unknown comparator type");
             return;
         }
         
-        // Siemens STL comparison: L in1, L in2, ==I (or <=I, >=I, <I, >I, <>I)
-        // Result goes to RLO
+        // Check if in2 is a literal (number)
+        bool in2IsLiteral = true;
+        const char* p = node.in2;
+        if (*p == '-') p++;  // skip negative sign
+        while (*p) {
+            if (*p < '0' || *p > '9') {
+                in2IsLiteral = false;
+                break;
+            }
+            p++;
+        }
+        
+        // Siemens STL comparison format:
+        // If in2 is literal: L in1, <I #literal
+        // If in2 is address: L in1, L in2, <I
         emitIndent();
         emit("L ");
         emitTypedAddress(node.in1, typeSuffix);
         emitChar('\n');
         
-        emitIndent();
-        emit("L ");
-        emitTypedAddress(node.in2, typeSuffix);
-        emitChar('\n');
-        
-        emitIndent();
-        emit(op);
-        emitChar(typeSuffix);
-        emitChar('\n');
+        if (in2IsLiteral) {
+            // Comparison with immediate value
+            emitIndent();
+            emit(op);
+            emitChar(typeSuffix);
+            emit(" #");
+            emit(node.in2);
+            emitChar('\n');
+        } else {
+            // Comparison with memory address
+            emitIndent();
+            emit("L ");
+            emitTypedAddress(node.in2, typeSuffix);
+            emitChar('\n');
+            
+            emitIndent();
+            emit(op);
+            emitChar(typeSuffix);
+            emitChar('\n');
+        }
     }
 
     // ============ Graph Traversal and Code Generation ============
@@ -1580,43 +1625,89 @@ public:
             emitLine("A(");
             indent_level++;
             
+            // First, count how many complex branches we have (branches that need more than a contact or single FB)
+            int complexBranchCount = 0;
+            for (int s = 0; s < sourceCount; s++) {
+                // Check if this source is just a simple contact
+                if (isContact(nodes[sourceIndices[s]].type)) {
+                    int srcIndices[MAX_NODES];
+                    int srcCount;
+                    getSourceNodes(nodes[sourceIndices[s]].id, srcIndices, srcCount, MAX_NODES);
+                    
+                    bool allEmitted = true;
+                    for (int i = 0; i < srcCount && allEmitted; i++) {
+                        bool found = false;
+                        for (int j = 0; j < emittedCount; j++) {
+                            if (srcIndices[i] == emittedChain[j]) { found = true; break; }
+                        }
+                        if (!found) allEmitted = false;
+                    }
+                    if (!allEmitted) complexBranchCount++;
+                } else {
+                    // Check if it's a simple function block (timer/counter/comparator) with no upstream contacts after common chain
+                    int srcIndices[MAX_NODES];
+                    int srcCount;
+                    getSourceNodes(nodes[sourceIndices[s]].id, srcIndices, srcCount, MAX_NODES);
+                    
+                    bool hasNonEmittedContacts = false;
+                    for (int i = 0; i < srcCount; i++) {
+                        bool found = false;
+                        for (int j = 0; j < emittedCount; j++) {
+                            if (srcIndices[i] == emittedChain[j]) { found = true; break; }
+                        }
+                        if (!found && isContact(nodes[srcIndices[i]].type)) {
+                            hasNonEmittedContacts = true;
+                            break;
+                        }
+                    }
+                    if (hasNonEmittedContacts) complexBranchCount++;
+                }
+            }
+            
+            bool needOrWrappers = (complexBranchCount > 1);
+            
             // Emit each source's unique part (the part after the common ancestor)
             for (int s = 0; s < sourceCount; s++) {
                 for (int i = 0; i < node_count; i++) nodes[i].visited = false;
                 
-                if (s > 0) {
-                    // Check if this source is just a simple contact
-                    if (isContact(nodes[sourceIndices[s]].type)) {
-                        // Get sources of this contact
-                        int srcIndices[MAX_NODES];
-                        int srcCount;
-                        getSourceNodes(nodes[sourceIndices[s]].id, srcIndices, srcCount, MAX_NODES);
-                        
-                        // If all sources are in the emitted chain, this is a simple OR
-                        bool allEmitted = true;
-                        for (int i = 0; i < srcCount && allEmitted; i++) {
-                            bool found = false;
-                            for (int j = 0; j < emittedCount; j++) {
-                                if (srcIndices[i] == emittedChain[j]) { found = true; break; }
-                            }
-                            if (!found) allEmitted = false;
+                // Check if this source is just a simple contact
+                if (isContact(nodes[sourceIndices[s]].type)) {
+                    // Get sources of this contact
+                    int srcIndices[MAX_NODES];
+                    int srcCount;
+                    getSourceNodes(nodes[sourceIndices[s]].id, srcIndices, srcCount, MAX_NODES);
+                    
+                    // If all sources are in the emitted chain, this is a simple OR
+                    bool allEmitted = true;
+                    for (int i = 0; i < srcCount && allEmitted; i++) {
+                        bool found = false;
+                        for (int j = 0; j < emittedCount; j++) {
+                            if (srcIndices[i] == emittedChain[j]) { found = true; break; }
                         }
-                        
-                        if (allEmitted) {
-                            emitContact(nodes[sourceIndices[s]], false, true);  // O contact
-                            continue;
-                        }
+                        if (!found) allEmitted = false;
                     }
                     
-                    // Complex OR branch
+                    if (allEmitted) {
+                        emitContact(nodes[sourceIndices[s]], s == 0, s > 0);  // A or O depending on first
+                        continue;
+                    }
+                }
+                
+                // Complex branch - wrap in O( only if there are multiple complex branches
+                if (needOrWrappers) {
                     emitLine("O(");
                     indent_level++;
                     emitConditionForNode(sourceIndices[s], depth + 2, false, stopAtEmittedOutputs);
                     indent_level--;
                     emitLine(")");
+                } else if (s == 0) {
+                    emitConditionForNode(sourceIndices[s], depth + 1, false, stopAtEmittedOutputs);
                 } else {
-                    // First source - emit its unique part (excluding common chain)
+                    emitLine("O(");
+                    indent_level++;
                     emitConditionForNode(sourceIndices[s], depth + 2, false, stopAtEmittedOutputs);
+                    indent_level--;
+                    emitLine(")");
                 }
             }
             
@@ -1748,51 +1839,48 @@ public:
         // Track which outputs have been processed
         bool outputProcessed[MAX_NODES] = { false };
         
-        // First pass: handle parallel output connections (same source -> multiple coils)
-        for (int c = 0; c < connection_count; c++) {
-            Connection& conn = connections[c];
+        // First pass: handle parallel branches (any node that feeds multiple termination nodes)
+        // Termination nodes include coils, timers, counters, comparators and operation blocks
+        // This handles both single-connection multiple destinations AND multiple connections from same source
+        for (int n = 0; n < node_count; n++) {
+            // Skip if this node type can't branch (outputs don't branch, they receive)
+            GraphNode& srcNode = nodes[n];
+            if (!isInputNode(srcNode.type) && !isTerminationNode(srcNode.type)) continue;
             
-            // Count how many destinations are output nodes
-            int outputDests[MAX_NODES];
-            int outputDestCount = 0;
-            for (int d = 0; d < conn.dest_count; d++) {
-                int destIdx = findNodeById(conn.destinations[d]);
-                if (destIdx >= 0 && isOutputNode(nodes[destIdx].type) && !outputProcessed[destIdx]) {
-                    outputDests[outputDestCount++] = destIdx;
+            // Get all destinations from this node (across ALL connections)
+            int allDestIndices[MAX_NODES];
+            int allDestCount;
+            getDestNodes(srcNode.id, allDestIndices, allDestCount, MAX_NODES);
+            
+            // Filter to termination nodes only (coils, timers, counters, comparators, ops)
+            int termDests[MAX_NODES];
+            int termDestCount = 0;
+            for (int d = 0; d < allDestCount; d++) {
+                int destIdx = allDestIndices[d];
+                GraphNode& dest = nodes[destIdx];
+                // Include termination nodes AND comparators (which act like contacts)
+                if ((isTerminationNode(dest.type) || isComparator(dest.type)) && !outputProcessed[destIdx] && !dest.emitted) {
+                    termDests[termDestCount++] = destIdx;
                 }
             }
             
-            // Skip if not multiple output destinations
-            if (outputDestCount < 2) continue;
+            // Skip if not multiple termination destinations
+            if (termDestCount < 2) continue;
             
-            // Emit condition chain from sources
-            if (conn.source_count > 1) {
-                // Multiple sources = OR logic
-                for (int s = 0; s < conn.source_count; s++) {
-                    int srcIdx = findNodeById(conn.sources[s]);
-                    if (srcIdx < 0) continue;
-                    for (int i = 0; i < node_count; i++) nodes[i].visited = false;
-                    if (s > 0) {
-                        emitConditionForNodeAsOr(srcIdx, 0);
-                    } else {
-                        emitConditionForNode(srcIdx, 0, false);
-                    }
-                }
-            } else if (conn.source_count == 1) {
-                int srcIdx = findNodeById(conn.sources[0]);
-                if (srcIdx >= 0) {
-                    for (int i = 0; i < node_count; i++) nodes[i].visited = false;
-                    emitConditionForNode(srcIdx, 0, false);
-                }
-            }
+            // Mark the source node as visited to avoid re-processing
+            srcNode.visited = true;
             
-            // Sort output destinations by Y position (top to bottom)
-            for (int i = 0; i < outputDestCount - 1; i++) {
-                for (int j = i + 1; j < outputDestCount; j++) {
-                    if (nodes[outputDests[j]].y < nodes[outputDests[i]].y) {
-                        int tmp = outputDests[i];
-                        outputDests[i] = outputDests[j];
-                        outputDests[j] = tmp;
+            // Emit condition chain for the source
+            for (int i = 0; i < node_count; i++) nodes[i].visited = false;
+            emitConditionForNode(n, 0, false);
+            
+            // Sort destinations by Y position (top to bottom)
+            for (int i = 0; i < termDestCount - 1; i++) {
+                for (int j = i + 1; j < termDestCount; j++) {
+                    if (nodes[termDests[j]].y < nodes[termDests[i]].y) {
+                        int tmp = termDests[i];
+                        termDests[i] = termDests[j];
+                        termDests[j] = tmp;
                     }
                 }
             }
@@ -1800,32 +1888,69 @@ public:
             // Use branch stack for parallel outputs
             emitLine("SAVE");
             indent_level++;
-            for (int d = 0; d < outputDestCount; d++) {
-                int destIdx = outputDests[d];
+            for (int d = 0; d < termDestCount; d++) {
+                int destIdx = termDests[d];
                 emitLine("L BR");
                 
                 GraphNode& destNode = nodes[destIdx];
-                // Emit the coil with TAP only if it has downstream contacts (not for coil-to-coil)
                 bool hasContinuation = hasDownstreamContact(destIdx);
-                // For operations: TAP before JCN if there are more outputs downstream
                 bool hasMoreOutputs = hasDownstreamOutput(destIdx);
                 
-                if (isCoil(destNode.type)) {
+                // Handle comparators first (they're like contacts, emit and continue)
+                if (isComparator(destNode.type)) {
+                    emitComparator(destNode, true);  // isFirst = true
+                    // Follow the chain from this comparator
+                    int compDestIndices[MAX_NODES];
+                    int compDestCount;
+                    getDestNodes(destNode.id, compDestIndices, compDestCount, MAX_NODES);
+                    for (int cd = 0; cd < compDestCount; cd++) {
+                        int compDestIdx = compDestIndices[cd];
+                        GraphNode& compDest = nodes[compDestIdx];
+                        if (isOperationBlock(compDest.type) && !compDest.emitted) {
+                            emitOperationBlock(compDest, hasDownstreamOutput(compDestIdx), hasDownstreamContact(compDestIdx));
+                            outputProcessed[compDestIdx] = true;
+                            compDest.emitted = true;
+                            if (hasDownstreamChain(compDestIdx)) {
+                                emitDownstreamChain(compDestIdx, outputProcessed);
+                            }
+                        } else if (isCoil(compDest.type) && !compDest.emitted) {
+                            emitCoil(compDest, hasDownstreamContact(compDestIdx));
+                            outputProcessed[compDestIdx] = true;
+                            compDest.emitted = true;
+                            if (hasDownstreamChain(compDestIdx)) {
+                                emitDownstreamChain(compDestIdx, outputProcessed);
+                            }
+                        }
+                    }
+                    destNode.emitted = true;
+                } else if (isCoil(destNode.type)) {
                     emitCoil(destNode, hasContinuation);
+                    outputProcessed[destIdx] = true;
+                    destNode.emitted = true;
+                    if (hasDownstreamChain(destIdx)) {
+                        emitDownstreamChain(destIdx, outputProcessed);
+                    }
                 } else if (isTimer(destNode.type)) {
                     emitTimer(destNode, hasContinuation);
+                    outputProcessed[destIdx] = true;
+                    destNode.emitted = true;
+                    if (hasDownstreamChain(destIdx)) {
+                        emitDownstreamChain(destIdx, outputProcessed);
+                    }
                 } else if (isCounter(destNode.type)) {
                     emitCounter(destNode, hasContinuation);
+                    outputProcessed[destIdx] = true;
+                    destNode.emitted = true;
+                    if (hasDownstreamChain(destIdx)) {
+                        emitDownstreamChain(destIdx, outputProcessed);
+                    }
                 } else if (isOperationBlock(destNode.type)) {
                     emitOperationBlock(destNode, hasMoreOutputs, hasContinuation);
-                }
-                outputProcessed[destIdx] = true;
-                destNode.emitted = true;  // Mark as emitted
-                
-                // Follow and emit the entire downstream chain (contact → coil sequences)
-                // Use hasDownstreamChain here since we still need to follow coil-to-coil chains
-                if (hasDownstreamChain(destIdx)) {
-                    emitDownstreamChain(destIdx, outputProcessed);
+                    outputProcessed[destIdx] = true;
+                    destNode.emitted = true;
+                    if (hasDownstreamChain(destIdx)) {
+                        emitDownstreamChain(destIdx, outputProcessed);
+                    }
                 }
             }
             indent_level--;
@@ -1863,15 +1988,8 @@ public:
             if (!sourceIsEmittedCoil) {
                 // Emit condition chain
                 if (sourceCount > 1) {
-                    // Multiple sources = OR logic
-                    for (int s = 0; s < sourceCount; s++) {
-                        for (int i = 0; i < node_count; i++) nodes[i].visited = false;
-                        if (s > 0) {
-                            emitConditionForNodeAsOr(sourceIndices[s], 0);
-                        } else {
-                            emitConditionForNode(sourceIndices[s], 0, false);
-                        }
-                    }
+                    // Multiple sources = OR logic - use emitOrSources for proper A(/O()) pattern
+                    emitOrSources(sourceIndices, sourceCount, 0, true);
                 } else if (sourceCount == 1) {
                     for (int i = 0; i < node_count; i++) nodes[i].visited = false;
                     emitConditionForNode(sourceIndices[0], 0, false);

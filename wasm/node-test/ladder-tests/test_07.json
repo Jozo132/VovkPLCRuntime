@@ -1,0 +1,18 @@
+{
+    "comment": "Network 2",
+    "nodes": [
+        { "id": "JT6tVfZKA1FcH", "x": 0, "y": 0, "type": "contact", "symbol": "X0.0", "inverted": false, "trigger": "rising" },
+        { "id": "n62Sr8gSHpTVR", "x": 2, "y": 0, "type": "fb_cmp_lt", "symbol": "", "inverted": false, "dataType": "i16", "in1": "M10", "in2": "10" },
+        { "id": "Ew8d3xW46bNfp", "x": 2, "y": 1, "type": "fb_cmp_gte", "symbol": "", "inverted": false, "dataType": "i16", "in1": "M10", "in2": "10" },
+        { "id": "AeAw0mGfYMINI", "x": 4, "y": 1, "type": "coil_rset", "symbol": "Y0.0", "inverted": false },
+        { "id": "JEHUG90Z5OpUB", "x": 3, "y": 0, "type": "fb_inc", "symbol": "M10", "inverted": false, "dataType": "i16", "address": "M10" },
+        { "id": "WQGT2qb2gvv8y", "x": 4, "y": 0, "type": "coil_set", "symbol": "Y0.0", "inverted": false }
+    ],
+    "connections": [
+        { "sources": [ "JT6tVfZKA1FcH" ], "destinations": [ "n62Sr8gSHpTVR" ] },
+        { "sources": [ "JT6tVfZKA1FcH" ], "destinations": [ "Ew8d3xW46bNfp" ] },
+        { "sources": [ "Ew8d3xW46bNfp" ], "destinations": [ "AeAw0mGfYMINI" ] },
+        { "sources": [ "JEHUG90Z5OpUB" ], "destinations": [ "WQGT2qb2gvv8y" ] },
+        { "sources": [ "n62Sr8gSHpTVR" ], "destinations": [ "JEHUG90Z5OpUB" ] }
+    ]
+}

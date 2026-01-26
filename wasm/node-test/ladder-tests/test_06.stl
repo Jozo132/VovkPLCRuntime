@@ -1,0 +1,24 @@
+// Generated from Ladder Graph by VovkPLCRuntime
+
+A Y0.0
+SAVE
+    L BR
+    TON T0, T#5s
+    TOF T1, T#10s
+    R Y0.0
+    L BR
+    TP T2, T#7s
+    = Y0.7
+DROP BR
+
+A X0.0
+TON T3, T#2s
+= Y1.0
+
+A X0.0
+TOF T4, T#2s
+= Y1.1
+
+A X0.0
+TP T5, T#2s
+= Y1.2
