@@ -1,0 +1,8 @@
+PROJECT MissingBlockLang
+VERSION 1.0
+
+PROGRAM Main
+    BLOCK Code
+exit
+    END_BLOCK
+END_PROGRAM

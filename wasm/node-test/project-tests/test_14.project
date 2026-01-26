@@ -1,0 +1,21 @@
+PROJECT NestedSymbols
+VERSION 1.0
+
+SYMBOLS
+    sensor1 : bit : X0.0
+    sensor2 : bit : X0.1
+    sensor3 : bit : X0.2
+    actuator1 : bit : Y0.0
+    actuator2 : bit : Y0.1
+END_SYMBOLS
+
+PROGRAM Control
+    BLOCK Logic LANG=STL
+A X0.0
+O X0.1
+O X0.2
+= Y0.0
+AN X0.2
+= Y0.1
+    END_BLOCK
+END_PROGRAM

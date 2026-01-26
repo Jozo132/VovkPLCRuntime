@@ -1,0 +1,15 @@
+{
+  "success": 0,
+  "project": { "name": "TestInvalidLang", "version": "1.0" },
+  "bytecode": "",
+  "bytecodeLength": 0,
+  "checksum": 0,
+  "files": [],
+  "blocks": [],
+  "symbols": [],
+  "memoryAreas": [],
+  "execution": { "steps": 0, "stackSize": 0 },
+  "problems": [
+    { "severity": "error", "message": "Unknown language: INVALID", "line": 5, "column": 28, "file": "Main", "block": "Code", "language": "UNKNOWN" }
+  ]
+}

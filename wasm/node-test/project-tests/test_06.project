@@ -1,0 +1,8 @@
+PROJECT LadderSimple
+VERSION 1.0
+
+PROGRAM Network1
+    BLOCK Rung1 LANG=LADDER
+{"nodes":[{"id":"n1","type":"contact","symbol":"X0.0","x":0,"y":0},{"id":"n2","type":"coil","symbol":"Y0.0","x":1,"y":0}],"connections":[{"sources":["n1"],"destinations":["n2"]}]}
+    END_BLOCK
+END_PROGRAM

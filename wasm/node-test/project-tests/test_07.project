@@ -1,0 +1,8 @@
+PROJECT TestInvalidLang
+VERSION 1.0
+
+PROGRAM Main
+    BLOCK Code LANG=INVALID
+exit
+    END_BLOCK
+END_PROGRAM

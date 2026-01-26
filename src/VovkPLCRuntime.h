@@ -29,3 +29,4 @@
 #include "tools/assembly/stl-linter.h"
 #include "tools/assembly/network-ir.h"
 #include "tools/assembly/ladder-compiler.h"
+#include "tools/assembly/project-compiler.h"

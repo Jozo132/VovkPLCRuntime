@@ -1,0 +1,16 @@
+PROJECT WithSymbols
+VERSION 2.0
+
+SYMBOLS
+    input1 : bit : X0.0
+    input2 : bit : X0.1
+    output1 : bit : Y0.0
+END_SYMBOLS
+
+PROGRAM Network1
+    BLOCK Logic LANG=STL
+A X0.0
+A X0.1
+= Y0.0
+    END_BLOCK
+END_PROGRAM

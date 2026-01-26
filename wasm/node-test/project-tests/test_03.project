@@ -1,0 +1,33 @@
+PROJECT MultiBlockWithSymbols
+VERSION 3.0
+
+MEMORY
+M 448-703
+I 64-127
+Q 128-191
+T 704-1023
+END_MEMORY
+
+SYMBOLS
+    start_btn : bit : X0.0
+    stop_btn : bit : X0.1
+    motor : bit : Y0.0
+END_SYMBOLS
+
+PROGRAM Main
+    BLOCK Init LANG=PLCASM
+u8.readBit start_btn
+u8.readBit stop_btn
+u8.not
+u8.and
+jump_if_not skip_set
+u8.writeBitOn motor
+skip_set:
+exit
+    END_BLOCK
+
+    BLOCK Logic LANG=STL
+A stop_btn
+R motor
+    END_BLOCK
+END_PROGRAM

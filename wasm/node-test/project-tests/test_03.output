@@ -1,0 +1,15 @@
+{
+  "success": 0,
+  "project": { "name": "MultiBlock", "version": "3.0" },
+  "bytecode": "",
+  "bytecodeLength": 0,
+  "checksum": 0,
+  "files": [],
+  "blocks": [],
+  "symbols": [],
+  "memoryAreas": [],
+  "execution": { "steps": 0, "stackSize": 0 },
+  "problems": [
+    { "severity": "error", "message": "PLCASM compilation failed", "line": 34, "column": 1, "file": "Main", "block": "Init", "language": "PLCASM" }
+  ]
+}

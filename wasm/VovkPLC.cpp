@@ -159,6 +159,10 @@ WASM_EXPORT u32 getMemoryLocation() {
     return (u32) runtime.memory;
 }
 
+WASM_EXPORT u32 getLastInstructionCount() {
+    return runtime.last_instruction_count;
+}
+
 WASM_EXPORT u32 getMillis() {
     return millis();
 }

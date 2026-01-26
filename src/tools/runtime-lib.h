@@ -178,6 +178,7 @@ public:
     u32 max_jitter_us = 0;
     u32 last_run_timestamp_us = 0;
     u32 previous_period_us = 0;
+    u32 last_instruction_count = 0; // Number of instructions executed in last run()
 
     static void splash() {
         Serial.println();
@@ -1106,15 +1107,18 @@ RuntimeError VovkPLCRuntime::run(u8* program, u32 prog_size) {
     
     updateGlobals();
     u32 index = 0;
+    u32 instruction_count = 0;
     RuntimeError status = STATUS_SUCCESS;
     while (index < prog_size) {
         status = step(program, prog_size, index);
+        instruction_count++;
         if (status != STATUS_SUCCESS) {
             if (status == PROGRAM_EXITED)
                 status = STATUS_SUCCESS;
             break;
         }
     }
+    last_instruction_count = instruction_count;
     if (status == STATUS_SUCCESS) updateCycleStats((u32) (micros() - start_us));
     else updateRamStats();
     return status;

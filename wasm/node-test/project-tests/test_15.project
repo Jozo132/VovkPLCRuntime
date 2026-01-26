@@ -1,0 +1,11 @@
+PROJECT BitwiseOps
+VERSION 1.0
+
+PROGRAM Main
+    BLOCK BitOps LANG=PLCASM
+u8.const 255
+u8.const 15
+u8.and
+exit
+    END_BLOCK
+END_PROGRAM

@@ -1,0 +1,16 @@
+PROJECT MultiProgram
+VERSION 2.0
+
+PROGRAM Startup
+    BLOCK Initialize LANG=PLCASM
+u8.const 1
+exit
+    END_BLOCK
+END_PROGRAM
+
+PROGRAM MainLogic
+    BLOCK Process LANG=STL
+A X0.0
+= Y0.0
+    END_BLOCK
+END_PROGRAM
