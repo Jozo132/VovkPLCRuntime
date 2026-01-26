@@ -241,6 +241,14 @@ WASM_EXPORT void resetDeviceHealth() {
     runtime.resetDeviceHealth();
 }
 
+WASM_EXPORT u32 getStackSize() {
+    return runtime.stack.size();
+}
+
+WASM_EXPORT void clearStack() {
+    runtime.clear();
+}
+
 
 // template <typename T> struct OutputBuffer {
 //     T* data = nullptr;

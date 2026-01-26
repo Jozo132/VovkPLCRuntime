@@ -468,8 +468,8 @@ public:
     // Check if a termination node should emit TAP (has outgoing connections to continuation nodes)
     // Only COILS need TAP because they consume the RLO
     // Timers and counters push their Q output as the new RLO, so they don't need TAP
-    // TAP is needed ONLY when the coil output feeds into a CONTACT (input node)
-    // Coil-to-coil passthrough does NOT need TAP - they share the same RLO value
+    // TAP is needed when the coil output feeds into ANY downstream node (contact OR coil)
+    // because the coil consumes the RLO value from the stack
     bool nodeNeedsTap(int nodeIdx) {
         if (nodeIdx < 0 || nodeIdx >= node_count) return false;
         GraphNode& node = nodes[nodeIdx];
@@ -477,8 +477,8 @@ public:
         // Only COILS need TAP - timers/counters push their Q output to the stack
         if (!isCoil(node.type)) return false;
         
-        // Check if node has outgoing connections to input nodes (contacts)
-        // TAP is only needed if the coil's RLO is used as a condition input
+        // Check if node has outgoing connections to any downstream nodes
+        // TAP is needed if there's any downstream node that needs the RLO
         int destIndices[MAX_NODES];
         int destCount;
         getDestNodes(node.id, destIndices, destCount, MAX_NODES);
@@ -487,7 +487,9 @@ public:
             GraphNode& dest = nodes[destIndices[d]];
             // If destination is a contact (input), we need TAP
             if (isInputNode(dest.type)) return true;
-            // Coil-to-coil passthrough does NOT need TAP - they share the same RLO
+            // If destination is another coil/output, we also need TAP
+            // because the current coil consumes the RLO
+            if (isOutputNode(dest.type)) return true;
         }
         
         return false;
@@ -617,7 +619,8 @@ public:
                         bool hasMoreOutputs = (c < outputCount - 1) || hasDownstreamOutput(outIdx);
                         
                         if (isCoil(outNode.type)) {
-                            emitCoil(outNode, needsTapAfter);
+                            // Coils need TAP if they have ANY downstream nodes (contacts OR other coils)
+                            emitCoil(outNode, needsTapAfter || hasMoreOutputs);
                         } else if (isOperationBlock(outNode.type)) {
                             emitOperationBlock(outNode, hasMoreOutputs, needsTapAfter);
                         }
@@ -636,7 +639,8 @@ public:
                 bool hasMoreOutputs = hasDownstreamOutput(destIdx);
                 
                 if (isCoil(dest.type)) {
-                    emitCoil(dest, needsTapAfter);
+                    // Coils need TAP if they have ANY downstream nodes (contacts OR other coils)
+                    emitCoil(dest, needsTapAfter || hasMoreOutputs);
                 } else if (isOperationBlock(dest.type)) {
                     emitOperationBlock(dest, hasMoreOutputs, needsTapAfter);
                 }
@@ -1438,8 +1442,9 @@ public:
                 emitConditionForNode(sourceIndices[0], depth + 1, isOrBranch, stopAtEmittedOutputs);
             }
             
-            // Emit the coil with TAP to pass RLO forward
-            emitCoil(node, true);  // TAP after coil
+            // Emit the coil - only TAP if it has downstream nodes that need the RLO
+            bool needsTap = hasDownstreamContact(nodeIdx) || hasDownstreamOutput(nodeIdx);
+            emitCoil(node, needsTap);
             node.emitted = true;
             node.visited = false;
             return true;
@@ -1667,108 +1672,52 @@ public:
             // Save RLO before branching so each branch can access it with L BR
             emitLine("SAVE");
             
-            // Emit A( <unique parts OR'd together> )
-            emitLine("A(");
-            indent_level++;
-            
-            // First, count how many complex branches we have (branches that need more than a contact or single FB)
-            int complexBranchCount = 0;
-            for (int s = 0; s < sourceCount; s++) {
-                // Check if this source is just a simple contact
-                if (isContact(nodes[sourceIndices[s]].type)) {
-                    int srcIndices[MAX_NODES];
-                    int srcCount;
-                    getSourceNodes(nodes[sourceIndices[s]].id, srcIndices, srcCount, MAX_NODES);
-                    
-                    bool allEmitted = true;
-                    for (int i = 0; i < srcCount && allEmitted; i++) {
-                        bool found = false;
-                        for (int j = 0; j < emittedCount; j++) {
-                            if (srcIndices[i] == emittedChain[j]) { found = true; break; }
-                        }
-                        if (!found) allEmitted = false;
-                    }
-                    if (!allEmitted) complexBranchCount++;
-                } else {
-                    // Check if it's a simple function block (timer/counter/comparator) with no upstream contacts after common chain
-                    int srcIndices[MAX_NODES];
-                    int srcCount;
-                    getSourceNodes(nodes[sourceIndices[s]].id, srcIndices, srcCount, MAX_NODES);
-                    
-                    bool hasNonEmittedContacts = false;
-                    for (int i = 0; i < srcCount; i++) {
-                        bool found = false;
-                        for (int j = 0; j < emittedCount; j++) {
-                            if (srcIndices[i] == emittedChain[j]) { found = true; break; }
-                        }
-                        if (!found && isContact(nodes[srcIndices[i]].type)) {
-                            hasNonEmittedContacts = true;
-                            break;
-                        }
-                    }
-                    if (hasNonEmittedContacts) complexBranchCount++;
-                }
-            }
-            
-            bool needOrWrappers = (complexBranchCount > 1);
-            
-            // Emit each source's unique part (the part after the common ancestor)
+            // In SAVE pattern, all branches need O( L BR ... ) to be properly gated
+            // Emit each source's unique part wrapped in O( L BR ... )
             for (int s = 0; s < sourceCount; s++) {
                 for (int i = 0; i < node_count; i++) nodes[i].visited = false;
                 
-                // Check if this source is just a simple contact
+                // Check if this source is just a simple contact with all sources emitted
+                bool isSimpleEmittedContact = false;
                 if (isContact(nodes[sourceIndices[s]].type)) {
-                    // Get sources of this contact
                     int srcIndices[MAX_NODES];
                     int srcCount;
                     getSourceNodes(nodes[sourceIndices[s]].id, srcIndices, srcCount, MAX_NODES);
                     
-                    // If all sources are in the emitted chain, this is a simple OR
-                    bool allEmitted = true;
-                    for (int i = 0; i < srcCount && allEmitted; i++) {
+                    isSimpleEmittedContact = true;
+                    for (int i = 0; i < srcCount && isSimpleEmittedContact; i++) {
                         bool found = false;
                         for (int j = 0; j < emittedCount; j++) {
                             if (srcIndices[i] == emittedChain[j]) { found = true; break; }
                         }
-                        if (!found) allEmitted = false;
-                    }
-                    
-                    if (allEmitted) {
-                        // Simple contacts inside the OR group should be OR'd together
-                        // The outer AND with BR happens when the A(...) block closes
-                        if (s == 0) {
-                            // First contact: just load its value (no AND/OR prefix)
-                            emitContact(nodes[sourceIndices[s]], true, false);  // Uses A prefix but no prior RLO
-                        } else {
-                            emitContact(nodes[sourceIndices[s]], false, true);  // OR with previous
-                        }
-                        continue;
+                        if (!found) isSimpleEmittedContact = false;
                     }
                 }
                 
-                // Complex branch - wrap in O( only if there are multiple complex branches
-                if (needOrWrappers) {
-                    emitLine("O(");
-                    indent_level++;
-                    emitLine("L BR");  // Load saved RLO for this branch
-                    emitConditionForNode(sourceIndices[s], depth + 2, false, stopAtEmittedOutputs);
-                    indent_level--;
-                    emitLine(")");
-                } else if (s == 0) {
-                    emitLine("L BR");  // Load saved RLO for single branch
-                    emitConditionForNode(sourceIndices[s], depth + 1, false, stopAtEmittedOutputs);
+                // All branches wrapped in O( L BR ... ) for proper gating with common ancestor
+                if (s == 0) {
+                    // First branch doesn't need O( wrapper, just L BR
+                    emitLine("L BR");
+                    if (isSimpleEmittedContact) {
+                        emitContact(nodes[sourceIndices[s]], true, false);  // A/AN contact
+                    } else {
+                        emitConditionForNode(sourceIndices[s], depth + 1, false, stopAtEmittedOutputs);
+                    }
                 } else {
+                    // Subsequent branches wrapped in O( L BR ... )
                     emitLine("O(");
                     indent_level++;
-                    emitLine("L BR");  // Load saved RLO for this branch
-                    emitConditionForNode(sourceIndices[s], depth + 2, false, stopAtEmittedOutputs);
+                    emitLine("L BR");
+                    if (isSimpleEmittedContact) {
+                        emitContact(nodes[sourceIndices[s]], true, false);  // A/AN contact
+                    } else {
+                        emitConditionForNode(sourceIndices[s], depth + 2, false, stopAtEmittedOutputs);
+                    }
                     indent_level--;
                     emitLine(")");
                 }
             }
             
-            indent_level--;
-            emitLine(")");
             emitLine("DROP BR");  // Clean up the saved RLO
             
             // Unmark emitted nodes
@@ -1986,7 +1935,9 @@ public:
                     }
                     destNode.emitted = true;
                 } else if (isCoil(destNode.type)) {
-                    emitCoil(destNode, hasContinuation);
+                    // Coils need TAP if they have ANY downstream nodes (contacts OR other coils)
+                    // because the coil consumes the RLO from the stack
+                    emitCoil(destNode, hasContinuation || hasMoreOutputs);
                     outputProcessed[destIdx] = true;
                     destNode.emitted = true;
                     if (hasDownstreamChain(destIdx)) {

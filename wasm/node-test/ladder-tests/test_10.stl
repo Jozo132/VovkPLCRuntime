@@ -7,8 +7,7 @@ A M0.1
 TON T4, T#1s
 O(
     L BR
-    A M0.2
-    TON T5, T#1s
+    AN M0.2
 )
 O(
     L BR
@@ -16,3 +15,4 @@ O(
 )
 DROP BR
 = Y0.0
+

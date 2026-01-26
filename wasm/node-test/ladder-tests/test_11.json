@@ -1,0 +1,4 @@
+{
+    "comment": "Test with intentional stack leak via raw STL",
+    "expect_stack_leak": true
+}

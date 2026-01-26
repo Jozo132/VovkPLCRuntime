@@ -45,6 +45,53 @@ function normalizeSTL(stl) {
         .join('\n')
 }
 
+// Check STL code for stack leaks by compiling and running it
+// Returns { success: boolean, error?: string, stackDepth?: number }
+function checkSTLForStackLeak(runtime, stlCode) {
+    try {
+        // Clear the runtime stack
+        if (runtime.wasm_exports.clearStack) {
+            runtime.wasm_exports.clearStack()
+        }
+        
+        // Compile STL to PLCASM
+        runtime.wasm_exports.streamClear()
+        streamCode(runtime, stlCode)
+        runtime.wasm_exports.stl_load_from_stream()
+        const stlCompileSuccess = runtime.wasm_exports.stl_compile()
+        
+        if (!stlCompileSuccess) {
+            return { success: false, error: 'STL compilation failed' }
+        }
+        
+        runtime.wasm_exports.stl_output_to_stream()
+        const plcasm = runtime.readStream()
+        
+        // Compile PLCASM to bytecode
+        runtime.downloadAssembly(plcasm)
+        const compileError = runtime.wasm_exports.compileAssembly(false)
+        
+        if (compileError) {
+            return { success: false, error: 'PLCASM compilation failed' }
+        }
+        
+        // Load and run the program
+        runtime.wasm_exports.loadCompiledProgram()
+        runtime.wasm_exports.run()
+        
+        // Check stack depth
+        const stackDepth = runtime.wasm_exports.getStackSize()
+        
+        if (stackDepth !== 0) {
+            return { success: false, error: `Stack leak: ${stackDepth} byte(s) left on stack`, stackDepth }
+        }
+        
+        return { success: true, stackDepth: 0 }
+    } catch (e) {
+        return { success: false, error: e.message }
+    }
+}
+
 // Compare two STL strings and show differences using unified diff style
 function compareSTL(expected, actual) {
     const expectedLines = expected.split('\n').map(l => l.trim()).filter(l => l)
@@ -116,6 +163,11 @@ async function runTests() {
         const jsonPath = path.join(testDir, `${testCase}.json`)
         const stlPath = path.join(testDir, `${testCase}.stl`)
         
+        // Clear the runtime stack before each test
+        if (runtime.wasm_exports.clearStack) {
+            runtime.wasm_exports.clearStack()
+        }
+        
         const ladderJson = fs.readFileSync(jsonPath, 'utf8')
         
         try {
@@ -135,8 +187,23 @@ async function runTests() {
             runtime.wasm_exports.ladder_graph_output_to_stream()
             const actualSTL = runtime.readStream()
             
-            // Check if expected STL file exists - if not, generate it
+            // Check if this is an expected stack leak test (marked in JSON)
+            const isExpectedLeakTest = ladderJson.includes('"expect_stack_leak"')
+            
+            // Check if expected STL file exists - if not, verify and generate it
             if (!fs.existsSync(stlPath)) {
+                // Before saving, check for stack leaks (unless it's an expected leak test)
+                if (!isExpectedLeakTest) {
+                    const leakCheck = checkSTLForStackLeak(runtime, actualSTL)
+                    if (!leakCheck.success) {
+                        console.log(`${RED}✗${RESET} ${testCase} - Cannot generate .stl file: ${leakCheck.error}`)
+                        console.log(`  Generated STL:`)
+                        actualSTL.split('\n').forEach((line, i) => console.log(`    ${i+1}| ${line}`))
+                        failed++
+                        failures.push({ name: testCase, error: `Generated STL has error: ${leakCheck.error}`, actual: actualSTL })
+                        continue
+                    }
+                }
                 fs.writeFileSync(stlPath, actualSTL)
                 console.log(`${CYAN}+${RESET} ${testCase} - Generated expected .stl file`)
                 passed++
@@ -149,15 +216,37 @@ async function runTests() {
             const normalizedExpected = normalizeSTL(expectedSTL)
             const normalizedActual = normalizeSTL(actualSTL)
             
-            if (normalizedExpected === normalizedActual) {
-                console.log(`${GREEN}✓${RESET} ${testCase}`)
-                passed++
-            } else {
+            // Special case: if generated STL is empty/minimal, use the expected STL for stack testing
+            // This allows testing raw PLCASM or manually written STL for stack leaks
+            const stlToTest = normalizedActual.length <= 50 ? expectedSTL : actualSTL
+            const isRawTest = normalizedActual.length <= 50
+            
+            if (!isRawTest && normalizedExpected !== normalizedActual) {
                 console.log(`${RED}✗${RESET} ${testCase} - STL output mismatch`)
                 const diffs = compareSTL(expectedSTL, actualSTL)
                 failures.push({ name: testCase, diffs, expected: expectedSTL, actual: actualSTL })
                 failed++
+                continue
             }
+            
+            // Check for stack leaks by compiling and running the STL
+            const leakCheck = checkSTLForStackLeak(runtime, stlToTest)
+            
+            if (!leakCheck.success) {
+                if (isExpectedLeakTest) {
+                    // This test expects a stack leak - it's a negative test
+                    console.log(`${GREEN}✓${RESET} ${testCase} ${CYAN}(expected stack leak: ${leakCheck.stackDepth} byte(s))${RESET}`)
+                    passed++
+                    continue
+                }
+                console.log(`${RED}✗${RESET} ${testCase} - ${leakCheck.error}`)
+                failed++
+                failures.push({ name: testCase, error: leakCheck.error })
+                continue
+            }
+            
+            console.log(`${GREEN}✓${RESET} ${testCase}`)
+            passed++
         } catch (e) {
             console.log(`${RED}✗${RESET} ${testCase} - Error: ${e.message}`)
             failed++

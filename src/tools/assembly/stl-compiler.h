@@ -134,6 +134,9 @@ public:
     
     // Track when BR is loaded to stack (L BR) for combining with comparison results
     bool br_loaded_for_comparison = false;
+    
+    // Track when TAP has been pre-emitted by SET/RESET handling (to avoid double emission)
+    bool tap_consumed = false;
 
     // Nesting stack for A(, O(, X( operations
     char nesting_ops[STL_MAX_NESTING_DEPTH]; // 'A', 'O', 'X'
@@ -178,6 +181,7 @@ public:
         pos = 0;
         network_has_rlo = false;
         br_loaded_for_comparison = false;
+        tap_consumed = false;
         nesting_depth = 0;
         label_counter = 0;
         compilation_hash = 0;
@@ -756,8 +760,10 @@ public:
     }
     
     // Lookahead to check if the next non-comment instruction is an output (=, S, R)
-    // This allows us to emit u8.copy only when needed for multiple coil outputs
-    bool peekNextIsOutput() {
+    // or TAP. Returns true if yes, and sets foundTap to true if TAP specifically.
+    // This allows us to emit u8.copy only when needed for multiple coil outputs.
+    bool peekNextIsOutput(bool* foundTap = nullptr) {
+        if (foundTap) *foundTap = false;
         int savedPos = pos;
         int savedLine = current_line;
         int savedCol = current_column;
@@ -815,6 +821,7 @@ public:
                         // Check it's standalone TAP, not TAPE or similar
                         if (pos + 3 >= stl_length || !isAlphaNum(stl_source[pos + 3])) {
                             pos = savedPos; current_line = savedLine; current_column = savedCol;
+                            if (foundTap) *foundTap = true;
                             return true;
                         }
                     }
@@ -880,8 +887,11 @@ public:
         char plcAddr[64];
         convertAddress(operand, plcAddr);
         // Only duplicate RLO if another output instruction follows
-        if (peekNextIsOutput()) {
+        // If the next instruction is TAP, mark it as consumed since we emit the copy here
+        bool foundTap = false;
+        if (peekNextIsOutput(&foundTap)) {
             emit("u8.copy\n");
+            if (foundTap) tap_consumed = true;
         }
         emit("u8.writeBit ");
         emitLine(plcAddr);
@@ -909,8 +919,11 @@ public:
         int savedCounter = label_counter++;
         
         // Only duplicate RLO if another output instruction follows
-        if (peekNextIsOutput()) {
+        // If the next instruction is TAP, mark it as consumed since we emit the copy here
+        bool foundTap = false;
+        if (peekNextIsOutput(&foundTap)) {
             emit("u8.copy\n");
+            if (foundTap) tap_consumed = true;  // TAP will be consumed, don't emit again
         }
         // Use relative jump for position-independent bytecode
         emit("jmp_if_not_rel __skip_set_");
@@ -939,8 +952,11 @@ public:
         int savedCounter = label_counter++;
         
         // Only duplicate RLO if another output instruction follows
-        if (peekNextIsOutput()) {
+        // If the next instruction is TAP, mark it as consumed since we emit the copy here
+        bool foundTap = false;
+        if (peekNextIsOutput(&foundTap)) {
             emit("u8.copy\n");
+            if (foundTap) tap_consumed = true;  // TAP will be consumed, don't emit again
         }
         // Use relative jump for position-independent bytecode
         emit("jmp_if_not_rel __skip_reset_");
@@ -1606,6 +1622,12 @@ public:
         // TAP (VovkPLCRuntime extension) - duplicate RLO on stack to preserve it
         // This allows the next instruction to consume one copy while keeping one for further use
         if (strEq(upperInstr, "TAP")) {
+            // Check if TAP was already consumed by a preceding S/R instruction
+            if (tap_consumed) {
+                tap_consumed = false;  // Reset the flag
+                network_has_rlo = true;  // RLO is still on stack (copy was emitted by S/R)
+                return;  // Skip emitting another copy
+            }
             emitLine("u8.copy");  // Duplicate top of stack (RLO)
             network_has_rlo = true;
             return;
