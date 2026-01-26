@@ -983,12 +983,14 @@ public:
     // If emitTapAfter is true, emit TAP instruction after the coil (for passthrough)
     void emitCoil(GraphNode& node, bool emitTapAfter = false) {
         const char* instr = "= ";
+        bool isInverted = node.inverted || strEqI(node.type, "coil_neg");
+        
         if (strEqI(node.type, "coil_set")) instr = "S ";
         else if (strEqI(node.type, "coil_rset")) instr = "R ";
-        else if (strEqI(node.type, "coil_neg")) {
-            // Negated coil: invert RLO before output
-            emitLine("NOT");
-            instr = "= ";
+        else if (isInverted) {
+            // Inverted coil: use =N instruction which negates only for the write,
+            // preserving the original RLO for continuation
+            instr = "=N ";
         }
         
         emitIndent();
@@ -996,7 +998,9 @@ public:
         emit(node.address);
         emitChar('\n');
         
-        if (emitTapAfter) {
+        // For inverted coils, =N preserves the RLO so no TAP needed
+        // For non-inverted coils, TAP after to preserve RLO for continuation
+        if (emitTapAfter && !isInverted) {
             emitLine("TAP");
         }
     }

@@ -888,6 +888,19 @@ public:
         network_has_rlo = false; // Consumed (or preserved if we duped)
     }
 
+    // Handle =N (negated assign) - writes NOT(RLO) but preserves original RLO
+    void handleAssignNegated(const char* operand) {
+        char plcAddr[64];
+        convertAddress(operand, plcAddr);
+        // Always duplicate RLO first, then invert the copy, write, leaving original on stack
+        emit("u8.copy\n");
+        emit("u8.not\n");
+        emit("u8.writeBit ");
+        emitLine(plcAddr);
+        // Original RLO is still on stack
+        network_has_rlo = true;
+    }
+
     // Handle S (set if RLO=1)
     void handleSet(const char* operand) {
         char plcAddr[64];
@@ -1375,7 +1388,7 @@ public:
                 continue;
             }
             
-            // = (assign) instruction OR ==I/==D/==R comparison
+            // = (assign) instruction OR ==I/==D/==R comparison OR =N (negated assign)
             if (c == '=') {
                 advance();
                 // Check if this is ==I/==D/==R comparison
@@ -1400,7 +1413,16 @@ public:
                     emit("// Unknown comparison: ==\n");
                     continue;
                 }
-                // It's the assign instruction
+                // Check for =N (negated assign) - writes NOT(RLO) but preserves original
+                if (peek() == 'N' || peek() == 'n') {
+                    advance(); // consume 'N'
+                    skipWhitespace();
+                    char operand[64];
+                    readIdentifier(operand, sizeof(operand));
+                    handleAssignNegated(operand);
+                    continue;
+                }
+                // It's the regular assign instruction
                 skipWhitespace();
                 char operand[64];
                 readIdentifier(operand, sizeof(operand));
