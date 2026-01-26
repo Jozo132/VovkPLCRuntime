@@ -1075,6 +1075,28 @@ void VovkPLCRuntime::updateGlobals() {
     memory[base + 11] = interval_time_days;
 
     writeMemory(base + 12, (u8*) &uptime_seconds, sizeof(u32));
+
+    // System Time (Unix Timestamp style) - Offset 16 (4 bytes)
+    // Read from memory, increment if 1s elapsed, write back
+    static bool _last_P_1s = false;
+    if (P_1s && !_last_P_1s) {
+        // Increment system time in memory (Little Endian)
+        u32 t_current = 0;
+        // Read current
+        t_current |= memory[base + 16];
+        t_current |= ((u32)memory[base + 17]) << 8;
+        t_current |= ((u32)memory[base + 18]) << 16;
+        t_current |= ((u32)memory[base + 19]) << 24;
+        
+        t_current++;
+        
+        // Write back
+        memory[base + 16] = t_current & 0xFF;
+        memory[base + 17] = (t_current >> 8) & 0xFF;
+        memory[base + 18] = (t_current >> 16) & 0xFF;
+        memory[base + 19] = (t_current >> 24) & 0xFF;
+    }
+    _last_P_1s = P_1s;
 }
 
 // Execute the whole PLC program, returns an erro code (0 on success)

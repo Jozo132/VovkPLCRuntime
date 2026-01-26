@@ -1654,6 +1654,18 @@ class VovkPLC_class {
     }
 
     /**
+     * Writes a single byte to memory.
+     * @param {number} address - Address to write to
+     * @param {number} byte - Byte value
+     * @returns {number} 1 on success
+     */
+    writeMemoryByte = (address, byte) => {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        if (!this.wasm_exports.writeMemoryByte) throw new Error("'writeMemoryByte' function not found")
+        return this.wasm_exports.writeMemoryByte(address, byte)
+    }
+
+    /**
      * Writes data to the PLC's RAM.
      *
      * @param {number} address - Relative address to start writing to.
