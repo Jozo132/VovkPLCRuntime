@@ -45,7 +45,6 @@
   - `stack/` - Stack implementation
 - `wasm/VovkPLC.cpp` - WASM entry point and exported functions
 - `wasm/node-test/` - Node.js test scripts
-- `wasm/web-server-test/` - Browser demo/test server
 - `examples/` - Arduino example sketches
 
 ## Platform Targets

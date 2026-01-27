@@ -13,7 +13,6 @@ The library allows you to run, update and online-debug PLC programs. The runtime
 Updating the running PLC programs is done almost instantly, without the need to recompile the Arduino sketch. 
 
 I've written a custom assembly language for the PLC runtime, which is used to compile PLC logic to the PLC bytecode that the runtime understands. This assembly language is the base that allows more complex programming languages to be built on top of it.
-The web interface is provided in the `./wasm/web-server-test` folder of this library.
 The PLC runtime runs in a custom stack-based virtual machine that has its' own instruction set and memory model.
 
 The runtime library just barely fits the Arduino Nano's 32KB of flash memory, so it is recommended to use a board with more memory if you plan to use this library in a more advanced project.

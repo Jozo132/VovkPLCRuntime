@@ -20,13 +20,8 @@ try {
     const msg = `The compiled WASM file is located in: ${BUILD_PATH}VovkPLC.wasm`;
     console.log('-'.repeat(msg.length));
     console.log(msg);
-    console.log(`Along with the JS wrapper: ${BUILD_PATH}VovkPLC.js`);
+    console.log(`Along with: ${BUILD_PATH}VovkPLC.js, ${BUILD_PATH}VovkPLC.worker.js`);
     console.log('-'.repeat(msg.length));
-    console.log(`To use it, navigate into the ${BUILD_PATH} directory`);
-    console.log('and you can either test it like for example:');
-    console.log("   - Node.JS -> cd into 'node-test' and run 'node unit_test.js'");
-    console.log("   - Browser -> cd into 'web-server-test' and run 'node server.js'");
-    console.log("Or you can copy the 'VovkPLC.wasm' and 'VovkPLC.js' files into your project and use them there as you wish.");
     process.exit(0);
 } catch (error) {
     console.error('Error building the WASM executable.');
