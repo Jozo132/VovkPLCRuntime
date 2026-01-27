@@ -216,6 +216,22 @@ function getMemoryAreas(runtime) {
     return areas
 }
 
+// Get memory usage info
+function getMemoryUsage(runtime) {
+    const wasm = runtime.wasm_exports
+    const available = wasm.project_getMemoryAvailable ? wasm.project_getMemoryAvailable() : 0
+    const used = wasm.project_getMemoryUsed ? wasm.project_getMemoryUsed() : 0
+    return { available, used }
+}
+
+// Get flash usage info
+function getFlashUsage(runtime) {
+    const wasm = runtime.wasm_exports
+    const size = wasm.project_getFlashSize ? wasm.project_getFlashSize() : 32768
+    const used = wasm.project_getFlashUsed ? wasm.project_getFlashUsed() : 0
+    return { size, used }
+}
+
 // Run the compiled program and get execution info
 function runProgram(runtime) {
     const wasm = runtime.wasm_exports
@@ -304,6 +320,8 @@ function generateOutput(runtime, success, error = null) {
     output.blocks = getBlocks(runtime)
     output.symbols = getSymbols(runtime)
     output.memoryAreas = getMemoryAreas(runtime)
+    output.memory = getMemoryUsage(runtime)
+    output.flash = getFlashUsage(runtime)
     
     // Run the program to get execution info
     const execResult = runProgram(runtime)
@@ -426,14 +444,19 @@ async function runTests() {
     const testDir = __dirname
     const files = fs.readdirSync(testDir)
     let testCases = files
-        .filter(f => f.match(/^test_\d+\.project$/))
+        .filter(f => f.match(/^test_\d+[a-zA-Z_]*\.project$/))
         .map(f => f.replace('.project', ''))
         .sort()
     
     // Filter to specific test if provided
     if (testFilter) {
         const filterName = testFilter.replace('.project', '').replace('.output', '')
-        testCases = testCases.filter(t => t === filterName)
+        // Try exact match first, then prefix match (e.g., "test_01" matches "test_01_base")
+        let filtered = testCases.filter(t => t === filterName)
+        if (filtered.length === 0) {
+            filtered = testCases.filter(t => t.startsWith(filterName + '_') || t.startsWith(filterName))
+        }
+        testCases = filtered
         if (testCases.length === 0) {
             console.error(`${RED}No test found matching '${testFilter}'${RESET}`)
             console.error(`Available tests: ${files.filter(f => f.endsWith('.project')).map(f => f.replace('.project', '')).join(', ')}`)
@@ -527,7 +550,11 @@ async function runTests() {
             // Build status message
             let status = ''
             if (actualOutput.success) {
-                status = `${actualOutput.bytecodeLength} bytes, ${actualOutput.execution.steps} steps`
+                const memUsed = actualOutput.memory?.used || 0
+                const memAvail = actualOutput.memory?.available || 0
+                const flashUsed = actualOutput.flash?.used || actualOutput.bytecodeLength || 0
+                const flashSize = actualOutput.flash?.size || 32768
+                status = `${actualOutput.bytecodeLength} bytes, ${actualOutput.execution.steps} steps, mem: ${memUsed}/${memAvail}, flash: ${flashUsed}/${flashSize}`
                 if (actualOutput.execution.stackSize > 0) {
                     status += `, ${YELLOW}stack: ${actualOutput.execution.stackSize}${RESET}`
                 }
@@ -559,11 +586,20 @@ async function runTests() {
             if (failure.error) {
                 console.log(`  Error: ${failure.error}`)
             } else if (failure.diffs && failure.diffs.length > 0) {
+                // Check if success mismatch exists - if so, only show that since it's the root cause
+                const successDiff = failure.diffs.find(d => d.field === 'success')
+                const diffsToShow = successDiff ? [successDiff] : failure.diffs
+                
                 console.log(`  Differences:`)
-                for (const d of failure.diffs) {
+                for (const d of diffsToShow) {
                     console.log(`    ${d.field}:`)
                     console.log(`      expected: ${RED}${JSON.stringify(d.expected)}${RESET}`)
                     console.log(`      actual:   ${YELLOW}${JSON.stringify(d.actual)}${RESET}`)
+                }
+                
+                // Show hint if success mismatch hides other diffs
+                if (successDiff && failure.diffs.length > 1) {
+                    console.log(`    ${CYAN}(${failure.diffs.length - 1} other difference(s) hidden - fix success first)${RESET}`)
                 }
             }
             console.log()

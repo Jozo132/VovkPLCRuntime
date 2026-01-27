@@ -1,14 +1,30 @@
 VOVKPLCPROJECT WithSymbols
 VERSION 2.0
 
+MEMORY
+    OFFSET 0
+    AVAILABLE 1024
+    K 64
+    X 64
+    Y 64
+    S 256
+    M 256
+    T 90
+    C 40
+END_MEMORY
+
+FLASH
+    SIZE 32768
+END_FLASH
+
 SYMBOLS
     input1 : bit : X0.0
     input2 : bit : X0.1
     output1 : bit : Y0.0
 END_SYMBOLS
 
-PROGRAM Network1
-    BLOCK Logic LANG=STL
+PROGRAM main
+    BLOCK LANG=STL Network 1 - Logic
 A X0.0
 A X0.1
 = Y0.0

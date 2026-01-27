@@ -1,15 +1,32 @@
 VOVKPLCPROJECT MultiProgram
 VERSION 2.0
 
-PROGRAM Startup
-    BLOCK Initialize LANG=PLCASM
+MEMORY
+    OFFSET 0
+    AVAILABLE 1024
+    K 64
+    X 64
+    Y 64
+    S 256
+    M 256
+    T 90
+    C 40
+END_MEMORY
+
+FLASH
+    SIZE 32768
+END_FLASH
+
+PROGRAM main
+    BLOCK LANG=PLCASM Network 1 - Initialize
 u8.const 1
+u8.drop
 exit
     END_BLOCK
 END_PROGRAM
 
-PROGRAM MainLogic
-    BLOCK Process LANG=STL
+PROGRAM test_program_2
+    BLOCK LANG=STL Network 1 - Process
 A X0.0
 = Y0.0
     END_BLOCK

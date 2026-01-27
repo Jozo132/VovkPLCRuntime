@@ -48,15 +48,15 @@ class STLLinter : public STLCompiler {
 public:
     LinterProblem problems[STL_MAX_LINT_PROBLEMS];
     int problem_count = 0;
-    
+
     // Symbol table
     STLSymbol symbols[STL_MAX_SYMBOLS];
     int symbol_count = 0;
-    
+
     // Track token info for error reporting
     int token_start_column = 1;
     int token_length = 0;
-    
+
     // Track last operand position for address validation errors
     int last_operand_column = 1;
     int last_operand_length = 0;
@@ -75,7 +75,7 @@ public:
         error_line = 0;
         error_column = 0;
     }
-    
+
     // Override readIdentifier to track operand position for error reporting
     bool readIdentifier(char* buf, int maxLen) override {
         last_operand_column = current_column;
@@ -84,9 +84,9 @@ public:
         last_operand_length = current_column - last_operand_column;
         return result;
     }
-    
+
     // ============ Symbol Parsing ============
-    
+
     // Get type size in bytes
     u8 getTypeSize(const char* type) {
         if (strEq(type, "i8") || strEq(type, "u8") || strEq(type, "byte")) return 1;
@@ -97,17 +97,17 @@ public:
         if (strEq(type, "ptr") || strEq(type, "pointer")) return 4;
         return 0; // unknown type
     }
-    
+
     // Check if type is valid
     bool isValidType(const char* type) {
-        const char* valid_types[] = { "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", 
+        const char* valid_types [] = { "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64",
                                        "f32", "f64", "bool", "bit", "byte", "ptr", "pointer" };
         for (int i = 0; i < 15; i++) {
             if (strEq(type, valid_types[i])) return true;
         }
         return false;
     }
-    
+
     // Check if symbol name is valid
     bool isValidSymbolName(const char* name) {
         if (!name || name[0] == '\0') return false;
@@ -117,14 +117,14 @@ public:
         }
         for (int i = 1; name[i]; i++) {
             char c = name[i];
-            if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || 
-                  (c >= '0' && c <= '9') || c == '_')) {
+            if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                (c >= '0' && c <= '9') || c == '_')) {
                 return false;
             }
         }
         return true;
     }
-    
+
     // Find symbol by name
     STLSymbol* findSymbol(const char* name) {
         for (int i = 0; i < symbol_count; i++) {
@@ -134,14 +134,14 @@ public:
         }
         return nullptr;
     }
-    
+
     // Parse symbol address (e.g., "M0", "X0.1", "130")
     bool parseSymbolAddress(const char* addr_str, u32& address, u8& bit, bool& is_bit) {
         is_bit = false;
         bit = 255;
-        
+
         if (!addr_str || addr_str[0] == '\0') return false;
-        
+
         // Find dot position for bit notation
         int dot_pos = -1;
         int len = 0;
@@ -149,13 +149,13 @@ public:
             if (addr_str[i] == '.') dot_pos = i;
             len++;
         }
-        
+
         char prefix = addr_str[0];
         if (prefix >= 'a' && prefix <= 'z') prefix -= 32; // Uppercase
-        
+
         u32 base_offset = 0;
         int num_start = 0;
-        
+
         // Determine memory area and offset
         switch (prefix) {
             case 'K': case 'C': base_offset = plcasm_control_offset; num_start = 1; break;
@@ -172,19 +172,19 @@ public:
                     return false;
                 }
         }
-        
+
         // Parse numeric part
         int byte_addr = 0;
         int end_pos = dot_pos >= 0 ? dot_pos : len;
-        
+
         for (int i = num_start; i < end_pos; i++) {
             char c = addr_str[i];
             if (c < '0' || c > '9') return false;
             byte_addr = byte_addr * 10 + (c - '0');
         }
-        
+
         address = base_offset + byte_addr;
-        
+
         // Parse bit position if present
         if (dot_pos >= 0 && dot_pos + 1 < len) {
             is_bit = true;
@@ -192,28 +192,28 @@ public:
             if (bit_char < '0' || bit_char > '7') return false;
             bit = bit_char - '0';
         }
-        
+
         return true;
     }
-    
+
     // Parse a symbol definition line: $$ name | type | address [| comment]
     void parseSymbolDefinition() {
         int start_line = current_line;
         int start_col = current_column;
-        
+
         // Skip "$$"
         advance(); advance();
         skipWhitespace();
-        
+
         // Read symbol name
-        char name[64] = {0};
+        char name[64] = { 0 };
         int name_col = current_column;
         int ni = 0;
         while (ni < 63 && isAlphaNum(peek())) {
             name[ni++] = advance();
         }
         name[ni] = '\0';
-        
+
         if (name[0] == '\0') {
             token_start_column = name_col;
             token_length = 1;
@@ -221,7 +221,7 @@ public:
             skipToEndOfLine();
             return;
         }
-        
+
         if (!isValidSymbolName(name)) {
             token_start_column = name_col;
             token_length = ni;
@@ -229,7 +229,7 @@ public:
             skipToEndOfLine();
             return;
         }
-        
+
         // Check for duplicate
         if (findSymbol(name)) {
             token_start_column = name_col;
@@ -238,9 +238,9 @@ public:
             skipToEndOfLine();
             return;
         }
-        
+
         skipWhitespace();
-        
+
         // Expect '|'
         if (peek() != '|') {
             token_start_column = current_column;
@@ -251,16 +251,16 @@ public:
         }
         advance();
         skipWhitespace();
-        
+
         // Read type
-        char type[16] = {0};
+        char type[16] = { 0 };
         int type_col = current_column;
         int ti = 0;
         while (ti < 15 && isAlphaNum(peek())) {
             type[ti++] = advance();
         }
         type[ti] = '\0';
-        
+
         if (!isValidType(type)) {
             token_start_column = type_col;
             token_length = ti > 0 ? ti : 1;
@@ -268,9 +268,9 @@ public:
             skipToEndOfLine();
             return;
         }
-        
+
         skipWhitespace();
-        
+
         // Expect '|'
         if (peek() != '|') {
             token_start_column = current_column;
@@ -281,20 +281,20 @@ public:
         }
         advance();
         skipWhitespace();
-        
+
         // Read address
-        char addr[32] = {0};
+        char addr[32] = { 0 };
         int addr_col = current_column;
         int ai = 0;
         while (ai < 31 && (isAlphaNum(peek()) || peek() == '.')) {
             addr[ai++] = advance();
         }
         addr[ai] = '\0';
-        
+
         u32 address;
         u8 bit;
         bool is_bit;
-        
+
         if (!parseSymbolAddress(addr, address, bit, is_bit)) {
             token_start_column = addr_col;
             token_length = ai > 0 ? ai : 1;
@@ -302,7 +302,7 @@ public:
             skipToEndOfLine();
             return;
         }
-        
+
         // Validate bit/type consistency
         bool is_bit_type = strEq(type, "bit") || strEq(type, "bool");
         if (is_bit_type && !is_bit) {
@@ -319,14 +319,14 @@ public:
             skipToEndOfLine();
             return;
         }
-        
+
         // Add symbol if we have space
         if (symbol_count >= STL_MAX_SYMBOLS) {
             addWarning("Maximum symbols reached", start_line, start_col);
             skipToEndOfLine();
             return;
         }
-        
+
         STLSymbol& sym = symbols[symbol_count++];
         // Clear name and type arrays first
         for (int i = 0; i < 64; i++) sym.name[i] = '\0';
@@ -341,22 +341,22 @@ public:
         sym.line = start_line;
         sym.column = start_col;
         sym.type_size = getTypeSize(type);
-        
+
         // Skip rest of line (comment)
         skipToEndOfLine();
     }
-    
+
     // Check if an operand is a valid address/symbol
     bool validateOperand(const char* operand, int col, int len) {
         if (!operand || operand[0] == '\0') return false;
-        
+
         char first = operand[0];
         if (first >= 'a' && first <= 'z') first -= 32;
-        
+
         // Check if it's a known symbol
         STLSymbol* sym = findSymbol(operand);
         if (sym) return true;
-        
+
         // Check if it's a valid address format
         // Valid prefixes: I, Q, M, S, X, Y, K, C, T, P (pulse), # (immediate)
         switch (first) {
@@ -377,19 +377,19 @@ public:
                 return true; // Don't block compilation
         }
     }
-    
+
     // Validate address format (e.g., I0.0, Q1, M10.5, T#5s, #123)
     bool isValidAddressFormat(const char* addr) {
         if (!addr || addr[0] == '\0') return false;
-        
+
         char first = addr[0];
         if (first >= 'a' && first <= 'z') first -= 32; // Uppercase
-        
+
         // Special formats that are passed through
         if (first == '#') return true;  // Immediate value
         if (first == 'P' && addr[1] == '_') return true;  // P_On, P_Off, etc.
         if (first == 'T' && addr[1] == '#') return true;  // T#5s duration
-        
+
         // Standard address prefixes
         bool hasPrefix = false;
         int i = 0;
@@ -410,29 +410,29 @@ public:
                     return false;
                 }
         }
-        
+
         // After prefix, expect digits
         bool hasDigits = false;
         while (addr[i] >= '0' && addr[i] <= '9') {
             hasDigits = true;
             i++;
         }
-        
+
         if (!hasDigits && hasPrefix) return false;  // Must have at least one digit after prefix
-        
+
         // Optional: dot followed by bit number (0-7)
         if (addr[i] == '.') {
             i++;
             if (addr[i] < '0' || addr[i] > '7') return false;  // Invalid bit number
             i++;
         }
-        
+
         // Should be at end of string now
         if (addr[i] != '\0') return false;  // Extra characters after valid address
-        
+
         return true;
     }
-    
+
     // Override convertAddress to resolve symbols first and validate addresses
     void convertAddress(const char* stlAddr, char* plcasmAddr) override {
         // Check if it's a symbol name
@@ -443,11 +443,11 @@ public:
             u32 addr = sym->address;
             u8 bit = sym->bit;
             bool is_bit = sym->is_bit;
-            
+
             // Determine the memory prefix from the address
             char prefix = 'M'; // default
             u32 offset = addr;
-            
+
             if (addr >= plcasm_timer_offset) {
                 prefix = 'T';
                 offset = (addr - plcasm_timer_offset) / 9; // Timer struct is 9 bytes
@@ -467,10 +467,10 @@ public:
                 prefix = 'K';
                 offset = addr - plcasm_control_offset;
             }
-            
+
             int j = 0;
             plcasmAddr[j++] = prefix;
-            
+
             // Write offset as decimal
             char numBuf[16];
             int ni = 0;
@@ -487,17 +487,17 @@ public:
             for (int k = ni - 1; k >= 0; k--) {
                 plcasmAddr[j++] = numBuf[k];
             }
-            
+
             // Add bit if needed
             if (is_bit) {
                 plcasmAddr[j++] = '.';
                 plcasmAddr[j++] = '0' + bit;
             }
-            
+
             plcasmAddr[j] = '\0';
             return;
         }
-        
+
         // Validate address format before converting
         if (!isValidAddressFormat(stlAddr)) {
             // Report error for invalid address at the operand position
@@ -510,7 +510,7 @@ public:
             STLCompiler::convertAddress(stlAddr, plcasmAddr);
             return;
         }
-        
+
         // Not a symbol, use base class implementation
         STLCompiler::convertAddress(stlAddr, plcasmAddr);
     }
@@ -520,11 +520,11 @@ public:
         // Find if we already have an error on this line
         int replace_index = -1;
         int same_line_index = -1;
-        
+
         for (int j = 0; j < problem_count; j++) {
-            if (problems[j].line == (uint32_t)current_line) {
+            if (problems[j].line == (uint32_t) current_line) {
                 if (same_line_index < 0) same_line_index = j;
-                if (problems[j].column == (uint32_t)token_start_column) {
+                if (problems[j].column == (uint32_t) token_start_column) {
                     replace_index = j;
                     break;
                 }
@@ -533,7 +533,7 @@ public:
 
         // If same line but earlier column exists, replace it; otherwise skip duplicate
         if (replace_index < 0 && same_line_index >= 0) {
-            if ((uint32_t)token_start_column < problems[same_line_index].column) {
+            if ((uint32_t) token_start_column < problems[same_line_index].column) {
                 replace_index = same_line_index;
             } else {
                 // Don't add duplicate error on same line with later column
@@ -554,9 +554,9 @@ public:
         p.line = current_line;
         p.column = token_start_column > 0 ? token_start_column : current_column;
         p.length = token_length > 0 ? token_length : 1;
-        
+
         // Set token_text pointer to point into the source at the last operand position
-        p.token_text = (char*)last_operand_ptr;
+        p.token_text = (char*) last_operand_ptr;
 
         // Reset message buffer
         for (int k = 0; k < 64; k++) p.message[k] = 0;
@@ -570,10 +570,10 @@ public:
         p.message[i] = '\0';
 
         if (replace_index < 0) problem_count++;
-        
+
         // Set the error flag but don't stop compilation in lint mode
         has_error = true;
-        
+
         // Also store in base class error fields for compatibility
         if (error_line == 0) {
             error_line = current_line;
@@ -590,13 +590,13 @@ public:
     // Add a warning (non-fatal)
     void addWarning(const char* msg, int line = -1, int column = -1, int length = 1) {
         if (problem_count >= STL_MAX_LINT_PROBLEMS) return;
-        
+
         LinterProblem& p = problems[problem_count];
         p.type = LINT_WARNING;
         p.line = line >= 0 ? line : current_line;
         p.column = column >= 0 ? column : current_column;
         p.length = length;
-        p.token_text = (char*)last_operand_ptr;
+        p.token_text = (char*) last_operand_ptr;
 
         for (int k = 0; k < 64; k++) p.message[k] = 0;
         int i = 0;
@@ -612,13 +612,13 @@ public:
     // Add an info message
     void addInfo(const char* msg, int line = -1, int column = -1, int length = 1) {
         if (problem_count >= STL_MAX_LINT_PROBLEMS) return;
-        
+
         LinterProblem& p = problems[problem_count];
         p.type = LINT_INFO;
         p.line = line >= 0 ? line : current_line;
         p.column = column >= 0 ? column : current_column;
         p.length = length;
-        p.token_text = (char*)last_operand_ptr;
+        p.token_text = (char*) last_operand_ptr;
 
         for (int k = 0; k < 64; k++) p.message[k] = 0;
         int i = 0;
@@ -634,7 +634,7 @@ public:
     // Lint mode compile - continues past errors to find more issues
     bool lint() {
         clearProblems();
-        
+
         if (!stl_source || stl_length == 0) {
             setError("No source code provided");
             return false;
@@ -649,26 +649,22 @@ public:
         network_has_rlo = false;
         nesting_depth = 0;
         label_counter = 0;
-        
-        // Add header comment
-        emitLine("// Generated from STL by VovkPLCRuntime STL Compiler");
-        emitLine("");
 
         while (pos < stl_length) {
             skipWhitespace();
-            
+
             char c = peek();
-            
+
             // End of input
             if (c == '\0') break;
-            
+
             // Newline - just advance
             if (c == '\n') {
                 advance();
                 network_has_rlo = false;
                 continue;
             }
-            
+
             // Comment (// or (* *))
             if (c == '/' && peek(1) == '/') {
                 // Copy comment to output
@@ -676,22 +672,22 @@ public:
                 advance(); advance();
                 while (pos < stl_length && peek() != '\n') {
                     char cc = advance();
-                    char buf[2] = {cc, '\0'};
+                    char buf[2] = { cc, '\0' };
                     emit(buf);
                 }
                 emit("\n");
                 continue;
             }
-            
+
             // Symbol definition: $$ name | type | address [| comment]
             if (c == '$' && peek(1) == '$') {
                 parseSymbolDefinition();
                 continue;
             }
-            
+
             // Track token start for error reporting
             token_start_column = current_column;
-            
+
             // Label definition: LABEL:
             if (isAlpha(c)) {
                 char identifier[64];
@@ -699,9 +695,9 @@ public:
                 last_operand_ptr = stl_source + pos;  // Track for error reporting
                 readIdentifier(identifier, sizeof(identifier));
                 token_length = current_column - start_col;
-                
+
                 skipWhitespace();
-                
+
                 if (peek() == ':') {
                     // It's a label
                     advance();
@@ -713,7 +709,7 @@ public:
                 }
                 continue;
             }
-            
+
             // = (assign) instruction OR ==I comparison
             if (c == '=') {
                 token_start_column = current_column;
@@ -742,11 +738,11 @@ public:
                 }
                 continue;
             }
-            
+
             // Math operators (+I, -I, *I, /I)
             if (c == '+' || c == '-' || c == '*' || c == '/') {
                 token_start_column = current_column;
-                char op[4] = {0};
+                char op[4] = { 0 };
                 op[0] = advance();
                 if (peek() == 'I' || peek() == 'i') {
                     op[1] = advance();
@@ -758,11 +754,11 @@ public:
                 }
                 continue;
             }
-            
+
             // Comparison operators (<>I, >I, >=I, <I, <=I)
             if (c == '<' || c == '>') {
                 token_start_column = current_column;
-                char op[4] = {0};
+                char op[4] = { 0 };
                 op[0] = advance();
                 if (peek() == '>' || peek() == '=') {
                     op[1] = advance();
@@ -777,7 +773,7 @@ public:
                 }
                 continue;
             }
-            
+
             // Special characters
             if (c == '(') {
                 token_start_column = current_column;
@@ -787,7 +783,7 @@ public:
                 setError("Unexpected '(' - use A(, O(, or X( for nesting");
                 continue;
             }
-            
+
             if (c == ')') {
                 token_start_column = current_column;
                 token_length = 1;
@@ -795,7 +791,7 @@ public:
                 handleNestingClose();
                 continue;
             }
-            
+
             // Skip unknown characters
             token_start_column = current_column;
             token_length = 1;

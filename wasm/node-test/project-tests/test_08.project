@@ -1,8 +1,24 @@
 VOVKPLCPROJECT MissingBlockLang
 VERSION 1.0
 
-PROGRAM Main
-    BLOCK Code
+MEMORY
+    OFFSET 0
+    AVAILABLE 1024
+    K 64
+    X 64
+    Y 64
+    S 256
+    M 256
+    T 90
+    C 40
+END_MEMORY
+
+FLASH
+    SIZE 32768
+END_FLASH
+
+PROGRAM main
+    BLOCK Network 1 - Code
 exit
     END_BLOCK
 END_PROGRAM

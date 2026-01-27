@@ -1,8 +1,24 @@
 VOVKPLCPROJECT LadderSimple
 VERSION 1.0
 
-PROGRAM Network1
-    BLOCK Rung1 LANG=LADDER
+MEMORY
+    OFFSET 0
+    AVAILABLE 1024
+    K 64
+    X 64
+    Y 64
+    S 256
+    M 256
+    T 90
+    C 40
+END_MEMORY
+
+FLASH
+    SIZE 32768
+END_FLASH
+
+PROGRAM main
+    BLOCK LANG=LADDER Rung1
 {"nodes":[{"id":"n1","type":"contact","symbol":"X0.0","x":0,"y":0},{"id":"n2","type":"coil","symbol":"Y0.0","x":1,"y":0}],"connections":[{"sources":["n1"],"destinations":["n2"]}]}
     END_BLOCK
 END_PROGRAM

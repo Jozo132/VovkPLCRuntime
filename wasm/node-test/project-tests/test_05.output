@@ -1,26 +1,28 @@
 {
   "success": 1,
   "project": { "name": "STLComplex", "version": "1.0" },
-  "bytecode": "58 00 14 E2 00 06 FD 02 58 00 40 59 00 40 C1 5A 00 40 C3 C0 60 00 80 FD 02 58 00 41 60 00 81 FF",
-  "bytecodeLength": 32,
-  "checksum": 216,
+  "bytecode": "FD 02 58 00 40 59 00 40 C1 5A 00 40 C3 C0 60 00 80 FD 02 58 00 41 60 00 81 FF",
+  "bytecodeLength": 26,
+  "checksum": 227,
   "files": [
-    { "path": "Logic", "firstBlockIndex": 0, "blockCount": 2, "executionOrder": 0 }
+    { "path": "main", "firstBlockIndex": 0, "blockCount": 2, "executionOrder": 0 }
   ],
   "blocks": [
-    { "file": "Logic", "name": "Network1", "language": "STL", "offset": 0, "size": 0 },
-    { "file": "Logic", "name": "Network2", "language": "STL", "offset": 0, "size": 0 }
+    { "file": "main", "name": "Network 1 - Network1", "language": "STL", "offset": 0, "size": 0 },
+    { "file": "main", "name": "Network 2 - Network2", "language": "STL", "offset": 0, "size": 0 }
   ],
   "symbols": [],
   "memoryAreas": [
-    { "name": "C", "start": 0, "end": 63 },
-    { "name": "I", "start": 64, "end": 127 },
-    { "name": "Q", "start": 128, "end": 191 },
+    { "name": "K", "start": 0, "end": 63 },
+    { "name": "X", "start": 64, "end": 127 },
+    { "name": "Y", "start": 128, "end": 191 },
     { "name": "S", "start": 192, "end": 447 },
     { "name": "M", "start": 448, "end": 703 },
-    { "name": "T", "start": 704, "end": 1023 },
-    { "name": "CT", "start": 1024, "end": 1279 }
+    { "name": "T", "start": 704, "end": 793 },
+    { "name": "C", "start": 794, "end": 833 }
   ],
-  "execution": { "steps": 14, "stackSize": 0 },
-  "problems": []
+  "execution": { "steps": 12, "stackSize": 0 },
+  "problems": [],
+  "memory": { "available": 1024, "used": 192 },
+  "flash": { "size": 32768, "used": 26 }
 }

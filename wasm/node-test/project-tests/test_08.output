@@ -10,6 +10,6 @@
   "memoryAreas": [],
   "execution": { "steps": 0, "stackSize": 0 },
   "problems": [
-    { "severity": "error", "message": "BLOCK requires LANG= attribute", "line": 5, "column": 16, "file": "Main", "block": "Code", "language": "UNKNOWN" }
+    { "severity": "error", "message": "BLOCK requires LANG= attribute (e.g., BLOCK LANG=STL My Block Name)", "line": 21, "column": 18, "file": "main" }
   ]
 }

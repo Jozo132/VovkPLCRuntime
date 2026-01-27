@@ -1,15 +1,31 @@
 VOVKPLCPROJECT STLComplex
 VERSION 1.0
 
-PROGRAM Logic
-    BLOCK Network1 LANG=STL
+MEMORY
+    OFFSET 0
+    AVAILABLE 1024
+    K 64
+    X 64
+    Y 64
+    S 256
+    M 256
+    T 90
+    C 40
+END_MEMORY
+
+FLASH
+    SIZE 32768
+END_FLASH
+
+PROGRAM main
+    BLOCK LANG=STL Network 1 - Network1
 A X0.0
 O X0.1
 AN X0.2
 = Y0.0
     END_BLOCK
 
-    BLOCK Network2 LANG=STL
+    BLOCK LANG=STL Network 2 - Network2
 A X1.0
 = Y1.0
     END_BLOCK

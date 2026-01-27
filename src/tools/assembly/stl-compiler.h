@@ -1350,10 +1350,6 @@ public:
             return false;
         }
 
-        // Add header comment
-        emitLine("// Generated from STL by VovkPLCRuntime STL Compiler");
-        emitLine("");
-
         while (pos < stl_length && !has_error) {
             skipWhitespace();
             

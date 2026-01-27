@@ -10,6 +10,6 @@
   "memoryAreas": [],
   "execution": { "steps": 0, "stackSize": 0 },
   "problems": [
-    { "severity": "error", "message": "Empty or unterminated BLOCK", "line": 8, "column": 1, "file": "Main", "block": "Code", "language": "PLCASM" }
+    { "severity": "error", "message": "Empty or unterminated BLOCK", "line": 24, "column": 1, "file": "main", "block": "Network 1 - Code", "language": "PLCASM" }
   ]
 }

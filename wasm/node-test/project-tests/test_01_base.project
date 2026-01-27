@@ -2,11 +2,20 @@ VOVKPLCPROJECT MultiBlockWithSymbols
 VERSION 3.0
 
 MEMORY
-M 448-703
-I 64-127
-Q 128-191
-T 704-1023
+    OFFSET 0
+    AVAILABLE 1024
+    K 64
+    X 64
+    Y 64
+    S 256
+    M 256
+    T 90
+    C 40
 END_MEMORY
+
+FLASH
+    SIZE 32768
+END_FLASH
 
 SYMBOLS
     start_btn : bit : X0.0
@@ -15,8 +24,8 @@ SYMBOLS
     error_led : bit : Y0.1
 END_SYMBOLS
 
-PROGRAM Main
-    BLOCK PLCASM_sample LANG=PLCASM
+PROGRAM main
+    BLOCK LANG=PLCASM Network 1 - PLCASM sample block
 u8.readBit start_btn
 u8.readBit stop_btn
 u8.not
@@ -26,12 +35,12 @@ u8.writeBitOn motor
 skip_set:
     END_BLOCK
 
-    BLOCK STL_sample LANG=STL
+    BLOCK LANG=STL Network 2 - STL sample block
 A stop_btn
 R motor
     END_BLOCK
 
-    BLOCK Ladder_sample LANG=LADDER
+    BLOCK LANG=LADDER Network 3 - Ladder sample block
 {
   "comment": "Network 1",
   "nodes": [

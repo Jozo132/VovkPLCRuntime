@@ -10,6 +10,6 @@
   "memoryAreas": [],
   "execution": { "steps": 0, "stackSize": 0 },
   "problems": [
-    { "severity": "error", "message": "Unknown language: INVALID", "line": 5, "column": 28, "file": "Main", "block": "Code", "language": "UNKNOWN" }
+    { "severity": "error", "message": "Unknown language: INVALID", "line": 21, "column": 23, "file": "main" }
   ]
 }
