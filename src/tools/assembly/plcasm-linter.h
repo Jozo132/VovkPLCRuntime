@@ -21,8 +21,10 @@ struct LinterProblem {
     uint32_t length;    // Length of the token causing the issue
     char message[64];   // Text description
     char block[64];     // Block name (optional)
+    char program[64];   // Program/file name (optional)
     uint32_t lang;      // Language ID (optional)
-    char* token_text;   // Text of the token (only useful for internal debugging)
+    char token_buf[64]; // Token text buffer (copied, stable storage)
+    char* token_text;   // Pointer to token_buf for compatibility
 };
 
 #define MAX_LINT_PROBLEMS 100

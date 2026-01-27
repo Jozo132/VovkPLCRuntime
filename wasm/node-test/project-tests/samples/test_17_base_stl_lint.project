@@ -1,0 +1,62 @@
+VOVKPLCPROJECT MultiBlockWithSymbols
+VERSION 3.0
+
+MEMORY
+    OFFSET 0
+    AVAILABLE 1024
+    K 64
+    X 64
+    Y 64
+    S 256
+    M 256
+    T 90
+    C 40
+END_MEMORY
+
+FLASH
+    SIZE 32768
+END_FLASH
+
+SYMBOLS
+    start_btn : bit : X0.0
+    stop_btn : bit : X0.1 = 1
+    motor : bit : Y0.0
+    error_led : bit : Y0.1
+    counter : i16 : M0 = 10
+END_SYMBOLS
+
+PROGRAM main
+    BLOCK LANG=PLCASM Network 1 - PLCASM sample block
+u8.readBit start_btn
+u8.readBit stop_btn
+u8.not
+u8.and
+jump_if_not skip_set
+u8.writeBitOn motor
+skip_set:
+i16.load_from counter
+i16.const 1
+i16.add
+i16.move_to counter
+    END_BLOCK
+
+    BLOCK LANG=STL Network 2 - STL sample block
+A stop_btn
+R motorn
+    END_BLOCK
+
+    BLOCK LANG=LADDER Network 3 - Ladder sample block
+{
+  "comment": "Network 1",
+  "nodes": [
+    { "id": "gzFIdmMFsKIZe", "x": 2, "y": 0, "type": "coil", "symbol": "error_led", "inverted": false },
+    { "id": "dkK9jduUKYAnf", "x": 0, "y": 0, "type": "contact", "symbol": "start_btn", "inverted": false, "trigger": "rising" },
+    { "id": "yUcYfCm0pKygR", "x": 1, "y": 0, "type": "contact", "symbol": "stop_btn", "inverted": false, "trigger": "normal" }
+  ],
+  "connections": [
+    { "sources": [ "dkK9jduUKYAnf" ], "destinations": [ "yUcYfCm0pKygR" ] }, 
+    { "sources": [ "yUcYfCm0pKygR" ], "destinations": [ "gzFIdmMFsKIZe" ] }
+  ]
+}
+    END_BLOCK
+END_PROGRAM

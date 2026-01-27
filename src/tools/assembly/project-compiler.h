@@ -380,10 +380,21 @@ public:
         p.line = l;
         p.column = c;
         p.length = length;
-        p.token_text = (char*) token;
+        
+        // Copy token text into stable buffer
+        p.token_buf[0] = '\0';
+        if (token && length > 0) {
+            int tlen = length < 63 ? length : 63;
+            for (int i = 0; i < tlen; i++) {
+                p.token_buf[i] = token[i];
+            }
+            p.token_buf[tlen] = '\0';
+        }
+        p.token_text = p.token_buf;  // Point to our stable buffer
 
         // Copy current context
         copyString(p.block, current_block, 64);
+        copyString(p.program, current_file, 64);  // Copy program/file name
         p.lang = (uint32_t) current_block_language;
 
         // Copy message
@@ -1893,7 +1904,8 @@ public:
 
         switch (block.language) {
             case LANG_PLCASM:
-                // PLCASM block - append directly
+                // PLCASM block - lint then append
+                if (!lintPLCASMBlock(block)) return false;
                 if (!appendToCombinedPLCASM(block_source)) return false;
                 if (!appendCharToCombinedPLCASM('\n')) return false;
                 break;
@@ -1916,6 +1928,31 @@ public:
 
         // Record the ending line for this block
         block.combined_line_end = combined_plcasm_line - 1;  // -1 because we just added a newline
+
+        return true;
+    }
+
+    // Lint PLCASM block for errors (used in Pass 1 before appending)
+    bool lintPLCASMBlock(ProgramBlock& block) {
+        plcasm_compiler.clearArray();
+        copySymbolsToPLCASM();
+
+        int source_len = string_len(block_source);
+        plcasm_compiler.set_assembly_string(block_source);
+
+        // Use lint mode (false, false) to check for errors without full compilation
+        bool error = plcasm_compiler.compileAssembly(false, false);
+
+        if (error || plcasm_compiler.problem_count > 0) {
+            // Copy all problems from PLCASM linter to project problems
+            for (int i = 0; i < plcasm_compiler.problem_count; i++) {
+                LinterProblem& prob = plcasm_compiler.problems[i];
+                setErrorFull("PLCASM Linter", prob.message, prob.line, prob.column,
+                    block_source, source_len,
+                    prob.token_text, prob.length);
+            }
+            return false;
+        }
 
         return true;
     }
@@ -2051,10 +2088,17 @@ public:
         // Generate Startup code for default values and differentiation logic
         generateStartupBlock();
 
-        for (int i = 0; i < program_block_count && !has_error; i++) {
+        bool any_block_error = false;
+        for (int i = 0; i < program_block_count; i++) {
             if (!convertBlockToPLCASM(program_blocks[i])) {
-                return false;
+                any_block_error = true;
+                // Continue processing to collect all errors
             }
+        }
+        
+        // If any block had errors, stop compilation but preserve collected problems
+        if (any_block_error || has_error) {
+            return false;
         }
 
         // Add closing banner

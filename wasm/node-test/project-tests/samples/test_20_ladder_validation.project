@@ -1,0 +1,36 @@
+VOVKPLCPROJECT LadderValidationTest
+VERSION 3.0
+
+MEMORY
+    OFFSET 0
+    AVAILABLE 1024
+    K 64
+    X 64
+    Y 64
+    S 256
+    M 256
+    T 90
+    C 40
+END_MEMORY
+
+SYMBOLS
+    start_btn : bit : X0.0
+    stop_btn : bit : X0.1
+    motor : bit : Y0.0
+    error_led : bit : Y0.1
+END_SYMBOLS
+
+PROGRAM main
+    BLOCK LANG=LADDER Network 1 - Ladder with backward connection
+{
+  "comment": "Backward connection test",
+  "nodes": [
+    { "id": "n1", "x": 2, "y": 0, "type": "contact_no", "symbol": "start_btn" },
+    { "id": "n2", "x": 1, "y": 0, "type": "coil", "symbol": "motor" }
+  ],
+  "connections": [
+    { "sources": ["n1"], "destinations": ["n2"] }
+  ]
+}
+    END_BLOCK
+END_PROGRAM

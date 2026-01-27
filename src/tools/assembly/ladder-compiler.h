@@ -396,6 +396,115 @@ public:
     Connection connections[MAX_CONNECTIONS];
     int connection_count;
 
+    // ============ Validation Helpers ============
+
+    // Find a node by its ID, returns index or -1 if not found
+    int findNodeById(const char* nodeId) {
+        for (int i = 0; i < node_count; i++) {
+            if (strEqI(nodes[i].id, nodeId)) return i;
+        }
+        return -1;
+    }
+
+    // Check if a node type is valid (known)
+    bool isKnownNodeType(const char* type) {
+        return isContact(type) || isCoil(type) || isTimer(type) ||
+               isCounter(type) || isOperationBlock(type) || isComparator(type) ||
+               strEqI(type, "tap");
+    }
+
+    // Check if node type is a tap node
+    bool isTapNode(const char* type) {
+        return strEqI(type, "tap");
+    }
+
+    // Check if a node has any incoming connections
+    bool nodeHasInputs(int nodeIdx) {
+        if (nodeIdx < 0 || nodeIdx >= node_count) return false;
+        for (int c = 0; c < connection_count; c++) {
+            for (int d = 0; d < connections[c].dest_count; d++) {
+                if (strEqI(connections[c].destinations[d], nodes[nodeIdx].id)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // Check if a node has any outgoing connections
+    bool nodeHasOutputs(int nodeIdx) {
+        if (nodeIdx < 0 || nodeIdx >= node_count) return false;
+        for (int c = 0; c < connection_count; c++) {
+            for (int s = 0; s < connections[c].source_count; s++) {
+                if (strEqI(connections[c].sources[s], nodes[nodeIdx].id)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // Virtual method to report a validation error with node position
+    // Derived class (linter) can override to collect multiple errors
+    virtual void reportNodeError(const char* msg, int nodeIdx) {
+        if (has_error) return; // Base class stops at first error
+        char fullMsg[256];
+        int mi = 0;
+        // Add node position info
+        if (nodeIdx >= 0 && nodeIdx < node_count) {
+            GraphNode& node = nodes[nodeIdx];
+            const char* prefix = "Node '";
+            while (*prefix && mi < 200) fullMsg[mi++] = *prefix++;
+            int ni = 0;
+            while (node.id[ni] && mi < 200) fullMsg[mi++] = node.id[ni++];
+            const char* mid = "' at (";
+            while (*mid && mi < 200) fullMsg[mi++] = *mid++;
+            // Convert x to string
+            char numBuf[16];
+            int x = node.x;
+            int nlen = 0;
+            if (x < 0) { numBuf[nlen++] = '-'; x = -x; }
+            if (x == 0) numBuf[nlen++] = '0';
+            else {
+                int start = nlen;
+                while (x > 0) { numBuf[nlen++] = '0' + (x % 10); x /= 10; }
+                for (int r = start; r < start + (nlen - start) / 2; r++) {
+                    char tmp = numBuf[r];
+                    numBuf[r] = numBuf[nlen - 1 - (r - start)];
+                    numBuf[nlen - 1 - (r - start)] = tmp;
+                }
+            }
+            for (int ni2 = 0; ni2 < nlen && mi < 200; ni2++) fullMsg[mi++] = numBuf[ni2];
+            fullMsg[mi++] = ',';
+            // Convert y to string
+            int y = node.y;
+            nlen = 0;
+            if (y < 0) { numBuf[nlen++] = '-'; y = -y; }
+            if (y == 0) numBuf[nlen++] = '0';
+            else {
+                int start = nlen;
+                while (y > 0) { numBuf[nlen++] = '0' + (y % 10); y /= 10; }
+                for (int r = start; r < start + (nlen - start) / 2; r++) {
+                    char tmp = numBuf[r];
+                    numBuf[r] = numBuf[nlen - 1 - (r - start)];
+                    numBuf[nlen - 1 - (r - start)] = tmp;
+                }
+            }
+            for (int ni2 = 0; ni2 < nlen && mi < 200; ni2++) fullMsg[mi++] = numBuf[ni2];
+            const char* end = "): ";
+            while (*end && mi < 200) fullMsg[mi++] = *end++;
+        }
+        while (*msg && mi < 255) fullMsg[mi++] = *msg++;
+        fullMsg[mi] = '\0';
+        setError(fullMsg);
+    }
+
+    // Virtual method to report a validation warning (non-fatal)
+    virtual void reportNodeWarning(const char* msg, int nodeIdx) {
+        // Base class ignores warnings during compilation
+        (void)msg; (void)nodeIdx;
+    }
+
     // ============ Node Type Helpers ============
 
     bool isContact(const char* type) {
@@ -670,15 +779,6 @@ public:
                 }
             }
         }
-    }
-
-    // ============ Node Lookup ============
-
-    int findNodeById(const char* id) {
-        for (int i = 0; i < node_count; i++) {
-            if (strEqI(nodes[i].id, id)) return i;
-        }
-        return -1;
     }
 
     // ============ Connection Helpers ============
@@ -2041,6 +2141,218 @@ public:
 
     // ============ Main Entry Point ============
 
+    // ============ Graph Validation ============
+
+    // Validate a single node
+    virtual bool validateNode(int nodeIdx) {
+        if (nodeIdx < 0 || nodeIdx >= node_count) return true;
+        GraphNode& node = nodes[nodeIdx];
+
+        // Check for unknown node type
+        if (!isKnownNodeType(node.type)) {
+            char msg[64];
+            int mi = 0;
+            const char* prefix = "Unknown node type '";
+            while (*prefix && mi < 50) msg[mi++] = *prefix++;
+            int ti = 0;
+            while (node.type[ti] && mi < 60) msg[mi++] = node.type[ti++];
+            msg[mi++] = '\'';
+            msg[mi] = '\0';
+            reportNodeError(msg, nodeIdx);
+            return false;
+        }
+
+        // Check address/symbol for most node types (tap nodes don't need addresses)
+        if (!isTapNode(node.type)) {
+            if (node.address[0] == '\0') {
+                reportNodeError("Missing address/symbol", nodeIdx);
+                return false;
+            }
+        }
+
+        // Validate node-type-specific parameters
+        if (isTimer(node.type) || isCounter(node.type)) {
+            // Timers and counters need a preset value
+            if (node.preset == 0 && node.preset_str[0] == '\0') {
+                reportNodeWarning("Timer/counter has no preset value", nodeIdx);
+            }
+        }
+
+        if (isOperationBlock(node.type)) {
+            // Operation blocks need at least one input and one output
+            bool needsIn1 = true;
+            bool needsIn2 = !strEqI(node.type, "fb_inc") && !strEqI(node.type, "fb_dec") &&
+                           !strEqI(node.type, "fb_not") && !strEqI(node.type, "fb_move");
+            bool needsOut = true;
+
+            if (needsIn1 && node.in1[0] == '\0') {
+                reportNodeError("Operation block missing input 1 (in1)", nodeIdx);
+                return false;
+            }
+            if (needsIn2 && node.in2[0] == '\0') {
+                reportNodeError("Operation block missing input 2 (in2)", nodeIdx);
+                return false;
+            }
+            if (needsOut && node.out[0] == '\0') {
+                reportNodeError("Operation block missing output (out)", nodeIdx);
+                return false;
+            }
+        }
+
+        if (isComparator(node.type)) {
+            // Comparators need two inputs
+            if (node.in1[0] == '\0') {
+                reportNodeError("Comparator missing input 1 (in1)", nodeIdx);
+                return false;
+            }
+            if (node.in2[0] == '\0') {
+                reportNodeError("Comparator missing input 2 (in2)", nodeIdx);
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    // Validate a single connection
+    virtual bool validateConnection(int connIdx) {
+        if (connIdx < 0 || connIdx >= connection_count) return true;
+        Connection& conn = connections[connIdx];
+
+        // Check that all sources exist and validate flow direction
+        for (int s = 0; s < conn.source_count; s++) {
+            int srcIdx = findNodeById(conn.sources[s]);
+            if (srcIdx < 0) {
+                char msg[64];
+                int mi = 0;
+                const char* prefix = "Connection source '";
+                while (*prefix && mi < 40) msg[mi++] = *prefix++;
+                int si = 0;
+                while (conn.sources[s][si] && mi < 55) msg[mi++] = conn.sources[s][si++];
+                const char* suffix = "' not found";
+                while (*suffix && mi < 63) msg[mi++] = *suffix++;
+                msg[mi] = '\0';
+                // Use first destination node for error position if available
+                int errorNode = -1;
+                for (int d = 0; d < conn.dest_count && errorNode < 0; d++) {
+                    errorNode = findNodeById(conn.destinations[d]);
+                }
+                if (errorNode >= 0) {
+                    reportNodeError(msg, errorNode);
+                } else {
+                    setError(msg);
+                }
+                return false;
+            }
+
+            // Check that destinations have x > source x (left-to-right flow)
+            GraphNode& srcNode = nodes[srcIdx];
+            for (int d = 0; d < conn.dest_count; d++) {
+                int destIdx = findNodeById(conn.destinations[d]);
+                if (destIdx >= 0) {
+                    GraphNode& destNode = nodes[destIdx];
+                    if (destNode.x <= srcNode.x) {
+                        reportNodeError("Connection flows backward (destination must be right of source)", destIdx);
+                        return false;
+                    }
+                }
+            }
+        }
+
+        // Check that all destinations exist
+        for (int d = 0; d < conn.dest_count; d++) {
+            int destIdx = findNodeById(conn.destinations[d]);
+            if (destIdx < 0) {
+                char msg[64];
+                int mi = 0;
+                const char* prefix = "Connection destination '";
+                while (*prefix && mi < 40) msg[mi++] = *prefix++;
+                int di = 0;
+                while (conn.destinations[d][di] && mi < 55) msg[mi++] = conn.destinations[d][di++];
+                const char* suffix = "' not found";
+                while (*suffix && mi < 63) msg[mi++] = *suffix++;
+                msg[mi] = '\0';
+                // Use first source node for error position
+                int errorNode = -1;
+                for (int si = 0; si < conn.source_count && errorNode < 0; si++) {
+                    errorNode = findNodeById(conn.sources[si]);
+                }
+                if (errorNode >= 0) {
+                    reportNodeError(msg, errorNode);
+                } else {
+                    setError(msg);
+                }
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    // Validate entire graph structure
+    virtual bool validateGraph() {
+        // Check for duplicate nodes at same position
+        for (int i = 0; i < node_count; i++) {
+            for (int j = i + 1; j < node_count; j++) {
+                if (nodes[i].x == nodes[j].x && nodes[i].y == nodes[j].y) {
+                    char msg[64];
+                    int mi = 0;
+                    const char* prefix = "Overlaps with node '";
+                    while (*prefix && mi < 40) msg[mi++] = *prefix++;
+                    int ni = 0;
+                    while (nodes[j].id[ni] && mi < 60) msg[mi++] = nodes[j].id[ni++];
+                    msg[mi++] = '\'';
+                    msg[mi] = '\0';
+                    reportNodeError(msg, i);
+                    if (has_error) return false;
+                }
+            }
+        }
+
+        // Validate all nodes
+        for (int i = 0; i < node_count; i++) {
+            if (!validateNode(i)) {
+                if (has_error) return false;
+            }
+        }
+
+        // Validate all connections
+        for (int i = 0; i < connection_count; i++) {
+            if (!validateConnection(i)) {
+                if (has_error) return false;
+            }
+        }
+
+        // Check for dead nodes (nodes with no connections at all)
+        for (int i = 0; i < node_count; i++) {
+            // Tap nodes are allowed to be connection points without their own logic
+            if (isTapNode(nodes[i].type)) continue;
+
+            bool hasInputs = nodeHasInputs(i);
+            bool hasOutputs = nodeHasOutputs(i);
+
+            // Input nodes (contacts) should have outputs
+            if (isInputNode(nodes[i].type) && !hasOutputs) {
+                reportNodeWarning("Contact not connected to any output", i);
+            }
+
+            // Output nodes (coils) should have inputs
+            if (isTerminationNode(nodes[i].type) && !hasInputs) {
+                reportNodeWarning("Output has no inputs", i);
+            }
+
+            // Completely isolated nodes are errors
+            if (!hasInputs && !hasOutputs) {
+                reportNodeError("Node is completely disconnected", i);
+                if (has_error) return false;
+            }
+        }
+
+        return !has_error;
+    }
+
+    // ============ Main Entry Point ============
+
     bool parse(const char* src, int len) {
         reset();
         source = src;
@@ -2048,6 +2360,11 @@ public:
 
         // Parse the graph JSON
         if (!parseGraph()) {
+            return false;
+        }
+
+        // Validate the graph structure
+        if (!validateGraph()) {
             return false;
         }
 

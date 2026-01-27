@@ -28,6 +28,17 @@
 #include "plcasm-linter.h" // Reuse LinterProblem struct and enums
 
 #define LADDER_MAX_LINT_PROBLEMS 100
+#define LADDER_MAX_SYMBOLS 128
+
+// Simple symbol structure for ladder linting
+struct LadderSymbol {
+    char name[64];
+    char type[16];
+    u32 address;
+    u8 bit;
+    bool is_bit;
+    u8 type_size;
+};
 
 // ### Ladder Linter Class Definition ###
 
@@ -35,40 +46,82 @@ class LadderLinter : public LadderGraphCompiler {
 public:
     LinterProblem problems[LADDER_MAX_LINT_PROBLEMS];
     int problem_count = 0;
-    
-    // Position tracking for JSON parsing
-    int current_line = 1;
-    int current_column = 1;
-    
+
+    // Symbol table for validating addresses
+    LadderSymbol symbols[LADDER_MAX_SYMBOLS];
+    int symbol_count = 0;
+
     LadderLinter() : LadderGraphCompiler() {
         problem_count = 0;
+        symbol_count = 0;
     }
-    
+
     void clearProblems() {
         problem_count = 0;
+        symbol_count = 0;
         has_error = false;
         error_msg[0] = '\0';
-        current_line = 1;
-        current_column = 1;
     }
-    
+
     void reset() override {
         LadderGraphCompiler::reset();
         clearProblems();
     }
-    
+
+    // ============ Symbol Management ============
+
+    void addSymbol(const char* name, const char* type, u32 address, u8 bit, bool is_bit, u8 type_size) {
+        if (symbol_count >= LADDER_MAX_SYMBOLS) return;
+        LadderSymbol& sym = symbols[symbol_count++];
+        int i = 0;
+        while (name[i] && i < 63) { sym.name[i] = name[i]; i++; }
+        sym.name[i] = '\0';
+        i = 0;
+        while (type[i] && i < 15) { sym.type[i] = type[i]; i++; }
+        sym.type[i] = '\0';
+        sym.address = address;
+        sym.bit = bit;
+        sym.is_bit = is_bit;
+        sym.type_size = type_size;
+    }
+
+    LadderSymbol* findSymbol(const char* name) {
+        for (int i = 0; i < symbol_count; i++) {
+            if (strEqI(symbols[i].name, name)) return &symbols[i];
+        }
+        return nullptr;
+    }
+
     // ============ Problem Reporting ============
-    
-    void addProblem(LinterProblemType type, const char* message, int line, int column, int len) {
+
+    // Add a problem using node's x,y position as line,column
+    void addProblemAtNode(LinterProblemType type, const char* message, int nodeIdx, const char* token = nullptr) {
         if (problem_count >= LADDER_MAX_LINT_PROBLEMS) return;
-        
+        if (nodeIdx < 0 || nodeIdx >= node_count) return;
+
+        GraphNode& node = nodes[nodeIdx];
         LinterProblem& p = problems[problem_count];
         p.type = type;
-        p.line = line;
-        p.column = column;
-        p.length = len > 0 ? len : 1;
-        p.token_text = nullptr;
-        
+        // Use node's x,y position as line (y+1) and column (x+1) for 1-based indexing
+        p.line = node.y + 1;
+        p.column = node.x + 1;
+        p.length = 1;
+        p.lang = 3;  // LADDER language ID
+
+        // Copy token into stable buffer
+        p.token_buf[0] = '\0';
+        if (token) {
+            int ti = 0;
+            while (token[ti] && ti < 63) { p.token_buf[ti] = token[ti]; ti++; }
+            p.token_buf[ti] = '\0';
+        } else {
+            // Use node id as token
+            int ti = 0;
+            while (node.id[ti] && ti < 63) { p.token_buf[ti] = node.id[ti]; ti++; }
+            p.token_buf[ti] = '\0';
+        }
+        p.token_text = p.token_buf;
+
         // Copy message safely (max 63 chars)
         int i = 0;
         while (message[i] && i < 63) {
@@ -76,260 +129,349 @@ public:
             i++;
         }
         p.message[i] = '\0';
-        
+
         problem_count++;
     }
-    
-    void addError(const char* message, int line = 1, int column = 1, int len = 1) {
-        addProblem(LINT_ERROR, message, line, column, len);
-    }
-    
-    void addWarning(const char* message, int line = 1, int column = 1, int len = 1) {
-        addProblem(LINT_WARNING, message, line, column, len);
-    }
-    
-    void addInfo(const char* message, int line = 1, int column = 1, int len = 1) {
-        addProblem(LINT_INFO, message, line, column, len);
-    }
-    
-    // Override setError to also add to problems list
-    void setError(const char* msg) override {
-        if (has_error) return;
+
+    void addError(const char* message, int nodeIdx, const char* token = nullptr) {
+        addProblemAtNode(LINT_ERROR, message, nodeIdx, token);
         has_error = true;
+    }
+
+    void addWarning(const char* message, int nodeIdx, const char* token = nullptr) {
+        addProblemAtNode(LINT_WARNING, message, nodeIdx, token);
+    }
+
+    void addInfo(const char* message, int nodeIdx, const char* token = nullptr) {
+        addProblemAtNode(LINT_INFO, message, nodeIdx, token);
+    }
+
+    // Override setError to add to problems list but continue linting
+    void setError(const char* msg) override {
+        // Don't set has_error - allow linting to continue
+        // Just record the error
         int i = 0;
         while (msg[i] && i < 255) {
             error_msg[i] = msg[i];
             i++;
         }
         error_msg[i] = '\0';
-        
-        // Calculate approximate line/column from current position
-        int line = 1, col = 1;
-        for (int j = 0; j < pos && source && j < length; j++) {
-            if (source[j] == '\n') {
-                line++;
-                col = 1;
-            } else {
-                col++;
-            }
-        }
-        
-        // Also add to problems list
-        addProblem(LINT_ERROR, msg, line, col, 1);
-    }
-    
-    // ============ Semantic Validation ============
-    
-    // Calculate line/column for a node based on searching for its ID in source
-    void findNodePosition(const char* nodeId, int& line, int& column) {
-        line = 1;
-        column = 1;
-        if (!source || !nodeId || nodeId[0] == '\0') return;
-        
-        // Search for the node ID in the source
-        int idLen = 0;
-        while (nodeId[idLen]) idLen++;
-        
-        for (int i = 0; i < length - idLen; i++) {
-            // Track position
-            if (source[i] == '\n') {
-                line++;
-                column = 1;
-            } else {
-                column++;
-            }
-            
-            // Check for match (looking for "id":"nodeId")
-            bool match = true;
-            for (int j = 0; j < idLen && match; j++) {
-                if (source[i + j] != nodeId[j]) match = false;
-            }
-            if (match) return;
+
+        // Add as a general problem (line 1, col 1 since we don't have node context)
+        if (problem_count < LADDER_MAX_LINT_PROBLEMS) {
+            LinterProblem& p = problems[problem_count++];
+            p.type = LINT_ERROR;
+            p.line = 1;
+            p.column = 1;
+            p.length = 1;
+            p.lang = 3;
+            p.token_buf[0] = '\0';
+            p.token_text = p.token_buf;
+            int mi = 0;
+            while (msg[mi] && mi < 63) { p.message[mi] = msg[mi]; mi++; }
+            p.message[mi] = '\0';
         }
     }
-    
-    // Check if a node type is valid (known)
-    bool isKnownNodeType(const char* type) {
-        return isContact(type) || isCoil(type) || isTimer(type) || 
-               isCounter(type) || isOperationBlock(type) || isComparator(type) ||
-               strEqI(type, "tap");
+
+    // Override reportNodeError to collect multiple errors
+    void reportNodeError(const char* msg, int nodeIdx) override {
+        addError(msg, nodeIdx);
     }
-    
-    // Check if node type is a tap node
-    bool isTapNode(const char* type) {
-        return strEqI(type, "tap");
+
+    // Override reportNodeWarning to collect warnings
+    void reportNodeWarning(const char* msg, int nodeIdx) override {
+        addWarning(msg, nodeIdx);
     }
-    
-    // Validate node has required fields
-    void validateNode(GraphNode& node, int nodeIndex) {
-        int line = 1, col = 1;
-        findNodePosition(node.id, line, col);
-        
+
+    // ============ Extended Validation ============
+
+    // Override validateNode to add symbol checking
+    bool validateNode(int nodeIdx) override {
+        if (nodeIdx < 0 || nodeIdx >= node_count) return true;
+        GraphNode& node = nodes[nodeIdx];
+
+        // Run base validation first
         // Check for unknown node type
         if (!isKnownNodeType(node.type)) {
             char msg[64];
             int mi = 0;
             const char* prefix = "Unknown node type '";
-            while (prefix[mi]) { msg[mi] = prefix[mi]; mi++; }
+            while (*prefix && mi < 50) msg[mi++] = *prefix++;
             int ti = 0;
-            while (node.type[ti] && mi < 50) { msg[mi++] = node.type[ti++]; }
-            const char* suffix = "'";
-            int si = 0;
-            while (suffix[si] && mi < 63) { msg[mi++] = suffix[si++]; }
+            while (node.type[ti] && mi < 60) msg[mi++] = node.type[ti++];
+            msg[mi++] = '\'';
             msg[mi] = '\0';
-            addError(msg, line, col, 1);
+            addError(msg, nodeIdx, node.type);
         }
-        
-        // Check address for most node types (tap nodes don't need addresses)
+
+        // Check address/symbol for most node types (tap nodes don't need addresses)
         if (!isTapNode(node.type) && isKnownNodeType(node.type)) {
             if (node.address[0] == '\0') {
-                char msg[64];
-                int mi = 0;
-                const char* prefix = "Node '";
-                while (prefix[mi]) { msg[mi] = prefix[mi]; mi++; }
-                int ni = 0;
-                while (node.id[ni] && mi < 40) { msg[mi++] = node.id[ni++]; }
-                const char* suffix = "' missing address";
-                int si = 0;
-                while (suffix[si] && mi < 63) { msg[mi++] = suffix[si++]; }
-                msg[mi] = '\0';
-                addWarning(msg, line, col, 1);
-            }
-        }
-    }
-    
-    // Validate connection references valid nodes
-    void validateConnection(Connection& conn, int connIndex) {
-        // Check sources exist
-        for (int i = 0; i < conn.source_count; i++) {
-            bool found = false;
-            for (int j = 0; j < node_count; j++) {
-                if (strEqI(conn.sources[i], nodes[j].id)) {
-                    found = true;
-                    break;
+                addError("Missing address/symbol", nodeIdx);
+            } else if (symbol_count > 0) {
+                // Validate symbol exists in symbol table
+                if (!isRawAddress(node.address) && !findSymbol(node.address)) {
+                    char msg[64];
+                    int mi = 0;
+                    const char* prefix = "Unknown symbol '";
+                    while (*prefix && mi < 40) msg[mi++] = *prefix++;
+                    int ai = 0;
+                    while (node.address[ai] && mi < 58) msg[mi++] = node.address[ai++];
+                    msg[mi++] = '\'';
+                    msg[mi] = '\0';
+                    addError(msg, nodeIdx, node.address);
                 }
             }
-            if (!found) {
-                char msg[64];
-                int mi = 0;
-                const char* prefix = "Source '";
-                while (prefix[mi]) { msg[mi] = prefix[mi]; mi++; }
-                int si = 0;
-                while (conn.sources[i][si] && mi < 45) { msg[mi++] = conn.sources[i][si++]; }
-                const char* suffix = "' not found";
-                int ssi = 0;
-                while (suffix[ssi] && mi < 63) { msg[mi++] = suffix[ssi++]; }
-                msg[mi] = '\0';
-                
-                int line = 1, col = 1;
-                findNodePosition(conn.sources[i], line, col);
-                addError(msg, line, col, 1);
+        }
+
+        // Validate node-type-specific parameters
+        if (isTimer(node.type) || isCounter(node.type)) {
+            if (node.preset == 0 && node.preset_str[0] == '\0') {
+                addWarning("Timer/counter has no preset value", nodeIdx);
             }
         }
-        
-        // Check destinations exist
-        for (int i = 0; i < conn.dest_count; i++) {
-            bool found = false;
-            for (int j = 0; j < node_count; j++) {
-                if (strEqI(conn.destinations[i], nodes[j].id)) {
-                    found = true;
-                    break;
+
+        if (isOperationBlock(node.type)) {
+            bool needsIn1 = true;
+            bool needsIn2 = !strEqI(node.type, "fb_inc") && !strEqI(node.type, "fb_dec") &&
+                           !strEqI(node.type, "fb_not") && !strEqI(node.type, "fb_move");
+            bool needsOut = true;
+
+            if (needsIn1 && node.in1[0] == '\0') {
+                addError("Operation block missing input 1 (in1)", nodeIdx);
+            } else if (needsIn1 && symbol_count > 0 && !isRawAddress(node.in1) && !findSymbol(node.in1)) {
+                char msg[64];
+                int mi = 0;
+                const char* prefix = "Unknown symbol '";
+                while (*prefix && mi < 40) msg[mi++] = *prefix++;
+                int ai = 0;
+                while (node.in1[ai] && mi < 58) msg[mi++] = node.in1[ai++];
+                msg[mi++] = '\'';
+                msg[mi] = '\0';
+                addError(msg, nodeIdx, node.in1);
+            }
+
+            if (needsIn2 && node.in2[0] == '\0') {
+                addError("Operation block missing input 2 (in2)", nodeIdx);
+            } else if (needsIn2 && symbol_count > 0 && !isRawAddress(node.in2) && !findSymbol(node.in2)) {
+                char msg[64];
+                int mi = 0;
+                const char* prefix = "Unknown symbol '";
+                while (*prefix && mi < 40) msg[mi++] = *prefix++;
+                int ai = 0;
+                while (node.in2[ai] && mi < 58) msg[mi++] = node.in2[ai++];
+                msg[mi++] = '\'';
+                msg[mi] = '\0';
+                addError(msg, nodeIdx, node.in2);
+            }
+
+            if (needsOut && node.out[0] == '\0') {
+                addError("Operation block missing output (out)", nodeIdx);
+            } else if (needsOut && symbol_count > 0 && !isRawAddress(node.out) && !findSymbol(node.out)) {
+                char msg[64];
+                int mi = 0;
+                const char* prefix = "Unknown symbol '";
+                while (*prefix && mi < 40) msg[mi++] = *prefix++;
+                int ai = 0;
+                while (node.out[ai] && mi < 58) msg[mi++] = node.out[ai++];
+                msg[mi++] = '\'';
+                msg[mi] = '\0';
+                addError(msg, nodeIdx, node.out);
+            }
+        }
+
+        if (isComparator(node.type)) {
+            if (node.in1[0] == '\0') {
+                addError("Comparator missing input 1 (in1)", nodeIdx);
+            } else if (symbol_count > 0 && !isRawAddress(node.in1) && !findSymbol(node.in1)) {
+                char msg[64];
+                int mi = 0;
+                const char* prefix = "Unknown symbol '";
+                while (*prefix && mi < 40) msg[mi++] = *prefix++;
+                int ai = 0;
+                while (node.in1[ai] && mi < 58) msg[mi++] = node.in1[ai++];
+                msg[mi++] = '\'';
+                msg[mi] = '\0';
+                addError(msg, nodeIdx, node.in1);
+            }
+
+            if (node.in2[0] == '\0') {
+                addError("Comparator missing input 2 (in2)", nodeIdx);
+            } else if (symbol_count > 0 && !isRawAddress(node.in2) && !findSymbol(node.in2)) {
+                char msg[64];
+                int mi = 0;
+                const char* prefix = "Unknown symbol '";
+                while (*prefix && mi < 40) msg[mi++] = *prefix++;
+                int ai = 0;
+                while (node.in2[ai] && mi < 58) msg[mi++] = node.in2[ai++];
+                msg[mi++] = '\'';
+                msg[mi] = '\0';
+                addError(msg, nodeIdx, node.in2);
+            }
+        }
+
+        return true;  // Always return true to continue linting
+    }
+
+    // Check if address is a raw memory address (starts with M, X, Y, K, S, T, C, or number)
+    bool isRawAddress(const char* addr) {
+        if (!addr || addr[0] == '\0') return false;
+        char first = addr[0];
+        // Memory area prefixes
+        if (first == 'M' || first == 'm' || first == 'X' || first == 'x' ||
+            first == 'Y' || first == 'y' || first == 'K' || first == 'k' ||
+            first == 'S' || first == 's' || first == 'T' || first == 't' ||
+            first == 'C' || first == 'c') {
+            // Check if next char is a digit (raw address) or not (could be symbol)
+            if (addr[1] >= '0' && addr[1] <= '9') return true;
+        }
+        // Pure numeric address
+        if (first >= '0' && first <= '9') return true;
+        return false;
+    }
+
+    // Override validateConnection to continue collecting errors
+    bool validateConnection(int connIdx) override {
+        if (connIdx < 0 || connIdx >= connection_count) return true;
+        Connection& conn = connections[connIdx];
+
+        // Check that all sources exist
+        for (int s = 0; s < conn.source_count; s++) {
+            int srcIdx = findNodeById(conn.sources[s]);
+            if (srcIdx < 0) {
+                // Add error at position 1,1 since we don't have a node
+                if (problem_count < LADDER_MAX_LINT_PROBLEMS) {
+                    LinterProblem& p = problems[problem_count++];
+                    p.type = LINT_ERROR;
+                    p.line = 1;
+                    p.column = 1;
+                    p.length = 1;
+                    p.lang = 3;
+                    int ti = 0;
+                    while (conn.sources[s][ti] && ti < 63) { p.token_buf[ti] = conn.sources[s][ti]; ti++; }
+                    p.token_buf[ti] = '\0';
+                    p.token_text = p.token_buf;
+                    char msg[64];
+                    int mi = 0;
+                    const char* prefix = "Connection source '";
+                    while (*prefix && mi < 40) msg[mi++] = *prefix++;
+                    int si = 0;
+                    while (conn.sources[s][si] && mi < 55) msg[mi++] = conn.sources[s][si++];
+                    const char* suffix = "' not found";
+                    while (*suffix && mi < 63) msg[mi++] = *suffix++;
+                    msg[mi] = '\0';
+                    int mj = 0;
+                    while (msg[mj] && mj < 63) { p.message[mj] = msg[mj]; mj++; }
+                    p.message[mj] = '\0';
+                    has_error = true;
+                }
+                continue;
+            }
+
+            // Check that destinations have x > source x
+            GraphNode& srcNode = nodes[srcIdx];
+            for (int d = 0; d < conn.dest_count; d++) {
+                int destIdx = findNodeById(conn.destinations[d]);
+                if (destIdx >= 0) {
+                    GraphNode& destNode = nodes[destIdx];
+                    if (destNode.x <= srcNode.x) {
+                        addError("Connection flows backward (destination must be right of source)", destIdx, conn.destinations[d]);
+                    }
                 }
             }
-            if (!found) {
-                char msg[64];
-                int mi = 0;
-                const char* prefix = "Destination '";
-                while (prefix[mi]) { msg[mi] = prefix[mi]; mi++; }
-                int di = 0;
-                while (conn.destinations[i][di] && mi < 45) { msg[mi++] = conn.destinations[i][di++]; }
-                const char* suffix = "' not found";
-                int ssi = 0;
-                while (suffix[ssi] && mi < 63) { msg[mi++] = suffix[ssi++]; }
-                msg[mi] = '\0';
-                
-                int line = 1, col = 1;
-                findNodePosition(conn.destinations[i], line, col);
-                addError(msg, line, col, 1);
+        }
+
+        // Check that all destinations exist
+        for (int d = 0; d < conn.dest_count; d++) {
+            int destIdx = findNodeById(conn.destinations[d]);
+            if (destIdx < 0) {
+                if (problem_count < LADDER_MAX_LINT_PROBLEMS) {
+                    LinterProblem& p = problems[problem_count++];
+                    p.type = LINT_ERROR;
+                    p.line = 1;
+                    p.column = 1;
+                    p.length = 1;
+                    p.lang = 3;
+                    int ti = 0;
+                    while (conn.destinations[d][ti] && ti < 63) { p.token_buf[ti] = conn.destinations[d][ti]; ti++; }
+                    p.token_buf[ti] = '\0';
+                    p.token_text = p.token_buf;
+                    char msg[64];
+                    int mi = 0;
+                    const char* prefix = "Connection destination '";
+                    while (*prefix && mi < 40) msg[mi++] = *prefix++;
+                    int di = 0;
+                    while (conn.destinations[d][di] && mi < 55) msg[mi++] = conn.destinations[d][di++];
+                    const char* suffix = "' not found";
+                    while (*suffix && mi < 63) msg[mi++] = *suffix++;
+                    msg[mi] = '\0';
+                    int mj = 0;
+                    while (msg[mj] && mj < 63) { p.message[mj] = msg[mj]; mj++; }
+                    p.message[mj] = '\0';
+                    has_error = true;
+                }
             }
         }
+
+        return true;  // Always return true to continue linting
     }
-    
-    // Validate entire graph structure
-    void validateGraph() {
+
+    // Override validateGraph to continue collecting all errors
+    bool validateGraph() override {
+        // Check for duplicate nodes at same position
+        for (int i = 0; i < node_count; i++) {
+            for (int j = i + 1; j < node_count; j++) {
+                if (nodes[i].x == nodes[j].x && nodes[i].y == nodes[j].y) {
+                    char msg[64];
+                    int mi = 0;
+                    const char* prefix = "Overlaps with node '";
+                    while (*prefix && mi < 40) msg[mi++] = *prefix++;
+                    int ni = 0;
+                    while (nodes[j].id[ni] && mi < 60) msg[mi++] = nodes[j].id[ni++];
+                    msg[mi++] = '\'';
+                    msg[mi] = '\0';
+                    addError(msg, i, nodes[j].id);
+                }
+            }
+        }
+
         // Validate all nodes
         for (int i = 0; i < node_count; i++) {
-            validateNode(nodes[i], i);
+            validateNode(i);
         }
-        
+
         // Validate all connections
         for (int i = 0; i < connection_count; i++) {
-            validateConnection(connections[i], i);
+            validateConnection(i);
         }
-        
-        // Check for disconnected outputs (coils without inputs)
+
+        // Check for dead nodes (nodes with no connections at all)
         for (int i = 0; i < node_count; i++) {
-            if (isTerminationNode(nodes[i].type)) {
-                bool hasInput = false;
-                for (int j = 0; j < connection_count; j++) {
-                    for (int k = 0; k < connections[j].dest_count; k++) {
-                        if (strEqI(connections[j].destinations[k], nodes[i].id)) {
-                            hasInput = true;
-                            break;
-                        }
-                    }
-                    if (hasInput) break;
-                }
-                if (!hasInput) {
-                    char msg[64];
-                    int mi = 0;
-                    const char* prefix = "Output '";
-                    while (prefix[mi]) { msg[mi] = prefix[mi]; mi++; }
-                    int ni = 0;
-                    while (nodes[i].id[ni] && mi < 45) { msg[mi++] = nodes[i].id[ni++]; }
-                    const char* suffix = "' has no inputs";
-                    int si = 0;
-                    while (suffix[si] && mi < 63) { msg[mi++] = suffix[si++]; }
-                    msg[mi] = '\0';
-                    
-                    int line = 1, col = 1;
-                    findNodePosition(nodes[i].id, line, col);
-                    addWarning(msg, line, col, 1);
-                }
+            if (isTapNode(nodes[i].type)) continue;
+
+            bool hasInputs = nodeHasInputs(i);
+            bool hasOutputs = nodeHasOutputs(i);
+
+            if (isInputNode(nodes[i].type) && !hasOutputs) {
+                addWarning("Contact not connected to any output", i);
+            }
+
+            if (isTerminationNode(nodes[i].type) && !hasInputs) {
+                addWarning("Output has no inputs", i);
+            }
+
+            if (!hasInputs && !hasOutputs) {
+                addError("Node is completely disconnected", i);
             }
         }
-        
-        // Check for orphaned contacts (contacts not connected to anything)
-        for (int i = 0; i < node_count; i++) {
-            if (isInputNode(nodes[i].type)) {
-                bool hasOutput = false;
-                for (int j = 0; j < connection_count; j++) {
-                    for (int k = 0; k < connections[j].source_count; k++) {
-                        if (strEqI(connections[j].sources[k], nodes[i].id)) {
-                            hasOutput = true;
-                            break;
-                        }
-                    }
-                    if (hasOutput) break;
-                }
-                if (!hasOutput) {
-                    char msg[64];
-                    int mi = 0;
-                    const char* prefix = "Contact '";
-                    while (prefix[mi]) { msg[mi] = prefix[mi]; mi++; }
-                    int ni = 0;
-                    while (nodes[i].id[ni] && mi < 45) { msg[mi++] = nodes[i].id[ni++]; }
-                    const char* suffix = "' not connected";
-                    int si = 0;
-                    while (suffix[si] && mi < 63) { msg[mi++] = suffix[si++]; }
-                    msg[mi] = '\0';
-                    
-                    int line = 1, col = 1;
-                    findNodePosition(nodes[i].id, line, col);
-                    addWarning(msg, line, col, 1);
-                }
-            }
+
+        // Count errors
+        int errorCount = 0;
+        for (int i = 0; i < problem_count; i++) {
+            if (problems[i].type == LINT_ERROR) errorCount++;
         }
+
+        return errorCount == 0;
     }
     
     // ============ Main Entry Points ============
@@ -346,11 +488,16 @@ public:
             return false;
         }
         
-        // Validate the graph structure (adds warnings)
+        // Validate the graph structure (collects all problems)
         validateGraph();
         
-        // Return true unless we have hard errors
-        return !has_error;
+        // Count actual errors
+        int errorCount = 0;
+        for (int i = 0; i < problem_count; i++) {
+            if (problems[i].type == LINT_ERROR) errorCount++;
+        }
+        
+        return errorCount == 0;
     }
     
     // Full compile mode: parse, validate, compile to STL
@@ -364,24 +511,28 @@ public:
             return false;
         }
         
-        // Validate the graph structure
+        // Validate the graph structure (collects all problems)
         validateGraph();
         
-        // Check if we have any errors (not just warnings)
-        bool hasErrors = false;
+        // Count actual errors
+        int errorCount = 0;
         for (int i = 0; i < problem_count; i++) {
             if (problems[i].type == LINT_ERROR) {
-                hasErrors = true;
-                break;
+                errorCount++;
             }
         }
         
         // Only compile if no errors
-        if (!hasErrors && !compile()) {
+        if (errorCount == 0 && !compile()) {
             return false;
         }
         
-        return !has_error && !hasErrors;
+        return errorCount == 0;
+    }
+
+    // Add a symbol to the symbol table for validation
+    void loadSymbol(const char* name, const char* type, u32 address, u8 bit, bool is_bit, u8 type_size) {
+        addSymbol(name, type, address, bit, is_bit, type_size);
     }
 };
 
@@ -453,6 +604,25 @@ WASM_EXPORT const char* ladder_lint_get_error() {
 
 WASM_EXPORT void ladder_lint_clear() {
     ladderLinter.clearProblems();
+}
+
+// Symbol table management
+WASM_EXPORT void ladder_lint_add_symbol(const char* name, const char* type, u32 address, u8 bit, bool is_bit, u8 type_size) {
+    ladderLinter.addSymbol(name, type, address, bit, is_bit, type_size);
+}
+
+WASM_EXPORT void ladder_lint_clear_symbols() {
+    ladderLinter.symbol_count = 0;
+}
+
+WASM_EXPORT int ladder_lint_get_problem_lang(int index) {
+    if (index < 0 || index >= ladderLinter.problem_count) return -1;
+    return ladderLinter.problems[index].lang;
+}
+
+WASM_EXPORT const char* ladder_lint_get_problem_token(int index) {
+    if (index < 0 || index >= ladderLinter.problem_count) return "";
+    return ladderLinter.problems[index].token_text ? ladderLinter.problems[index].token_text : "";
 }
 
 } // extern "C"

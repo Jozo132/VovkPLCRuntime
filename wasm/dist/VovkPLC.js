@@ -602,6 +602,130 @@ class VovkPLC_class {
     }
 
     /**
+     * @typedef {{ type: 'error' | 'warning' | 'info', line: number, column: number, length: number, message: string, token_text: string }} LadderLinterProblem
+     */
+
+    /**
+     * @typedef {{ problems: LadderLinterProblem[], output: string }} LadderLintResult
+     */
+
+    /**
+     * Lints the provided Ladder Graph JSON.
+     * Parses the ladder diagram, validates structure, and returns problems and generated STL.
+     * The line/column in problems correspond to the node's y/x position in the grid.
+     *
+     * @param {string | LadderGraph} ladder - The Ladder Graph as JSON string or object.
+     * @param {boolean} [debug=false] - If true, streams linter output to console.
+     * @returns {LadderLintResult} - Object containing problems array and generated STL output.
+     */
+    lintLadder = (ladder, debug = false) => {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        if (!this.wasm_exports.ladder_lint_load_from_stream) throw new Error("'ladder_lint_load_from_stream' function not found - Ladder linter not available")
+        if (!this.wasm_exports.ladder_lint_run) throw new Error("'ladder_lint_run' function not found")
+        if (!this.wasm_exports.ladder_lint_problem_count) throw new Error("'ladder_lint_problem_count' function not found")
+
+        const wasSilent = this.silent
+
+        // Temporarily disable stream output unless debug is enabled
+        if (!debug) {
+            this.setSilent(true)
+        }
+
+        try {
+            // Convert object to JSON string if needed
+            const ladderJson = typeof ladder === 'string' ? ladder : JSON.stringify(ladder)
+
+            // 1. Stream Ladder Graph JSON to linter
+            if (this.wasm_exports.streamClear) this.wasm_exports.streamClear()
+
+            let ok = true
+            for (let i = 0; i < ladderJson.length && ok; i++) {
+                ok = this.wasm_exports.streamIn(ladderJson.charCodeAt(i))
+            }
+            if (!ok) throw new Error('Failed to stream Ladder Graph JSON')
+            this.wasm_exports.streamIn(0) // Null terminator
+            this.wasm_exports.ladder_lint_load_from_stream()
+
+            // 2. Run Ladder Linter
+            this.wasm_exports.ladder_lint_run()
+
+            // 3. Get problems
+            const count = this.wasm_exports.ladder_lint_problem_count()
+            /** @type { LadderLinterProblem[] } */
+            const problems = []
+
+            if (count > 0) {
+                const memoryBuffer = this.wasm_exports.memory.buffer
+
+                for (let i = 0; i < count; i++) {
+                    const type_int = this.wasm_exports.ladder_lint_get_problem_type(i)
+                    const line = this.wasm_exports.ladder_lint_get_problem_line(i)
+                    const column = this.wasm_exports.ladder_lint_get_problem_column(i)
+                    const length = this.wasm_exports.ladder_lint_get_problem_length(i)
+
+                    // Get message (returned as pointer to C string)
+                    const msgPtr = this.wasm_exports.ladder_lint_get_problem_message(i)
+                    let message = ''
+                    if (msgPtr) {
+                        const mem = new Uint8Array(memoryBuffer)
+                        for (let j = 0; j < 256 && mem[msgPtr + j] !== 0; j++) {
+                            message += String.fromCharCode(mem[msgPtr + j])
+                        }
+                    }
+
+                    // Get token text if available
+                    let token_text = ''
+                    if (this.wasm_exports.ladder_lint_get_problem_token) {
+                        const tokenPtr = this.wasm_exports.ladder_lint_get_problem_token(i)
+                        if (tokenPtr) {
+                            const mem = new Uint8Array(memoryBuffer)
+                            for (let j = 0; j < 64 && mem[tokenPtr + j] !== 0; j++) {
+                                token_text += String.fromCharCode(mem[tokenPtr + j])
+                            }
+                        }
+                    }
+
+                    problems.push({
+                        type: type_int === 2 ? 'error' : type_int === 1 ? 'warning' : 'info',
+                        line,
+                        column,
+                        length,
+                        message,
+                        token_text,
+                    })
+                }
+            }
+
+            // 4. Get generated STL output
+            let output = ''
+            if (this.wasm_exports.ladder_lint_get_output && this.wasm_exports.ladder_lint_get_output_length) {
+                const outputLen = this.wasm_exports.ladder_lint_get_output_length()
+                const outputPtr = this.wasm_exports.ladder_lint_get_output()
+                if (outputLen > 0 && outputPtr) {
+                    const mem = new Uint8Array(this.wasm_exports.memory.buffer)
+                    for (let j = 0; j < outputLen; j++) {
+                        output += String.fromCharCode(mem[outputPtr + j])
+                    }
+                }
+            }
+
+            // Clear linter state
+            if (this.wasm_exports.ladder_lint_clear) {
+                this.wasm_exports.ladder_lint_clear()
+            }
+
+            return {problems, output}
+        } finally {
+            // Restore original stream callback
+            this.setSilent(wasSilent)
+            // Clear any accumulated stream output
+            if (!debug) {
+                this.readStream()
+            }
+        }
+    }
+
+    /**
      * IR Flag constants for instruction classification.
      */
     static IR_FLAGS = {
@@ -1415,8 +1539,8 @@ class VovkPLC_class {
 
         if (count > 0) {
             const pointer = this.wasm_exports.project_getProblems()
-            // Struct size = 152 bytes (4+4+4+4+64+64+4+4)
-            const struct_size = 152
+            // Struct size = 280 bytes (4+4+4+4+64+64+64+4+64+4)
+            const struct_size = 280
 
             const memory = new Uint8Array(this.wasm_exports.memory.buffer)
             const view = new DataView(this.wasm_exports.memory.buffer)
@@ -1456,25 +1580,25 @@ class VovkPLC_class {
                     block += String.fromCharCode(charCode)
                 }
 
-                // lang is 4 bytes at offset 144
-                const lang = view.getUint32(offset + 144, true)
-
-                // token_text pointer at offset 148
-                const token_ptr = view.getUint32(offset + 148, true)
-                let token = undefined
-
-                if (token_ptr !== 0) {
-                    if (length > 0) {
-                        try {
-                            const token_buf = new Uint8Array(memory.buffer, token_ptr, length)
-                            token = new TextDecoder().decode(token_buf)
-                        } catch (e) {
-                            token = readString(token_ptr, 128)
-                        }
-                    } else {
-                        token = readString(token_ptr, 128)
-                    }
+                // program is 64 bytes at offset 144
+                let program = ''
+                for (let j = 0; j < 64; j++) {
+                    const charCode = view.getUint8(offset + 144 + j)
+                    if (charCode === 0) break
+                    program += String.fromCharCode(charCode)
                 }
+
+                // lang is 4 bytes at offset 208
+                const lang = view.getUint32(offset + 208, true)
+
+                // token_buf is 64 bytes at offset 212 (stable copy of token text)
+                let token = ''
+                for (let j = 0; j < 64; j++) {
+                    const charCode = view.getUint8(offset + 212 + j)
+                    if (charCode === 0) break
+                    token += String.fromCharCode(charCode)
+                }
+                // Note: token_text pointer at offset 276 is no longer used since we read from token_buf directly
 
                 // Map integer language ID to string name if possible
                 /** @type {Record<number, string>} */
@@ -1492,6 +1616,7 @@ class VovkPLC_class {
                     line: line,
                     column: column,
                     length: length,
+                    program: program || undefined,
                     block: block || undefined,
                     lang: lang,
                     compiler: langName,
@@ -2717,6 +2842,8 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
     lintPLCASM = (assembly, debug = false) => this.call('lintPLCASM', assembly, debug)
     /** @type { (stl: string, debug?: boolean) => Promise<{ problems: STLLinterProblem[], output: string }> } */
     lintSTL = (stl, debug = false) => this.call('lintSTL', stl, debug)
+    /** @type { (ladder: string | LadderGraph, debug?: boolean) => Promise<{ problems: LadderLinterProblem[], output: string }> } */
+    lintLadder = (ladder, debug = false) => this.call('lintLadder', ladder, debug)
     /** @type { (value?: boolean) => Promise<any> } */
     setSilent = value => this.call('setSilent', value)
     /** @type { () => Promise<any> } */
