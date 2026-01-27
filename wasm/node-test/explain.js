@@ -598,6 +598,9 @@ const run = async () => {
         // We'll use runFullProgramDebug but need to handle potential infinite loops
         // The runtime should output step-by-step execution
         
+        // Reset first cycle flag so initial values are applied
+        runtime.wasm_exports.memoryReset()
+        
         runtime.wasm_exports.runFullProgramDebug()
         
         // Debug execution output goes to stdout

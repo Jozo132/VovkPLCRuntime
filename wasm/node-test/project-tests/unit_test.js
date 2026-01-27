@@ -5,7 +5,7 @@
 // the generated output against expected .output JSON files.
 //
 // Usage:
-//   node wasm/node-test/project-tests/unit_test.js [test_name] [--update] [--verbose]
+//   node wasm/node-test/project-tests/unit_test.js [test_name] [--update] [--verbose] [--run]
 //   npm run test:project
 //
 // Examples:
@@ -13,6 +13,7 @@
 //   node unit_test.js test_03   # Run only test_03
 //   node unit_test.js test_03 --update  # Update expected output for test_03
 //   node unit_test.js test_03 --verbose # Run with debug output from compiler
+//   node unit_test.js test_01 --run     # Explain bytecode step-by-step
 //
 // Test files (in samples/ subdirectory):
 //   - test_XX.project - Project definition input
@@ -24,6 +25,7 @@ import VovkPLC from '../../dist/VovkPLC.js'
 import path from 'path'
 import fs from 'fs'
 import {fileURLToPath} from 'url'
+import {execSync} from 'child_process'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -328,6 +330,8 @@ function generateOutput(runtime, success, error = null) {
         const errorFile = getString(runtime, wasm.project_getErrorFile())
         const errorBlock = getString(runtime, wasm.project_getErrorBlock())
         const errorBlockLang = wasm.project_getErrorBlockLanguage()
+        const errorToken = getString(runtime, wasm.project_getErrorToken())
+        const errorSourceLine = getString(runtime, wasm.project_getErrorSourceLine())
         const langNames = ['UNKNOWN', 'PLCASM', 'STL', 'LADDER', 'FBD', 'SFC', 'ST', 'IL']
         /** @type { Problem } */
         const problem = {
@@ -342,6 +346,8 @@ function generateOutput(runtime, success, error = null) {
             problem.block = errorBlock
             problem.language = langNames[errorBlockLang] || 'UNKNOWN'
         }
+        if (errorToken) problem.token = errorToken
+        if (errorSourceLine) problem.sourceLine = errorSourceLine
         output.problems.push(problem)
         return output
     }
@@ -429,6 +435,28 @@ function compareOutputs(expected, actual) {
         diffs.push({field: 'blocks.length', expected: expected.blocks.length, actual: actual.blocks.length})
     }
 
+    // Compare individual block properties
+    const minBlocks = Math.min(expected.blocks.length, actual.blocks.length)
+    for (let i = 0; i < minBlocks; i++) {
+        const eb = expected.blocks[i]
+        const ab = actual.blocks[i]
+        if (eb.file !== ab.file) {
+            diffs.push({field: `blocks[${i}].file`, expected: eb.file, actual: ab.file})
+        }
+        if (eb.name !== ab.name) {
+            diffs.push({field: `blocks[${i}].name`, expected: eb.name, actual: ab.name})
+        }
+        if (eb.language !== ab.language) {
+            diffs.push({field: `blocks[${i}].language`, expected: eb.language, actual: ab.language})
+        }
+        if (eb.offset !== ab.offset) {
+            diffs.push({field: `blocks[${i}].offset`, expected: eb.offset, actual: ab.offset})
+        }
+        if (eb.size !== ab.size) {
+            diffs.push({field: `blocks[${i}].size`, expected: eb.size, actual: ab.size})
+        }
+    }
+
     // Compare symbols count
     if (expected.symbols.length !== actual.symbols.length) {
         diffs.push({field: 'symbols.length', expected: expected.symbols.length, actual: actual.symbols.length})
@@ -455,6 +483,9 @@ async function runTests() {
 
     // Check for --verbose flag to show debug output from compiler
     const verboseMode = process.argv.includes('--verbose') || process.argv.includes('-v')
+
+    // Check for --run flag to pipe bytecode to npm run explain
+    const runMode = process.argv.includes('--run') || process.argv.includes('-r')
 
     // Check for specific test name argument (not a flag)
     const testFilter = process.argv.slice(2).find(arg => !arg.startsWith('-'))
@@ -521,6 +552,10 @@ async function runTests() {
         console.log(`${YELLOW}Running in VERBOSE mode - showing compiler debug output${RESET}`)
         console.log()
     }
+    if (runMode) {
+        console.log(`${YELLOW}Running in RUN mode - will explain bytecode after compilation${RESET}`)
+        console.log()
+    }
     if (testFilter) {
         console.log(`Running test: ${testFilter}`)
     } else {
@@ -581,9 +616,17 @@ async function runTests() {
             // Compare outputs
             const diffs = compareOutputs(expectedOutput, actualOutput)
 
+            // Collect bytecode for explain at the end
+            let bytecodeToExplain = null
+            if (runMode && actualOutput.bytecodeLength > 0 && actualOutput.bytecode) {
+                bytecodeToExplain = { name: testCase, bytecode: actualOutput.bytecode }
+            }
+
             if (diffs.length > 0) {
                 console.log(`${RED}✗${RESET} ${testCase} - Output mismatch`)
-                failures.push({name: testCase, diffs, expected: expectedOutput, actual: actualOutput})
+                // Get combined PLCASM for error display (not saved to file)
+                const combinedPLCASM = getString(runtime, wasm.project_getCombinedPLCASM())
+                failures.push({name: testCase, diffs, expected: expectedOutput, actual: actualOutput, combinedPLCASM, bytecodeToExplain})
                 failed++
                 continue
             }
@@ -612,6 +655,12 @@ async function runTests() {
                 const status = `expected error: line ${actualOutput.problems[0]?.line || '?'}`
                 console.log(`${GREEN}✓${RESET} ${testCase} (${status})`)
             }
+
+            // Store bytecode to explain for passing tests too
+            if (bytecodeToExplain) {
+                failures.push({name: testCase, bytecodeToExplain, passed: true})
+            }
+
             passed++
         } catch (e) { // @ts-ignore
             console.log(`${RED}✗${RESET} ${testCase} - Error: ${e.message}`)
@@ -623,31 +672,70 @@ async function runTests() {
     console.log()
     console.log('─'.repeat(68))
 
-    // Show detailed failures
-    if (failures.length > 0) {
+    // Show detailed failures (excluding passed tests that are only there for bytecode explain)
+    const actualFailures = failures.filter(f => !f.passed)
+    if (actualFailures.length > 0) {
         console.log()
         console.log(`${BOLD}${RED}Failed Tests:${RESET}`)
         console.log()
 
-        for (const failure of failures) {
+        for (const failure of actualFailures) {
             console.log(`${BOLD}${failure.name}:${RESET}`)
             if (failure.error) {
                 console.log(`  Error: ${failure.error}`)
             } else if (failure.diffs && failure.diffs.length > 0) {
-                // Check if success mismatch exists - if so, only show that since it's the root cause
+                // Check if this is a success mismatch where actual failed
                 const successDiff = failure.diffs.find(d => d.field === 'success')
-                const diffsToShow = successDiff ? [successDiff] : failure.diffs
+                if (successDiff && !failure.actual?.success && failure.actual?.problems?.length > 0) {
+                    // Show the actual compilation error prominently
+                    const prob = failure.actual.problems[0]
+                    console.log(`  ${RED}Compilation Error:${RESET}`)
+                    console.log(`    ${prob.message}`)
+                    if (prob.file || prob.block) {
+                        let location = '    at'
+                        if (prob.file) location += ` ${prob.file}`
+                        if (prob.block) location += `/${prob.block}`
+                        if (prob.language) location += ` (${prob.language})`
+                        location += ` line ${prob.line}:${prob.column}`
+                        console.log(`${CYAN}${location}${RESET}`)
+                    }
+                    
+                    // Show combined PLCASM with line numbers if available
+                    if (failure.combinedPLCASM) {
+                        console.log()
+                        console.log(`  ${CYAN}Combined PLCASM (error at line ${prob.line}):${RESET}`)
+                        const lines = failure.combinedPLCASM.split('\n')
+                        const errorLineNum = prob.line || 0
+                        // Show context: 3 lines before and after the error
+                        const startLine = Math.max(0, errorLineNum - 4)
+                        const endLine = Math.min(lines.length, errorLineNum + 3)
+                        
+                        for (let i = startLine; i < endLine; i++) {
+                            const lineNum = i + 1  // 1-based
+                            const lineNumStr = String(lineNum).padStart(4)
+                            const isErrorLine = lineNum === errorLineNum
+                            const prefix = isErrorLine ? `${RED}>>` : '  '
+                            const suffix = isErrorLine ? RESET : ''
+                            console.log(`  ${prefix}${lineNumStr}│ ${lines[i]}${suffix}`)
+                            
+                            // Show caret under the error position
+                            if (isErrorLine && prob.column) {
+                                const col = Math.max(0, prob.column - 1)
+                                const tokenLen = prob.token ? prob.token.length : 1
+                                const padding = ' '.repeat(8 + col)  // 8 = "  >>XXXX│ " prefix length
+                                const caret = '^'.repeat(tokenLen)
+                                console.log(`${padding}${YELLOW}${caret}${RESET}`)
+                            }
+                        }
+                    }
+                    console.log()
+                }
 
                 console.log(`  Differences:`)
-                for (const d of diffsToShow) {
+                for (const d of failure.diffs) {
                     console.log(`    ${d.field}:`)
                     console.log(`      expected: ${RED}${JSON.stringify(d.expected)}${RESET}`)
                     console.log(`      actual:   ${YELLOW}${JSON.stringify(d.actual)}${RESET}`)
-                }
-
-                // Show hint if success mismatch hides other diffs
-                if (successDiff && failure.diffs.length > 1) {
-                    console.log(`    ${CYAN}(${failure.diffs.length - 1} other difference(s) hidden - fix success first)${RESET}`)
                 }
             }
             console.log()
@@ -657,6 +745,40 @@ async function runTests() {
     // Summary
     const total = passed + failed
     const statusColor = failed > 0 ? RED : GREEN
+
+    // Run explain for all collected bytecodes just before showing results
+    if (runMode) {
+        const toExplain = failures.filter(f => f.bytecodeToExplain)
+        if (toExplain.length > 0) {
+            console.log()
+            for (const item of toExplain) {
+                const { name, bytecode } = item.bytecodeToExplain
+                console.log(`${CYAN}─── Bytecode Explanation for ${name} ───${RESET}`)
+                console.log()
+                try {
+                    const rootDir = path.resolve(__dirname, '../../..')
+                    const result = execSync(`node -e "process.stdout.write('${bytecode}')" | npm run explain --silent`, {
+                        cwd: rootDir,
+                        encoding: 'utf8',
+                        stdio: ['pipe', 'pipe', 'pipe']
+                    })
+                    console.log(result)
+                } catch (err) {
+                    // @ts-ignore
+                    console.log(`${RED}Error running explain: ${err.message}${RESET}`)
+                    // @ts-ignore
+                    if (err.stdout) console.log(err.stdout)
+                    // @ts-ignore
+                    if (err.stderr) console.log(`${RED}${err.stderr}${RESET}`)
+                }
+            }
+        }
+        // Remove the passed entries from failures (they were only there for bytecode)
+        for (let i = failures.length - 1; i >= 0; i--) {
+            if (failures[i].passed) failures.splice(i, 1)
+        }
+    }
+
     console.log()
     console.log(`${BOLD}Results: ${statusColor}${passed}/${total} tests passed${RESET}`)
 

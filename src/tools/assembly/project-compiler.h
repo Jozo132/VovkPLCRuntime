@@ -2115,6 +2115,9 @@ public:
         // Calculate actual memory usage based on bytecode access patterns
         calculateMemoryUsage();
 
+        // Calculate block bytecode offsets and sizes from LANG markers
+        calculateBlockOffsets();
+
         if (debug_mode) {
             Serial.print(F("Compilation complete. Output size: "));
             Serial.print(output_length);
@@ -2202,21 +2205,25 @@ public:
         }
         
         // Also scan symbols for addresses (covers compile-time references)
+        // Track the end address (addr + type_size - 1) to properly account for multi-byte types
         for (int i = 0; i < symbol_count; i++) {
             u32 addr = symbols[i].address;
+            u8 type_size = symbols[i].type_size;
+            if (type_size < 1) type_size = 1;  // Minimum 1 byte for bits
+            u32 end_addr = addr + type_size - 1;  // Last byte used by this symbol
             
             if (addr >= S_start && addr <= S_end) {
                 used_S = true;
-                if (addr > max_addr_S) max_addr_S = addr;
+                if (end_addr > max_addr_S) max_addr_S = end_addr;
             } else if (addr >= M_start && addr <= M_end) {
                 used_M = true;
-                if (addr > max_addr_M) max_addr_M = addr;
+                if (end_addr > max_addr_M) max_addr_M = end_addr;
             } else if (addr >= T_start && addr <= T_end) {
                 used_T = true;
-                if (addr > max_addr_T) max_addr_T = addr;
+                if (end_addr > max_addr_T) max_addr_T = end_addr;
             } else if (addr >= C_start && addr <= C_end) {
                 used_C = true;
-                if (addr > max_addr_C) max_addr_C = addr;
+                if (end_addr > max_addr_C) max_addr_C = end_addr;
             }
         }
         
@@ -2239,6 +2246,40 @@ public:
         }
         
         memory_used = total_used;
+    }
+
+    // Calculate block bytecode offsets and sizes by scanning for LANG markers (0xFD)
+    // Each block starts with [LANG, language_id] and ends before the next LANG or END (0xFF)
+    void calculateBlockOffsets() {
+        if (program_block_count == 0 || output_length == 0) return;
+
+        // Find all LANG marker positions in bytecode
+        u32 block_starts[PROJECT_MAX_PROGRAM_BLOCKS];
+        int found_blocks = 0;
+
+        for (int i = 0; i < output_length - 1 && found_blocks < PROJECT_MAX_PROGRAM_BLOCKS; i++) {
+            if (output[i] == 0xFD) {  // LANG opcode
+                block_starts[found_blocks++] = i;
+                i++;  // Skip the language ID byte
+            }
+        }
+
+        // Assign offsets and sizes to blocks
+        for (int b = 0; b < program_block_count && b < found_blocks; b++) {
+            program_blocks[b].bytecode_offset = block_starts[b];
+
+            // Size is from this block start to next block start (or END marker)
+            if (b + 1 < found_blocks) {
+                program_blocks[b].bytecode_size = block_starts[b + 1] - block_starts[b];
+            } else {
+                // Last block - size is to end of bytecode (excluding END marker if present)
+                u32 end_pos = output_length;
+                if (output_length > 0 && output[output_length - 1] == 0xFF) {
+                    end_pos = output_length - 1;  // Exclude END marker
+                }
+                program_blocks[b].bytecode_size = end_pos - block_starts[b];
+            }
+        }
     }
 
     // ============ Output Accessors ============
@@ -2315,6 +2356,16 @@ extern "C" {
     // Compile project from a direct string pointer (for internal use)
     WASM_EXPORT bool project_compileString(char* source, int length, bool debug = false) {
         return project_compiler.compile(source, length, debug);
+    }
+
+    // Get the combined PLCASM source (generated during compilation)
+    WASM_EXPORT const char* project_getCombinedPLCASM() {
+        return project_compiler.combined_plcasm;
+    }
+
+    // Get the combined PLCASM source length
+    WASM_EXPORT int project_getCombinedPLCASMLength() {
+        return project_compiler.combined_plcasm_length;
     }
 
     // Get the compiled bytecode pointer

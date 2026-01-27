@@ -8,6 +8,8 @@
   "blocks": [],
   "symbols": [],
   "memoryAreas": [],
+  "memory": { "available": 0, "used": 0 },
+  "flash": { "size": 0, "used": 0 },
   "execution": { "steps": 0, "stackSize": 0 },
   "problems": [
     { "severity": "error", "message": "No program blocks found", "line": 3, "column": 1 }

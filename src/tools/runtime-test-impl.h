@@ -121,6 +121,9 @@ template <typename T> void UnitTest::review(VovkPLCRuntime& runtime, const TestC
 
 RuntimeError UnitTest::fullProgramDebug(VovkPLCRuntime& runtime) {
     runtime.clear();
+#ifdef __WASM__
+    runtime.updateGlobals(); // Update global markers (including first cycle flag)
+#endif // __WASM__
     auto& program = runtime.program;
     program.println();
 #ifdef __RUNTIME_DEBUG__

@@ -1614,6 +1614,17 @@ public:
             }
             // If prefixed parsing fails, fall back to named constants or plain ints.
         }
+        
+        // Check symbol table for named symbols (e.g., variable names)
+        if (token.type == TOKEN_KEYWORD) {
+            StringView name = { token.string.data, token.length };
+            Symbol* sym = findSymbol(name);
+            if (sym != nullptr) {
+                output = sym->address;
+                return false;
+            }
+        }
+        
         return intFromToken(token, output);
     }
 
