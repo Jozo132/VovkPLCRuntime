@@ -10,6 +10,26 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const wasmPath = path.resolve(__dirname, '../dist/VovkPLC.wasm')
 
+/**
+ * @typedef {Object} SharedStatus
+ * @property {number} status
+ * @property {number} cycles
+ * @property {number} last_time
+ * @property {number} min_time
+ * @property {number} max_time
+ */
+
+/**
+ * @typedef {Object} CompilationResult
+ * @property {number} size
+ * @property {Uint8Array} [output]
+ */
+
+/**
+ * @param {any} condition
+ * @param {string} [message]
+ * @returns {void}
+ */
 const assert = (condition, message) => {
     if (!condition) {
         throw new Error(message || "Assertion failed")
@@ -184,7 +204,7 @@ const main = async () => {
         console.log('    Info:', JSON.stringify(info))
         try {
            const memLoc = await worker.callExport('getMemoryLocation')
-           console.log(`    getMemoryLocation: ${memLoc}`)
+           console.log(`    getMemoryLocation: ${memLoc}`) // @ts-ignore
         } catch(e) { console.log('    Could not getMemoryLocation via export: ' + e.message) }
 
         // Reload the program for the debugger test (since unit tests overwrote it)
@@ -210,6 +230,7 @@ const main = async () => {
         while(cycles < maxCycles) {
             // Check status (requires polling the shared struct)
             const status = worker.getSharedStatus()
+            if (!status) throw new Error('Failed to get shared status during stepping')
             
             // Trigger a step
             worker.setSharedMode('step')
@@ -218,7 +239,7 @@ const main = async () => {
             await new Promise(r => setTimeout(r, 50))
             
             const memNew = await worker.readMemoryArea(0, 1)
-            console.log(`    Cycle ${cycles}: Status=${status?.status} Cycle=${status?.cycle} Mem[0]=${memNew[0]}`)
+            console.log(`    Cycle ${cycles}: Status=${status.status} Cycle=${status.cycles} Mem[0]=${memNew[0]}`)
             
             if (memNew[0] === 30) {
                 val = 30
@@ -248,8 +269,10 @@ const main = async () => {
         
         // Wait for status to settle (Worker loop poll is ~50ms)
         let stats = await worker.getSharedStatus()
+        if (!stats) throw new Error('Failed to get shared status after runtime stop')
         for(let i=0; i<20; i++) {
              stats = await worker.getSharedStatus()
+             if (!stats) throw new Error('Failed to get shared status during wait loop')
              if (stats.status === 0 || stats.status === 2) break
              await new Promise(r => setTimeout(r, 50))
         }
