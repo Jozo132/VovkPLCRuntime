@@ -1,5 +1,5 @@
 // test_stl_compiler.js - Test Siemens STL to PLCASM transpiler
-import VovkPLC from '../dist/VovkPLC.js'
+import VovkPLC from '../../dist/VovkPLC.js'
 import path from 'path'
 import fs from 'fs'
 import {fileURLToPath} from 'url'
@@ -11,7 +11,7 @@ let passed = 0
 let failed = 0
 
 const run = async () => {
-    const wasmPath = path.resolve(__dirname, '../dist/VovkPLC.wasm')
+    const wasmPath = path.resolve(__dirname, '../../dist/VovkPLC.wasm')
     console.log(`Loading WASM from: ${wasmPath}`)
 
     if (!fs.existsSync(wasmPath)) {

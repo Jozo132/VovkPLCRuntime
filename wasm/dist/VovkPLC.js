@@ -128,7 +128,7 @@ const SUPPORT = checkSupport()
  * `;
  *
  * // Compile
- * await worker.compile(assembly);
+ * await worker.compilePLCASM(assembly);
  *
  * // Start the PLC VM
  * await worker.startRuntime();
@@ -147,12 +147,12 @@ const SUPPORT = checkSupport()
  * const plc = new VovkPLC();
  * await plc.initialize('./VovkPLC.wasm');
  *
- * plc.compile(`
+ * plc.compilePLCASM(`
  *   ptr.const 0
  *   u8.const 42
  *   u8.move
  *   exit
- * `, true); // true = run immediately in debug mode
+ * `, {run: true}); // run: true = run immediately in debug mode
  *
  * // Read Memory
  * const mem = plc.readMemoryArea(0, 1);
@@ -275,7 +275,7 @@ class VovkPLC_class {
      * @param {boolean} [debug=false] - If true, streams linter output to console.
      * @returns {LinterProblem[]} - Array of discovered problems.
      */
-    lint = (assembly, debug = false) => {
+    lintPLCASM = (assembly, debug = false) => {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         if (!this.wasm_exports.lint_load_assembly) throw new Error("'lint_load_assembly' function not found")
         if (!this.wasm_exports.lint_run) throw new Error("'lint_run' function not found")
@@ -973,7 +973,7 @@ class VovkPLC_class {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         if (!this.wasm_exports.ladder_graph_load_from_stream) throw new Error("'ladder_graph_load_from_stream' function not found - Ladder Graph compiler not available")
         if (!this.wasm_exports.ladder_graph_compile) throw new Error("'ladder_graph_compile' function not found")
-        if (!this.wasm_exports.ladder_graph_output_to_stream) throw new Error("'ladder_graph_output_to_stream' function not found")
+        if (!this.wasm_exports.ladder_graph_get_output_length) throw new Error("'ladder_graph_get_output_length' function not found")
 
         // Convert object to JSON string if needed
         const ladderJson = typeof ladder === 'string' ? ladder : JSON.stringify(ladder)
@@ -994,12 +994,31 @@ class VovkPLC_class {
         const ladderSuccess = this.wasm_exports.ladder_graph_compile()
 
         if (!ladderSuccess) {
+            // Get error message if available
+            if (this.wasm_exports.ladder_graph_has_error && this.wasm_exports.ladder_graph_has_error()) {
+                const errPtr = this.wasm_exports.ladder_graph_get_error()
+                if (errPtr) {
+                    const mem = new Uint8Array(this.wasm_exports.memory.buffer)
+                    let errMsg = ''
+                    for (let i = 0; i < 256 && mem[errPtr + i] !== 0; i++) {
+                        errMsg += String.fromCharCode(mem[errPtr + i])
+                    }
+                    throw new Error(`Ladder Graph compilation failed: ${errMsg}`)
+                }
+            }
             throw new Error('Ladder Graph compilation failed')
         }
 
-        // Get the generated STL via stream
-        this.wasm_exports.ladder_graph_output_to_stream()
-        const stlCode = this.readStream()
+        // Get the generated STL directly from output buffer
+        const outputLen = this.wasm_exports.ladder_graph_get_output_length()
+        const outputPtr = this.wasm_exports.ladder_graph_get_output()
+        let stlCode = ''
+        if (outputLen > 0 && outputPtr) {
+            const mem = new Uint8Array(this.wasm_exports.memory.buffer)
+            for (let i = 0; i < outputLen; i++) {
+                stlCode += String.fromCharCode(mem[outputPtr + i])
+            }
+        }
 
         return {
             type: 'stl',
@@ -1056,41 +1075,6 @@ class VovkPLC_class {
         }
 
         return result
-    }
-
-    /**
-     * Compiles source code based on the specified language.
-     * - 'plcasm': Compiles directly to bytecode.
-     * - 'stl': Transpiles to PLCASM (for further compilation by external editor).
-     * - 'ladder-graph': Transpiles to STL (for further compilation).
-     *
-     * @param {string | LadderGraph} source_code - The source code to compile.
-     * @param {boolean | { run?: boolean, language?: 'plcasm' | 'stl' | 'ladder-graph' }} [options=false] - If boolean, whether to run after compile (only for plcasm). If object, contains options.
-     * @returns {CompileResult} - The compilation result.
-     * @throws {Error} If compilation fails.
-     */
-    compile(source_code, options = false) {
-        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
-
-        // Handle backward-compatible boolean parameter
-        let run = false
-        let language = 'plcasm'
-        if (typeof options === 'boolean') {
-            run = options
-        } else if (typeof options === 'object' && options !== null) {
-            run = options.run || false
-            language = options.language || 'plcasm'
-        }
-
-        switch (language) {
-            case 'ladder-graph':
-                return this.compileLadder(source_code)
-            case 'stl':
-                return this.compileSTL(source_code)
-            case 'plcasm':
-            default:
-                return this.compilePLCASM(source_code, {run})
-        }
     }
 
     /**
@@ -2627,7 +2611,7 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
     }
 
     /** @type { (assembly: string, debug?: boolean) => Promise<any> } */
-    lint = (assembly, debug = false) => this.call('lint', assembly, debug)
+    lintPLCASM = (assembly, debug = false) => this.call('lintPLCASM', assembly, debug)
     /** @type { (stl: string, debug?: boolean) => Promise<{ problems: STLLinterProblem[], output: string }> } */
     lintSTL = (stl, debug = false) => this.call('lintSTL', stl, debug)
     /** @type { (value?: boolean) => Promise<any> } */
@@ -2642,8 +2626,6 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
     setRuntimeOffsets = (controlOffset, inputOffset, outputOffset, systemOffset, markerOffset) => this.call('setRuntimeOffsets', controlOffset, inputOffset, outputOffset, systemOffset, markerOffset)
     /** @type { (assembly: string) => Promise<any> } */
     downloadAssembly = assembly => this.call('downloadAssembly', assembly)
-    /** @type { (assembly: string, options?: boolean | { run?: boolean, language?: 'plcasm' | 'stl' | 'ladder-graph' }) => Promise<CompileResult> } */
-    compile = (assembly, options = false) => this.call('compile', assembly, options)
     /** @type { (plcasm: string, options?: { run?: boolean }) => Promise<CompileResult> } */
     compilePLCASM = (plcasm, options = {}) => this.call('compilePLCASM', plcasm, options)
     /** @type { (stl: string) => Promise<CompileResult> } */

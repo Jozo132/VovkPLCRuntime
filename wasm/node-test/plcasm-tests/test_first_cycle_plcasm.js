@@ -1,10 +1,10 @@
 
-import VovkPLC from '../dist/VovkPLC.js'
+import VovkPLC from '../../dist/VovkPLC.js'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const wasmPath = path.resolve(__dirname, '../dist/VovkPLC.wasm')
+const wasmPath = path.resolve(__dirname, '../../dist/VovkPLC.wasm')
 
 const runtime = new VovkPLC()
 await runtime.initialize(wasmPath, false, true)

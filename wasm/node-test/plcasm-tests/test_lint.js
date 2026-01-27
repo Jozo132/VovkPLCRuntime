@@ -1,5 +1,5 @@
 // test_lint.js
-import VovkPLC from '../dist/VovkPLC.js'
+import VovkPLC from '../../dist/VovkPLC.js'
 import path from 'path'
 import fs from 'fs'
 import {fileURLToPath} from 'url'
@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename)
 
 const run = async () => {
     // Path to WASM file
-    const wasmPath = path.resolve(__dirname, '../dist/VovkPLC.wasm')
+    const wasmPath = path.resolve(__dirname, '../../dist/VovkPLC.wasm')
     console.log(`Loading WASM from: ${wasmPath}`)
 
     if (!fs.existsSync(wasmPath)) {
@@ -45,7 +45,7 @@ jmp undefined_label
         // Lint the assembly
         console.log('Linting assembly...')
         const t_start = performance.now()
-        const problems = await runtime.lint(assembly)
+        const problems = await runtime.lintPLCASM(assembly)
         const t_end = performance.now()
         console.log(`Linting completed in ${(t_end - t_start).toFixed(2)} ms`)
 

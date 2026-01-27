@@ -265,11 +265,10 @@ async function main() {
     const apiMethods = [
         { name: 'compileProject', async: true },
         { name: 'lintProject', async: true },
-        { name: 'compile', async: true },
         { name: 'compilePLCASM', async: true },
         { name: 'compileSTL', async: true },
         { name: 'compileLadder', async: true },
-        { name: 'lint', async: true },
+        { name: 'lintPLCASM', async: true },
         { name: 'lintSTL', async: true },
     ]
     

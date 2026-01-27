@@ -1,5 +1,5 @@
 // test_compile.js
-import VovkPLC from '../dist/VovkPLC.js'
+import VovkPLC from '../../dist/VovkPLC.js'
 import path from 'path'
 import fs from 'fs'
 import {fileURLToPath} from 'url'
@@ -12,7 +12,7 @@ const originalLog = console.log
 
 const run = async () => {
     // Path to WASM file
-    const wasmPath = path.resolve(__dirname, '../dist/VovkPLC.wasm')
+    const wasmPath = path.resolve(__dirname, '../../dist/VovkPLC.wasm')
     console.log(`Loading WASM from: ${wasmPath}`)
 
     if (!fs.existsSync(wasmPath)) {

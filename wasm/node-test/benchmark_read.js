@@ -22,7 +22,7 @@ async function benchmark() {
     const worker = await VovkPLCWorker.create(wasmPath, {silent: false, debug: false})
 
     // Compile empty program
-    await worker.compile('nop')
+    await worker.compilePLCASM('nop')
 
     // ---------------------------------------------------------
     // 1. Benchmark Standard Async Read (Command Protocol)
@@ -183,10 +183,10 @@ async function benchmark() {
     console.log(`\n[5] Compiling ${lines} blocks (3000 instructions)...`);
     
     // Run once to warm up (with valid asm)
-    await worker.compile('const v = 0\nptr.const 0\nu8.const 0\nu8.move');
+    await worker.compilePLCASM('const v = 0\nptr.const 0\nu8.const 0\nu8.move');
 
     const startCompile = Date.now();
-    await worker.compile(largeAsm);
+    await worker.compilePLCASM(largeAsm);
     const durationCompile = (Date.now() - startCompile) / 1000;
     
     console.log(`    Time: ${durationCompile.toFixed(3)}s`);

@@ -1,11 +1,11 @@
 // test_stl_linter.js - Test STL Linter functionality
-import VovkPLC from '../dist/VovkPLC.js'
+import VovkPLC from '../../dist/VovkPLC.js'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-const wasmPath = path.resolve(__dirname, '../dist/VovkPLC.wasm')
+const wasmPath = path.resolve(__dirname, '../../dist/VovkPLC.wasm')
 
 async function runTests() {
     console.log('=== STL Linter Tests ===\n')

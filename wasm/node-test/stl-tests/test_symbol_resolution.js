@@ -1,4 +1,4 @@
-import VovkPLC from '../dist/VovkPLC.js';
+import VovkPLC from '../../dist/VovkPLC.js';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -8,7 +8,7 @@ const __dirname = path.dirname(__filename);
 
 (async () => {
     // Path to WASM file
-    const wasmPath = path.resolve(__dirname, '../dist/VovkPLC.wasm');
+    const wasmPath = path.resolve(__dirname, '../../dist/VovkPLC.wasm');
     if (!fs.existsSync(wasmPath)) {
         console.error('WASM file not found!');
         process.exit(1);

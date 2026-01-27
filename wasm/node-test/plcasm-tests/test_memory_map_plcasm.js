@@ -1,11 +1,11 @@
 // test_memory_map.js - Test Timer and Counter memory mapping with struct size multipliers
-import VovkPLC from '../dist/VovkPLC.js'
+import VovkPLC from '../../dist/VovkPLC.js'
 import path from 'path'
 import {fileURLToPath} from 'url'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-const wasmPath = path.resolve(__dirname, '../dist/VovkPLC.wasm')
+const wasmPath = path.resolve(__dirname, '../../dist/VovkPLC.wasm')
 
 const run = async () => {
     const runtime = await VovkPLC.createWorker(wasmPath)

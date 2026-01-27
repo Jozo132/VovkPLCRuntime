@@ -1,13 +1,13 @@
 // test_ladder_graph.js - Test the new Ladder Graph to STL compiler
 // Tests the graph format: { nodes: [...], connections: [...] }
 
-import VovkPLC from '../dist/VovkPLC.js'
+import VovkPLC from '../../dist/VovkPLC.js'
 import path from 'path'
 import {fileURLToPath} from 'url'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-const wasmPath = path.resolve(__dirname, '../dist/VovkPLC.wasm')
+const wasmPath = path.resolve(__dirname, '../../dist/VovkPLC.wasm')
 
 async function test() {
     const runtime = await VovkPLC.createWorker(wasmPath)
@@ -20,55 +20,34 @@ async function test() {
     let passed = 0
     let failed = 0
 
-    // Helper to write string to stream
-    const writeToStream = async str => {
-        for (let i = 0; i < str.length; i++) {
-            await runtime.callExport('streamIn', str.charCodeAt(i))
-        }
-        await runtime.callExport('streamIn', 0) // Null terminator
-    }
-
     async function runTest(name, graphJson, expectedPatterns) {
         console.log(`\nTest: ${name}`)
         console.log('-'.repeat(50))
 
-        // Clear stream and write graph JSON
-        await runtime.callExport('streamClear')
-        await writeToStream(JSON.stringify(graphJson))
+        try {
+            const result = await runtime.compileLadder(graphJson)
+            const stl = result.output
 
-        // Load from stream and compile
-        await runtime.callExport('ladder_graph_load_from_stream')
-        const success = await runtime.callExport('ladder_graph_compile')
+            console.log('Generated STL:')
+            console.log(stl)
 
-        if (!success) {
-            // Read error - call error_to_stream which writes to streamOut (captured by readStream)
-            await runtime.callExport('ladder_graph_error_to_stream')
-            const error = await runtime.readStream()
-            console.log(`FAILED: Compilation error: ${error}`)
-            failed++
-            return
-        }
-
-        // Get the output - output_to_stream writes to streamOut (captured by readStream)
-        await runtime.callExport('ladder_graph_output_to_stream')
-        const stl = await runtime.readStream()
-
-        console.log('Generated STL:')
-        console.log(stl)
-
-        // Check for expected patterns
-        let allFound = true
-        for (const pattern of expectedPatterns) {
-            if (!stl.includes(pattern)) {
-                console.log(`FAILED: Expected pattern not found: "${pattern}"`)
-                allFound = false
+            // Check for expected patterns
+            let allFound = true
+            for (const pattern of expectedPatterns) {
+                if (!stl.includes(pattern)) {
+                    console.log(`FAILED: Expected pattern not found: "${pattern}"`)
+                    allFound = false
+                }
             }
-        }
 
-        if (allFound) {
-            console.log('PASSED')
-            passed++
-        } else {
+            if (allFound) {
+                console.log('PASSED')
+                passed++
+            } else {
+                failed++
+            }
+        } catch (err) {
+            console.log(`FAILED: Compilation error: ${err.message}`)
             failed++
         }
     }
@@ -342,28 +321,18 @@ async function test() {
             connections: [{sources: ['n1'], destinations: ['n2']}],
         }
 
-        await runtime.callExport('streamClear')
-        await writeToStream(JSON.stringify(pipelineGraph))
-        await runtime.callExport('ladder_graph_load_from_stream')
-
-        const fullSuccess = await runtime.callExport('ladder_graph_compile_full')
-        if (fullSuccess) {
-            console.log('Full pipeline compilation succeeded!')
-            // Extract the program to verify bytecode was generated
-            const extracted = await runtime.extractProgram()
-            if (extracted && extracted.size > 0) {
-                console.log(`Bytecode size: ${extracted.size} bytes`)
-                console.log(`Bytecode: ${extracted.output.substring(0, 50)}...`)
+        try {
+            const result = await runtime.compileAll(pipelineGraph, 'ladder-graph')
+            if (result && result.bytecode) {
+                console.log('Full pipeline compilation succeeded!')
+                console.log(`Bytecode size: ${result.bytecode.length} bytes`)
                 passed++
             } else {
-                console.log('FAILED: Bytecode extraction returned empty')
+                console.log('FAILED: Bytecode compilation returned empty')
                 failed++
             }
-        } else {
-            console.log('FAILED: Full pipeline compilation failed')
-            await runtime.callExport('ladder_graph_error_to_stream')
-            const stlError = await runtime.readStream()
-            if (stlError) console.log(`  Graph error: ${stlError}`)
+        } catch (err) {
+            console.log(`FAILED: Full pipeline compilation failed: ${err.message}`)
             failed++
         }
     } // END TEMP SKIP PIPELINE TEST

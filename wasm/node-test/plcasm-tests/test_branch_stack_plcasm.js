@@ -3,11 +3,11 @@
 
 import path from 'path';
 import { fileURLToPath } from 'url';
-import VovkPLC from '../dist/VovkPLC.js';
+import VovkPLC from '../../dist/VovkPLC.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const wasmPath = path.resolve(__dirname, '../dist/VovkPLC.wasm');
+const wasmPath = path.resolve(__dirname, '../../dist/VovkPLC.wasm');
 
 console.log(`Loading WASM from: ${wasmPath}`);
 

@@ -76,8 +76,8 @@ const main = async () => {
         `
         
         console.log('    Compiling simple addition...')
-        // compile(assembly, true) attempts to load and runDebug immediately
-        const compilationResult = await worker.compile(assembly, true) 
+        // compilePLCASM(assembly, {run: true}) attempts to load and runDebug immediately
+        const compilationResult = await worker.compilePLCASM(assembly, {run: true}) 
         console.log('    Compilation successful & Debug Run executed.')
         // Verify bytecode extraction
         assert(compilationResult && compilationResult.size > 0 && compilationResult.output, "Bytecode extraction failed")
@@ -175,7 +175,7 @@ const main = async () => {
         console.log('\n[5] Bytecode Debugger Test...')
         // We use shared control for stepping
         // 1. Reset
-        await worker.compile(assembly) // Re-compile/Reset memory
+        await worker.compilePLCASM(assembly) // Re-compile/Reset memory
         // Clear memory 0 manually to be sure
         await worker.writeMemoryArea(0, [0])
         
@@ -189,7 +189,7 @@ const main = async () => {
 
         // Reload the program for the debugger test (since unit tests overwrote it)
         console.log('    Reloading simple program...');
-        await worker.compile(`
+        await worker.compilePLCASM(`
             ptr.const 0
             u8.const 10
             u8.const 20

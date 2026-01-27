@@ -75,7 +75,7 @@ import VovkPLC from './wasm/dist/VovkPLC.js'
 const worker = await VovkPLC.createWorker('./wasm/dist/VovkPLC.wasm')
 worker.onStdout(msg => console.log(msg))
 
-const problems = await worker.lint(assembly)
+const problems = await worker.lintPLCASM(assembly)
 await worker.downloadAssembly(assembly)
 await worker.run()
 

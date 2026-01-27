@@ -1,8 +1,8 @@
 // Test STL typed math operations
-import VovkPLC from '../dist/VovkPLC.js'
+import VovkPLC from '../../dist/VovkPLC.js'
 
 const plc = new VovkPLC()
-await plc.initialize('../dist/VovkPLC.wasm', false, true)
+await plc.initialize('../../dist/VovkPLC.wasm', false, true)
 
 let passed = 0
 let failed = 0

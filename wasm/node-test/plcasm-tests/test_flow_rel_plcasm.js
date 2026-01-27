@@ -1,5 +1,5 @@
 // test_flow_rel.js
-import VovkPLC from '../dist/VovkPLC.js'
+import VovkPLC from '../../dist/VovkPLC.js'
 import path from 'path'
 import fs from 'fs'
 import {fileURLToPath} from 'url'
@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const run = async () => {
-    const wasmPath = path.resolve(__dirname, '../dist/VovkPLC.wasm')
+    const wasmPath = path.resolve(__dirname, '../../dist/VovkPLC.wasm')
     console.log(`Loading WASM from: ${wasmPath}`)
 
     if (!fs.existsSync(wasmPath)) {
