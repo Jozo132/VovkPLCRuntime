@@ -38,6 +38,7 @@ const checkSupport = () => {
             new TextDecoder().decode(view)
             support.decodeShared = true
         } catch (e) {
+            // @ts-ignore
             // If new SharedArrayBuffer throws, it's effectively unsupported
             if (e.name === 'ReferenceError' || e.name === 'TypeError') support.sab = false
         }
@@ -89,6 +90,111 @@ const SUPPORT = checkSupport()
  *     lint_run: () => void, // Runs the linter on the loaded assembly.
  *     lint_get_problem_count: () => number, // Returns the number of problems found by the linter.
  *     lint_get_problems_pointer: () => number, // Returns a pointer to the array of linter problem structs.
+ *     stl_load_from_stream: () => void, // Loads STL code from the stream buffer into the STL compiler.
+ *     stl_set_source: (ptr: number, len: number) => void, // Sets the STL source from a memory pointer.
+ *     stl_compile: () => boolean, // Compiles the loaded STL code to PLCASM. Returns true on success.
+ *     stl_compile_full: () => boolean, // Compiles STL code fully (STL → PLCASM → bytecode). Returns true on success.
+ *     stl_get_output: () => number, // Returns a pointer to the generated PLCASM output.
+ *     stl_get_output_length: () => number, // Returns the length of the generated PLCASM output.
+ *     stl_has_error: () => boolean, // Returns true if there was an STL compilation error.
+ *     stl_get_error: () => number, // Returns a pointer to the STL error message string.
+ *     stl_get_error_line: () => number, // Returns the line number of the STL error.
+ *     stl_get_error_column: () => number, // Returns the column number of the STL error.
+ *     stl_output_to_stream: () => void, // Streams the generated PLCASM output to stdout.
+ *     stl_lint_load_from_stream: () => void, // Loads STL code from the stream buffer into the STL linter.
+ *     stl_lint_set_source: (ptr: number, len: number) => void, // Sets the STL source from a memory pointer.
+ *     stl_lint_run: () => void, // Runs the STL linter on the loaded code.
+ *     stl_lint_get_problem_count: () => number, // Returns the number of problems found by the STL linter.
+ *     stl_lint_get_problems_pointer: () => number, // Returns a pointer to the array of STL linter problem structs.
+ *     stl_lint_get_problem_type: (index: number) => number, // Returns the type of a specific STL linter problem.
+ *     stl_lint_get_problem_line: (index: number) => number, // Returns the line number of a specific STL linter problem.
+ *     stl_lint_get_problem_column: (index: number) => number, // Returns the column number of a specific STL linter problem.
+ *     stl_lint_get_problem_length: (index: number) => number, // Returns the length of a specific STL linter problem.
+ *     stl_lint_get_problem_message: (index: number) => number, // Returns a pointer to the message of a specific STL linter problem.
+ *     stl_lint_get_output: () => void, // Streams the generated PLCASM output to stdout.
+ *     stl_lint_get_output_length: () => number, // Returns the length of the generated PLCASM output.
+ *     stl_lint_clear: () => void, // Clears the STL linter state.
+ *     ladder_graph_load_from_stream: () => void, // Loads Ladder Graph JSON from the stream buffer into the compiler.
+ *     ladder_graph_compile: () => boolean, // Compiles the loaded Ladder Graph to STL. Returns true on success.
+ *     ladder_graph_compile_full: () => boolean, // Compiles Ladder Graph fully (Ladder → STL → PLCASM → bytecode). Returns true on success.
+ *     ladder_graph_get_output: () => number, // Returns a pointer to the generated STL output.
+ *     ladder_graph_get_output_length: () => number, // Returns the length of the generated STL output.
+ *     ladder_graph_output_to_stream: () => void, // Streams the generated STL output to stdout.
+ *     ladder_graph_has_error: () => boolean, // Returns true if there was a Ladder Graph compilation error.
+ *     ladder_graph_get_error: () => number, // Returns a pointer to the Ladder Graph error message string.
+ *     ladder_graph_error_to_stream: () => void, // Streams the error message to stdout.
+ *     project_compile: (debug?: boolean | number) => boolean, // Compiles a project from the stream buffer. Returns true on success.
+ *     project_compileString: (source: number, length: number, debug?: boolean) => boolean, // Compiles a project from a memory pointer. Returns true on success.
+ *     project_getBytecode: () => number, // Returns a pointer to the compiled bytecode.
+ *     project_getBytecodeLength: () => number, // Returns the length of the compiled bytecode.
+ *     project_getChecksum: () => number, // Returns the CRC8 checksum of the compiled bytecode.
+ *     project_hasError: () => boolean, // Returns true if there was a compilation error.
+ *     project_getError: () => number, // Returns a pointer to the error message string.
+ *     project_getErrorLine: () => number, // Returns the line number of the error.
+ *     project_getErrorColumn: () => number, // Returns the column number of the error.
+ *     project_getErrorFile: () => number, // Returns a pointer to the error file path string.
+ *     project_getErrorBlock: () => number, // Returns a pointer to the error block name string.
+ *     project_getErrorBlockLanguage: () => number, // Returns the language enum of the error block.
+ *     project_getErrorCompiler: () => number, // Returns a pointer to the compiler name that produced the error.
+ *     project_getErrorSourceLine: () => number, // Returns a pointer to the source line that caused the error.
+ *     project_getErrorToken: () => number, // Returns a pointer to the error token string.
+ *     project_getErrorTokenLength: () => number, // Returns the length of the error token.
+ *     project_getName: () => number, // Returns a pointer to the project name string.
+ *     project_getVersion: () => number, // Returns a pointer to the project version string.
+ *     project_getFileCount: () => number, // Returns the number of program files in the project.
+ *     project_getFilePath: (index: number) => number, // Returns a pointer to the file path string at the given index.
+ *     project_getFileFirstBlockIndex: (index: number) => number, // Returns the first block index for the file at the given index.
+ *     project_getFileBlockCount: (index: number) => number, // Returns the number of blocks in the file at the given index.
+ *     project_getFileExecutionOrder: (index: number) => number, // Returns the execution order of the file at the given index.
+ *     project_getBlockCount: () => number, // Returns the total number of program blocks.
+ *     project_getBlockName: (index: number) => number, // Returns a pointer to the block name string at the given index.
+ *     project_getBlockFilePath: (index: number) => number, // Returns a pointer to the block's file path string.
+ *     project_getBlockProgramName: (index: number) => number, // Returns a pointer to the block's program name string.
+ *     project_getBlockLanguage: (index: number) => number, // Returns the language enum of the block (0=UNKNOWN, 1=PLCASM, 2=STL, 3=LADDER, etc.).
+ *     project_getBlockOffset: (index: number) => number, // Returns the bytecode offset of the block.
+ *     project_getBlockSize: (index: number) => number, // Returns the bytecode size of the block.
+ *     project_getProblemCount: () => number, // Returns the number of linter problems found during compilation.
+ *     project_getProblems: () => number, // Returns a pointer to the array of LinterProblem structs.
+ *     project_getMemoryAreaCount: () => number, // Returns the number of memory areas defined.
+ *     project_getMemoryAvailable: () => number, // Returns the total available memory in bytes.
+ *     project_getMemoryUsed: () => number, // Returns the used memory in bytes.
+ *     project_getFlashSize: () => number, // Returns the flash size limit in bytes.
+ *     project_getFlashUsed: () => number, // Returns the used flash (bytecode size) in bytes.
+ *     project_getMemoryAreaName: (index: number) => number, // Returns a pointer to the memory area name string.
+ *     project_getMemoryAreaStart: (index: number) => number, // Returns the start address of the memory area.
+ *     project_getMemoryAreaEnd: (index: number) => number, // Returns the end address of the memory area.
+ *     project_getSymbolCount: () => number, // Returns the number of symbols defined in the project.
+ *     project_getSymbolName: (index: number) => number, // Returns a pointer to the symbol name string.
+ *     project_getSymbolType: (index: number) => number, // Returns a pointer to the symbol type string.
+ *     project_getSymbolAddress: (index: number) => number, // Returns a pointer to the symbol address string.
+ *     project_getSymbolByteAddress: (index: number) => number, // Returns the byte address of the symbol.
+ *     project_getSymbolBit: (index: number) => number, // Returns the bit offset of the symbol (0-7).
+ *     project_getSymbolIsBit: (index: number) => boolean, // Returns true if the symbol is a bit address.
+ *     project_getSymbolTypeSize: (index: number) => number, // Returns the size in bytes of the symbol's type.
+ *     project_load: () => boolean, // Loads the compiled program into the runtime. Returns true on success.
+ *     project_reset: () => void, // Resets the project compiler state.
+ *     project_uploadBytecode: () => number, // Streams the bytecode to stdout. Returns the bytecode length.
+ *     project_printInfo: () => void, // Prints project information to stdout.
+ *     project_loadToRuntime: () => number, // Loads the project bytecode into the runtime. Returns status code.
+ *     runExplain: () => number, // Executes a single cycle with step-by-step explanation output.
+ *     doSomething: () => void, // Test function that does something (for benchmarking).
+ *     getLastInstructionCount: () => number, // Returns the number of instructions executed in the last cycle.
+ *     getDeviceHealthPtr: () => number, // Returns a pointer to the DeviceHealth struct.
+ *     getLastPeriodUs: () => number, // Returns the last period time in microseconds.
+ *     getMinPeriodUs: () => number, // Returns the minimum period time recorded in microseconds.
+ *     getMaxPeriodUs: () => number, // Returns the maximum period time recorded in microseconds.
+ *     getLastJitterUs: () => number, // Returns the last jitter value in microseconds.
+ *     getMinJitterUs: () => number, // Returns the minimum jitter recorded in microseconds.
+ *     getMaxJitterUs: () => number, // Returns the maximum jitter recorded in microseconds.
+ *     getTotalRam: () => number, // Returns the total RAM size in bytes.
+ *     getStackSize: () => number, // Returns the current stack size in bytes.
+ *     clearStack: () => void, // Clears the runtime stack.
+ *     memoryReset: () => void, // Resets all memory to initial state.
+ *     ir_get_count: () => number, // Returns the number of IR entries from the last compilation.
+ *     ir_get_pointer: () => number, // Returns a pointer to the array of IR_Entry structs.
+ *     ir_get_entry_size: () => number, // Returns the size in bytes of each IR_Entry struct.
+ *     ir_get_labels_count: () => number, // Returns the number of labels defined in the last compilation.
+ *     ir_get_consts_count: () => number, // Returns the number of named constants defined in the last compilation.
  * }} VovkPLCExportTypes
  */
 
@@ -108,6 +214,27 @@ const SUPPORT = checkSupport()
  *     min_jitter_us: number,
  *     max_jitter_us: number,
  * }} DeviceHealth
+ */
+
+/**
+ * @typedef {{
+ *     type: number,        // IR_OP_TYPES value
+ *     bytecode_pos: number, // Position within instruction where this operand starts
+ *     value: number | bigint  // The operand value (number for 32-bit, bigint for 64-bit)
+ * }} IR_Operand
+ */
+
+/**
+ * @typedef {{
+ *     bytecode_offset: number,  // Offset in bytecode where this instruction starts
+ *     source_line: number,       // Source line number (1-based)
+ *     source_column: number,     // Source column number (1-based)
+ *     bytecode_size: number,     // Size of this instruction in bytes
+ *     opcode: number,            // The instruction opcode
+ *     flags: number,             // IR_FLAGS combination
+ *     operand_count: number,     // Number of operands (0-3)
+ *     operands: IR_Operand[]     // Array of operands
+ * }} IR_Entry
  */
 
 /**
@@ -160,10 +287,10 @@ const SUPPORT = checkSupport()
  */
 /** @typedef */ // @ts-ignore
 class VovkPLC_class {
-    /** @type { WebAssembly.Instance | null } */
-    wasm = null
-    /** @type { VovkPLCExportTypes | null } */
-    wasm_exports = null
+    /** @type { WebAssembly.Instance } */ // @ts-ignore
+    wasm
+    /** @type { VovkPLCExportTypes } */ // @ts-ignore
+    wasm_exports
     /** @type { any } */
     wasmImports
     running = false
@@ -293,7 +420,7 @@ class VovkPLC_class {
             // 1. Download assembly to Linter
             // Clear any stale data in the stream buffer first
             if (this.wasm_exports.streamClear) this.wasm_exports.streamClear()
-            
+
             let ok = true
             for (let i = 0; i < assembly.length && ok; i++) {
                 const char = assembly[i]
@@ -365,7 +492,7 @@ class VovkPLC_class {
     }
 
     /**
-     * @typedef {{ type: 'error' | 'warning' | 'info', line: number, column: number, length: number, message: string }} STLLinterProblem
+     * @typedef {{ type: 'error' | 'warning' | 'info', line: number, column: number, length: number, message: string, token_text: string }} STLLinterProblem
      */
 
     /**
@@ -399,7 +526,7 @@ class VovkPLC_class {
             // 1. Stream STL code to linter
             // Clear any stale data in the stream buffer first
             if (this.wasm_exports.streamClear) this.wasm_exports.streamClear()
-            
+
             let ok = true
             for (let i = 0; i < stl.length && ok; i++) {
                 ok = this.wasm_exports.streamIn(stl.charCodeAt(i))
@@ -506,27 +633,6 @@ class VovkPLC_class {
         PTR: 12,
         LABEL: 13,
     }
-
-    /**
-     * @typedef {{
-     *     type: number,        // IR_OP_TYPES value
-     *     bytecode_pos: number, // Position within instruction where this operand starts
-     *     value: number | bigint  // The operand value (number for 32-bit, bigint for 64-bit)
-     * }} IR_Operand
-     */
-
-    /**
-     * @typedef {{
-     *     bytecode_offset: number,  // Offset in bytecode where this instruction starts
-     *     source_line: number,       // Source line number (1-based)
-     *     source_column: number,     // Source column number (1-based)
-     *     bytecode_size: number,     // Size of this instruction in bytes
-     *     opcode: number,            // The instruction opcode
-     *     flags: number,             // IR_FLAGS combination
-     *     operand_count: number,     // Number of operands (0-3)
-     *     operands: IR_Operand[]     // Array of operands
-     * }} IR_Entry
-     */
 
     /**
      * Gets the Intermediate Representation (IR) for the last compiled assembly.
@@ -775,7 +881,7 @@ class VovkPLC_class {
         if (!this.wasm_exports.getDeviceHealthPtr) throw new Error("'getDeviceHealthPtr' function not found")
 
         const ptr = this.wasm_exports.getDeviceHealthPtr()
-        const view = new Uint32Array(this.wasm_memory.buffer, ptr, 13)
+        const view = new Uint32Array(this.wasm_exports.memory.buffer, ptr, 13)
 
         return {
             last_cycle_time_us: view[0],
@@ -859,21 +965,8 @@ class VovkPLC_class {
 
     /**
      * @typedef {{ type: 'bytecode' | 'plcasm' | 'stl', size: number, output: string }} CompileResult
-     */
-
-    /**
-     * @typedef {{ ladderGraph?: string, stl?: string, plcasm?: string, bytecode?: string }} CompileAllResult
-     */
-
-    /**
      * @typedef {{ id: string, type: string, symbol: string, x: number, y: number, inverted?: boolean, trigger?: string, preset?: string }} LadderGraphNode
-     */
-
-    /**
      * @typedef {{ id?: string, sources: string[], destinations: string[] }} LadderGraphConnection
-     */
-
-    /**
      * @typedef {{ nodes: LadderGraphNode[], connections: LadderGraphConnection[] }} LadderGraph
      */
 
@@ -1117,7 +1210,7 @@ class VovkPLC_class {
      *     console.log('Bytecode:', result.bytecode)
      * }
      */
-    compileProject = (projectSource) => {
+    compileProject = projectSource => {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         if (!this.wasm_exports.project_compile) throw new Error("'project_compile' function not found - Project compiler not available")
         if (!this.wasm_exports.project_reset) throw new Error("'project_reset' function not found")
@@ -1142,8 +1235,8 @@ class VovkPLC_class {
                 problem: {
                     message: 'Failed to stream project source - buffer overflow',
                     line: 0,
-                    column: 0
-                }
+                    column: 0,
+                },
             }
         }
 
@@ -1203,9 +1296,9 @@ class VovkPLC_class {
                     message,
                     line: errorLine,
                     column: errorColumn,
-                    ...(block && { block }),
-                    ...(compiler && { compiler })
-                }
+                    ...(block && {block}),
+                    ...(compiler && {compiler}),
+                },
             }
         }
 
@@ -1219,8 +1312,8 @@ class VovkPLC_class {
                 problem: {
                     message: 'Compilation produced no bytecode',
                     line: 0,
-                    column: 0
-                }
+                    column: 0,
+                },
             }
         }
 
@@ -1234,7 +1327,7 @@ class VovkPLC_class {
 
         return {
             bytecode: hex,
-            problem: null
+            problem: null,
         }
     }
 
@@ -1277,7 +1370,7 @@ class VovkPLC_class {
      *     console.log(`${problem.type} at line ${problem.line}: ${problem.message}`)
      * }
      */
-    lintProject = (projectSource) => {
+    lintProject = projectSource => {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         if (!this.wasm_exports.project_compile) throw new Error("'project_compile' function not found - Project compiler not available")
         if (!this.wasm_exports.project_reset) throw new Error("'project_reset' function not found")
@@ -1297,13 +1390,17 @@ class VovkPLC_class {
             ok = this.wasm_exports.streamIn(projectSource.charCodeAt(i))
         }
         if (!ok) {
-            return [{
-                type: 'error',
-                message: 'Failed to stream project source - buffer overflow',
-                line: 0,
-                column: 0,
-                length: 0
-            }]
+            return [
+                {
+                    type: 'error',
+                    message: 'Failed to stream project source - buffer overflow',
+                    line: 0,
+                    column: 0,
+                    length: 0,
+                    block: undefined,
+                    lang: 0,
+                },
+            ]
         }
         this.wasm_exports.streamIn(0) // Null terminator
 
@@ -1323,8 +1420,8 @@ class VovkPLC_class {
             const memory = new Uint8Array(this.wasm_exports.memory.buffer)
             const view = new DataView(this.wasm_exports.memory.buffer)
 
-             // Helper to read C string from memory
-             const readString = (ptr, maxLen = 512) => {
+            // Helper to read C string from memory
+            const readString = (ptr = 0, maxLen = 512) => {
                 if (!ptr) return undefined
                 let str = ''
                 let i = ptr
@@ -1364,26 +1461,27 @@ class VovkPLC_class {
                 // token_text pointer at offset 148
                 const token_ptr = view.getUint32(offset + 148, true)
                 let token = undefined
-                
+
                 if (token_ptr !== 0) {
-                     if (length > 0) {
+                    if (length > 0) {
                         try {
                             const token_buf = new Uint8Array(memory.buffer, token_ptr, length)
                             token = new TextDecoder().decode(token_buf)
                         } catch (e) {
                             token = readString(token_ptr, 128)
                         }
-                     } else {
+                    } else {
                         token = readString(token_ptr, 128)
-                     }
+                    }
                 }
 
                 // Map integer language ID to string name if possible
+                /** @type {Record<number, string>} */
                 const LANG_MAP = {
                     0: 'UNKNOWN',
                     1: 'PLCASM',
                     2: 'STL',
-                    3: 'LADDER'
+                    3: 'LADDER',
                 }
                 const langName = LANG_MAP[lang] || 'UNKNOWN'
 
@@ -1395,8 +1493,8 @@ class VovkPLC_class {
                     length: length,
                     block: block || undefined,
                     lang: lang,
-                    compiler: langName, 
-                    token: token
+                    compiler: langName,
+                    token: token,
                 })
             }
         }
@@ -1415,7 +1513,7 @@ class VovkPLC_class {
             const memory = new Uint8Array(this.wasm_exports.memory.buffer)
 
             // Helper to read C string from memory
-            const readString = (ptr, maxLen = 512) => {
+            const readString = (ptr = 0, maxLen = 512) => {
                 if (!ptr) return ''
                 let str = ''
                 let i = ptr
@@ -1429,19 +1527,19 @@ class VovkPLC_class {
             const message = readString(errorPtr) || 'Unknown compilation error'
             const block = readString(errorBlock, 64) || undefined
             const compiler = readString(errorCompiler, 64) || undefined
-            
+
             let token = undefined
             if (errorToken) {
-                 if (errorTokenLength > 0) {
-                     // errorToken is a buffer in C, so it is null terminated there likely, but we can use length if provided
-                     // Actually project_getErrorToken returns pointer to char array error_token[64]
-                     // So we can safely use readString(errorToken) as it is null terminated in C++
-                     token = readString(errorToken, 128)
-                 } else {
-                     token = readString(errorToken, 128)
-                 }
+                if (errorTokenLength > 0) {
+                    // errorToken is a buffer in C, so it is null terminated there likely, but we can use length if provided
+                    // Actually project_getErrorToken returns pointer to char array error_token[64]
+                    // So we can safely use readString(errorToken) as it is null terminated in C++
+                    token = readString(errorToken, 128)
+                } else {
+                    token = readString(errorToken, 128)
+                }
             }
-            
+
             const sourceLine = readString(errorSourceLine, 256) || undefined
 
             problems.push({
@@ -1450,10 +1548,11 @@ class VovkPLC_class {
                 line: errorLine,
                 column: errorColumn,
                 length: errorTokenLength || (token ? token.length : 0),
-                ...(block && { block }),
-                ...(compiler && { compiler }),
-                ...(token && { token }),
-                ...(sourceLine && { sourceLine })
+                lang: 0,
+                block,
+                ...(compiler && {compiler}),
+                ...(token && {token}),
+                ...(sourceLine && {sourceLine}),
             })
         }
 
@@ -1475,10 +1574,10 @@ class VovkPLC_class {
         const code = Array.isArray(program) ? program : this.parseHex(program)
         const size = code.length
         const crc = this.crc8(code)
-        
+
         // Clear any stale data in the stream buffer first
         if (this.wasm_exports.streamClear) this.wasm_exports.streamClear()
-        
+
         for (let i = 0; i < size; i++) {
             const c = code[i]
             this.wasm_exports.streamIn(c)
@@ -2022,7 +2121,10 @@ const OFFSETS = {
  *   removeEventListener?: (type: string, listener: (event: any) => void) => void,
  *   on?: (type: string, listener: (event: any) => void) => void,
  *   off?: (type: string, listener: (event: any) => void) => void,
+ *   once?: (type: string, listener: (event: any) => void) => void,
  *   removeListener?: (type: string, listener: (event: any) => void) => void,
+ *   removeAllListeners?: (type?: string) => void,
+ *   unref?: () => void,
  *   onmessage?: ((event: any) => void) | null,
  *   onerror?: ((error: any) => void) | null,
  * }} VovkPLCWorkerLike
@@ -2526,20 +2628,20 @@ class VovkPLCWorkerClient {
      * Terminate the worker and clean up resources.
      * @param {Object} options - Termination options
      * @param {boolean} [options.exit=false] - If true, call process.exit(0) after cleanup (Node.js only).
-     *   Due to Node.js worker_threads behavior, the process may not exit naturally even after 
+     *   Due to Node.js worker_threads behavior, the process may not exit naturally even after
      *   worker.terminate(). Use exit:true for CLI tools or when this is the last operation.
      * @returns {Promise<number>} - Returns 0 on success
      */
     terminate = async (options = {}) => {
         // Stop polling loop first
         this.stopPolling()
-        
+
         // Reject all pending requests
         for (const pending of this.pending.values()) pending.reject(new Error('Worker terminated'))
         this.pending.clear()
         this.stdoutHandlers.clear()
         this.stderrHandlers.clear()
-        
+
         // Remove all event listeners BEFORE terminating
         if (typeof this.worker.removeEventListener === 'function') {
             this.worker.removeEventListener('message', this._onMessage)
@@ -2551,10 +2653,10 @@ class VovkPLCWorkerClient {
             this.worker.removeListener('message', this._onMessage)
             this.worker.removeListener('error', this._onError)
         }
-        
+
         // Unref before terminate so the worker doesn't keep the process alive
         if (typeof this.worker.unref === 'function') this.worker.unref()
-        
+
         // Terminate and wait for exit
         if (typeof this.worker.terminate === 'function') {
             // For Node.js worker_threads, wait for the 'exit' event for proper cleanup
@@ -2569,12 +2671,12 @@ class VovkPLCWorkerClient {
             if (result && typeof result.then === 'function') await result
             await exitPromise
         }
-        
+
         // Remove any remaining listeners (belt and suspenders)
         if (typeof this.worker.removeAllListeners === 'function') {
             this.worker.removeAllListeners()
         }
-        
+
         // In Node.js, optionally force process exit after cleanup
         // This is needed because Node.js worker_threads may keep internal refs even after terminate
         if (options.exit && isNodeRuntime && typeof process !== 'undefined' && typeof process.exit === 'function') {
@@ -2689,7 +2791,7 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
     get sharedInputs() {
         if (this.sabU8 && this.sabI32) {
             const offset = this.sabI32[OFFSETS.IO_OFFSET / 4]
-            const size = this.sabI32[OFFSETS.IO_IN_SIZE / 4]
+            const size = this.sabI32[OFFSETS.IO_IN_SIZE / 4] // @ts-ignore
             if (offset && size) return new Uint8Array(this.sab, offset, size)
         }
         return this._sharedInputs
@@ -2698,7 +2800,7 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
         if (this.sabU8 && this.sabI32) {
             const offset = this.sabI32[OFFSETS.IO_OFFSET / 4]
             const inSize = this.sabI32[OFFSETS.IO_IN_SIZE / 4]
-            const outSize = this.sabI32[OFFSETS.IO_OUT_SIZE / 4]
+            const outSize = this.sabI32[OFFSETS.IO_OUT_SIZE / 4] // @ts-ignore
             if (offset && inSize && outSize) return new Uint8Array(this.sab, offset + inSize, outSize)
         }
         return this._sharedOutputs
@@ -2733,7 +2835,7 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
         if (!this.sabI32) return
         const offset = this.sabI32[OFFSETS.IO_OFFSET / 4]
         if (!offset) return
-
+        // @ts-ignore
         const i32 = new Int32Array(this.sab, offset)
         const map = {stop: 0, run: 1, pause: 2, step: 3}
         Atomics.store(i32, 0, map[mode])
@@ -2749,7 +2851,7 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
     getSharedStatus = () => {
         if (!this.sabI32) return null
         const offset = this.sabI32[OFFSETS.IO_OFFSET / 4]
-        if (!offset) return null
+        if (!offset) return null // @ts-ignore
         const i32 = new Int32Array(this.sab, offset)
 
         return {
@@ -2790,13 +2892,13 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
 const getDefaultWorkerFactory = async () => {
     if (isNodeRuntime) {
         const {Worker} = await import('worker_threads') // @ts-ignore
-        return url => {
+        return url => { // @ts-ignore
             const worker = new Worker(url, {type: 'module'})
             // Don't keep the process alive just because of this worker
             if (typeof worker.unref === 'function') worker.unref()
             return worker
         }
-    }
+    } // @ts-ignore
     if (typeof Worker !== 'undefined') return url => new Worker(url, {type: 'module'})
     throw new Error('Workers are not supported in this environment')
 }

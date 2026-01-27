@@ -113,9 +113,9 @@ const streamCode = (runtime, code) => {
 }
 
 // Read a null-terminated string from WASM memory
-/** @type { (runtime: any, ptr: number) => string } */
+/** @type { (runtime: VovkPLC, ptr: number) => string } */
 const getString = (runtime, ptr) => {
-    if (!ptr) return ''
+    if (!ptr) return '' // @ts-ignore
     const memory = new Uint8Array(runtime.wasm.exports.memory.buffer)
     let str = ''
     let i = ptr
@@ -127,13 +127,13 @@ const getString = (runtime, ptr) => {
 }
 
 // Get bytecode as hex string (space-separated)
-/** @type { (runtime: any) => string } */
-const getBytecodeHex = (runtime) => {
+/** @type { (runtime: VovkPLC) => string } */
+const getBytecodeHex = runtime => {
     const wasm = runtime.wasm_exports
     const bytecodePtr = wasm.project_getBytecode()
     const bytecodeLen = wasm.project_getBytecodeLength()
 
-    if (!bytecodePtr || bytecodeLen === 0) return ''
+    if (!bytecodePtr || bytecodeLen === 0) return '' // @ts-ignore
 
     const memory = new Uint8Array(runtime.wasm.exports.memory.buffer)
     let hex = ''
@@ -145,7 +145,8 @@ const getBytecodeHex = (runtime) => {
 }
 
 // Get symbols from project
-const getSymbols = (runtime) => {
+/** @type { (runtime: VovkPLC) => any[] } */
+const getSymbols = runtime => {
     const wasm = runtime.wasm_exports
     const count = wasm.project_getSymbolCount()
     const symbols = []
@@ -161,8 +162,8 @@ const getSymbols = (runtime) => {
 }
 
 // Get program files info
-/** @type { (runtime: any) => any[] } */
-const getFiles = (runtime) => {
+/** @type { (runtime: VovkPLC) => any[] } */
+const getFiles = runtime => {
     const wasm = runtime.wasm_exports
     const count = wasm.project_getFileCount()
     const files = []
@@ -184,6 +185,7 @@ const getFiles = (runtime) => {
 }
 
 // Get program blocks info
+/** @type { (runtime: VovkPLC) => any[] } */
 function getBlocks(runtime) {
     const wasm = runtime.wasm_exports
     const count = wasm.project_getBlockCount()
@@ -209,6 +211,7 @@ function getBlocks(runtime) {
 }
 
 // Get memory areas
+/** @type { (runtime: VovkPLC) => any[] } */
 function getMemoryAreas(runtime) {
     const wasm = runtime.wasm_exports
     const count = wasm.project_getMemoryAreaCount()
@@ -225,6 +228,7 @@ function getMemoryAreas(runtime) {
 }
 
 // Get memory usage info
+/** @type { (runtime: VovkPLC) => {available: number, used: number} } */
 function getMemoryUsage(runtime) {
     const wasm = runtime.wasm_exports
     const available = wasm.project_getMemoryAvailable ? wasm.project_getMemoryAvailable() : 0
@@ -233,6 +237,7 @@ function getMemoryUsage(runtime) {
 }
 
 // Get flash usage info
+/** @type { (runtime: VovkPLC) => {size: number, used: number} } */
 function getFlashUsage(runtime) {
     const wasm = runtime.wasm_exports
     const size = wasm.project_getFlashSize ? wasm.project_getFlashSize() : 32768
@@ -241,13 +246,14 @@ function getFlashUsage(runtime) {
 }
 
 // Run the compiled program and get execution info
+/** @type { (runtime: VovkPLC) => {success: boolean, steps?: number, stackSize: number, error?: string} } */
 function runProgram(runtime) {
     const wasm = runtime.wasm_exports
 
     // Load the program
     const loaded = wasm.project_load()
     if (!loaded) {
-        return {success: false, error: 'Failed to load program'}
+        return {success: false, error: 'Failed to load program', stackSize: 0}
     }
 
     // Clear stack before running
@@ -264,7 +270,7 @@ function runProgram(runtime) {
     const steps = wasm.getLastInstructionCount ? wasm.getLastInstructionCount() : 0
 
     // Get stack size after execution
-    const stackSize = wasm.getStackSize ? wasm.getStackSize() : 0
+    const stackSize = wasm.getStackSize ? wasm.getStackSize() || 0 : 0
 
     return {
         success: true,
@@ -274,8 +280,28 @@ function runProgram(runtime) {
 }
 
 // Generate the full output object for a project compilation
+/** @type { (runtime: VovkPLC, success: boolean, error?: string | null) => any } */
 function generateOutput(runtime, success, error = null) {
     const wasm = runtime.wasm_exports
+
+    /** @typedef { {severity: string, message: string, line: number, column: number, file?: string, block?: string, language?: string} } Problem */
+    /**
+     * @type {{
+     *    success: boolean,
+     *    project: { name: string, version: string },
+     *    bytecode: string,
+     *    bytecodeLength: number,
+     *    checksum: number,
+     *    files: any[],
+     *    blocks: any[],
+     *    symbols: any[],
+     *    memoryAreas: any[],
+     *    memory: { available: number, used: number },
+     *    flash: { size: number, used: number },
+     *    execution: { steps: number, stackSize: number },
+     *    problems: Problem[]
+     * }} 
+    **/
     const output = {
         success,
         project: {
@@ -289,10 +315,9 @@ function generateOutput(runtime, success, error = null) {
         blocks: [],
         symbols: [],
         memoryAreas: [],
-        execution: {
-            steps: 0,
-            stackSize: 0,
-        },
+        memory: { available: 0, used: 0 },
+        flash: { size: 0, used: 0 },
+        execution: { steps: 0, stackSize: 0, },
         problems: [],
     }
 
@@ -304,6 +329,7 @@ function generateOutput(runtime, success, error = null) {
         const errorBlock = getString(runtime, wasm.project_getErrorBlock())
         const errorBlockLang = wasm.project_getErrorBlockLanguage()
         const langNames = ['UNKNOWN', 'PLCASM', 'STL', 'LADDER', 'FBD', 'SFC', 'ST', 'IL']
+        /** @type { Problem } */
         const problem = {
             severity: 'error',
             message: errorMsg,
@@ -334,8 +360,8 @@ function generateOutput(runtime, success, error = null) {
     // Run the program to get execution info
     const execResult = runProgram(runtime)
     if (execResult.success) {
-        output.execution.steps = execResult.steps
-        output.execution.stackSize = execResult.stackSize
+        output.execution.steps = execResult.steps || 0
+        output.execution.stackSize = execResult.stackSize || 0
 
         // Add warning if stack leak detected
         if (execResult.stackSize > 0) {
@@ -349,7 +375,7 @@ function generateOutput(runtime, success, error = null) {
     } else {
         output.problems.push({
             severity: 'warning',
-            message: execResult.error,
+            message: execResult.error || '?',
             line: 0,
             column: 0,
         })
@@ -359,6 +385,7 @@ function generateOutput(runtime, success, error = null) {
 }
 
 // Compare two output objects and return differences
+/** @type { (expected: any, actual: any) => Array<{field: string, expected: any, actual: any}> } */
 function compareOutputs(expected, actual) {
     const diffs = []
 
@@ -586,9 +613,9 @@ async function runTests() {
                 console.log(`${GREEN}✓${RESET} ${testCase} (${status})`)
             }
             passed++
-        } catch (e) {
+        } catch (e) { // @ts-ignore
             console.log(`${RED}✗${RESET} ${testCase} - Error: ${e.message}`)
-            failed++
+            failed++ // @ts-ignore
             failures.push({name: testCase, error: e.message})
         }
     }
