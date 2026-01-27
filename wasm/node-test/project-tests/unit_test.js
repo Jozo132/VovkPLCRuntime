@@ -286,7 +286,7 @@ function runProgram(runtime) {
 function generateOutput(runtime, success, error = null) {
     const wasm = runtime.wasm_exports
 
-    /** @typedef { {severity: string, message: string, line: number, column: number, file?: string, block?: string, language?: string} } Problem */
+    /** @typedef { {severity: string, message: string, line: number, column: number, file?: string, block?: string, language?: string, token?: string, sourceLine?: string} } Problem */
     /**
      * @type {{
      *    success: boolean,
@@ -751,7 +751,7 @@ async function runTests() {
         const toExplain = failures.filter(f => f.bytecodeToExplain)
         if (toExplain.length > 0) {
             console.log()
-            for (const item of toExplain) {
+            for (const item of toExplain) { // @ts-ignore
                 const { name, bytecode } = item.bytecodeToExplain
                 console.log(`${CYAN}─── Bytecode Explanation for ${name} ───${RESET}`)
                 console.log()

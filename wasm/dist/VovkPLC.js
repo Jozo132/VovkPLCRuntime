@@ -173,6 +173,7 @@ const SUPPORT = checkSupport()
  *     project_getSymbolTypeSize: (index: number) => number, // Returns the size in bytes of the symbol's type.
  *     project_load: () => boolean, // Loads the compiled program into the runtime. Returns true on success.
  *     project_reset: () => void, // Resets the project compiler state.
+ *     project_getCombinedPLCASM: () => number, // Returns a pointer to the combined PLCASM source string from all blocks.
  *     project_uploadBytecode: () => number, // Streams the bytecode to stdout. Returns the bytecode length.
  *     project_printInfo: () => void, // Prints project information to stdout.
  *     project_loadToRuntime: () => number, // Loads the project bytecode into the runtime. Returns status code.
