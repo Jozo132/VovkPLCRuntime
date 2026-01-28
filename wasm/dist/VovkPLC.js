@@ -1297,11 +1297,16 @@ class VovkPLC_class {
 
     /**
      * @typedef {{
+     *     type: 'error' | 'warning' | 'info',
      *     message: string,
      *     line: number,
      *     column: number,
+     *     length?: number,
+     *     program?: string,
      *     block?: string,
-     *     compiler?: string
+     *     lang?: number,
+     *     compiler?: string,
+     *     token?: string
      * }} ProjectCompileProblem
      */
 
@@ -1368,8 +1373,88 @@ class VovkPLC_class {
         // Compile the project (reads from stream buffer)
         const success = this.wasm_exports.project_compile(false)
 
-        // Check for errors
+        // Check for errors using accumulated problems API
         if (!success || this.wasm_exports.project_hasError()) {
+            const count = this.wasm_exports.project_getProblemCount ? this.wasm_exports.project_getProblemCount() : 0
+
+            if (count > 0 && this.wasm_exports.project_getProblems) {
+                const pointer = this.wasm_exports.project_getProblems()
+                // Struct size = 344 bytes (4+4+4+4+128+64+64+4+64+4)
+                const struct_size = 344
+
+                const memory = new Uint8Array(this.wasm_exports.memory.buffer)
+                const view = new DataView(this.wasm_exports.memory.buffer)
+
+                // Read first problem (most relevant for compile result)
+                const offset = pointer
+                const type_int = view.getUint32(offset + 0, true)
+                const line = view.getUint32(offset + 4, true)
+                const column = view.getUint32(offset + 8, true)
+                const length = view.getUint32(offset + 12, true)
+
+                // message is 128 bytes at offset 16
+                let message = ''
+                for (let j = 0; j < 128; j++) {
+                    const charCode = view.getUint8(offset + 16 + j)
+                    if (charCode === 0) break
+                    message += String.fromCharCode(charCode)
+                }
+
+                // block is 64 bytes at offset 144
+                let block = ''
+                for (let j = 0; j < 64; j++) {
+                    const charCode = view.getUint8(offset + 144 + j)
+                    if (charCode === 0) break
+                    block += String.fromCharCode(charCode)
+                }
+
+                // program is 64 bytes at offset 208
+                let program = ''
+                for (let j = 0; j < 64; j++) {
+                    const charCode = view.getUint8(offset + 208 + j)
+                    if (charCode === 0) break
+                    program += String.fromCharCode(charCode)
+                }
+
+                // lang is 4 bytes at offset 272
+                const lang = view.getUint32(offset + 272, true)
+
+                // token_buf is 64 bytes at offset 276
+                let token = ''
+                for (let j = 0; j < 64; j++) {
+                    const charCode = view.getUint8(offset + 276 + j)
+                    if (charCode === 0) break
+                    token += String.fromCharCode(charCode)
+                }
+
+                // Map integer language ID to string name
+                /** @type {Record<number, string>} */
+                const LANG_MAP = {
+                    0: 'UNKNOWN',
+                    1: 'PLCASM',
+                    2: 'STL',
+                    3: 'LADDER',
+                }
+                const langName = LANG_MAP[lang] || 'UNKNOWN'
+
+                return {
+                    bytecode: null,
+                    problem: {
+                        type: type_int === 2 ? 'error' : type_int === 1 ? 'warning' : 'info',
+                        message: message || 'Unknown compilation error',
+                        line,
+                        column,
+                        length,
+                        ...(program && {program}),
+                        ...(block && {block}),
+                        lang,
+                        compiler: langName,
+                        ...(token && {token}),
+                    },
+                }
+            }
+
+            // Fallback to old single-error API if no accumulated problems
             const errorPtr = this.wasm_exports.project_getError ? this.wasm_exports.project_getError() : 0
             const errorLine = this.wasm_exports.project_getErrorLine ? this.wasm_exports.project_getErrorLine() : 0
             const errorColumn = this.wasm_exports.project_getErrorColumn ? this.wasm_exports.project_getErrorColumn() : 0
@@ -1418,6 +1503,7 @@ class VovkPLC_class {
             return {
                 bytecode: null,
                 problem: {
+                    type: 'error',
                     message,
                     line: errorLine,
                     column: errorColumn,
