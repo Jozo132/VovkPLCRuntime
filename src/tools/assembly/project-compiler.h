@@ -2795,6 +2795,300 @@ extern "C" {
         return true;
     }
 
+    // ========== Modifier API (editable constants in bytecode) ==========
+    // Modifiers are values embedded in bytecode that can be hot-patched at runtime.
+    // These are extracted from the IR entries that have IR_FLAG_EDITABLE set.
+    // Examples: timer presets, counter presets, numeric constants.
+
+    // Helper to find block info for a given bytecode offset
+    static int findBlockForOffset(u32 offset) {
+        for (int i = 0; i < project_compiler.program_block_count; i++) {
+            ProgramBlock& block = project_compiler.program_blocks[i];
+            if (offset >= block.bytecode_offset && 
+                offset < block.bytecode_offset + block.bytecode_size) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    // Get count of editable modifiers in the compiled project
+    WASM_EXPORT int project_getModifierCount() {
+        int count = 0;
+        for (int i = 0; i < project_compiler.plcasm_compiler.ir_entry_count; i++) {
+            if (project_compiler.plcasm_compiler.ir_entries[i].flags & IR_FLAG_EDITABLE) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    // Get the n-th editable modifier (0-based index among EDITABLE entries)
+    static IR_Entry* getModifierEntry(int modifierIndex) {
+        int count = 0;
+        for (int i = 0; i < project_compiler.plcasm_compiler.ir_entry_count; i++) {
+            if (project_compiler.plcasm_compiler.ir_entries[i].flags & IR_FLAG_EDITABLE) {
+                if (count == modifierIndex) {
+                    return &project_compiler.plcasm_compiler.ir_entries[i];
+                }
+                count++;
+            }
+        }
+        return nullptr;
+    }
+
+    // Static buffers for modifier string returns
+    static char modifier_name_buffer[64];
+    static char modifier_datatype_buffer[16];
+    static char modifier_description_buffer[128];
+    static char modifier_token_buffer[64];
+
+    // Get modifier name (generated from opcode and offset)
+    WASM_EXPORT const char* project_getModifierName(int index) {
+        IR_Entry* entry = getModifierEntry(index);
+        if (!entry) return "";
+
+        // Generate name based on opcode
+        const char* opname = "const";
+        if (entry->flags & IR_FLAG_TIMER) opname = "timer_preset";
+
+        int pos = 0;
+        while (*opname && pos < 48) modifier_name_buffer[pos++] = *opname++;
+        modifier_name_buffer[pos++] = '_';
+
+        // Add offset as hex
+        u32 offset = entry->bytecode_offset;
+        char temp[16];
+        int tempLen = 0;
+        if (offset == 0) {
+            temp[tempLen++] = '0';
+        } else {
+            while (offset > 0 && tempLen < 16) {
+                int digit = offset % 16;
+                temp[tempLen++] = digit < 10 ? ('0' + digit) : ('a' + digit - 10);
+                offset /= 16;
+            }
+        }
+        for (int i = tempLen - 1; i >= 0 && pos < 62; i--) {
+            modifier_name_buffer[pos++] = temp[i];
+        }
+        modifier_name_buffer[pos] = '\0';
+        return modifier_name_buffer;
+    }
+
+    // Get modifier location: 0 = memory, 1 = program (bytecode)
+    WASM_EXPORT int project_getModifierLocation(int index) {
+        IR_Entry* entry = getModifierEntry(index);
+        if (!entry) return 1; // Default to program
+        return 1; // All modifiers are in program bytecode
+    }
+
+    // Get modifier byte offset in bytecode
+    WASM_EXPORT u32 project_getModifierByteOffset(int index) {
+        IR_Entry* entry = getModifierEntry(index);
+        if (!entry) return 0;
+
+        // For timer instructions with 2 operands, the preset is operand 2
+        // The bytecode_pos tells us where in the instruction the value starts
+        if (entry->operand_count >= 2 && (entry->flags & IR_FLAG_TIMER)) {
+            // Timer preset is operand 2
+            return entry->bytecode_offset + entry->operands[1].bytecode_pos;
+        } else if (entry->operand_count >= 1) {
+            // First operand
+            return entry->bytecode_offset + entry->operands[0].bytecode_pos;
+        }
+        return entry->bytecode_offset;
+    }
+
+    // Get modifier datatype string
+    WASM_EXPORT const char* project_getModifierDatatype(int index) {
+        IR_Entry* entry = getModifierEntry(index);
+        if (!entry) return "";
+
+        // Get the editable operand's type
+        IR_OperandType opType = IR_OP_U32; // Default
+        if (entry->operand_count >= 2 && (entry->flags & IR_FLAG_TIMER)) {
+            opType = (IR_OperandType)entry->operands[1].type;
+        } else if (entry->operand_count >= 1) {
+            opType = (IR_OperandType)entry->operands[0].type;
+        }
+
+        switch (opType) {
+            case IR_OP_BOOL: return "bool";
+            case IR_OP_I8:   return "i8";
+            case IR_OP_U8:   return "u8";
+            case IR_OP_I16:  return "i16";
+            case IR_OP_U16:  return "u16";
+            case IR_OP_I32:  return "i32";
+            case IR_OP_U32:  return "u32";
+            case IR_OP_I64:  return "i64";
+            case IR_OP_U64:  return "u64";
+            case IR_OP_F32:  return "f32";
+            case IR_OP_F64:  return "f64";
+            default:         return "u32";
+        }
+    }
+
+    // Get modifier size in bytes
+    WASM_EXPORT int project_getModifierSize(int index) {
+        IR_Entry* entry = getModifierEntry(index);
+        if (!entry) return 0;
+
+        IR_OperandType opType = IR_OP_U32;
+        if (entry->operand_count >= 2 && (entry->flags & IR_FLAG_TIMER)) {
+            opType = (IR_OperandType)entry->operands[1].type;
+        } else if (entry->operand_count >= 1) {
+            opType = (IR_OperandType)entry->operands[0].type;
+        }
+
+        switch (opType) {
+            case IR_OP_BOOL:
+            case IR_OP_I8:
+            case IR_OP_U8:   return 1;
+            case IR_OP_I16:
+            case IR_OP_U16:  return 2;
+            case IR_OP_I32:
+            case IR_OP_U32:
+            case IR_OP_F32:  return 4;
+            case IR_OP_I64:
+            case IR_OP_U64:
+            case IR_OP_F64:  return 8;
+            default:         return 4;
+        }
+    }
+
+    // Get modifier file path (which file this modifier is in)
+    WASM_EXPORT const char* project_getModifierFile(int index) {
+        IR_Entry* entry = getModifierEntry(index);
+        if (!entry) return "";
+        int blockIdx = findBlockForOffset(entry->bytecode_offset);
+        if (blockIdx < 0) return "";
+        return project_compiler.program_blocks[blockIdx].file_path;
+    }
+
+    // Get modifier program name
+    WASM_EXPORT const char* project_getModifierProgram(int index) {
+        return project_getModifierFile(index); // Same as file path
+    }
+
+    // Get modifier block name
+    WASM_EXPORT const char* project_getModifierBlock(int index) {
+        IR_Entry* entry = getModifierEntry(index);
+        if (!entry) return "";
+        int blockIdx = findBlockForOffset(entry->bytecode_offset);
+        if (blockIdx < 0) return "";
+        return project_compiler.program_blocks[blockIdx].name;
+    }
+
+    // Get modifier source line number
+    WASM_EXPORT int project_getModifierLine(int index) {
+        IR_Entry* entry = getModifierEntry(index);
+        if (!entry) return 0;
+        return entry->source_line;
+    }
+
+    // Get modifier source column number
+    WASM_EXPORT int project_getModifierColumn(int index) {
+        IR_Entry* entry = getModifierEntry(index);
+        if (!entry) return 0;
+        return entry->source_column;
+    }
+
+    // Get modifier token length (in source)
+    WASM_EXPORT int project_getModifierLength(int index) {
+        // We don't track token length in IR, estimate based on datatype
+        IR_Entry* entry = getModifierEntry(index);
+        if (!entry) return 0;
+        // Return source_column as a fallback estimate (not ideal)
+        // In practice, the caller should use the token string length
+        return 4; // Default estimate
+    }
+
+    // Get modifier token string (the source text)
+    WASM_EXPORT const char* project_getModifierToken(int index) {
+        IR_Entry* entry = getModifierEntry(index);
+        if (!entry) return "";
+
+        // Extract the value and format it as a string
+        u64 value = 0;
+        IR_OperandType opType = IR_OP_U32;
+
+        if (entry->operand_count >= 2 && (entry->flags & IR_FLAG_TIMER)) {
+            opType = (IR_OperandType)entry->operands[1].type;
+            value = entry->operands[1].val_u64;
+        } else if (entry->operand_count >= 1) {
+            opType = (IR_OperandType)entry->operands[0].type;
+            value = entry->operands[0].val_u64;
+        }
+
+        // Format as string based on type
+        int pos = 0;
+        if (entry->flags & IR_FLAG_TIMER) {
+            // Format as time: T#<value>ms
+            const char* prefix = "T#";
+            while (*prefix && pos < 60) modifier_token_buffer[pos++] = *prefix++;
+
+            u32 ms = (u32)value;
+            char temp[16];
+            int tempLen = 0;
+            if (ms == 0) {
+                temp[tempLen++] = '0';
+            } else {
+                while (ms > 0 && tempLen < 16) {
+                    temp[tempLen++] = '0' + (ms % 10);
+                    ms /= 10;
+                }
+            }
+            for (int i = tempLen - 1; i >= 0 && pos < 58; i--) {
+                modifier_token_buffer[pos++] = temp[i];
+            }
+            modifier_token_buffer[pos++] = 'm';
+            modifier_token_buffer[pos++] = 's';
+        } else {
+            // Format as decimal number
+            u32 v = (u32)value;
+            char temp[16];
+            int tempLen = 0;
+            if (v == 0) {
+                temp[tempLen++] = '0';
+            } else {
+                while (v > 0 && tempLen < 16) {
+                    temp[tempLen++] = '0' + (v % 10);
+                    v /= 10;
+                }
+            }
+            for (int i = tempLen - 1; i >= 0 && pos < 62; i--) {
+                modifier_token_buffer[pos++] = temp[i];
+            }
+        }
+        modifier_token_buffer[pos] = '\0';
+        return modifier_token_buffer;
+    }
+
+    // Get modifier description
+    WASM_EXPORT const char* project_getModifierDescription(int index) {
+        IR_Entry* entry = getModifierEntry(index);
+        if (!entry) return "";
+
+        if (entry->flags & IR_FLAG_TIMER) {
+            return "Timer preset value (milliseconds)";
+        }
+        return "Editable constant value";
+    }
+
+    // Get modifier current value as u32 (for simple access)
+    WASM_EXPORT u32 project_getModifierValue(int index) {
+        IR_Entry* entry = getModifierEntry(index);
+        if (!entry) return 0;
+
+        if (entry->operand_count >= 2 && (entry->flags & IR_FLAG_TIMER)) {
+            return entry->operands[1].val_u32;
+        } else if (entry->operand_count >= 1) {
+            return entry->operands[0].val_u32;
+        }
+        return 0;
+    }
+
     // Reset the project compiler state
     WASM_EXPORT void project_reset() {
         project_compiler.reset();

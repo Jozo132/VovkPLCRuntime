@@ -1586,6 +1586,434 @@ class VovkPLC_class {
 
     /**
      * @typedef {{
+     *     name: string,
+     *     type: string,
+     *     address: string,
+     *     byteAddress: number,
+     *     bit?: number,
+     *     isBit: boolean,
+     *     typeSize: number
+     * }} ProjectSymbol
+     */
+
+    /**
+     * @typedef {{
+     *     name: string,
+     *     start: number,
+     *     end: number,
+     *     size: number
+     * }} ProjectMemoryArea
+     */
+
+    /**
+     * @typedef {{
+     *     name: string,
+     *     file: string,
+     *     program: string,
+     *     language: string,
+     *     offset: number,
+     *     size: number
+     * }} ProjectBlock
+     */
+
+    /**
+     * @typedef {{
+     *     path: string,
+     *     firstBlockIndex: number,
+     *     blockCount: number,
+     *     executionOrder: number
+     * }} ProjectFile
+     */
+
+    /**
+     * @typedef {{
+     *     success: true,
+     *     project: { name: string, version: string },
+     *     memory: { used: number, available: number },
+     *     flash: { used: number, size: number },
+     *     symbols: ProjectSymbol[],
+     *     memoryAreas: ProjectMemoryArea[],
+     *     blocks: ProjectBlock[],
+     *     files: ProjectFile[]
+     * } | {
+     *     success: false,
+     *     error: string
+     * }} ProjectIR
+     */
+
+    /**
+     * Compiles a PLC project and returns the intermediate representation (IR) including
+     * symbols, memory areas, blocks, and files. Useful for debugging, hot-updating values,
+     * and understanding the memory layout without needing the bytecode.
+     *
+     * @param {string} projectSource - The project definition string (starts with VOVKPLCPROJECT).
+     * @returns {ProjectIR} - Object with project structure or error.
+     *
+     * @example
+     * const ir = runtime.getProjectIR(projectSource)
+     * if (ir.success) {
+     *     // Find a symbol to hot-update
+     *     const timer = ir.symbols.find(s => s.name === 'delay_timer')
+     *     console.log(`Timer at address ${timer.address} (byte ${timer.byteAddress})`)
+     * }
+     */
+    getProjectIR = projectSource => {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        if (!this.wasm_exports.project_compile) throw new Error("'project_compile' function not found - Project compiler not available")
+
+        const wasm = this.wasm_exports
+
+        // Helper to read null-terminated string from WASM memory
+        const getString = ptr => {
+            if (!ptr) return ''
+            const memory = new Uint8Array(wasm.memory.buffer)
+            let str = ''
+            let i = ptr
+            while (memory[i] !== 0 && i < memory.length && str.length < 512) {
+                str += String.fromCharCode(memory[i])
+                i++
+            }
+            return str
+        }
+
+        // Compile the project first
+        wasm.project_reset()
+        if (wasm.streamClear) wasm.streamClear()
+        for (let i = 0; i < projectSource.length; i++) {
+            wasm.streamIn(projectSource.charCodeAt(i))
+        }
+        const success = wasm.project_compile(false)
+
+        if (!success || wasm.project_hasError()) {
+            const errorPtr = wasm.project_getError ? wasm.project_getError() : 0
+            return {
+                success: false,
+                error: getString(errorPtr) || 'Compilation failed',
+            }
+        }
+
+        const langNames = ['UNKNOWN', 'PLCASM', 'STL', 'LADDER', 'FBD', 'SFC', 'ST', 'IL']
+
+        // Get memory areas first (needed for symbol address formatting)
+        /** @type {ProjectMemoryArea[]} */
+        const memoryAreas = []
+        const memAreaCount = wasm.project_getMemoryAreaCount()
+        for (let i = 0; i < memAreaCount; i++) {
+            const name = getString(wasm.project_getMemoryAreaName(i))
+            const start = wasm.project_getMemoryAreaStart(i)
+            const end = wasm.project_getMemoryAreaEnd(i)
+            memoryAreas.push({ name, start, end, size: end - start })
+        }
+
+        // Helper to convert byte address to partitioned address (e.g., 448 -> "M0")
+        const toPartitionedAddress = (byteAddress, bit, isBit) => {
+            for (const area of memoryAreas) {
+                if (byteAddress >= area.start && byteAddress <= area.end) {
+                    const offset = byteAddress - area.start
+                    if (isBit) {
+                        return `${area.name}${offset}.${bit}`
+                    }
+                    return `${area.name}${offset}`
+                }
+            }
+            // Fallback to raw address if not in any area
+            return isBit ? `${byteAddress}.${bit}` : `${byteAddress}`
+        }
+
+        // Get symbols
+        /** @type {ProjectSymbol[]} */
+        const symbols = []
+        const symbolCount = wasm.project_getSymbolCount()
+        for (let i = 0; i < symbolCount; i++) {
+            const name = getString(wasm.project_getSymbolName(i))
+            const type = getString(wasm.project_getSymbolType(i))
+            const byteAddress = wasm.project_getSymbolByteAddress(i)
+            const bit = wasm.project_getSymbolBit(i)
+            const isBit = !!wasm.project_getSymbolIsBit(i)
+            const typeSize = wasm.project_getSymbolTypeSize(i)
+            const address = toPartitionedAddress(byteAddress, bit, isBit)
+
+            symbols.push({
+                name,
+                type,
+                address,
+                byteAddress,
+                ...(isBit && { bit }),
+                isBit,
+                typeSize,
+            })
+        }
+
+        // Get program blocks
+        /** @type {ProjectBlock[]} */
+        const blocks = []
+        const blockCount = wasm.project_getBlockCount()
+        for (let i = 0; i < blockCount; i++) {
+            const name = getString(wasm.project_getBlockName(i))
+            const filePath = getString(wasm.project_getBlockFilePath(i))
+            const programName = getString(wasm.project_getBlockProgramName(i))
+            const lang = wasm.project_getBlockLanguage(i)
+            const offset = wasm.project_getBlockOffset(i)
+            const size = wasm.project_getBlockSize(i)
+
+            blocks.push({
+                name,
+                file: filePath,
+                program: programName,
+                language: langNames[lang] || 'UNKNOWN',
+                offset,
+                size,
+            })
+        }
+
+        // Get files
+        /** @type {ProjectFile[]} */
+        const files = []
+        const fileCount = wasm.project_getFileCount()
+        for (let i = 0; i < fileCount; i++) {
+            const filePath = getString(wasm.project_getFilePath(i))
+            const firstBlockIndex = wasm.project_getFileFirstBlockIndex(i)
+            const fileBlockCount = wasm.project_getFileBlockCount(i)
+            const executionOrder = wasm.project_getFileExecutionOrder(i)
+            files.push({
+                path: filePath,
+                firstBlockIndex,
+                blockCount: fileBlockCount,
+                executionOrder,
+            })
+        }
+
+        // Get memory usage
+        const memUsed = wasm.project_getMemoryUsed ? wasm.project_getMemoryUsed() : 0
+        const memAvailable = wasm.project_getMemoryAvailable ? wasm.project_getMemoryAvailable() : 0
+        const flashUsed = wasm.project_getFlashUsed ? wasm.project_getFlashUsed() : 0
+        const flashSize = wasm.project_getFlashSize ? wasm.project_getFlashSize() : 32768
+
+        return {
+            success: true,
+            project: {
+                name: getString(wasm.project_getName()),
+                version: getString(wasm.project_getVersion()),
+            },
+            memory: {
+                used: memUsed,
+                available: memAvailable,
+            },
+            flash: {
+                used: flashUsed,
+                size: flashSize,
+            },
+            symbols,
+            memoryAreas,
+            blocks,
+            files,
+        }
+    }
+
+    /**
+     * @typedef {{
+     *     name: string,
+     *     location: 'memory' | 'program',
+     *     offset: string,
+     *     byteOffset: number,
+     *     datatype: string,
+     *     size: number,
+     *     file: string,
+     *     program: string,
+     *     block: string,
+     *     line: number,
+     *     column: number,
+     *     length: number,
+     *     token: string,
+     *     description: string
+     * }} ProjectModifier
+     */
+
+    /**
+     * @typedef {{
+     *     success: true,
+     *     modifiers: ProjectModifier[]
+     * } | {
+     *     success: false,
+     *     error: string
+     * }} ProjectModifiersResult
+     */
+
+    /**
+     * Compiles a PLC project and returns all modifiable values (constants, timer presets, etc.)
+     * that can be hot-patched at runtime. This is useful for creating editor UI that allows
+     * precision patching of program bytecode or memory values while the program is running.
+     *
+     * @param {string} projectSource - The project definition string (starts with VOVKPLCPROJECT).
+     * @returns {ProjectModifiersResult} - Object with modifiers array or error.
+     *
+     * @example
+     * const result = runtime.getProjectIRModifiers(projectSource)
+     * if (result.success) {
+     *     for (const mod of result.modifiers) {
+     *         console.log(`${mod.name}: ${mod.location} at ${mod.offset} (${mod.datatype})`)
+     *     }
+     * }
+     */
+    getProjectIRModifiers = projectSource => {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        if (!this.wasm_exports.project_compile) throw new Error("'project_compile' function not found - Project compiler not available")
+
+        const wasm = this.wasm_exports
+
+        // Helper to read null-terminated string from WASM memory
+        const getString = ptr => {
+            if (!ptr) return ''
+            const memory = new Uint8Array(wasm.memory.buffer)
+            let str = ''
+            let i = ptr
+            while (memory[i] !== 0 && i < memory.length && str.length < 512) {
+                str += String.fromCharCode(memory[i])
+                i++
+            }
+            return str
+        }
+
+        // Compile the project first
+        wasm.project_reset()
+        if (wasm.streamClear) wasm.streamClear()
+        for (let i = 0; i < projectSource.length; i++) {
+            wasm.streamIn(projectSource.charCodeAt(i))
+        }
+        const success = wasm.project_compile(false)
+
+        if (!success || wasm.project_hasError()) {
+            const errorPtr = wasm.project_getError ? wasm.project_getError() : 0
+            return {
+                success: false,
+                error: getString(errorPtr) || 'Compilation failed',
+            }
+        }
+
+        // Get memory areas (needed for address formatting)
+        const memoryAreas = []
+        const memAreaCount = wasm.project_getMemoryAreaCount()
+        for (let i = 0; i < memAreaCount; i++) {
+            const name = getString(wasm.project_getMemoryAreaName(i))
+            const start = wasm.project_getMemoryAreaStart(i)
+            const end = wasm.project_getMemoryAreaEnd(i)
+            memoryAreas.push({ name, start, end })
+        }
+
+        // Helper to convert byte address to partitioned address
+        const toPartitionedAddress = byteAddress => {
+            for (const area of memoryAreas) {
+                if (byteAddress >= area.start && byteAddress <= area.end) {
+                    const offset = byteAddress - area.start
+                    return `${area.name}${offset}`
+                }
+            }
+            return `${byteAddress}`
+        }
+
+        /** @type {ProjectModifier[]} */
+        const modifiers = []
+
+        // Check if we have the modifier API available
+        if (wasm.project_getModifierCount) {
+            const modCount = wasm.project_getModifierCount()
+            for (let i = 0; i < modCount; i++) {
+                const name = getString(wasm.project_getModifierName(i))
+                const locationType = wasm.project_getModifierLocation(i) // 0 = memory, 1 = program
+                const byteOffset = wasm.project_getModifierByteOffset(i)
+                const datatype = getString(wasm.project_getModifierDatatype(i))
+                const size = wasm.project_getModifierSize(i)
+                const file = getString(wasm.project_getModifierFile(i))
+                const program = wasm.project_getModifierProgram ? getString(wasm.project_getModifierProgram(i)) : file
+                const block = getString(wasm.project_getModifierBlock(i))
+                const line = wasm.project_getModifierLine(i)
+                const column = wasm.project_getModifierColumn(i)
+                const length = wasm.project_getModifierLength ? wasm.project_getModifierLength(i) : datatype.length
+                const token = wasm.project_getModifierToken ? getString(wasm.project_getModifierToken(i)) : name
+                const description = getString(wasm.project_getModifierDescription(i))
+
+                const location = locationType === 0 ? 'memory' : 'program'
+                const offset = location === 'memory' ? toPartitionedAddress(byteOffset) : `${byteOffset}`
+
+                modifiers.push({
+                    name,
+                    location,
+                    offset,
+                    byteOffset,
+                    datatype,
+                    size,
+                    file,
+                    program,
+                    block,
+                    line,
+                    column,
+                    length,
+                    token,
+                    description,
+                })
+            }
+        }
+
+        // Fallback: derive modifiers from symbols for memory-based values
+        // This provides basic support even without the full modifier API
+        if (modifiers.length === 0 && wasm.project_getSymbolCount) {
+            const symbolCount = wasm.project_getSymbolCount()
+            for (let i = 0; i < symbolCount; i++) {
+                const name = getString(wasm.project_getSymbolName(i))
+                const type = getString(wasm.project_getSymbolType(i))
+                const byteAddress = wasm.project_getSymbolByteAddress(i)
+                const isBit = !!wasm.project_getSymbolIsBit(i)
+                const typeSize = wasm.project_getSymbolTypeSize(i)
+
+                // Skip bit-level symbols (they're not directly modifiable as values)
+                if (isBit) continue
+
+                // Determine size based on type
+                let size = typeSize
+                if (size === 0) {
+                    // Infer size from type name
+                    if (type.includes('8')) size = 1
+                    else if (type.includes('16')) size = 2
+                    else if (type.includes('32') || type === 'f32') size = 4
+                    else if (type.includes('64') || type === 'f64') size = 8
+                    else size = 2 // Default to 2 bytes
+                }
+
+                // Determine description based on type
+                let description = `${type} variable`
+                if (type.toLowerCase().includes('timer') || name.toLowerCase().includes('timer')) {
+                    description = 'Timer preset/elapsed value'
+                } else if (type.toLowerCase().includes('counter') || name.toLowerCase().includes('counter')) {
+                    description = 'Counter preset/current value'
+                }
+
+                modifiers.push({
+                    name,
+                    location: 'memory',
+                    offset: toPartitionedAddress(byteAddress),
+                    byteOffset: byteAddress,
+                    datatype: type,
+                    size,
+                    file: '',
+                    program: '',
+                    block: '',
+                    line: 0, // Not available from symbols
+                    column: 0,
+                    length: name.length,
+                    token: name,
+                    description,
+                })
+            }
+        }
+
+        return {
+            success: true,
+            modifiers,
+        }
+    }
+
+    /**
+     * @typedef {{
      *     type: 'error' | 'warning' | 'info',
      *     message: string,
      *     line: number,

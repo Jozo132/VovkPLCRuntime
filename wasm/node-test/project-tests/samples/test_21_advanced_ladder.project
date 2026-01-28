@@ -1,0 +1,58 @@
+VOVKPLCPROJECT LadderValidationTest
+VERSION 3.0
+
+MEMORY
+    OFFSET 0
+    AVAILABLE 1024
+    K 64
+    X 64
+    Y 64
+    S 256
+    M 256
+    T 90
+    C 40
+END_MEMORY
+
+SYMBOLS
+    start_btn : bit : X0.0
+    stop_btn : bit : X0.1
+    motor : bit : Y0.0
+    error_led : bit : Y0.1
+END_SYMBOLS
+
+PROGRAM main
+    BLOCK LANG=LADDER Network 1 - Ladder with backward connection
+{
+  "comment": "Network 4",
+  "nodes": [
+    { "id": "ysdkdW5WHrNZj", "x": 0, "y": 0, "type": "contact", "symbol": "X0.0", "inverted": false, "trigger": "normal" },
+    { "id": "OZQBBuLgLyiau", "x": 3, "y": 0, "type": "contact", "symbol": "M0.0", "inverted": false, "trigger": "normal" },
+    { "id": "FGftxzdjGzIdZ", "x": 0, "y": 1, "type": "contact", "symbol": "Y0.1", "inverted": false, "trigger": "normal" },
+    { "id": "qXA0LSGu23Kd5", "x": 0, "y": 4, "type": "contact", "symbol": "Y0.2", "inverted": false, "trigger": "normal" },
+    { "id": "NHX3yKS6ek2zP", "x": 9, "y": 1, "type": "coil", "symbol": "Y0.4", "inverted": false },
+    { "id": "JydGjS4LvzorQ", "x": 0, "y": 2, "type": "contact", "symbol": "X0.1", "inverted": false, "trigger": "normal" },
+    { "id": "csSZopeZpDOCu", "x": 3, "y": 2, "type": "contact", "symbol": "M0.2", "inverted": false, "trigger": "normal" },
+    { "id": "X4WcTremO8j3i", "x": 0, "y": 3, "type": "contact", "symbol": "Y0.3", "inverted": false, "trigger": "normal" },
+    { "id": "yq0ydd3f7tt93", "x": 7, "y": 0, "type": "contact", "symbol": "M0.1", "inverted": true, "trigger": "normal" },
+    { "id": "Wl2ZZ1Iqp5caB", "x": 9, "y": 0, "type": "coil", "symbol": "Y0.1", "inverted": false },
+    { "id": "ZzoDAT0mRQaW0", "x": 4, "y": 2, "type": "timer_ton", "symbol": "T1", "inverted": false, "preset": "T#3s" },
+    { "id": "RKyNApYAcuNUU", "x": 5, "y": 4, "type": "coil_rset", "symbol": "Y0.1", "inverted": false },
+    { "id": "i4pbhWAXINbxw", "x": 10, "y": 0, "type": "coil", "symbol": "Y0.2", "inverted": false },
+    { "id": "j6dKCUkwNlP8K", "x": 4, "y": 0, "type": "fb_cmp_lt", "symbol": "", "inverted": false, "dataType": "i16", "in1": "M10", "in2": "#100" },
+    { "id": "bWPT8jkC9L3sO", "x": 5, "y": 0, "type": "timer_ton", "symbol": "T0", "inverted": false, "preset": "T#10s" }
+  ],
+  "connections": [
+    { "sources": [ "FGftxzdjGzIdZ", "ysdkdW5WHrNZj" ], "destinations": [ "OZQBBuLgLyiau" ] },
+    { "sources": [ "JydGjS4LvzorQ", "X4WcTremO8j3i" ], "destinations": [ "csSZopeZpDOCu" ] },
+    { "sources": [ "yq0ydd3f7tt93" ], "destinations": [ "NHX3yKS6ek2zP", "Wl2ZZ1Iqp5caB" ] },
+    { "sources": [ "RKyNApYAcuNUU", "ZzoDAT0mRQaW0" ], "destinations": [ "yq0ydd3f7tt93" ] },
+    { "sources": [ "csSZopeZpDOCu" ], "destinations": [ "ZzoDAT0mRQaW0" ] },
+    { "sources": [ "qXA0LSGu23Kd5" ], "destinations": [ "RKyNApYAcuNUU" ] },
+    { "sources": [ "Wl2ZZ1Iqp5caB" ], "destinations": [ "i4pbhWAXINbxw" ] },
+    { "sources": [ "OZQBBuLgLyiau" ], "destinations": [ "j6dKCUkwNlP8K" ] },
+    { "sources": [ "j6dKCUkwNlP8K" ], "destinations": [ "bWPT8jkC9L3sO" ] },
+    { "sources": [ "bWPT8jkC9L3sO" ], "destinations": [ "yq0ydd3f7tt93" ] }
+  ]
+}
+    END_BLOCK
+END_PROGRAM

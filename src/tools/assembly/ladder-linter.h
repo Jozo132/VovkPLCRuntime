@@ -261,7 +261,8 @@ public:
         }
 
         // Check address/symbol for most node types (tap nodes don't need addresses)
-        if (!isTapNode(node.type) && isKnownNodeType(node.type)) {
+        // Comparators and operation blocks use in1/in2 instead of address
+        if (!isTapNode(node.type) && !isComparator(node.type) && !isOperationBlock(node.type) && isKnownNodeType(node.type)) {
             if (node.address[0] == '\0') {
                 addError("Missing address/symbol", nodeIdx);
             } else if (symbol_count > 0 || sharedSymbols.symbol_count > 0) {
@@ -370,9 +371,20 @@ public:
     }
 
     // Check if address is a raw memory address (starts with M, X, Y, K, S, T, C, or number)
+    // Also handles literal values prefixed with # (e.g., #100)
     bool isRawAddress(const char* addr) {
         if (!addr || addr[0] == '\0') return false;
         char first = addr[0];
+        // Literal value prefix (e.g., #100, #-50, #3.14)
+        if (first == '#') {
+            // Must have at least one character after #
+            if (addr[1] == '\0') return false;
+            // Can be a number or negative number
+            char second = addr[1];
+            if (second >= '0' && second <= '9') return true;
+            if (second == '-' && addr[2] >= '0' && addr[2] <= '9') return true;
+            return false;
+        }
         // Memory area prefixes
         if (first == 'M' || first == 'm' || first == 'X' || first == 'x' ||
             first == 'Y' || first == 'y' || first == 'K' || first == 'k' ||

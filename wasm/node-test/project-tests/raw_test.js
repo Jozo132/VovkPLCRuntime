@@ -7,10 +7,14 @@
 // Usage:
 //   node raw_test.js <test_name> --compile   # Show raw compilation output
 //   node raw_test.js <test_name> --lint      # Show raw linter output
+//   node raw_test.js <test_name> --ir        # Show intermediate representation (symbols, memory, blocks)
+//   node raw_test.js <test_name> --modifiers # Show modifiable values for hot-patching
 //
 // Examples:
 //   node raw_test.js test_01 --compile
 //   node raw_test.js test_01 --lint
+//   node raw_test.js test_01 --ir
+//   node raw_test.js test_01 --modifiers
 //
 // @ts-check
 'use strict'
@@ -36,10 +40,14 @@ function printUsage() {
 ${BOLD}Usage:${RESET}
   node raw_test.js <test_name> --compile   Show raw compilation output
   node raw_test.js <test_name> --lint      Show raw linter output
+  node raw_test.js <test_name> --ir        Show intermediate representation (symbols, memory, blocks)
+  node raw_test.js <test_name> --modifiers Show modifiable values for hot-patching
 
 ${BOLD}Examples:${RESET}
   node raw_test.js test_01 --compile
   node raw_test.js test_01 --lint
+  node raw_test.js test_01 --ir
+  node raw_test.js test_01 --modifiers
   node raw_test.js test_01_base --compile
 `)
 }
@@ -50,6 +58,8 @@ async function main() {
     // Parse arguments
     const compileMode = args.includes('--compile') || args.includes('-c')
     const lintMode = args.includes('--lint') || args.includes('-l')
+    const irMode = args.includes('--ir') || args.includes('-i')
+    const modifiersMode = args.includes('--modifiers') || args.includes('-m')
     const testName = args.find(arg => !arg.startsWith('-'))
     
     if (!testName) {
@@ -58,14 +68,15 @@ async function main() {
         process.exit(1)
     }
     
-    if (!compileMode && !lintMode) {
-        console.error(`${RED}Error: Must specify --compile or --lint${RESET}`)
+    const modeCount = [compileMode, lintMode, irMode, modifiersMode].filter(Boolean).length
+    if (modeCount === 0) {
+        console.error(`${RED}Error: Must specify --compile, --lint, --ir, or --modifiers${RESET}`)
         printUsage()
         process.exit(1)
     }
     
-    if (compileMode && lintMode) {
-        console.error(`${RED}Error: Cannot specify both --compile and --lint${RESET}`)
+    if (modeCount > 1) {
+        console.error(`${RED}Error: Cannot specify multiple modes${RESET}`)
         printUsage()
         process.exit(1)
     }
@@ -103,17 +114,26 @@ async function main() {
     runtime.stdout_callback = () => {}  // Suppress runtime output
     await runtime.initialize(wasmPath, false, false)
     
-    console.log(`${CYAN}─── ${compileMode ? 'Compilation' : 'Linter'} Output for ${cleanName} ───${RESET}`)
+    const modeName = compileMode ? 'Compilation' : lintMode ? 'Linter' : irMode ? 'IR' : 'Modifiers'
+    console.log(`${CYAN}─── ${modeName} Output for ${cleanName} ───${RESET}`)
     console.log()
     
     if (compileMode) {
         // Compile the project
         const result = runtime.compileProject(projectCode)
         console.log(JSON.stringify(result, null, 2))
-    } else {
+    } else if (lintMode) {
         // Lint the project
         const problems = runtime.lintProject(projectCode)
         console.log(JSON.stringify(problems, null, 2))
+    } else if (irMode) {
+        // Show intermediate representation
+        const ir = runtime.getProjectIR(projectCode)
+        console.log(JSON.stringify(ir, null, 2))
+    } else if (modifiersMode) {
+        // Show modifiable values
+        const result = runtime.getProjectIRModifiers(projectCode)
+        console.log(JSON.stringify(result, null, 2))
     }
 }
 
