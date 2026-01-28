@@ -1311,7 +1311,15 @@ class VovkPLC_class {
      */
 
     /**
-     * @typedef {{ bytecode: string, problem: null } | { bytecode: null, problem: ProjectCompileProblem }} ProjectCompileResult
+     * @typedef {{
+     *     memory: { used: number, available: number },
+     *     flash: { used: number, size: number },
+     *     execution: { steps: number, stackSize: number }
+     * }} ProjectCompileOutput
+     */
+
+    /**
+     * @typedef {{ bytecode: string, compileTime: number, problem: null, output: ProjectCompileOutput } | { bytecode: null, compileTime: number, problem: ProjectCompileProblem, output: null }} ProjectCompileResult
      */
 
     /**
@@ -1348,6 +1356,9 @@ class VovkPLC_class {
         if (!this.wasm_exports.project_getBytecode) throw new Error("'project_getBytecode' function not found")
         if (!this.wasm_exports.project_getBytecodeLength) throw new Error("'project_getBytecodeLength' function not found")
 
+        // Start timing
+        const startTime = performance.now()
+
         // Reset compiler state
         this.wasm_exports.project_reset()
 
@@ -1362,11 +1373,13 @@ class VovkPLC_class {
         if (!ok) {
             return {
                 bytecode: null,
+                compileTime: +(performance.now() - startTime).toFixed(1),
                 problem: {
                     message: 'Failed to stream project source - buffer overflow',
                     line: 0,
                     column: 0,
                 },
+                output: null,
             }
         }
 
@@ -1439,6 +1452,7 @@ class VovkPLC_class {
 
                 return {
                     bytecode: null,
+                    compileTime: +(performance.now() - startTime).toFixed(1),
                     problem: {
                         type: type_int === 2 ? 'error' : type_int === 1 ? 'warning' : 'info',
                         message: message || 'Unknown compilation error',
@@ -1451,6 +1465,7 @@ class VovkPLC_class {
                         compiler: langName,
                         ...(token && {token}),
                     },
+                    output: null,
                 }
             }
 
@@ -1502,6 +1517,7 @@ class VovkPLC_class {
 
             return {
                 bytecode: null,
+                compileTime: +(performance.now() - startTime).toFixed(1),
                 problem: {
                     type: 'error',
                     message,
@@ -1510,6 +1526,7 @@ class VovkPLC_class {
                     ...(block && {block}),
                     ...(compiler && {compiler}),
                 },
+                output: null,
             }
         }
 
@@ -1520,11 +1537,13 @@ class VovkPLC_class {
         if (!bytecodePtr || bytecodeLen === 0) {
             return {
                 bytecode: null,
+                compileTime: +(performance.now() - startTime).toFixed(1),
                 problem: {
                     message: 'Compilation produced no bytecode',
                     line: 0,
                     column: 0,
                 },
+                output: null,
             }
         }
 
@@ -1536,9 +1555,32 @@ class VovkPLC_class {
             if (i < bytecodeLen - 1) hex += ' '
         }
 
+        // Get memory and flash usage
+        const memUsed = this.wasm_exports.project_getMemoryUsed ? this.wasm_exports.project_getMemoryUsed() : 0
+        const memAvailable = this.wasm_exports.project_getMemoryAvailable ? this.wasm_exports.project_getMemoryAvailable() : 0
+        const flashUsed = this.wasm_exports.project_getFlashUsed ? this.wasm_exports.project_getFlashUsed() : bytecodeLen
+        const flashSize = this.wasm_exports.project_getFlashSize ? this.wasm_exports.project_getFlashSize() : 32768
+
+        // Load and run the program to get execution stats
+        let steps = 0
+        let stackSize = 0
+        const loaded = this.wasm_exports.project_load ? this.wasm_exports.project_load() : false
+        if (loaded) {
+            if (this.wasm_exports.clearStack) this.wasm_exports.clearStack()
+            if (this.wasm_exports.run) this.wasm_exports.run()
+            steps = this.wasm_exports.getLastInstructionCount ? this.wasm_exports.getLastInstructionCount() : 0
+            stackSize = this.wasm_exports.getStackSize ? this.wasm_exports.getStackSize() || 0 : 0
+        }
+
         return {
             bytecode: hex,
+            compileTime: +(performance.now() - startTime).toFixed(1),
             problem: null,
+            output: {
+                memory: { used: memUsed, available: memAvailable },
+                flash: { used: flashUsed, size: flashSize },
+                execution: { steps, stackSize },
+            },
         }
     }
 
