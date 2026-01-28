@@ -149,7 +149,7 @@ async function runTests() {
     }
     
     console.log(`${BOLD}${CYAN}╔══════════════════════════════════════════════════════════════════╗${RESET}`)
-    console.log(`${BOLD}${CYAN}║          Ladder Graph → STL Compiler Unit Tests                 ║${RESET}`)
+    console.log(`${BOLD}${CYAN}║           Ladder Graph → STL Compiler Unit Tests                 ║${RESET}`)
     console.log(`${BOLD}${CYAN}╚══════════════════════════════════════════════════════════════════╝${RESET}`)
     console.log()
     console.log(`Found ${testCases.length} test case(s)`)

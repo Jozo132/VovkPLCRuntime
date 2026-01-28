@@ -9,17 +9,13 @@
     "explain": "node --no-warnings wasm/node-test/explain.js",
     "update": "git pull",
     "wasm_unit_test": "cd wasm/node-test && node unit_test.js",
-    "test_compile": "cd wasm/node-test && node test_compile.js",
-    "test_edge": "cd wasm/node-test && node test_edge_detection.js",
-    "test_edge_ext": "cd wasm/node-test && node test_edge_extensions.js",
-    "test_flow_rel": "cd wasm/node-test && node test_flow_rel.js",
     "test_timers": "cd wasm/node-test && node test_timers.js",
-    "test_lint": "cd wasm/node-test && node test_lint.js",
     "test_worker_full": "cd wasm/node-test && node test_worker_full.js",
+    "test_project": "node wasm/node-test/project-tests/unit_test.js",
     "test_ladder": "node --no-warnings wasm/node-test/ladder-tests/test_ladder_stl.js",
     "memory_leak_test": "node wasm/memory_leak_test.js",
     "memory_leak_test:verbose": "node wasm/memory_leak_test.js --verbose",
-    "test_wasm": "npm run wasm_unit_test && npm run test_ladder && npm run memory_leak_test"
+    "test": "npm run test_ladder && npm run test_project"
   },
   "keywords": [
     "plc",

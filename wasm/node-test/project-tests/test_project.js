@@ -30,7 +30,7 @@ const run = async () => {
 
     console.log('')
     console.log('╔══════════════════════════════════════════════════════════════════╗')
-    console.log('║              VovkPLC.compileProject() Tests                       ║')
+    console.log('║                VovkPLC.compileProject() Tests                    ║')
     console.log('╚══════════════════════════════════════════════════════════════════╝')
     console.log('')
 
@@ -292,7 +292,7 @@ END_PROGRAM
     // ========================================================================
     console.log('')
     console.log('╔══════════════════════════════════════════════════════════════════╗')
-    console.log('║              VovkPLC.lintProject() Tests                          ║')
+    console.log('║                VovkPLC.lintProject() Tests                       ║')
     console.log('╚══════════════════════════════════════════════════════════════════╝')
     console.log('')
 
