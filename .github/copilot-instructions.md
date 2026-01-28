@@ -8,12 +8,10 @@
 - Do NOT delete `VovkPLC.js` or `VovkPLC.worker.js` thinking they will be regenerated
 
 ## Testing
-- Run `npm run test` to execute all tests (unit tests + memory leak tests)
+- Run `npm run test` to execute all tests (unit tests)
 - Individual test scripts are in `wasm/node-test/`:
-  - `npm run test_compile` - Compilation tests
-  - `npm run test_timers` - Timer instruction tests
-  - `npm run test_lint` - Linter tests
-  - Additional test files: `test_ladder.js`, `test_stl_compiler.js`, `test_network_ir.js`, `test_tap_inline.js`, `test_stl_math.js`, etc.
+  - `npm run test_ladder` - Ladder to STL compiler unit tests
+  - `npm run test_project` - Full PLC project compilation unit test
 - Run tests after any significant C++ changes to verify functionality
 - The runtime has built-in unit tests that can be enabled with `#define __RUNTIME_FULL_UNIT_TEST___`
 
