@@ -472,17 +472,17 @@ const run = async () => {
             console.log()
             
             streamCode(runtime, input)
-            runtime.wasm_exports.ladder_graph_load_from_stream()
+            runtime.wasm_exports.ladder_standalone_load_stream()
             
-            const ladderSuccess = runtime.wasm_exports.ladder_graph_compile()
+            const ladderSuccess = runtime.wasm_exports.ladder_standalone_compile()
             
             if (!ladderSuccess) {
                 console.error('  ✗ Ladder Graph compilation error')
                 process.exit(1)
             }
             
-            runtime.wasm_exports.ladder_graph_output_to_stream()
-            stl = runtime.readStream()
+            runtime.wasm_exports.ladder_standalone_output_to_stream()
+            stl = runtime.readOutBuffer()
             
             const stlLines = stl.split('\n')
             stlLines.forEach((line, i) => {
@@ -521,7 +521,7 @@ const run = async () => {
             }
             
             runtime.wasm_exports.stl_output_to_stream()
-            plcasm = runtime.readStream()
+            plcasm = runtime.readOutBuffer()
             
             // Filter out the header comment
             const plcasmLines = plcasm.split('\n').filter(l => !l.startsWith('// Generated from STL'))

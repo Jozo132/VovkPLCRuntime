@@ -362,7 +362,7 @@ async function testSTLFull(runtime, name, stlCode) {
         
         // Write PLCASM output to stream
         await runtime.callExport('stl_output_to_stream')
-        const plcasm = await runtime.readStream()
+        const plcasm = await runtime.readOutBuffer()
         console.log(`Generated PLCASM:\n${plcasm}`)
         
         // Load compiled program into runtime

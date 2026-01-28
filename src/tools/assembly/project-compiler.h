@@ -2020,7 +2020,7 @@ public:
     // Convert Ladder block to PLCASM and append to combined buffer
     bool convertLadderToPLCASM(ProgramBlock& block) {
         // Compile Ladder JSON to STL first
-        ladder_compiler.reset();
+        ladder_compiler.clearState();
         int source_len = string_len(block_source);
 
         // Use parse() which calls parseGraph() then compile()
@@ -3011,13 +3011,10 @@ extern "C" {
 
         // Extract the value and format it as a string
         u64 value = 0;
-        IR_OperandType opType = IR_OP_U32;
 
         if (entry->operand_count >= 2 && (entry->flags & IR_FLAG_TIMER)) {
-            opType = (IR_OperandType)entry->operands[1].type;
             value = entry->operands[1].val_u64;
         } else if (entry->operand_count >= 1) {
-            opType = (IR_OperandType)entry->operands[0].type;
             value = entry->operands[0].val_u64;
         }
 

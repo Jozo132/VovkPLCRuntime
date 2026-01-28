@@ -18,7 +18,7 @@ async function transpileSTL(runtime, stlCode) {
     await runtime.callExport('stl_compile')
     await runtime.callExport('stl_output_to_stream')
     
-    return await runtime.readStream()
+    return await runtime.readOutBuffer()
 }
 
 const run = async () => {

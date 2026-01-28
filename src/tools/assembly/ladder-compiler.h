@@ -71,7 +71,7 @@ public:
     // Output STL buffer
     static const int MAX_OUTPUT = 32768;
     char output[MAX_OUTPUT];
-    int output_len;
+    volatile int output_len;
 
     // Edge memory counter for auto-generated edge state bits
     int edge_mem_counter;
@@ -82,12 +82,12 @@ public:
     // Indentation level for nested structures
     int indent_level;
 
-    LadderGraphCompiler() { reset(); }
+    LadderGraphCompiler() { clearState(); }
 
     // Virtual destructor for proper cleanup in derived classes
     virtual ~LadderGraphCompiler() = default;
 
-    virtual void reset() {
+    virtual void clearState() {
         source = nullptr;
         length = 0;
         pos = 0;
@@ -421,9 +421,20 @@ public:
 
     // Check if address is a raw memory address (starts with M, X, Y, K, S, T, C, or number)
     // Raw addresses like "X0.0", "M10", "T0" don't need symbol lookup
+    // Also handles literal values prefixed with # (e.g., #100, #-50, #3.14)
     bool isRawAddress(const char* addr) {
         if (!addr || addr[0] == '\0') return false;
         char first = addr[0];
+        // Literal value prefix (e.g., #100, #-50, #3.14)
+        if (first == '#') {
+            // Must have at least one character after #
+            if (addr[1] == '\0') return false;
+            // Can be a number or negative number
+            char second = addr[1];
+            if (second >= '0' && second <= '9') return true;
+            if (second == '-' && addr[2] >= '0' && addr[2] <= '9') return true;
+            return false;
+        }
         // Memory area prefixes
         if (first == 'M' || first == 'm' || first == 'X' || first == 'x' ||
             first == 'Y' || first == 'y' || first == 'K' || first == 'k' ||
@@ -999,12 +1010,16 @@ public:
             return false;
         }
 
+        bool has_sources = false;
+        bool has_destinations = false;
+
         while (peek() != '}' && peek() != '\0') {
             char key[32];
             if (!readString(key, sizeof(key))) return false;
             if (!expect(':')) { setError("Expected ':'"); return false; }
 
             if (strEqI(key, "sources")) {
+                has_sources = true;
                 if (!expect('[')) { setError("Expected sources array"); return false; }
                 while (peek() != ']' && peek() != '\0') {
                     if (conn.source_count >= MAX_CONN_ENDPOINTS) {
@@ -1018,6 +1033,7 @@ public:
                 }
                 if (!expect(']')) { setError("Expected ']'"); return false; }
             } else if (strEqI(key, "destinations")) {
+                has_destinations = true;
                 if (!expect('[')) { setError("Expected destinations array"); return false; }
                 while (peek() != ']' && peek() != '\0') {
                     if (conn.dest_count >= MAX_CONN_ENDPOINTS) {
@@ -1043,6 +1059,24 @@ public:
             return false;
         }
 
+        // Validate required keys
+        if (!has_sources) {
+            setError("Connection missing required 'sources' array");
+            return false;
+        }
+        if (!has_destinations) {
+            setError("Connection missing required 'destinations' array");
+            return false;
+        }
+        if (conn.source_count == 0) {
+            setError("Connection 'sources' array is empty");
+            return false;
+        }
+        if (conn.dest_count == 0) {
+            setError("Connection 'destinations' array is empty");
+            return false;
+        }
+
         return true;
     }
 
@@ -1052,12 +1086,16 @@ public:
             return false;
         }
 
+        bool has_nodes = false;
+        bool has_connections = false;
+
         while (peek() != '}' && peek() != '\0') {
             char key[32];
             if (!readString(key, sizeof(key))) return false;
             if (!expect(':')) { setError("Expected ':'"); return false; }
 
             if (strEqI(key, "nodes")) {
+                has_nodes = true;
                 if (!expect('[')) { setError("Expected nodes array"); return false; }
                 while (peek() != ']' && peek() != '\0') {
                     if (node_count >= MAX_NODES) {
@@ -1071,6 +1109,7 @@ public:
                 }
                 if (!expect(']')) { setError("Expected ']'"); return false; }
             } else if (strEqI(key, "connections")) {
+                has_connections = true;
                 if (!expect('[')) { setError("Expected connections array"); return false; }
                 while (peek() != ']' && peek() != '\0') {
                     if (connection_count >= MAX_CONNECTIONS) {
@@ -1093,6 +1132,16 @@ public:
 
         if (!expect('}')) {
             setError("Expected '}'");
+            return false;
+        }
+
+        // Validate required arrays
+        if (!has_nodes) {
+            setError("Ladder Graph JSON missing required 'nodes' array");
+            return false;
+        }
+        if (!has_connections) {
+            setError("Ladder Graph JSON missing required 'connections' array");
             return false;
         }
 
@@ -2238,7 +2287,8 @@ public:
         }
 
         // Check address/symbol for most node types (tap nodes don't need addresses)
-        if (!isTapNode(node.type)) {
+        // Comparators and operation blocks use in1/in2/out fields instead of address
+        if (!isTapNode(node.type) && !isComparator(node.type) && !isOperationBlock(node.type)) {
             if (node.address[0] == '\0') {
                 reportNodeError("Missing address/symbol", nodeIdx);
                 return false;
@@ -2258,35 +2308,70 @@ public:
         }
 
         if (isOperationBlock(node.type)) {
-            // Operation blocks need at least one input and one output
-            bool needsIn1 = true;
-            bool needsIn2 = !strEqI(node.type, "fb_inc") && !strEqI(node.type, "fb_dec") &&
-                           !strEqI(node.type, "fb_not") && !strEqI(node.type, "fb_move");
-            bool needsOut = true;
+            // fb_inc/fb_dec can use either 'address' field or 'in1'/'out' fields
+            bool isIncDec = strEqI(node.type, "fb_inc") || strEqI(node.type, "fb_dec");
+            
+            if (isIncDec) {
+                // INC/DEC operations: accept 'address' OR 'in1'/'out', but check for conflicts
+                bool hasAddress = node.address[0] != '\0';
+                bool hasIn1 = node.in1[0] != '\0';
+                bool hasOut = node.out[0] != '\0';
+                
+                // If both address and in1/out are provided, they must match
+                if (hasAddress && hasIn1 && !strEqI(node.address, node.in1)) {
+                    reportNodeError("INC/DEC: address and in1 fields don't match", nodeIdx);
+                    return false;
+                }
+                if (hasAddress && hasOut && !strEqI(node.address, node.out)) {
+                    reportNodeError("INC/DEC: address and out fields don't match", nodeIdx);
+                    return false;
+                }
+                if (hasIn1 && hasOut && !strEqI(node.in1, node.out)) {
+                    reportNodeError("INC/DEC: in1 and out fields don't match", nodeIdx);
+                    return false;
+                }
+                
+                // Must have at least one way to specify the address
+                if (!hasAddress && !hasIn1 && !hasOut) {
+                    reportNodeError("INC/DEC operation block missing address (use 'address', 'in1', or 'out')", nodeIdx);
+                    return false;
+                }
+                
+                // Validate the symbol that was provided
+                const char* addrToValidate = hasAddress ? node.address : (hasIn1 ? node.in1 : node.out);
+                if (!validateSymbolExists(addrToValidate, nodeIdx)) {
+                    return false;
+                }
+            } else {
+                // Other operation blocks use in1/in2/out fields
+                bool needsIn1 = true;
+                bool needsIn2 = !strEqI(node.type, "fb_not") && !strEqI(node.type, "fb_move");
+                bool needsOut = true;
 
-            if (needsIn1 && node.in1[0] == '\0') {
-                reportNodeError("Operation block missing input 1 (in1)", nodeIdx);
-                return false;
-            }
-            // Validate in1 symbol
-            if (needsIn1 && node.in1[0] != '\0' && !validateSymbolExists(node.in1, nodeIdx)) {
-                return false;
-            }
-            if (needsIn2 && node.in2[0] == '\0') {
-                reportNodeError("Operation block missing input 2 (in2)", nodeIdx);
-                return false;
-            }
-            // Validate in2 symbol
-            if (needsIn2 && node.in2[0] != '\0' && !validateSymbolExists(node.in2, nodeIdx)) {
-                return false;
-            }
-            if (needsOut && node.out[0] == '\0') {
-                reportNodeError("Operation block missing output (out)", nodeIdx);
-                return false;
-            }
-            // Validate out symbol
-            if (needsOut && node.out[0] != '\0' && !validateSymbolExists(node.out, nodeIdx)) {
-                return false;
+                if (needsIn1 && node.in1[0] == '\0') {
+                    reportNodeError("Operation block missing input 1 (in1)", nodeIdx);
+                    return false;
+                }
+                // Validate in1 symbol
+                if (needsIn1 && node.in1[0] != '\0' && !validateSymbolExists(node.in1, nodeIdx)) {
+                    return false;
+                }
+                if (needsIn2 && node.in2[0] == '\0') {
+                    reportNodeError("Operation block missing input 2 (in2)", nodeIdx);
+                    return false;
+                }
+                // Validate in2 symbol
+                if (needsIn2 && node.in2[0] != '\0' && !validateSymbolExists(node.in2, nodeIdx)) {
+                    return false;
+                }
+                if (needsOut && node.out[0] == '\0') {
+                    reportNodeError("Operation block missing output (out)", nodeIdx);
+                    return false;
+                }
+                // Validate out symbol
+                if (needsOut && node.out[0] != '\0' && !validateSymbolExists(node.out, nodeIdx)) {
+                    return false;
+                }
             }
         }
 
@@ -2453,7 +2538,6 @@ public:
     // ============ Main Entry Point ============
 
     bool parse(const char* src, int len) {
-        reset();
         source = src;
         length = len;
 
@@ -2472,6 +2556,12 @@ public:
             return false;
         }
 
+        // Check for empty output - this is an error
+        if (output_len == 0) {
+            setError("Compilation produced no output");
+            return false;
+        }
+
         return !has_error;
     }
 };
@@ -2480,46 +2570,69 @@ public:
 // Global Instances and WASM Exports
 // ============================================================================
 
-static LadderGraphCompiler ladderGraphCompiler;
-static char ladder_input_buffer[32768];
-static int ladder_input_length = 0;
+LadderGraphCompiler ladderGraphCompiler = LadderGraphCompiler();
+char ladder_input_buffer[32768];
+int ladder_input_length = 0;
+
+// Global output buffer for WASM export (avoids reinitialization issues)
+char ladder_output_buffer[65536];
+int ladder_output_length = 0;
 
 extern "C" {
 
-    // ============ Ladder Graph to STL ============
+    // ============ Standalone Ladder Compiler: Ladder Graph JSON -> STL ============
+    // NOTE: These functions use a SEPARATE instance (ladderGraphCompiler) from
+    // the project compiler's internal ladder_compiler (LadderLinter).
+    // For project compilation, use project_compile() which handles ladder internally.
 
-    WASM_EXPORT void ladder_graph_load_from_stream() {
+    WASM_EXPORT void ladder_standalone_clear() {
+        ladderGraphCompiler.clearState();
+        ladder_input_length = 0;
+        ladder_output_length = 0;
+    }
+
+    WASM_EXPORT void ladder_standalone_load_stream() {
         streamRead(ladder_input_buffer, ladder_input_length, sizeof(ladder_input_buffer));
     }
 
-    WASM_EXPORT bool ladder_graph_compile() {
+    WASM_EXPORT int ladder_standalone_compile() {
         // Parse and compile Ladder Graph JSON directly to STL
-        return ladderGraphCompiler.parse(ladder_input_buffer, ladder_input_length);
+        bool result = ladderGraphCompiler.parse(ladder_input_buffer, ladder_input_length);
+        if (result) {
+            // Copy output to global buffer to avoid reinitialization issues
+            ladder_output_length = ladderGraphCompiler.output_len;
+            for (int i = 0; i < ladder_output_length && i < 65535; i++) {
+                ladder_output_buffer[i] = ladderGraphCompiler.output[i];
+            }
+            ladder_output_buffer[ladder_output_length] = '\0';
+            return ladder_output_length;
+        }
+        return -1;
     }
 
-    WASM_EXPORT const char* ladder_graph_get_output() {
-        return ladderGraphCompiler.output;
+    WASM_EXPORT const char* ladder_standalone_get_output() {
+        return ladder_output_buffer;
     }
 
-    WASM_EXPORT int ladder_graph_get_output_length() {
-        return ladderGraphCompiler.output_len;
+    WASM_EXPORT int ladder_standalone_get_output_len() {
+        return ladder_output_length;
     }
 
-    WASM_EXPORT void ladder_graph_output_to_stream() {
-        for (int i = 0; i < ladderGraphCompiler.output_len; i++) {
-            streamOut(ladderGraphCompiler.output[i]);
+    WASM_EXPORT void ladder_standalone_output_to_stream() {
+        for (int i = 0; i < ladder_output_length; i++) {
+            streamOut(ladder_output_buffer[i]);
         }
     }
 
-    WASM_EXPORT bool ladder_graph_has_error() {
+    WASM_EXPORT bool ladder_standalone_has_error() {
         return ladderGraphCompiler.has_error;
     }
 
-    WASM_EXPORT const char* ladder_graph_get_error() {
+    WASM_EXPORT const char* ladder_standalone_get_error() {
         return ladderGraphCompiler.error_msg;
     }
 
-    WASM_EXPORT void ladder_graph_error_to_stream() {
+    WASM_EXPORT void ladder_standalone_error_to_stream() {
         const char* err = ladderGraphCompiler.error_msg;
         for (int i = 0; err[i] != '\0'; i++) {
             streamOut(err[i]);
@@ -2528,7 +2641,7 @@ extern "C" {
 
     // ============ Full Pipeline: Ladder Graph -> STL -> PLCASM -> Bytecode ============
 
-    WASM_EXPORT bool ladder_graph_compile_full() {
+    WASM_EXPORT bool ladder_standalone_compile_full() {
         // Step 1: Parse Ladder Graph to STL
         if (!ladderGraphCompiler.parse(ladder_input_buffer, ladder_input_length)) {
             return false;

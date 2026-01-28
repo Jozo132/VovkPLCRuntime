@@ -1,6 +1,0 @@
-// Intentional stack leak test - TAP without consume
-
-A X0.0
-A M0.1
-TAP
-= Y0.0

@@ -116,9 +116,9 @@ const run = async () => {
         if (isLadder) {
             // Ladder mode: compile Ladder Graph JSON to STL and output STL
             await streamCode(runtime, input)
-            await runtime.callExport('ladder_graph_load_from_stream')
+            await runtime.callExport('ladder_standalone_load_stream')
             
-            const success = await runtime.callExport('ladder_graph_compile')
+            const success = await runtime.callExport('ladder_standalone_compile')
             
             if (!success) {
                 console.error('Ladder Graph compilation error')
@@ -126,8 +126,8 @@ const run = async () => {
             }
             
             // Output STL to stream and read it
-            await runtime.callExport('ladder_graph_output_to_stream')
-            const stl = await runtime.readStream()
+            await runtime.callExport('ladder_standalone_output_to_stream')
+            const stl = await runtime.readOutBuffer()
             
             // Output STL to stdout
             process.stdout.write(stl)
@@ -151,7 +151,7 @@ const run = async () => {
             
             // Output PLCASM to stream and read it
             await runtime.callExport('stl_output_to_stream')
-            const plcasm = await runtime.readStream()
+            const plcasm = await runtime.readOutBuffer()
             
             // Output PLCASM to stdout
             process.stdout.write(plcasm)

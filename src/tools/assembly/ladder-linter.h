@@ -63,8 +63,8 @@ public:
         error_msg[0] = '\0';
     }
 
-    void reset() override {
-        LadderGraphCompiler::reset();
+    void clearState() override {
+        LadderGraphCompiler::clearState();
         clearProblems();
     }
 
@@ -289,51 +289,91 @@ public:
         }
 
         if (isOperationBlock(node.type)) {
-            bool needsIn1 = true;
-            bool needsIn2 = !strEqI(node.type, "fb_inc") && !strEqI(node.type, "fb_dec") &&
-                           !strEqI(node.type, "fb_not") && !strEqI(node.type, "fb_move");
-            bool needsOut = true;
+            // fb_inc/fb_dec can use either 'address' field or 'in1'/'out' fields
+            bool isIncDec = strEqI(node.type, "fb_inc") || strEqI(node.type, "fb_dec");
+            
+            if (isIncDec) {
+                // INC/DEC operations: accept 'address' OR 'in1'/'out', but check for conflicts
+                bool hasAddress = node.address[0] != '\0';
+                bool hasIn1 = node.in1[0] != '\0';
+                bool hasOut = node.out[0] != '\0';
+                
+                // If both address and in1/out are provided, they must match
+                if (hasAddress && hasIn1 && !strEqI(node.address, node.in1)) {
+                    addError("INC/DEC: address and in1 fields don't match", nodeIdx);
+                }
+                if (hasAddress && hasOut && !strEqI(node.address, node.out)) {
+                    addError("INC/DEC: address and out fields don't match", nodeIdx);
+                }
+                if (hasIn1 && hasOut && !strEqI(node.in1, node.out)) {
+                    addError("INC/DEC: in1 and out fields don't match", nodeIdx);
+                }
+                
+                // Must have at least one way to specify the address
+                if (!hasAddress && !hasIn1 && !hasOut) {
+                    addError("INC/DEC operation block missing address (use 'address', 'in1', or 'out')", nodeIdx);
+                } else {
+                    // Validate the symbol that was provided
+                    const char* addrToValidate = hasAddress ? node.address : (hasIn1 ? node.in1 : node.out);
+                    if ((symbol_count > 0 || sharedSymbols.symbol_count > 0) && !isRawAddress(addrToValidate) && !findSymbol(addrToValidate) && !sharedSymbols.findSymbol(addrToValidate)) {
+                        char msg[64];
+                        int mi = 0;
+                        const char* prefix = "Unknown symbol '";
+                        while (*prefix && mi < 40) msg[mi++] = *prefix++;
+                        int ai = 0;
+                        while (addrToValidate[ai] && mi < 58) msg[mi++] = addrToValidate[ai++];
+                        msg[mi++] = '\'';
+                        msg[mi] = '\0';
+                        addError(msg, nodeIdx, addrToValidate);
+                    }
+                }
+            } else {
+                // Other operation blocks use in1/in2/out fields
+                bool needsIn1 = true;
+                bool needsIn2 = !strEqI(node.type, "fb_not") && !strEqI(node.type, "fb_move");
+                bool needsOut = true;
 
-            if (needsIn1 && node.in1[0] == '\0') {
-                addError("Operation block missing input 1 (in1)", nodeIdx);
-            } else if (needsIn1 && (symbol_count > 0 || sharedSymbols.symbol_count > 0) && !isRawAddress(node.in1) && !findSymbol(node.in1) && !sharedSymbols.findSymbol(node.in1)) {
-                char msg[64];
-                int mi = 0;
-                const char* prefix = "Unknown symbol '";
-                while (*prefix && mi < 40) msg[mi++] = *prefix++;
-                int ai = 0;
-                while (node.in1[ai] && mi < 58) msg[mi++] = node.in1[ai++];
-                msg[mi++] = '\'';
-                msg[mi] = '\0';
-                addError(msg, nodeIdx, node.in1);
-            }
+                if (needsIn1 && node.in1[0] == '\0') {
+                    addError("Operation block missing input 1 (in1)", nodeIdx);
+                } else if (needsIn1 && (symbol_count > 0 || sharedSymbols.symbol_count > 0) && !isRawAddress(node.in1) && !findSymbol(node.in1) && !sharedSymbols.findSymbol(node.in1)) {
+                    char msg[64];
+                    int mi = 0;
+                    const char* prefix = "Unknown symbol '";
+                    while (*prefix && mi < 40) msg[mi++] = *prefix++;
+                    int ai = 0;
+                    while (node.in1[ai] && mi < 58) msg[mi++] = node.in1[ai++];
+                    msg[mi++] = '\'';
+                    msg[mi] = '\0';
+                    addError(msg, nodeIdx, node.in1);
+                }
 
-            if (needsIn2 && node.in2[0] == '\0') {
-                addError("Operation block missing input 2 (in2)", nodeIdx);
-            } else if (needsIn2 && (symbol_count > 0 || sharedSymbols.symbol_count > 0) && !isRawAddress(node.in2) && !findSymbol(node.in2) && !sharedSymbols.findSymbol(node.in2)) {
-                char msg[64];
-                int mi = 0;
-                const char* prefix = "Unknown symbol '";
-                while (*prefix && mi < 40) msg[mi++] = *prefix++;
-                int ai = 0;
-                while (node.in2[ai] && mi < 58) msg[mi++] = node.in2[ai++];
-                msg[mi++] = '\'';
-                msg[mi] = '\0';
-                addError(msg, nodeIdx, node.in2);
-            }
+                if (needsIn2 && node.in2[0] == '\0') {
+                    addError("Operation block missing input 2 (in2)", nodeIdx);
+                } else if (needsIn2 && (symbol_count > 0 || sharedSymbols.symbol_count > 0) && !isRawAddress(node.in2) && !findSymbol(node.in2) && !sharedSymbols.findSymbol(node.in2)) {
+                    char msg[64];
+                    int mi = 0;
+                    const char* prefix = "Unknown symbol '";
+                    while (*prefix && mi < 40) msg[mi++] = *prefix++;
+                    int ai = 0;
+                    while (node.in2[ai] && mi < 58) msg[mi++] = node.in2[ai++];
+                    msg[mi++] = '\'';
+                    msg[mi] = '\0';
+                    addError(msg, nodeIdx, node.in2);
+                }
 
-            if (needsOut && node.out[0] == '\0') {
-                addError("Operation block missing output (out)", nodeIdx);
-            } else if (needsOut && (symbol_count > 0 || sharedSymbols.symbol_count > 0) && !isRawAddress(node.out) && !findSymbol(node.out) && !sharedSymbols.findSymbol(node.out)) {
-                char msg[64];
-                int mi = 0;
-                const char* prefix = "Unknown symbol '";
-                while (*prefix && mi < 40) msg[mi++] = *prefix++;
-                int ai = 0;
-                while (node.out[ai] && mi < 58) msg[mi++] = node.out[ai++];
-                msg[mi++] = '\'';
-                msg[mi] = '\0';
-                addError(msg, nodeIdx, node.out);
+                if (needsOut && node.out[0] == '\0') {
+                    addError("Operation block missing output (out)", nodeIdx);
+                } else if (needsOut && (symbol_count > 0 || sharedSymbols.symbol_count > 0) && !isRawAddress(node.out) && !findSymbol(node.out) && !sharedSymbols.findSymbol(node.out)) {
+                    char msg[64];
+                    int mi = 0;
+                    const char* prefix = "Unknown symbol '";
+                    while (*prefix && mi < 40) msg[mi++] = *prefix++;
+                    int ai = 0;
+                    while (node.out[ai] && mi < 58) msg[mi++] = node.out[ai++];
+                    msg[mi++] = '\'';
+                    msg[mi] = '\0';
+                    addError(msg, nodeIdx, node.out);
+                }
             }
         }
 
@@ -546,7 +586,6 @@ public:
     
     // Lint-only mode: parse, validate, but don't compile to STL
     bool lint(const char* src, int len) {
-        reset();
         source = src;
         length = len;
         
@@ -570,7 +609,6 @@ public:
     
     // Full compile mode: parse, validate, compile to STL
     bool parse(const char* src, int len) {
-        reset();
         source = src;
         length = len;
         
@@ -609,7 +647,7 @@ public:
 // Global Instance and WASM Exports
 // ============================================================================
 
-static LadderLinter ladderLinter;
+LadderLinter ladderLinter = LadderLinter();
 
 extern "C" {
 
@@ -617,16 +655,28 @@ WASM_EXPORT void ladder_lint_load_from_stream() {
     streamRead(ladder_input_buffer, ladder_input_length, sizeof(ladder_input_buffer));
 }
 
-WASM_EXPORT bool ladder_lint_run() {
-    return ladderLinter.lint(ladder_input_buffer, ladder_input_length);
+// Returns problem_count (to workaround WASM static reinit issue)
+// Access output_len and problems via the accessor functions BEFORE calling this again
+WASM_EXPORT int ladder_lint_run() {
+    ladderLinter.lint(ladder_input_buffer, ladder_input_length);
+    return ladderLinter.problem_count;
 }
 
-WASM_EXPORT bool ladder_lint_compile() {
-    return ladderLinter.parse(ladder_input_buffer, ladder_input_length);
+// Returns problem_count (to workaround WASM static reinit issue)
+// Access output_len and problems via the accessor functions BEFORE calling this again
+WASM_EXPORT int ladder_lint_compile() {
+    ladderLinter.parse(ladder_input_buffer, ladder_input_length);
+    return ladderLinter.problem_count;
 }
 
 WASM_EXPORT int ladder_lint_problem_count() {
     return ladderLinter.problem_count;
+}
+
+// Get pointer to problems array - use this to read all problems from memory in one call
+// to avoid reinit issues with individual accessor functions
+WASM_EXPORT LinterProblem* ladder_lint_get_problems_pointer() {
+    return ladderLinter.problems;
 }
 
 WASM_EXPORT int ladder_lint_get_problem_type(int index) {

@@ -204,7 +204,7 @@ public:
 // Global Shared Symbol Table Instance
 // ============================================================================
 
-static SharedSymbolTable sharedSymbols;
+SharedSymbolTable sharedSymbols = SharedSymbolTable();
 
 // Convenience functions for global access
 inline void resetSharedSymbols() {

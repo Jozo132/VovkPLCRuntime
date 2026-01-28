@@ -114,15 +114,16 @@ const SUPPORT = checkSupport()
  *     stl_lint_get_output: () => void, // Streams the generated PLCASM output to stdout.
  *     stl_lint_get_output_length: () => number, // Returns the length of the generated PLCASM output.
  *     stl_lint_clear: () => void, // Clears the STL linter state.
- *     ladder_graph_load_from_stream: () => void, // Loads Ladder Graph JSON from the stream buffer into the compiler.
- *     ladder_graph_compile: () => boolean, // Compiles the loaded Ladder Graph to STL. Returns true on success.
- *     ladder_graph_compile_full: () => boolean, // Compiles Ladder Graph fully (Ladder → STL → PLCASM → bytecode). Returns true on success.
- *     ladder_graph_get_output: () => number, // Returns a pointer to the generated STL output.
- *     ladder_graph_get_output_length: () => number, // Returns the length of the generated STL output.
- *     ladder_graph_output_to_stream: () => void, // Streams the generated STL output to stdout.
- *     ladder_graph_has_error: () => boolean, // Returns true if there was a Ladder Graph compilation error.
- *     ladder_graph_get_error: () => number, // Returns a pointer to the Ladder Graph error message string.
- *     ladder_graph_error_to_stream: () => void, // Streams the error message to stdout.
+ *     ladder_standalone_clear: () => void, // Clears the standalone Ladder compiler state.
+ *     ladder_standalone_load_stream: () => void, // Loads Ladder Graph JSON from the stream buffer into the compiler.
+ *     ladder_standalone_compile: () => number, // Compiles the loaded Ladder Graph to STL. Returns output length or -1.
+ *     ladder_standalone_compile_full: () => boolean, // Compiles Ladder Graph fully (Ladder → STL → PLCASM → bytecode). Returns true on success.
+ *     ladder_standalone_get_output: () => number, // Returns a pointer to the generated STL output.
+ *     ladder_standalone_get_output_len: () => number, // Returns the length of the generated STL output.
+ *     ladder_standalone_output_to_stream: () => void, // Streams the generated STL output to stdout.
+ *     ladder_standalone_has_error: () => boolean, // Returns true if there was a Ladder Graph compilation error.
+ *     ladder_standalone_get_error: () => number, // Returns a pointer to the Ladder Graph error message string.
+ *     ladder_standalone_error_to_stream: () => void, // Streams the error message to stdout.
  *     project_compile: (debug?: boolean | number) => boolean, // Compiles a project from the stream buffer. Returns true on success.
  *     project_compileString: (source: number, length: number, debug?: boolean) => boolean, // Compiles a project from a memory pointer. Returns true on success.
  *     project_getBytecode: () => number, // Returns a pointer to the compiled bytecode.
@@ -196,6 +197,37 @@ const SUPPORT = checkSupport()
  *     ir_get_entry_size: () => number, // Returns the size in bytes of each IR_Entry struct.
  *     ir_get_labels_count: () => number, // Returns the number of labels defined in the last compilation.
  *     ir_get_consts_count: () => number, // Returns the number of named constants defined in the last compilation.
+ *     ladder_lint_load_from_stream?: () => void, // Loads Ladder JSON from the stream buffer into the linter.
+ *     ladder_lint_run?: () => number, // Runs the Ladder linter. Returns output length or -1.
+ *     ladder_lint_compile?: () => number, // Compiles Ladder and lints. Returns output length or -1.
+ *     ladder_lint_problem_count?: () => number, // Returns the number of problems found.
+ *     ladder_lint_get_problem_type?: (index: number) => number, // Returns the type of a specific problem.
+ *     ladder_lint_get_problem_line?: (index: number) => number, // Returns the line number of a specific problem.
+ *     ladder_lint_get_problem_column?: (index: number) => number, // Returns the column number of a specific problem.
+ *     ladder_lint_get_problem_length?: (index: number) => number, // Returns the length of a specific problem.
+ *     ladder_lint_get_problem_message?: (index: number) => number, // Returns a pointer to the message of a specific problem.
+ *     ladder_lint_get_problem_token?: (index: number) => number, // Returns a pointer to the token of a specific problem.
+ *     ladder_lint_get_output?: () => number, // Returns a pointer to the generated STL output.
+ *     ladder_lint_get_output_length?: () => number, // Returns the length of the generated STL output.
+ *     ladder_lint_get_problems_pointer?: () => number, // Returns a pointer to the problems array.
+ *     ladder_lint_clear?: () => void, // Clears the Ladder linter state.
+ *     project_getModifierCount?: () => number, // Returns the number of modifiers defined.
+ *     project_getModifierName?: (index: number) => number, // Returns a pointer to the modifier name string.
+ *     project_getModifierLocation?: (index: number) => number, // Returns the location type (0=memory, 1=program).
+ *     project_getModifierByteOffset?: (index: number) => number, // Returns the byte offset of the modifier.
+ *     project_getModifierDatatype?: (index: number) => number, // Returns a pointer to the datatype string.
+ *     project_getModifierSize?: (index: number) => number, // Returns the size of the modifier.
+ *     project_getModifierFile?: (index: number) => number, // Returns a pointer to the file path string.
+ *     project_getModifierProgram?: (index: number) => number, // Returns a pointer to the program name string.
+ *     project_getModifierBlock?: (index: number) => number, // Returns a pointer to the block name string.
+ *     project_getModifierLine?: (index: number) => number, // Returns the line number of the modifier.
+ *     project_getModifierColumn?: (index: number) => number, // Returns the column number of the modifier.
+ *     project_getModifierLength?: (index: number) => number, // Returns the length of the modifier token.
+ *     project_getModifierToken?: (index: number) => number, // Returns a pointer to the modifier token string.
+ *     project_getModifierDescription?: (index: number) => number, // Returns a pointer to the modifier description.
+ *     get_out_buffer_ptr?: () => number, // Returns a pointer to the output buffer.
+ *     get_out_index?: () => number, // Returns the current output buffer index/length.
+ *     flush_out_buffer?: () => void, // Clears the output buffer.
  * }} VovkPLCExportTypes
  */
 
@@ -588,7 +620,7 @@ class VovkPLC_class {
 
             // 4. Get generated PLCASM output
             this.wasm_exports.stl_lint_get_output()
-            const output = this.readStream()
+            const output = this.readOutBuffer()
 
             return {problems, output}
         } finally {
@@ -646,44 +678,51 @@ class VovkPLC_class {
             this.wasm_exports.streamIn(0) // Null terminator
             this.wasm_exports.ladder_lint_load_from_stream()
 
-            // 2. Run Ladder Linter
-            this.wasm_exports.ladder_lint_run()
+            // 2. Run Ladder Linter with compile (returns problem_count)
+            // Use ladder_lint_compile instead of ladder_lint_run to get STL output
+            const compileFunc = this.wasm_exports.ladder_lint_compile || this.wasm_exports.ladder_lint_run
+            const problemCount = compileFunc()
 
-            // 3. Get problems
-            const count = this.wasm_exports.ladder_lint_problem_count()
+            // 3. Get output length BEFORE calling any other functions (WASM reinit workaround)
+            const lintOutputLen = this.wasm_exports.ladder_lint_get_output_length ? this.wasm_exports.ladder_lint_get_output_length() : 0
+
+            // 4. Get problems pointer and read directly from memory
             /** @type { LadderLinterProblem[] } */
             const problems = []
 
-            if (count > 0) {
+            if (problemCount > 0 && this.wasm_exports.ladder_lint_get_problems_pointer) {
+                const problemsPtr = this.wasm_exports.ladder_lint_get_problems_pointer()
                 const memoryBuffer = this.wasm_exports.memory.buffer
+                const view = new DataView(memoryBuffer)
+                const mem = new Uint8Array(memoryBuffer)
 
-                for (let i = 0; i < count; i++) {
-                    const type_int = this.wasm_exports.ladder_lint_get_problem_type(i)
-                    const line = this.wasm_exports.ladder_lint_get_problem_line(i)
-                    const column = this.wasm_exports.ladder_lint_get_problem_column(i)
-                    const length = this.wasm_exports.ladder_lint_get_problem_length(i)
+                // LinterProblem struct layout (344 bytes):
+                // u32 type (4), u32 line (4), u32 column (4), u32 length (4)
+                // char message[128], char block[64], char program[64], u32 lang (4)
+                // char token_buf[64], char* token_text (4)
+                const STRUCT_SIZE = 344
 
-                    // Get message (returned as pointer to C string)
-                    const msgPtr = this.wasm_exports.ladder_lint_get_problem_message(i)
-                    let message = ''
-                    if (msgPtr) {
-                        const mem = new Uint8Array(memoryBuffer)
-                        for (let j = 0; j < 256 && mem[msgPtr + j] !== 0; j++) {
-                            message += String.fromCharCode(mem[msgPtr + j])
-                        }
+                /** @type {(offset: number, maxLen: number) => string} */
+                const readString = (offset, maxLen) => {
+                    let str = ''
+                    for (let i = 0; i < maxLen && mem[offset + i] !== 0; i++) {
+                        str += String.fromCharCode(mem[offset + i])
                     }
+                    return str
+                }
 
-                    // Get token text if available
-                    let token_text = ''
-                    if (this.wasm_exports.ladder_lint_get_problem_token) {
-                        const tokenPtr = this.wasm_exports.ladder_lint_get_problem_token(i)
-                        if (tokenPtr) {
-                            const mem = new Uint8Array(memoryBuffer)
-                            for (let j = 0; j < 64 && mem[tokenPtr + j] !== 0; j++) {
-                                token_text += String.fromCharCode(mem[tokenPtr + j])
-                            }
-                        }
-                    }
+                for (let i = 0; i < problemCount; i++) {
+                    const offset = problemsPtr + i * STRUCT_SIZE
+                    const type_int = view.getUint32(offset + 0, true)
+                    const line = view.getUint32(offset + 4, true)
+                    const column = view.getUint32(offset + 8, true)
+                    const length = view.getUint32(offset + 12, true)
+                    const message = readString(offset + 16, 128)
+                    // block at offset 144 (16 + 128)
+                    // program at offset 208 (144 + 64)
+                    // lang at offset 272 (208 + 64)
+                    // token_buf at offset 276 (272 + 4)
+                    const token_text = readString(offset + 276, 64)
 
                     problems.push({
                         type: type_int === 2 ? 'error' : type_int === 1 ? 'warning' : 'info',
@@ -696,14 +735,13 @@ class VovkPLC_class {
                 }
             }
 
-            // 4. Get generated STL output
+            // 5. Get generated STL output
             let output = ''
-            if (this.wasm_exports.ladder_lint_get_output && this.wasm_exports.ladder_lint_get_output_length) {
-                const outputLen = this.wasm_exports.ladder_lint_get_output_length()
+            if (this.wasm_exports.ladder_lint_get_output && lintOutputLen > 0) {
                 const outputPtr = this.wasm_exports.ladder_lint_get_output()
-                if (outputLen > 0 && outputPtr) {
+                if (outputPtr) {
                     const mem = new Uint8Array(this.wasm_exports.memory.buffer)
-                    for (let j = 0; j < outputLen; j++) {
+                    for (let j = 0; j < lintOutputLen; j++) {
                         output += String.fromCharCode(mem[outputPtr + j])
                     }
                 }
@@ -1165,11 +1203,11 @@ class VovkPLC_class {
             throw new Error('STL compilation failed')
         }
 
-        // Get the generated PLCASM via stream
+        // Get the generated PLCASM via stream buffer
         let plcasmCode = ''
         if (this.wasm_exports.stl_output_to_stream) {
             this.wasm_exports.stl_output_to_stream()
-            plcasmCode = this.readStream()
+            plcasmCode = this.readOutBuffer()
         }
 
         return {
@@ -1189,15 +1227,18 @@ class VovkPLC_class {
      */
     compileLadder(ladder) {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
-        if (!this.wasm_exports.ladder_graph_load_from_stream) throw new Error("'ladder_graph_load_from_stream' function not found - Ladder Graph compiler not available")
-        if (!this.wasm_exports.ladder_graph_compile) throw new Error("'ladder_graph_compile' function not found")
-        if (!this.wasm_exports.ladder_graph_get_output_length) throw new Error("'ladder_graph_get_output_length' function not found")
+        if (!this.wasm_exports.ladder_standalone_load_stream) throw new Error("'ladder_standalone_load_stream' function not found - Ladder Graph compiler not available")
+        if (!this.wasm_exports.ladder_standalone_compile) throw new Error("'ladder_standalone_compile' function not found")
+        if (!this.wasm_exports.ladder_standalone_get_output_len) throw new Error("'ladder_standalone_get_output_len' function not found")
 
         // Convert object to JSON string if needed
         const ladderJson = typeof ladder === 'string' ? ladder : JSON.stringify(ladder)
 
         // Clear any stale data in the stream buffer first
         if (this.wasm_exports.streamClear) this.wasm_exports.streamClear()
+
+        // Clear ladder compiler state
+        if (this.wasm_exports.ladder_standalone_clear) this.wasm_exports.ladder_standalone_clear()
 
         // Stream Ladder Graph JSON to compiler
         let ok = true
@@ -1208,13 +1249,13 @@ class VovkPLC_class {
         this.wasm_exports.streamIn(0) // Null terminator
 
         // Load from stream and compile Ladder Graph to STL
-        this.wasm_exports.ladder_graph_load_from_stream()
-        const ladderSuccess = this.wasm_exports.ladder_graph_compile()
+        this.wasm_exports.ladder_standalone_load_stream()
+        const ladderSuccess = this.wasm_exports.ladder_standalone_compile()
 
         if (!ladderSuccess) {
             // Get error message if available
-            if (this.wasm_exports.ladder_graph_has_error && this.wasm_exports.ladder_graph_has_error()) {
-                const errPtr = this.wasm_exports.ladder_graph_get_error()
+            if (this.wasm_exports.ladder_standalone_has_error && this.wasm_exports.ladder_standalone_has_error()) {
+                const errPtr = this.wasm_exports.ladder_standalone_get_error()
                 if (errPtr) {
                     const mem = new Uint8Array(this.wasm_exports.memory.buffer)
                     let errMsg = ''
@@ -1227,9 +1268,10 @@ class VovkPLC_class {
             throw new Error('Ladder Graph compilation failed')
         }
 
-        // Get the generated STL directly from output buffer
-        const outputLen = this.wasm_exports.ladder_graph_get_output_length()
-        const outputPtr = this.wasm_exports.ladder_graph_get_output()
+        // Use the return value from compile (which is output_len) directly
+        // because getter functions are affected by WASM static initializer issues
+        const outputLen = ladderSuccess  // compile() returns output_len on success
+        const outputPtr = this.wasm_exports.ladder_standalone_get_output()
         let stlCode = ''
         if (outputLen > 0 && outputPtr) {
             const mem = new Uint8Array(this.wasm_exports.memory.buffer)
@@ -1375,6 +1417,7 @@ class VovkPLC_class {
                 bytecode: null,
                 compileTime: +(performance.now() - startTime).toFixed(1),
                 problem: {
+                    type: 'error',
                     message: 'Failed to stream project source - buffer overflow',
                     line: 0,
                     column: 0,
@@ -1539,6 +1582,7 @@ class VovkPLC_class {
                 bytecode: null,
                 compileTime: +(performance.now() - startTime).toFixed(1),
                 problem: {
+                    type: 'error',
                     message: 'Compilation produced no bytecode',
                     line: 0,
                     column: 0,
@@ -1664,6 +1708,7 @@ class VovkPLC_class {
         const wasm = this.wasm_exports
 
         // Helper to read null-terminated string from WASM memory
+        /** @param {number} ptr */
         const getString = ptr => {
             if (!ptr) return ''
             const memory = new Uint8Array(wasm.memory.buffer)
@@ -1706,6 +1751,7 @@ class VovkPLC_class {
         }
 
         // Helper to convert byte address to partitioned address (e.g., 448 -> "M0")
+        /** @param {number} byteAddress @param {number} bit @param {boolean} isBit */
         const toPartitionedAddress = (byteAddress, bit, isBit) => {
             for (const area of memoryAreas) {
                 if (byteAddress >= area.start && byteAddress <= area.end) {
@@ -1862,6 +1908,7 @@ class VovkPLC_class {
         const wasm = this.wasm_exports
 
         // Helper to read null-terminated string from WASM memory
+        /** @param {number} ptr */
         const getString = ptr => {
             if (!ptr) return ''
             const memory = new Uint8Array(wasm.memory.buffer)
@@ -1891,6 +1938,7 @@ class VovkPLC_class {
         }
 
         // Get memory areas (needed for address formatting)
+        /** @type {{ name: string, start: number, end: number }[]} */
         const memoryAreas = []
         const memAreaCount = wasm.project_getMemoryAreaCount()
         for (let i = 0; i < memAreaCount; i++) {
@@ -1901,6 +1949,7 @@ class VovkPLC_class {
         }
 
         // Helper to convert byte address to partitioned address
+        /** @param {number} byteAddress */
         const toPartitionedAddress = byteAddress => {
             for (const area of memoryAreas) {
                 if (byteAddress >= area.start && byteAddress <= area.end) {
@@ -1918,18 +1967,28 @@ class VovkPLC_class {
         if (wasm.project_getModifierCount) {
             const modCount = wasm.project_getModifierCount()
             for (let i = 0; i < modCount; i++) {
+                // @ts-ignore - these functions exist if project_getModifierCount exists
                 const name = getString(wasm.project_getModifierName(i))
+                // @ts-ignore
                 const locationType = wasm.project_getModifierLocation(i) // 0 = memory, 1 = program
+                // @ts-ignore
                 const byteOffset = wasm.project_getModifierByteOffset(i)
+                // @ts-ignore
                 const datatype = getString(wasm.project_getModifierDatatype(i))
+                // @ts-ignore
                 const size = wasm.project_getModifierSize(i)
+                // @ts-ignore
                 const file = getString(wasm.project_getModifierFile(i))
                 const program = wasm.project_getModifierProgram ? getString(wasm.project_getModifierProgram(i)) : file
+                // @ts-ignore
                 const block = getString(wasm.project_getModifierBlock(i))
+                // @ts-ignore
                 const line = wasm.project_getModifierLine(i)
+                // @ts-ignore
                 const column = wasm.project_getModifierColumn(i)
                 const length = wasm.project_getModifierLength ? wasm.project_getModifierLength(i) : datatype.length
                 const token = wasm.project_getModifierToken ? getString(wasm.project_getModifierToken(i)) : name
+                // @ts-ignore
                 const description = getString(wasm.project_getModifierDescription(i))
 
                 const location = locationType === 0 ? 'memory' : 'program'
@@ -2019,6 +2078,7 @@ class VovkPLC_class {
      *     line: number,
      *     column: number,
      *     length: number,
+     *     program?: string,
      *     block: string | undefined,
      *     lang: number,
      *     compiler?: string,
@@ -2390,9 +2450,9 @@ class VovkPLC_class {
     extractProgram = () => {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         if (!this.wasm_exports.uploadProgram) throw new Error("'uploadProgram' function not found")
-        this.stream_message = ''
+        this.flushOutBuffer() // Clear any previous output
         const size = +this.wasm_exports.uploadProgram()
-        const output = this.readStream()
+        const output = this.readOutBuffer()
         return {size, output}
     }
 
@@ -2554,6 +2614,42 @@ class VovkPLC_class {
         const output = this.stream_message
         this.stream_message = ''
         return output
+    }
+
+    /**
+     * Reads from the WASM output buffer (__wasm_stream_out__).
+     * This is the NEW buffer-based output mechanism used by functions like
+     * stl_output_to_stream() and ladder_graph_output_to_stream().
+     * 
+     * @param {boolean} [flush=true] - If true, clears the buffer after reading.
+     * @returns {string} - The content of the output buffer as a string.
+     */
+    readOutBuffer = (flush = true) => {
+        if (!this.wasm_exports || !this.wasm_exports.get_out_buffer_ptr || !this.wasm_exports.get_out_index) {
+            // Fallback to readStream if buffer exports not available
+            return this.readStream()
+        }
+        const ptr = this.wasm_exports.get_out_buffer_ptr()
+        const len = this.wasm_exports.get_out_index()
+        if (len <= 0) return ''
+        const mem = new Uint8Array(this.wasm_exports.memory.buffer)
+        let result = ''
+        for (let i = 0; i < len; i++) {
+            result += String.fromCharCode(mem[ptr + i])
+        }
+        if (flush && this.wasm_exports.flush_out_buffer) {
+            this.wasm_exports.flush_out_buffer()
+        }
+        return result
+    }
+
+    /**
+     * Clears the WASM output buffer.
+     */
+    flushOutBuffer = () => {
+        if (this.wasm_exports && this.wasm_exports.flush_out_buffer) {
+            this.wasm_exports.flush_out_buffer()
+        }
     }
 
     /** @param { number | number[] } data * @param { number } [crc] */
@@ -3440,6 +3536,10 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
     writeMemoryAreaMasked = (address, data, mask) => this.call('writeMemoryAreaMasked', address, data, mask)
     /** @type { () => Promise<string> } */
     readStream = () => this.call('readStream')
+    /** @type { (flush?: boolean) => Promise<string> } */
+    readOutBuffer = (flush = true) => this.call('readOutBuffer', flush)
+    /** @type { () => Promise<void> } */
+    flushOutBuffer = () => this.call('flushOutBuffer')
     /** @type { () => Promise<string[]> } */
     getExports = () => this.call('getExports')
     /** @type { (name: string, ...args: any[]) => Promise<any> } */

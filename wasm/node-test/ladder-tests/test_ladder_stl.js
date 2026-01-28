@@ -65,7 +65,7 @@ function checkSTLForStackLeak(runtime, stlCode) {
         }
         
         runtime.wasm_exports.stl_output_to_stream()
-        const plcasm = runtime.readStream()
+        const plcasm = runtime.readOutBuffer()
         
         // Compile PLCASM to bytecode
         runtime.downloadAssembly(plcasm)
@@ -173,9 +173,9 @@ async function runTests() {
         try {
             // Compile ladder graph to STL
             streamCode(runtime, ladderJson)
-            runtime.wasm_exports.ladder_graph_load_from_stream()
+            runtime.wasm_exports.ladder_standalone_load_stream()
             
-            const success = runtime.wasm_exports.ladder_graph_compile()
+            const success = runtime.wasm_exports.ladder_standalone_compile()
             
             if (!success) {
                 console.log(`${RED}✗${RESET} ${testCase} - Ladder compilation failed`)
@@ -184,8 +184,8 @@ async function runTests() {
                 continue
             }
             
-            runtime.wasm_exports.ladder_graph_output_to_stream()
-            const actualSTL = runtime.readStream()
+            runtime.wasm_exports.ladder_standalone_output_to_stream()
+            const actualSTL = runtime.readOutBuffer()
             
             // Check if this is an expected stack leak test (marked in JSON)
             const isExpectedLeakTest = ladderJson.includes('"expect_stack_leak"')

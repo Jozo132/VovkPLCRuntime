@@ -7,14 +7,14 @@
 // Usage:
 //   node wasm/node-test/test_ladder_linter.js
 
-import VovkPLC from '../dist/VovkPLC.js'
+import VovkPLC from '../../dist/VovkPLC.js'
 import path from 'path'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-const wasmPath = path.resolve(__dirname, '../dist/VovkPLC.wasm')
+const wasmPath = path.resolve(__dirname, '../../dist/VovkPLC.wasm')
 
 // ANSI colors
 const RED = '\x1b[31m'
