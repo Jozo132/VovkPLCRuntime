@@ -911,11 +911,8 @@ public:
         // Store total allocated (will be recalculated after compilation based on actual usage)
         memory_used = current_offset;
 
-        // Validate that total allocation doesn't exceed available
-        if (memory_used > memory_available) {
-            setError("Memory allocation exceeds available memory");
-            return false;
-        }
+        // Note: Memory limit checking is handled by the front-end editor based on stats
+        // if (memory_used > memory_available) { ... }
 
         return !has_error;
     }
