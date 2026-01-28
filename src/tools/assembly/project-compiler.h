@@ -29,6 +29,8 @@
 #include "stl-compiler.h"
 #include "stl-linter.h"
 #include "ladder-compiler.h"
+#include "ladder-linter.h"
+#include "shared-symbols.h"
 
 // ============================================================================
 // Project Compiler - Full Project Export/Compile
@@ -272,7 +274,7 @@ public:
     // Child compilers (using linter variants for better error messages)
     PLCASMLinter plcasm_compiler;
     STLLinter stl_compiler;
-    LadderGraphCompiler ladder_compiler;
+    LadderLinter ladder_compiler;
 
     // Problems array for multiple error tracking
     LinterProblem problems[MAX_LINT_PROBLEMS];
@@ -368,6 +370,9 @@ public:
         // Reset child compilers' symbol tables
         plcasm_compiler.symbol_count = 0;
         plcasm_compiler.base_symbol_count = 0;
+
+        // Reset shared symbol table for fresh compile/lint
+        resetSharedSymbols();
     }
 
     // ============ Error Handling ============
@@ -400,7 +405,7 @@ public:
         // Copy message
         int i = 0;
         const char* src = msg;
-        while (*src && i < 63) {
+        while (*src && i < 127) {
             p.message[i++] = *src++;
         }
         p.message[i] = '\0';
@@ -1142,6 +1147,24 @@ public:
         }
 
         psym.used = true;
+
+        // Also add to shared symbol table for cross-compiler access
+        int result = addSharedSymbol(psym.name, psym.type, psym.address, psym.bit, psym.is_bit, psym.type_size);
+        if (result == -2) {
+            // Duplicate symbol with different definition
+            char msg[128];
+            int mi = 0;
+            const char* prefix = "Symbol '";
+            while (*prefix && mi < 100) msg[mi++] = *prefix++;
+            int ni = 0;
+            while (psym.name[ni] && mi < 100) msg[mi++] = psym.name[ni++];
+            const char* suffix = "' redefined with different type or address";
+            while (*suffix && mi < 127) msg[mi++] = *suffix++;
+            msg[mi] = '\0';
+            setError(msg);
+            return false;
+        }
+        // result == 0 (new) or result == 1 (exact duplicate, silently ignored) are both OK
 
         symbol_count++;
         return true;
@@ -2004,9 +2027,39 @@ public:
         bool success = ladder_compiler.parse(block_source, source_len);
 
         if (!success || ladder_compiler.has_error) {
-            // Ladder compiler doesn't track line/col well, use position in JSON
-            setErrorFull("Ladder Compiler", ladder_compiler.error_msg, 1, 1,
-                block_source, source_len, nullptr, 0);
+            // Copy problems from ladder linter to project problems
+            if (ladder_compiler.problem_count > 0) {
+                for (int i = 0; i < ladder_compiler.problem_count && problem_count < MAX_LINT_PROBLEMS; i++) {
+                    LinterProblem& src = ladder_compiler.problems[i];
+                    LinterProblem& dest = problems[problem_count++];
+                    dest.type = src.type;
+                    dest.line = src.line;
+                    dest.column = src.column;
+                    dest.length = src.length;
+                    dest.lang = src.lang;
+                    // Copy message
+                    int mi = 0;
+                    while (src.message[mi] && mi < 127) { dest.message[mi] = src.message[mi]; mi++; }
+                    dest.message[mi] = '\0';
+                    // Copy token
+                    int ti = 0;
+                    while (src.token_buf[ti] && ti < 63) { dest.token_buf[ti] = src.token_buf[ti]; ti++; }
+                    dest.token_buf[ti] = '\0';
+                    dest.token_text = dest.token_buf;
+                    // Copy program and block names
+                    int pi = 0;
+                    while (current_file[pi] && pi < 63) { dest.program[pi] = current_file[pi]; pi++; }
+                    dest.program[pi] = '\0';
+                    int bi = 0;
+                    while (current_block[bi] && bi < 63) { dest.block[bi] = current_block[bi]; bi++; }
+                    dest.block[bi] = '\0';
+                }
+                has_error = true;
+            } else {
+                // Fallback to old error handling
+                setErrorFull("Ladder Compiler", ladder_compiler.error_msg, 1, 1,
+                    block_source, source_len, nullptr, 0);
+            }
             return false;
         }
 

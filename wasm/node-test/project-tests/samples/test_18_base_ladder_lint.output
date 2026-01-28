@@ -1,0 +1,17 @@
+{
+  "success": 0,
+  "project": { "name": "MultiBlockWithSymbols", "version": "3.0" },
+  "bytecode": "",
+  "bytecodeLength": 0,
+  "checksum": 0,
+  "files": [],
+  "blocks": [],
+  "symbols": [],
+  "memoryAreas": [],
+  "memory": { "available": 0, "used": 0 },
+  "flash": { "size": 0, "used": 0 },
+  "execution": { "steps": 0, "stackSize": 0 },
+  "problems": [
+    { "severity": "error", "message": "Unknown symbol 'stop_btnn'", "line": 1, "column": 2, "file": "main", "block": "Network 3 - Ladder sample block", "language": "LADDER", "token": "stop_btnn" }
+  ]
+}

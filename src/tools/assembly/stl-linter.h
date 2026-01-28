@@ -559,11 +559,11 @@ public:
         p.token_text = (char*) last_operand_ptr;
 
         // Reset message buffer
-        for (int k = 0; k < 64; k++) p.message[k] = 0;
+        for (int k = 0; k < 128; k++) p.message[k] = 0;
 
-        // Copy message safely (max 63 chars)
+        // Copy message safely (max 127 chars)
         int i = 0;
-        while (msg[i] && i < 63) {
+        while (msg[i] && i < 127) {
             p.message[i] = msg[i];
             i++;
         }
@@ -598,9 +598,9 @@ public:
         p.length = length;
         p.token_text = (char*) last_operand_ptr;
 
-        for (int k = 0; k < 64; k++) p.message[k] = 0;
+        for (int k = 0; k < 128; k++) p.message[k] = 0;
         int i = 0;
-        while (msg[i] && i < 63) {
+        while (msg[i] && i < 127) {
             p.message[i] = msg[i];
             i++;
         }
@@ -620,9 +620,9 @@ public:
         p.length = length;
         p.token_text = (char*) last_operand_ptr;
 
-        for (int k = 0; k < 64; k++) p.message[k] = 0;
+        for (int k = 0; k < 128; k++) p.message[k] = 0;
         int i = 0;
-        while (msg[i] && i < 63) {
+        while (msg[i] && i < 127) {
             p.message[i] = msg[i];
             i++;
         }

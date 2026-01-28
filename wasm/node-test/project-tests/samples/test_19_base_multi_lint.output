@@ -1,0 +1,19 @@
+{
+  "success": 0,
+  "project": { "name": "MultiBlockWithSymbols", "version": "3.0" },
+  "bytecode": "",
+  "bytecodeLength": 0,
+  "checksum": 0,
+  "files": [],
+  "blocks": [],
+  "symbols": [],
+  "memoryAreas": [],
+  "memory": { "available": 0, "used": 0 },
+  "flash": { "size": 0, "used": 0 },
+  "execution": { "steps": 0, "stackSize": 0 },
+  "problems": [
+    { "severity": "error", "message": "unexpected token, expected integer", "line": 8, "column": 15, "file": "main", "block": "Network 1 - PLCASM sample block", "language": "PLCASM", "token": "countern" },
+    { "severity": "error", "message": "Invalid address format", "line": 2, "column": 3, "file": "main", "block": "Network 2 - STL sample block", "language": "STL", "token": "motorn" },
+    { "severity": "error", "message": "Unknown symbol 'stop_btnn'", "line": 1, "column": 2, "file": "main", "block": "Network 3 - Ladder sample block", "language": "LADDER", "token": "stop_btnn" }
+  ]
+}

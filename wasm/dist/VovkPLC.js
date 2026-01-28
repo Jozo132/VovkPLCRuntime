@@ -1539,8 +1539,8 @@ class VovkPLC_class {
 
         if (count > 0) {
             const pointer = this.wasm_exports.project_getProblems()
-            // Struct size = 280 bytes (4+4+4+4+64+64+64+4+64+4)
-            const struct_size = 280
+            // Struct size = 344 bytes (4+4+4+4+128+64+64+4+64+4)
+            const struct_size = 344
 
             const memory = new Uint8Array(this.wasm_exports.memory.buffer)
             const view = new DataView(this.wasm_exports.memory.buffer)
@@ -1564,41 +1564,41 @@ class VovkPLC_class {
                 const column = view.getUint32(offset + 8, true)
                 const length = view.getUint32(offset + 12, true)
 
-                // message is 64 bytes at offset 16
+                // message is 128 bytes at offset 16
                 let message = ''
-                for (let j = 0; j < 64; j++) {
+                for (let j = 0; j < 128; j++) {
                     const charCode = view.getUint8(offset + 16 + j)
                     if (charCode === 0) break
                     message += String.fromCharCode(charCode)
                 }
 
-                // block is 64 bytes at offset 80
+                // block is 64 bytes at offset 144
                 let block = ''
                 for (let j = 0; j < 64; j++) {
-                    const charCode = view.getUint8(offset + 80 + j)
+                    const charCode = view.getUint8(offset + 144 + j)
                     if (charCode === 0) break
                     block += String.fromCharCode(charCode)
                 }
 
-                // program is 64 bytes at offset 144
+                // program is 64 bytes at offset 208
                 let program = ''
                 for (let j = 0; j < 64; j++) {
-                    const charCode = view.getUint8(offset + 144 + j)
+                    const charCode = view.getUint8(offset + 208 + j)
                     if (charCode === 0) break
                     program += String.fromCharCode(charCode)
                 }
 
-                // lang is 4 bytes at offset 208
-                const lang = view.getUint32(offset + 208, true)
+                // lang is 4 bytes at offset 272
+                const lang = view.getUint32(offset + 272, true)
 
-                // token_buf is 64 bytes at offset 212 (stable copy of token text)
+                // token_buf is 64 bytes at offset 276 (stable copy of token text)
                 let token = ''
                 for (let j = 0; j < 64; j++) {
-                    const charCode = view.getUint8(offset + 212 + j)
+                    const charCode = view.getUint8(offset + 276 + j)
                     if (charCode === 0) break
                     token += String.fromCharCode(charCode)
                 }
-                // Note: token_text pointer at offset 276 is no longer used since we read from token_buf directly
+                // Note: token_text pointer at offset 340 is no longer used since we read from token_buf directly
 
                 // Map integer language ID to string name if possible
                 /** @type {Record<number, string>} */

@@ -323,32 +323,104 @@ function generateOutput(runtime, success, error = null) {
         problems: [],
     }
 
-    if (!success) {
-        const errorMsg = error || getString(runtime, wasm.project_getError())
-        const errorLine = wasm.project_getErrorLine()
-        const errorCol = wasm.project_getErrorColumn()
-        const errorFile = getString(runtime, wasm.project_getErrorFile())
-        const errorBlock = getString(runtime, wasm.project_getErrorBlock())
-        const errorBlockLang = wasm.project_getErrorBlockLanguage()
-        const errorToken = getString(runtime, wasm.project_getErrorToken())
-        const errorSourceLine = getString(runtime, wasm.project_getErrorSourceLine())
+    // Get all accumulated problems from the compiler
+    const problemCount = wasm.project_getProblemCount ? wasm.project_getProblemCount() : 0
+    if (problemCount > 0 && wasm.project_getProblems) {
+        const pointer = wasm.project_getProblems()
+        // Struct size = 344 bytes (4+4+4+4+128+64+64+4+64+4)
+        const struct_size = 344
+        const memory = new Uint8Array(wasm.memory.buffer)
+        const view = new DataView(wasm.memory.buffer)
         const langNames = ['UNKNOWN', 'PLCASM', 'STL', 'LADDER', 'FBD', 'SFC', 'ST', 'IL']
-        /** @type { Problem } */
-        const problem = {
-            severity: 'error',
-            message: errorMsg,
-            line: errorLine,
-            column: errorCol,
+
+        for (let i = 0; i < problemCount; i++) {
+            const offset = pointer + i * struct_size
+            const type_int = view.getUint32(offset + 0, true)
+            const line = view.getUint32(offset + 4, true)
+            const column = view.getUint32(offset + 8, true)
+            const length = view.getUint32(offset + 12, true)
+
+            // message is 128 bytes at offset 16
+            let message = ''
+            for (let j = 0; j < 128; j++) {
+                const charCode = view.getUint8(offset + 16 + j)
+                if (charCode === 0) break
+                message += String.fromCharCode(charCode)
+            }
+
+            // block is 64 bytes at offset 144
+            let block = ''
+            for (let j = 0; j < 64; j++) {
+                const charCode = view.getUint8(offset + 144 + j)
+                if (charCode === 0) break
+                block += String.fromCharCode(charCode)
+            }
+
+            // program is 64 bytes at offset 208
+            let program = ''
+            for (let j = 0; j < 64; j++) {
+                const charCode = view.getUint8(offset + 208 + j)
+                if (charCode === 0) break
+                program += String.fromCharCode(charCode)
+            }
+
+            // lang is 4 bytes at offset 272
+            const lang = view.getUint32(offset + 272, true)
+
+            // token_buf is 64 bytes at offset 276
+            let token = ''
+            for (let j = 0; j < 64; j++) {
+                const charCode = view.getUint8(offset + 276 + j)
+                if (charCode === 0) break
+                token += String.fromCharCode(charCode)
+            }
+
+            /** @type { Problem } */
+            const problem = {
+                severity: type_int === 2 ? 'error' : type_int === 1 ? 'warning' : 'info',
+                message: message,
+                line: line,
+                column: column,
+            }
+            if (program) problem.file = program
+            if (block) {
+                problem.block = block
+                problem.language = langNames[lang] || 'UNKNOWN'
+            }
+            if (token) problem.token = token
+            output.problems.push(problem)
         }
-        // Add file and block context if available
-        if (errorFile) problem.file = errorFile
-        if (errorBlock) {
-            problem.block = errorBlock
-            problem.language = langNames[errorBlockLang] || 'UNKNOWN'
+    }
+
+    if (!success) {
+        // If no accumulated problems, fall back to single error message
+        if (output.problems.length === 0) {
+            const errorMsg = error || getString(runtime, wasm.project_getError())
+            const errorLine = wasm.project_getErrorLine()
+            const errorCol = wasm.project_getErrorColumn()
+            const errorFile = getString(runtime, wasm.project_getErrorFile())
+            const errorBlock = getString(runtime, wasm.project_getErrorBlock())
+            const errorBlockLang = wasm.project_getErrorBlockLanguage()
+            const errorToken = getString(runtime, wasm.project_getErrorToken())
+            const errorSourceLine = getString(runtime, wasm.project_getErrorSourceLine())
+            const langNames = ['UNKNOWN', 'PLCASM', 'STL', 'LADDER', 'FBD', 'SFC', 'ST', 'IL']
+            /** @type { Problem } */
+            const problem = {
+                severity: 'error',
+                message: errorMsg,
+                line: errorLine,
+                column: errorCol,
+            }
+            // Add file and block context if available
+            if (errorFile) problem.file = errorFile
+            if (errorBlock) {
+                problem.block = errorBlock
+                problem.language = langNames[errorBlockLang] || 'UNKNOWN'
+            }
+            if (errorToken) problem.token = errorToken
+            if (errorSourceLine) problem.sourceLine = errorSourceLine
+            output.problems.push(problem)
         }
-        if (errorToken) problem.token = errorToken
-        if (errorSourceLine) problem.sourceLine = errorSourceLine
-        output.problems.push(problem)
         return output
     }
 

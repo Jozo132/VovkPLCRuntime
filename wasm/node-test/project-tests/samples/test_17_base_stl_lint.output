@@ -1,0 +1,17 @@
+{
+  "success": 0,
+  "project": { "name": "MultiBlockWithSymbols", "version": "3.0" },
+  "bytecode": "",
+  "bytecodeLength": 0,
+  "checksum": 0,
+  "files": [],
+  "blocks": [],
+  "symbols": [],
+  "memoryAreas": [],
+  "memory": { "available": 0, "used": 0 },
+  "flash": { "size": 0, "used": 0 },
+  "execution": { "steps": 0, "stackSize": 0 },
+  "problems": [
+    { "severity": "error", "message": "Invalid address format", "line": 2, "column": 3, "file": "main", "block": "Network 2 - STL sample block", "language": "STL", "token": "motorn" }
+  ]
+}

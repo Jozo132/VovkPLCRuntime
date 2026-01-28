@@ -25,6 +25,7 @@
 #ifdef __WASM__
 
 #include "stl-compiler.h"
+#include "shared-symbols.h"
 
 
 // ============================================================================
@@ -418,6 +419,48 @@ public:
         return strEqI(type, "tap");
     }
 
+    // Check if address is a raw memory address (starts with M, X, Y, K, S, T, C, or number)
+    // Raw addresses like "X0.0", "M10", "T0" don't need symbol lookup
+    bool isRawAddress(const char* addr) {
+        if (!addr || addr[0] == '\0') return false;
+        char first = addr[0];
+        // Memory area prefixes
+        if (first == 'M' || first == 'm' || first == 'X' || first == 'x' ||
+            first == 'Y' || first == 'y' || first == 'K' || first == 'k' ||
+            first == 'S' || first == 's' || first == 'T' || first == 't' ||
+            first == 'C' || first == 'c') {
+            // Check if next char is a digit (raw address) or not (could be symbol)
+            if (addr[1] >= '0' && addr[1] <= '9') return true;
+        }
+        // Pure numeric address
+        if (first >= '0' && first <= '9') return true;
+        return false;
+    }
+
+    // Validate a symbol name exists in the shared symbol table
+    // Returns true if address is raw OR if symbol exists
+    bool validateSymbolExists(const char* addr, int nodeIdx) {
+        if (!addr || addr[0] == '\0') return true;  // Empty handled elsewhere
+        if (isRawAddress(addr)) return true;  // Raw addresses don't need lookup
+
+        // Check shared symbol table (if populated)
+        if (sharedSymbols.symbol_count > 0) {
+            if (!sharedSymbols.findSymbol(addr)) {
+                char msg[64];
+                int mi = 0;
+                const char* prefix = "Unknown symbol '";
+                while (*prefix && mi < 40) msg[mi++] = *prefix++;
+                int ai = 0;
+                while (addr[ai] && mi < 58) msg[mi++] = addr[ai++];
+                msg[mi++] = '\'';
+                msg[mi] = '\0';
+                reportNodeError(msg, nodeIdx);
+                return false;
+            }
+        }
+        return true;
+    }
+
     // Check if a node has any incoming connections
     bool nodeHasInputs(int nodeIdx) {
         if (nodeIdx < 0 || nodeIdx >= node_count) return false;
@@ -503,6 +546,38 @@ public:
     virtual void reportNodeWarning(const char* msg, int nodeIdx) {
         // Base class ignores warnings during compilation
         (void)msg; (void)nodeIdx;
+    }
+
+    // Virtual method to report a connection validation error
+    // connIdx is the index of the connection in the connections array
+    virtual void reportConnectionError(const char* msg, int connIdx, int nodeIdx = -1) {
+        if (has_error) return; // Base class stops at first error
+        char fullMsg[256];
+        int mi = 0;
+        const char* prefix = "Connection c[";
+        while (*prefix && mi < 200) fullMsg[mi++] = *prefix++;
+        // Convert connIdx to string
+        char numBuf[16];
+        int idx = connIdx;
+        int nlen = 0;
+        if (idx < 0) { numBuf[nlen++] = '-'; idx = -idx; }
+        if (idx == 0) numBuf[nlen++] = '0';
+        else {
+            int start = nlen;
+            while (idx > 0) { numBuf[nlen++] = '0' + (idx % 10); idx /= 10; }
+            for (int r = start; r < start + (nlen - start) / 2; r++) {
+                char tmp = numBuf[r];
+                numBuf[r] = numBuf[nlen - 1 - (r - start)];
+                numBuf[nlen - 1 - (r - start)] = tmp;
+            }
+        }
+        for (int ni = 0; ni < nlen && mi < 200; ni++) fullMsg[mi++] = numBuf[ni];
+        const char* mid = "]: ";
+        while (*mid && mi < 200) fullMsg[mi++] = *mid++;
+        while (*msg && mi < 255) fullMsg[mi++] = *msg++;
+        fullMsg[mi] = '\0';
+        setError(fullMsg);
+        (void)nodeIdx; // nodeIdx available for derived classes
     }
 
     // ============ Node Type Helpers ============
@@ -2168,6 +2243,10 @@ public:
                 reportNodeError("Missing address/symbol", nodeIdx);
                 return false;
             }
+            // Validate symbol exists in shared symbol table
+            if (!validateSymbolExists(node.address, nodeIdx)) {
+                return false;
+            }
         }
 
         // Validate node-type-specific parameters
@@ -2189,12 +2268,24 @@ public:
                 reportNodeError("Operation block missing input 1 (in1)", nodeIdx);
                 return false;
             }
+            // Validate in1 symbol
+            if (needsIn1 && node.in1[0] != '\0' && !validateSymbolExists(node.in1, nodeIdx)) {
+                return false;
+            }
             if (needsIn2 && node.in2[0] == '\0') {
                 reportNodeError("Operation block missing input 2 (in2)", nodeIdx);
                 return false;
             }
+            // Validate in2 symbol
+            if (needsIn2 && node.in2[0] != '\0' && !validateSymbolExists(node.in2, nodeIdx)) {
+                return false;
+            }
             if (needsOut && node.out[0] == '\0') {
                 reportNodeError("Operation block missing output (out)", nodeIdx);
+                return false;
+            }
+            // Validate out symbol
+            if (needsOut && node.out[0] != '\0' && !validateSymbolExists(node.out, nodeIdx)) {
                 return false;
             }
         }
@@ -2205,8 +2296,16 @@ public:
                 reportNodeError("Comparator missing input 1 (in1)", nodeIdx);
                 return false;
             }
+            // Validate in1 symbol
+            if (!validateSymbolExists(node.in1, nodeIdx)) {
+                return false;
+            }
             if (node.in2[0] == '\0') {
                 reportNodeError("Comparator missing input 2 (in2)", nodeIdx);
+                return false;
+            }
+            // Validate in2 symbol
+            if (!validateSymbolExists(node.in2, nodeIdx)) {
                 return false;
             }
         }
@@ -2252,7 +2351,7 @@ public:
                 if (destIdx >= 0) {
                     GraphNode& destNode = nodes[destIdx];
                     if (destNode.x <= srcNode.x) {
-                        reportNodeError("Connection flows backward (destination must be right of source)", destIdx);
+                        reportConnectionError("Connection flows backward (destination must be right of source)", connIdx, destIdx);
                         return false;
                     }
                 }

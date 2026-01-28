@@ -122,9 +122,9 @@ public:
         }
         p.token_text = p.token_buf;
 
-        // Copy message safely (max 63 chars)
+        // Copy message safely (max 127 chars)
         int i = 0;
-        while (message[i] && i < 63) {
+        while (message[i] && i < 127) {
             p.message[i] = message[i];
             i++;
         }
@@ -144,6 +144,57 @@ public:
 
     void addInfo(const char* message, int nodeIdx, const char* token = nullptr) {
         addProblemAtNode(LINT_INFO, message, nodeIdx, token);
+    }
+
+    // Add a connection-related error with c[<index>] token format
+    void addConnectionError(const char* message, int connIdx, int nodeIdx = -1) {
+        if (problem_count >= LADDER_MAX_LINT_PROBLEMS) return;
+
+        LinterProblem& p = problems[problem_count];
+        p.type = LINT_ERROR;
+        p.lang = 3;  // LADDER language ID
+
+        // Use node position if available, otherwise default to 1,1
+        if (nodeIdx >= 0 && nodeIdx < node_count) {
+            GraphNode& node = nodes[nodeIdx];
+            p.line = node.y + 1;
+            p.column = node.x + 1;
+        } else {
+            p.line = 1;
+            p.column = 1;
+        }
+        p.length = 1;
+
+        // Build c[<index>] token
+        p.token_buf[0] = 'c';
+        p.token_buf[1] = '[';
+        int ti = 2;
+        char numBuf[16];
+        int idx = connIdx;
+        int nlen = 0;
+        if (idx < 0) { numBuf[nlen++] = '-'; idx = -idx; }
+        if (idx == 0) numBuf[nlen++] = '0';
+        else {
+            int start = nlen;
+            while (idx > 0) { numBuf[nlen++] = '0' + (idx % 10); idx /= 10; }
+            for (int r = start; r < start + (nlen - start) / 2; r++) {
+                char tmp = numBuf[r];
+                numBuf[r] = numBuf[nlen - 1 - (r - start)];
+                numBuf[nlen - 1 - (r - start)] = tmp;
+            }
+        }
+        for (int ni = 0; ni < nlen && ti < 60; ni++) p.token_buf[ti++] = numBuf[ni];
+        p.token_buf[ti++] = ']';
+        p.token_buf[ti] = '\0';
+        p.token_text = p.token_buf;
+
+        // Copy message
+        int mi = 0;
+        while (message[mi] && mi < 127) { p.message[mi] = message[mi]; mi++; }
+        p.message[mi] = '\0';
+
+        problem_count++;
+        has_error = true;
     }
 
     // Override setError to add to problems list but continue linting
@@ -168,7 +219,7 @@ public:
             p.token_buf[0] = '\0';
             p.token_text = p.token_buf;
             int mi = 0;
-            while (msg[mi] && mi < 63) { p.message[mi] = msg[mi]; mi++; }
+            while (msg[mi] && mi < 127) { p.message[mi] = msg[mi]; mi++; }
             p.message[mi] = '\0';
         }
     }
@@ -181,6 +232,11 @@ public:
     // Override reportNodeWarning to collect warnings
     void reportNodeWarning(const char* msg, int nodeIdx) override {
         addWarning(msg, nodeIdx);
+    }
+
+    // Override reportConnectionError to collect connection errors
+    void reportConnectionError(const char* msg, int connIdx, int nodeIdx = -1) override {
+        addConnectionError(msg, connIdx, nodeIdx);
     }
 
     // ============ Extended Validation ============
@@ -208,9 +264,9 @@ public:
         if (!isTapNode(node.type) && isKnownNodeType(node.type)) {
             if (node.address[0] == '\0') {
                 addError("Missing address/symbol", nodeIdx);
-            } else if (symbol_count > 0) {
-                // Validate symbol exists in symbol table
-                if (!isRawAddress(node.address) && !findSymbol(node.address)) {
+            } else if (symbol_count > 0 || sharedSymbols.symbol_count > 0) {
+                // Validate symbol exists in symbol table (local or shared)
+                if (!isRawAddress(node.address) && !findSymbol(node.address) && !sharedSymbols.findSymbol(node.address)) {
                     char msg[64];
                     int mi = 0;
                     const char* prefix = "Unknown symbol '";
@@ -239,7 +295,7 @@ public:
 
             if (needsIn1 && node.in1[0] == '\0') {
                 addError("Operation block missing input 1 (in1)", nodeIdx);
-            } else if (needsIn1 && symbol_count > 0 && !isRawAddress(node.in1) && !findSymbol(node.in1)) {
+            } else if (needsIn1 && (symbol_count > 0 || sharedSymbols.symbol_count > 0) && !isRawAddress(node.in1) && !findSymbol(node.in1) && !sharedSymbols.findSymbol(node.in1)) {
                 char msg[64];
                 int mi = 0;
                 const char* prefix = "Unknown symbol '";
@@ -253,7 +309,7 @@ public:
 
             if (needsIn2 && node.in2[0] == '\0') {
                 addError("Operation block missing input 2 (in2)", nodeIdx);
-            } else if (needsIn2 && symbol_count > 0 && !isRawAddress(node.in2) && !findSymbol(node.in2)) {
+            } else if (needsIn2 && (symbol_count > 0 || sharedSymbols.symbol_count > 0) && !isRawAddress(node.in2) && !findSymbol(node.in2) && !sharedSymbols.findSymbol(node.in2)) {
                 char msg[64];
                 int mi = 0;
                 const char* prefix = "Unknown symbol '";
@@ -267,7 +323,7 @@ public:
 
             if (needsOut && node.out[0] == '\0') {
                 addError("Operation block missing output (out)", nodeIdx);
-            } else if (needsOut && symbol_count > 0 && !isRawAddress(node.out) && !findSymbol(node.out)) {
+            } else if (needsOut && (symbol_count > 0 || sharedSymbols.symbol_count > 0) && !isRawAddress(node.out) && !findSymbol(node.out) && !sharedSymbols.findSymbol(node.out)) {
                 char msg[64];
                 int mi = 0;
                 const char* prefix = "Unknown symbol '";
@@ -283,7 +339,7 @@ public:
         if (isComparator(node.type)) {
             if (node.in1[0] == '\0') {
                 addError("Comparator missing input 1 (in1)", nodeIdx);
-            } else if (symbol_count > 0 && !isRawAddress(node.in1) && !findSymbol(node.in1)) {
+            } else if ((symbol_count > 0 || sharedSymbols.symbol_count > 0) && !isRawAddress(node.in1) && !findSymbol(node.in1) && !sharedSymbols.findSymbol(node.in1)) {
                 char msg[64];
                 int mi = 0;
                 const char* prefix = "Unknown symbol '";
@@ -297,7 +353,7 @@ public:
 
             if (node.in2[0] == '\0') {
                 addError("Comparator missing input 2 (in2)", nodeIdx);
-            } else if (symbol_count > 0 && !isRawAddress(node.in2) && !findSymbol(node.in2)) {
+            } else if ((symbol_count > 0 || sharedSymbols.symbol_count > 0) && !isRawAddress(node.in2) && !findSymbol(node.in2) && !sharedSymbols.findSymbol(node.in2)) {
                 char msg[64];
                 int mi = 0;
                 const char* prefix = "Unknown symbol '";
@@ -375,7 +431,7 @@ public:
                 if (destIdx >= 0) {
                     GraphNode& destNode = nodes[destIdx];
                     if (destNode.x <= srcNode.x) {
-                        addError("Connection flows backward (destination must be right of source)", destIdx, conn.destinations[d]);
+                        addConnectionError("Connection flows backward (destination must be right of source)", connIdx, destIdx);
                     }
                 }
             }

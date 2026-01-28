@@ -19,7 +19,7 @@ struct LinterProblem {
     uint32_t line;      // Line number (1-based)
     uint32_t column;    // Column number (1-based)
     uint32_t length;    // Length of the token causing the issue
-    char message[64];   // Text description
+    char message[128];  // Text description
     char block[64];     // Block name (optional)
     char program[64];   // Program/file name (optional)
     uint32_t lang;      // Language ID (optional)
@@ -76,7 +76,7 @@ public:
         p.block[0] = '\0'; // Default empty block
 
         // Reset message buffer
-        for(int k=0; k<64; k++) p.message[k] = 0;
+        for(int k=0; k<128; k++) p.message[k] = 0;
 
         // Copy message safely (max 63 chars)
         const char * src = message;
