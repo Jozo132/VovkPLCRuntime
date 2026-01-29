@@ -182,6 +182,7 @@ const SUPPORT = checkSupport()
  *     doSomething: () => void, // Test function that does something (for benchmarking).
  *     getLastInstructionCount: () => number, // Returns the number of instructions executed in the last cycle.
  *     getDeviceHealthPtr: () => number, // Returns a pointer to the DeviceHealth struct.
+ *     getInfoString: () => number, // Returns a pointer to a static buffer containing runtime info string (same format as printInfo).
  *     getLastPeriodUs: () => number, // Returns the last period time in microseconds.
  *     getMinPeriodUs: () => number, // Returns the minimum period time recorded in microseconds.
  *     getMaxPeriodUs: () => number, // Returns the maximum period time recorded in microseconds.
@@ -953,16 +954,13 @@ class VovkPLC_class {
     }
 
     /**
-     * Retrieves runtime information and configuration from the PLC.
-     * Parses the output string containing version, architecture, memory sizes, and offsets.
+     * Parses the info string from printInfo/getInfoString into a RuntimeInfo object.
+     * Format: [VovkPLCRuntime,ARCH,MAJOR,MINOR,PATCH,BUILD,DATE,STACK,MEM,PROG,K_OFF,K_SZ,X_OFF,X_SZ,Y_OFF,Y_SZ,S_OFF,S_SZ,M_OFF,M_SZ,T_OFF,T_CNT,T_SZ,C_OFF,C_CNT,C_SZ,DEVICE]
      *
-     * @returns {Object|string} - An object containing runtime properties (version, offsets, etc.) or a raw string if parsing fails.
+     * @param {string} raw - The raw bracket-delimited info string.
+     * @returns {RuntimeInfo|string} - Parsed object or raw string if parsing fails.
      */
-    printInfo = () => {
-        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
-        if (!this.wasm_exports.printInfo) throw new Error("'printInfo' function not found")
-        this.wasm_exports.printInfo()
-        const raw = this.readStream().trim()
+    parseInfoString = (raw) => {
         if (raw.length === 0) return 'No info available'
         if (raw.startsWith('[') && raw.endsWith(']')) {
             // '[VovkPLCRuntime,WASM,0,1,0,324,2025-03-16 19:16:44,1024,104857,104857,0,16,16,16,32,16,48,16,64,16,704,16,9,848,16,5,Simulator]'
@@ -972,6 +970,10 @@ class VovkPLC_class {
                 header: parts[0],
                 arch: parts[1],
                 version: `${parts[2]}.${parts[3]}.${parts[4]} Build ${parts[5]}`,
+                versionMajor: +parts[2],
+                versionMinor: +parts[3],
+                versionPatch: +parts[4],
+                versionBuild: +parts[5],
                 date: parts[6],
                 stack: +parts[7],
                 memory: +parts[8],
@@ -1029,7 +1031,72 @@ class VovkPLC_class {
         }
         console.error(`Invalid info response:`, raw)
         return raw
-        // return raw
+    }
+
+    /**
+     * Retrieves runtime information and configuration from the PLC.
+     * Parses the output string containing version, architecture, memory sizes, and offsets.
+     *
+     * @returns {RuntimeInfo|string} - An object containing runtime properties (version, offsets, etc.) or a raw string if parsing fails.
+     */
+    printInfo = () => {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        if (!this.wasm_exports.printInfo) throw new Error("'printInfo' function not found")
+        this.wasm_exports.printInfo()
+        return this.parseInfoString(this.readStream().trim())
+    }
+
+    /**
+     * @typedef {{
+     *     header: string,
+     *     arch: string,
+     *     version: string,
+     *     versionMajor: number,
+     *     versionMinor: number,
+     *     versionPatch: number,
+     *     versionBuild: number,
+     *     date: string,
+     *     device: string,
+     *     stack: number,
+     *     memory: number,
+     *     program: number,
+     *     control_offset: number,
+     *     control_size: number,
+     *     input_offset: number,
+     *     input_size: number,
+     *     output_offset: number,
+     *     output_size: number,
+     *     system_offset: number,
+     *     system_size: number,
+     *     marker_offset: number,
+     *     marker_size: number,
+     *     timer_offset: number,
+     *     timer_count: number,
+     *     timer_struct_size: number,
+     *     counter_offset: number,
+     *     counter_count: number,
+     *     counter_struct_size: number
+     * }} RuntimeInfo
+     */
+
+    /**
+     * Retrieves runtime information and configuration from the PLC using direct buffer access.
+     * This is the preferred method over printInfo() as it avoids stream parsing overhead.
+     *
+     * @returns {RuntimeInfo} - An object containing runtime properties (version, offsets, etc.).
+     */
+    getInfo = () => {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+
+        // Check for the direct getter function
+        if (!this.wasm_exports.getInfoString) {
+            // Fall back to printInfo for older WASM builds
+            return this.printInfo()
+        }
+
+        const ptr = this.wasm_exports.getInfoString()
+        const raw = this.readCString(ptr)
+        return this.parseInfoString(raw)
     }
 
     /**

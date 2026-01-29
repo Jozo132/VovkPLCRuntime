@@ -2831,6 +2831,43 @@ WASM_EXPORT void printInfo() {
     runtime.printInfo();
 }
 
+// ============ Direct Info Getter (buffer-based API for WASM) ============
+// Returns pointer to a static string with same format as printInfo() serial output
+// Format: [VovkPLCRuntime,ARCH,MAJOR,MINOR,PATCH,BUILD,DATE,STACK,MEM,PROG,K_OFF,K_SZ,X_OFF,X_SZ,Y_OFF,Y_SZ,S_OFF,S_SZ,M_OFF,M_SZ,T_OFF,T_CNT,T_SZ,C_OFF,C_CNT,C_SZ,DEVICE]
+static char info_buffer[512];
+
+WASM_EXPORT const char* getInfoString() {
+    sprintf(info_buffer, "[VovkPLCRuntime,%s,%d,%d,%d,%d,%s,%d,%d,%d,%u,%d,%u,%d,%u,%d,%u,%d,%u,%d,%u,%d,%d,%u,%d,%d,%s]",
+        VOVKPLC_ARCH,
+        VOVKPLCRUNTIME_VERSION_MAJOR,
+        VOVKPLCRUNTIME_VERSION_MINOR,
+        VOVKPLCRUNTIME_VERSION_PATCH,
+        VOVKPLCRUNTIME_VERSION_BUILD,
+        __ISO_TIMESTAMP__,
+        PLCRUNTIME_MAX_STACK_SIZE,
+        PLCRUNTIME_MAX_MEMORY_SIZE,
+        PLCRUNTIME_MAX_PROGRAM_SIZE,
+        runtime.control_offset,
+        PLCRUNTIME_NUM_OF_CONTROLS,
+        runtime.input_offset,
+        PLCRUNTIME_NUM_OF_INPUTS,
+        runtime.output_offset,
+        PLCRUNTIME_NUM_OF_OUTPUTS,
+        runtime.system_offset,
+        PLCRUNTIME_NUM_OF_SYSTEMS,
+        runtime.marker_offset,
+        PLCRUNTIME_NUM_OF_MARKERS,
+        runtime.timer_offset,
+        PLCRUNTIME_NUM_OF_TIMERS,
+        PLCRUNTIME_TIMER_STRUCT_SIZE,
+        runtime.counter_offset,
+        PLCRUNTIME_NUM_OF_COUNTERS,
+        PLCRUNTIME_COUNTER_STRUCT_SIZE,
+        VOVKPLC_DEVICE_NAME
+    );
+    return info_buffer;
+}
+
 WASM_EXPORT void setRuntimeOffsets(u32 controlOffset, u32 inputOffset, u32 outputOffset, u32 systemOffset, u32 markerOffset) {
     plcasm_control_offset = controlOffset;
     plcasm_input_offset = inputOffset;
