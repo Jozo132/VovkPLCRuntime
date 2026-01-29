@@ -276,6 +276,9 @@ public:
     STLLinter stl_compiler;
     LadderLinter ladder_compiler;
 
+    // Project-level edge memory counter for differentiation bits (shared across all blocks)
+    int project_edge_mem_counter;
+
     // Problems array for multiple error tracking
     LinterProblem problems[MAX_LINT_PROBLEMS];
     int problem_count = 0;
@@ -366,6 +369,9 @@ public:
         current_block_language = LANG_UNKNOWN;
 
         debug_mode = false;
+
+        // Reset project-level edge memory counter (starts at bit 800 = M100.0)
+        project_edge_mem_counter = 800;
 
         // Reset child compilers' symbol tables
         plcasm_compiler.symbol_count = 0;
@@ -2018,10 +2024,15 @@ public:
     bool convertLadderToPLCASM(ProgramBlock& block) {
         // Compile Ladder JSON to STL first
         ladder_compiler.clearState();
+        // Restore the project-level edge memory counter for cross-block continuity
+        ladder_compiler.setEdgeMemCounter(project_edge_mem_counter);
         int source_len = string_len(block_source);
 
         // Use parse() which calls parseGraph() then compile()
         bool success = ladder_compiler.parse(block_source, source_len);
+
+        // Save the updated edge memory counter back to project level
+        project_edge_mem_counter = ladder_compiler.getEdgeMemCounter();
 
         if (!success || ladder_compiler.has_error) {
             // Copy problems from ladder linter to project problems

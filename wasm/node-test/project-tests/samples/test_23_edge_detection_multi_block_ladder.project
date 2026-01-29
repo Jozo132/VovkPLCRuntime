@@ -1,0 +1,116 @@
+VOVKPLCPROJECT EdgeDetectionMultiBlock
+VERSION 1.0
+
+MEMORY
+    OFFSET 0
+    AVAILABLE 1024
+    K 64
+    X 64
+    Y 64
+    S 256
+    M 256
+    T 90
+    C 40
+END_MEMORY
+
+FLASH
+    SIZE 32768
+END_FLASH
+
+SYMBOLS
+    btn1 : bit : X0.0
+    btn2 : bit : X0.1
+    btn3 : bit : X0.2
+    out0 : bit : Y0.0
+    out1 : bit : Y0.1
+    out2 : bit : Y0.2
+    out3 : bit : Y0.3
+    out4 : bit : Y0.4
+    out5 : bit : Y0.5
+END_SYMBOLS
+
+// Test: Edge detection contacts in multiple ladder blocks across different programs
+// should use unique auto-generated memory addresses (M100.0, M100.1, ..., M100.5)
+// All blocks are LADDER to test the edge_mem_counter persistence feature
+
+PROGRAM main
+    BLOCK LANG=LADDER Network 1 - Rising Edge Block 1
+{
+  "comment": "Ladder with rising edge contact - should use M100.0",
+  "nodes": [
+    { "id": "n1", "x": 0, "y": 0, "type": "contact", "symbol": "X0.0", "inverted": false, "trigger": "rising" },
+    { "id": "n2", "x": 3, "y": 0, "type": "coil", "symbol": "Y0.0", "inverted": false }
+  ],
+  "connections": [
+    { "sources": [ "n1" ], "destinations": [ "n2" ] }
+  ]
+}
+    END_BLOCK
+
+    BLOCK LANG=LADDER Network 2 - Falling Edge Block 2
+{
+  "comment": "Ladder with falling edge contact - should use M100.1",
+  "nodes": [
+    { "id": "n3", "x": 0, "y": 0, "type": "contact", "symbol": "X0.1", "inverted": false, "trigger": "falling" },
+    { "id": "n4", "x": 3, "y": 0, "type": "coil", "symbol": "Y0.1", "inverted": false }
+  ],
+  "connections": [
+    { "sources": [ "n3" ], "destinations": [ "n4" ] }
+  ]
+}
+    END_BLOCK
+
+    BLOCK LANG=LADDER Network 3 - Rising Edge Block 3
+{
+  "comment": "Ladder with rising edge contact - should use M100.2",
+  "nodes": [
+    { "id": "n5", "x": 0, "y": 0, "type": "contact", "symbol": "X0.2", "inverted": false, "trigger": "positive" },
+    { "id": "n6", "x": 3, "y": 0, "type": "coil", "symbol": "Y0.2", "inverted": false }
+  ],
+  "connections": [
+    { "sources": [ "n5" ], "destinations": [ "n6" ] }
+  ]
+}
+    END_BLOCK
+END_PROGRAM
+
+PROGRAM secondary
+    BLOCK LANG=LADDER Network 4 - Ladder Rising Edge
+{
+  "comment": "Ladder with rising edge contact - should use M100.3",
+  "nodes": [
+    { "id": "n1", "x": 0, "y": 0, "type": "contact", "symbol": "X0.0", "inverted": false, "trigger": "rising" },
+    { "id": "n2", "x": 3, "y": 0, "type": "coil", "symbol": "Y0.3", "inverted": false }
+  ],
+  "connections": [
+    { "sources": [ "n1" ], "destinations": [ "n2" ] }
+  ]
+}
+    END_BLOCK
+
+    BLOCK LANG=LADDER Network 5 - Ladder Falling Edge
+{
+  "comment": "Ladder with falling edge contact - should use M100.4",
+  "nodes": [
+    { "id": "n3", "x": 0, "y": 0, "type": "contact", "symbol": "X0.1", "inverted": false, "trigger": "falling" },
+    { "id": "n4", "x": 3, "y": 0, "type": "coil", "symbol": "Y0.4", "inverted": false }
+  ],
+  "connections": [
+    { "sources": [ "n3" ], "destinations": [ "n4" ] }
+  ]
+}
+    END_BLOCK
+
+    BLOCK LANG=LADDER Network 6 - Another Rising Edge
+{
+  "comment": "Another ladder with rising edge - should use M100.5",
+  "nodes": [
+    { "id": "n5", "x": 0, "y": 0, "type": "contact", "symbol": "X0.2", "inverted": false, "trigger": "positive" },
+    { "id": "n6", "x": 3, "y": 0, "type": "coil", "symbol": "Y0.5", "inverted": false }
+  ],
+  "connections": [
+    { "sources": [ "n5" ], "destinations": [ "n6" ] }
+  ]
+}
+    END_BLOCK
+END_PROGRAM

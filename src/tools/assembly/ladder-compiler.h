@@ -114,6 +114,10 @@ public:
         error_msg[i] = '\0';
     }
 
+    // Get/Set edge memory counter for cross-block continuity
+    int getEdgeMemCounter() const { return edge_mem_counter; }
+    void setEdgeMemCounter(int value) { edge_mem_counter = value; }
+
     // ============ Output Helpers ============
 
     void emitIndent() {

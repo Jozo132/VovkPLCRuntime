@@ -1,0 +1,43 @@
+{
+  "success": 1,
+  "project": { "name": "EdgeDetectionMultiBlock", "version": "1.0" },
+  "bytecode": "FD 03 58 00 40 8C 02 24 00 60 00 80 FD 03 59 00 40 8D 02 24 01 61 00 80 FD 03 5A 00 40 8C 02 24 02 62 00 80 FD 03 58 00 40 8C 02 24 03 63 00 80 FD 03 59 00 40 8D 02 24 04 64 00 80 FD 03 5A 00 40 8C 02 24 05 65 00 80 FF",
+  "bytecodeLength": 73,
+  "checksum": 169,
+  "files": [
+    { "path": "main", "firstBlockIndex": 0, "blockCount": 3, "executionOrder": 0 },
+    { "path": "secondary", "firstBlockIndex": 3, "blockCount": 3, "executionOrder": 1 }
+  ],
+  "blocks": [
+    { "file": "main", "name": "Network 1 - Rising Edge Block 1", "language": "LADDER", "offset": 0, "size": 12 },
+    { "file": "main", "name": "Network 2 - Falling Edge Block 2", "language": "LADDER", "offset": 12, "size": 12 },
+    { "file": "main", "name": "Network 3 - Rising Edge Block 3", "language": "LADDER", "offset": 24, "size": 12 },
+    { "file": "secondary", "name": "Network 4 - Ladder Rising Edge", "language": "LADDER", "offset": 36, "size": 12 },
+    { "file": "secondary", "name": "Network 5 - Ladder Falling Edge", "language": "LADDER", "offset": 48, "size": 12 },
+    { "file": "secondary", "name": "Network 6 - Another Rising Edge", "language": "LADDER", "offset": 60, "size": 12 }
+  ],
+  "symbols": [
+    { "name": "btn1", "type": "bit", "address": "64.0" },
+    { "name": "btn2", "type": "bit", "address": "64.1" },
+    { "name": "btn3", "type": "bit", "address": "64.2" },
+    { "name": "out0", "type": "bit", "address": "128.0" },
+    { "name": "out1", "type": "bit", "address": "128.1" },
+    { "name": "out2", "type": "bit", "address": "128.2" },
+    { "name": "out3", "type": "bit", "address": "128.3" },
+    { "name": "out4", "type": "bit", "address": "128.4" },
+    { "name": "out5", "type": "bit", "address": "128.5" }
+  ],
+  "memoryAreas": [
+    { "name": "K", "start": 0, "end": 63 },
+    { "name": "X", "start": 64, "end": 127 },
+    { "name": "Y", "start": 128, "end": 191 },
+    { "name": "S", "start": 192, "end": 447 },
+    { "name": "M", "start": 448, "end": 703 },
+    { "name": "T", "start": 704, "end": 793 },
+    { "name": "C", "start": 794, "end": 833 }
+  ],
+  "memory": { "available": 1024, "used": 192 },
+  "flash": { "size": 32768, "used": 73 },
+  "execution": { "steps": 25, "stackSize": 0 },
+  "problems": []
+}
