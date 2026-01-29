@@ -2534,6 +2534,11 @@ public:
                 reportNodeError("Node is completely disconnected", i);
                 if (has_error) return false;
             }
+
+            // Starting nodes (no input connections) should be at x=0
+            if (!hasInputs && nodes[i].x != 0) {
+                reportNodeWarning("Starting node should be at x=0", i);
+            }
         }
 
         return !has_error;
