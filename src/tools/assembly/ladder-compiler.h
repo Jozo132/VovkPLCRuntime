@@ -1152,6 +1152,78 @@ public:
         return true;
     }
 
+    // ============ Connection Normalization ============
+
+    // Helper: Check if a string is already in an array
+    bool stringInArray(const char* str, char arr[][32], int count) {
+        for (int i = 0; i < count; i++) {
+            if (strEqI(arr[i], str)) return true;
+        }
+        return false;
+    }
+
+    // Helper: Check if two connections share any source or destination
+    bool connectionsShareEndpoints(const Connection& a, const Connection& b) {
+        // Check if they share any sources
+        for (int i = 0; i < a.source_count; i++) {
+            for (int j = 0; j < b.source_count; j++) {
+                if (strEqI(a.sources[i], b.sources[j])) return true;
+            }
+        }
+        // Check if they share any destinations
+        for (int i = 0; i < a.dest_count; i++) {
+            for (int j = 0; j < b.dest_count; j++) {
+                if (strEqI(a.destinations[i], b.destinations[j])) return true;
+            }
+        }
+        return false;
+    }
+
+    // Helper: Merge connection b into connection a (adding unique sources/destinations)
+    void mergeConnections(Connection& a, const Connection& b) {
+        // Merge sources
+        for (int i = 0; i < b.source_count; i++) {
+            if (!stringInArray(b.sources[i], a.sources, a.source_count)) {
+                if (a.source_count < MAX_CONN_ENDPOINTS) {
+                    strcpy(a.sources[a.source_count], b.sources[i]);
+                    a.source_count++;
+                }
+            }
+        }
+        // Merge destinations
+        for (int i = 0; i < b.dest_count; i++) {
+            if (!stringInArray(b.destinations[i], a.destinations, a.dest_count)) {
+                if (a.dest_count < MAX_CONN_ENDPOINTS) {
+                    strcpy(a.destinations[a.dest_count], b.destinations[i]);
+                    a.dest_count++;
+                }
+            }
+        }
+    }
+
+    // Normalize connections: merge all connections that share sources or destinations
+    // This creates many-to-many relationships for parallel power transfer detection
+    void normalizeConnections() {
+        bool merged;
+        do {
+            merged = false;
+            for (int i = 0; i < connection_count && !merged; i++) {
+                for (int j = i + 1; j < connection_count && !merged; j++) {
+                    if (connectionsShareEndpoints(connections[i], connections[j])) {
+                        // Merge j into i
+                        mergeConnections(connections[i], connections[j]);
+                        // Remove j by shifting remaining connections down
+                        for (int k = j; k < connection_count - 1; k++) {
+                            connections[k] = connections[k + 1];
+                        }
+                        connection_count--;
+                        merged = true; // Restart the loop
+                    }
+                }
+            }
+        } while (merged);
+    }
+
     // ============ STL Generation ============
 
     // Helper to generate unique edge memory address
@@ -2554,6 +2626,10 @@ public:
         if (!parseGraph()) {
             return false;
         }
+
+        // Normalize connections: merge connections that share sources/destinations
+        // This creates many-to-many relationships for parallel power transfer detection
+        normalizeConnections();
 
         // Validate the graph structure
         if (!validateGraph()) {
