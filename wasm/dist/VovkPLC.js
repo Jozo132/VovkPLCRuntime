@@ -954,6 +954,23 @@ class VovkPLC_class {
     }
 
     /**
+     * Reads a null-terminated C string from WASM memory at the given pointer.
+     *
+     * @param {number} ptr - Pointer to the start of the string in WASM memory.
+     * @param {number} [maxLen=512] - Maximum length to read (safety limit).
+     * @returns {string} - The decoded string.
+     */
+    readCString = (ptr, maxLen = 512) => {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        const mem = new Uint8Array(this.wasm_exports.memory.buffer)
+        let str = ''
+        for (let i = 0; i < maxLen && mem[ptr + i] !== 0; i++) {
+            str += String.fromCharCode(mem[ptr + i])
+        }
+        return str
+    }
+
+    /**
      * Parses the info string from printInfo/getInfoString into a RuntimeInfo object.
      * Format: [VovkPLCRuntime,ARCH,MAJOR,MINOR,PATCH,BUILD,DATE,STACK,MEM,PROG,K_OFF,K_SZ,X_OFF,X_SZ,Y_OFF,Y_SZ,S_OFF,S_SZ,M_OFF,M_SZ,T_OFF,T_CNT,T_SZ,C_OFF,C_CNT,C_SZ,DEVICE]
      *
