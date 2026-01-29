@@ -567,8 +567,8 @@ public:
         return false;
     }
 
-    // Check if two nodes are touching (adjacent on the grid)
-    // Adjacent means they differ by exactly 1 in x OR y (not both)
+    // Check if two nodes are touching horizontally (adjacent on X axis only)
+    // Adjacent means they are on the same row (same Y) and X differs by exactly 1
     bool nodesAreTouching(int nodeIdxA, int nodeIdxB) {
         if (nodeIdxA < 0 || nodeIdxA >= node_count) return false;
         if (nodeIdxB < 0 || nodeIdxB >= node_count) return false;
@@ -580,10 +580,8 @@ public:
         if (dx < 0) dx = -dx;
         if (dy < 0) dy = -dy;
         
-        // Adjacent horizontally (same row, columns differ by 1)
+        // Adjacent horizontally only (same row, columns differ by 1)
         if (dy == 0 && dx == 1) return true;
-        // Adjacent vertically (same column, rows differ by 1)  
-        if (dx == 0 && dy == 1) return true;
         
         return false;
     }
