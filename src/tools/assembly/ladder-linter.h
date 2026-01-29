@@ -524,6 +524,70 @@ public:
         return true;  // Always return true to continue linting
     }
 
+    // Check if two nodes are connected (either direction)
+    bool nodesAreConnected(int nodeIdxA, int nodeIdxB) {
+        if (nodeIdxA < 0 || nodeIdxA >= node_count) return false;
+        if (nodeIdxB < 0 || nodeIdxB >= node_count) return false;
+        
+        const char* idA = nodes[nodeIdxA].id;
+        const char* idB = nodes[nodeIdxB].id;
+        
+        for (int c = 0; c < connection_count; c++) {
+            Connection& conn = connections[c];
+            bool hasA = false, hasB = false;
+            
+            // Check if A is a source and B is a destination
+            for (int s = 0; s < conn.source_count; s++) {
+                if (strEqI(conn.sources[s], idA)) hasA = true;
+                if (strEqI(conn.sources[s], idB)) hasB = true;
+            }
+            for (int d = 0; d < conn.dest_count; d++) {
+                if (strEqI(conn.destinations[d], idA)) hasA = true;
+                if (strEqI(conn.destinations[d], idB)) hasB = true;
+            }
+            
+            // If both nodes are in the same connection (one as source, one as dest)
+            if (hasA && hasB) {
+                // Verify it's actually a source->dest relationship
+                bool aIsSource = false, bIsDest = false;
+                bool bIsSource = false, aIsDest = false;
+                for (int s = 0; s < conn.source_count; s++) {
+                    if (strEqI(conn.sources[s], idA)) aIsSource = true;
+                    if (strEqI(conn.sources[s], idB)) bIsSource = true;
+                }
+                for (int d = 0; d < conn.dest_count; d++) {
+                    if (strEqI(conn.destinations[d], idA)) aIsDest = true;
+                    if (strEqI(conn.destinations[d], idB)) bIsDest = true;
+                }
+                if ((aIsSource && bIsDest) || (bIsSource && aIsDest)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // Check if two nodes are touching (adjacent on the grid)
+    // Adjacent means they differ by exactly 1 in x OR y (not both)
+    bool nodesAreTouching(int nodeIdxA, int nodeIdxB) {
+        if (nodeIdxA < 0 || nodeIdxA >= node_count) return false;
+        if (nodeIdxB < 0 || nodeIdxB >= node_count) return false;
+        
+        int dx = nodes[nodeIdxA].x - nodes[nodeIdxB].x;
+        int dy = nodes[nodeIdxA].y - nodes[nodeIdxB].y;
+        
+        // Make absolute
+        if (dx < 0) dx = -dx;
+        if (dy < 0) dy = -dy;
+        
+        // Adjacent horizontally (same row, columns differ by 1)
+        if (dy == 0 && dx == 1) return true;
+        // Adjacent vertically (same column, rows differ by 1)  
+        if (dx == 0 && dy == 1) return true;
+        
+        return false;
+    }
+
     // Override validateGraph to continue collecting all errors
     bool validateGraph() override {
         // Check for duplicate nodes at same position
@@ -539,6 +603,37 @@ public:
                     msg[mi++] = '\'';
                     msg[mi] = '\0';
                     addError(msg, i, nodes[j].id);
+                }
+            }
+        }
+
+        // Check for touching nodes that are NOT connected (warning for each)
+        for (int i = 0; i < node_count; i++) {
+            for (int j = i + 1; j < node_count; j++) {
+                if (nodesAreTouching(i, j) && !nodesAreConnected(i, j)) {
+                    // Add warning for first node
+                    char msg1[96];
+                    int mi = 0;
+                    const char* prefix = "Adjacent to '";
+                    while (*prefix && mi < 40) msg1[mi++] = *prefix++;
+                    int ni = 0;
+                    while (nodes[j].id[ni] && mi < 70) msg1[mi++] = nodes[j].id[ni++];
+                    const char* suffix = "' but not connected";
+                    while (*suffix && mi < 95) msg1[mi++] = *suffix++;
+                    msg1[mi] = '\0';
+                    addWarning(msg1, i, nodes[j].id);
+                    
+                    // Add warning for second node
+                    char msg2[96];
+                    mi = 0;
+                    prefix = "Adjacent to '";
+                    while (*prefix && mi < 40) msg2[mi++] = *prefix++;
+                    ni = 0;
+                    while (nodes[i].id[ni] && mi < 70) msg2[mi++] = nodes[i].id[ni++];
+                    suffix = "' but not connected";
+                    while (*suffix && mi < 95) msg2[mi++] = *suffix++;
+                    msg2[mi] = '\0';
+                    addWarning(msg2, j, nodes[i].id);
                 }
             }
         }
@@ -570,6 +665,17 @@ public:
 
             if (!hasInputs && !hasOutputs) {
                 addError("Node is completely disconnected", i);
+            }
+
+            // Check if input nodes (contacts, comparators) or operation blocks 
+            // without input connections are not at the power rail (x=0)
+            // Grid is 0-based internally, so x=0 is the power rail (user sees it as x=1)
+            if (!hasInputs && nodes[i].x != 0) {
+                if (isInputNode(nodes[i].type)) {
+                    addWarning("Input node has no connection and is not at the power rail", i);
+                } else if (isOperationBlock(nodes[i].type)) {
+                    addWarning("Operation block has no input connection and is not at the power rail", i);
+                }
             }
         }
 
