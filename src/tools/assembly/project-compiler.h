@@ -417,6 +417,35 @@ public:
         p.message[i] = '\0';
     }
 
+    // Copy all problems (warnings, errors, info) from ladder compiler to project's problem list
+    void copyLadderProblems() {
+        for (int i = 0; i < ladder_compiler.problem_count && problem_count < MAX_LINT_PROBLEMS; i++) {
+            LinterProblem& src = ladder_compiler.problems[i];
+            LinterProblem& dest = problems[problem_count++];
+            dest.type = src.type;
+            dest.line = src.line;
+            dest.column = src.column;
+            dest.length = src.length;
+            dest.lang = src.lang;
+            // Copy message
+            int mi = 0;
+            while (src.message[mi] && mi < 127) { dest.message[mi] = src.message[mi]; mi++; }
+            dest.message[mi] = '\0';
+            // Copy token
+            int ti = 0;
+            while (src.token_buf[ti] && ti < 63) { dest.token_buf[ti] = src.token_buf[ti]; ti++; }
+            dest.token_buf[ti] = '\0';
+            dest.token_text = dest.token_buf;
+            // Copy program and block names
+            int pi = 0;
+            while (current_file[pi] && pi < 63) { dest.program[pi] = current_file[pi]; pi++; }
+            dest.program[pi] = '\0';
+            int bi = 0;
+            while (current_block[bi] && bi < 63) { dest.block[bi] = current_block[bi]; bi++; }
+            dest.block[bi] = '\0';
+        }
+    }
+
     void setError(const char* msg) {
         if (has_error) return; // Still keep first error behavior for compilation failure
 
@@ -2034,34 +2063,14 @@ public:
         // Save the updated edge memory counter back to project level
         project_edge_mem_counter = ladder_compiler.getEdgeMemCounter();
 
+        // Always copy problems (warnings, info, errors) from ladder compiler
+        if (ladder_compiler.problem_count > 0) {
+            copyLadderProblems();
+        }
+
         if (!success || ladder_compiler.has_error) {
-            // Copy problems from ladder linter to project problems
             if (ladder_compiler.problem_count > 0) {
-                for (int i = 0; i < ladder_compiler.problem_count && problem_count < MAX_LINT_PROBLEMS; i++) {
-                    LinterProblem& src = ladder_compiler.problems[i];
-                    LinterProblem& dest = problems[problem_count++];
-                    dest.type = src.type;
-                    dest.line = src.line;
-                    dest.column = src.column;
-                    dest.length = src.length;
-                    dest.lang = src.lang;
-                    // Copy message
-                    int mi = 0;
-                    while (src.message[mi] && mi < 127) { dest.message[mi] = src.message[mi]; mi++; }
-                    dest.message[mi] = '\0';
-                    // Copy token
-                    int ti = 0;
-                    while (src.token_buf[ti] && ti < 63) { dest.token_buf[ti] = src.token_buf[ti]; ti++; }
-                    dest.token_buf[ti] = '\0';
-                    dest.token_text = dest.token_buf;
-                    // Copy program and block names
-                    int pi = 0;
-                    while (current_file[pi] && pi < 63) { dest.program[pi] = current_file[pi]; pi++; }
-                    dest.program[pi] = '\0';
-                    int bi = 0;
-                    while (current_block[bi] && bi < 63) { dest.block[bi] = current_block[bi]; bi++; }
-                    dest.block[bi] = '\0';
-                }
+                // Problems already copied above, just set error flag
                 has_error = true;
             } else {
                 // Fallback to old error handling
