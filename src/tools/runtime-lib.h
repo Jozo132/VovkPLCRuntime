@@ -1860,12 +1860,20 @@ template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<u16>()   { return 
 template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<i32>()   { return TYPE_I32; }
 template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<u32>()   { return TYPE_U32; }
 template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<f32>()   { return TYPE_F32; }
-// Handle 'int' which may differ from i32 on some platforms
-template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<int>()   { return (sizeof(int) == 2) ? TYPE_I16 : TYPE_I32; }
-template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<unsigned int>() { return (sizeof(unsigned int) == 2) ? TYPE_U16 : TYPE_U32; }
-// Handle 'long' which may differ
-template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<long>()  { return (sizeof(long) == 4) ? TYPE_I32 : TYPE_I64; }
-template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<unsigned long>() { return (sizeof(unsigned long) == 4) ? TYPE_U32 : TYPE_U64; }
+// Handle 'int' and 'long' types carefully to avoid redefinition when they alias fixed-width types
+// On ARM32: int32_t = long, int != long (both 32-bit but distinct types)
+// On x86/x64: int32_t = int, long may differ
+#if INTPTR_MAX == INT32_MAX  // 32-bit platform
+  #if defined(__arm__) || defined(__ARM_ARCH)
+    // ARM32: i32 = long, so only add int (not long)
+    template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<int>()   { return TYPE_I32; }
+    template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<unsigned int>() { return TYPE_U32; }
+  #else
+    // Other 32-bit: i32 = int, so only add long (not int)
+    template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<long>()  { return TYPE_I32; }
+    template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<unsigned long>() { return TYPE_U32; }
+  #endif
+#endif
 #ifdef USE_X64_OPS
 template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<i64>()   { return TYPE_I64; }
 template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<u64>()   { return TYPE_U64; }
