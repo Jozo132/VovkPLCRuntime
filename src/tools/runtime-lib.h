@@ -108,6 +108,9 @@
 #include "runtime-program.h"
 #include "runtime-thread.h"
 
+// Transport system (optional - define PLCRUNTIME_TRANSPORT to enable)
+#include "transport/plc-transport.h"
+
 #define SERIAL_TIMEOUT_RETURN if (serial_timeout) return;
 #define SERIAL_TIMEOUT_JOB(task) if (serial_timeout) { task; return; };
 
@@ -320,6 +323,15 @@ class VovkPLCRuntime {
 private:
     bool started_up = false;
     bool is_first_cycle = true;
+
+#ifdef PLCRUNTIME_TRANSPORT
+    // Transport system components
+    PLCTransportManager _transports;
+    PLCSessionManager _sessions;
+    PLCAuthProvider _auth;
+    PLCTransportInterface* _activeTransport = nullptr;
+#endif // PLCRUNTIME_TRANSPORT
+
     void updateRamStats() {
         int free_mem = freeMemory();
         u32 free_u32 = free_mem < 0 ? 0u : (u32) free_mem;
@@ -387,6 +399,9 @@ public:
 #ifdef PLCRUNTIME_EEPROM_STORAGE
         program.loadFromEEPROM();
 #endif // PLCRUNTIME_EEPROM_STORAGE
+#ifdef PLCRUNTIME_TRANSPORT
+        _transports.begin();
+#endif // PLCRUNTIME_TRANSPORT
     }
 
 
@@ -413,6 +428,83 @@ public:
     }
 
     VovkPLCRuntime() {}
+
+    // ========================================================================
+    // Transport System API (only available when PLCRUNTIME_TRANSPORT is defined)
+    // ========================================================================
+#ifdef PLCRUNTIME_TRANSPORT
+    /**
+     * @brief Add a Serial transport
+     * @param stream Serial stream (e.g., Serial, Serial1)
+     * @param security Security level (default: none)
+     * @return Reference to this for chaining
+     */
+    VovkPLCRuntime& addSerial(Stream& stream, PLCSecurity security = PLC_SEC_NONE) {
+        PLCSerialTransport* transport = new PLCSerialTransport(stream);
+        _transports.addTransport(transport, security, "Serial", true);
+        return *this;
+    }
+    
+    /**
+     * @brief Add a WiFi TCP server transport (ESP8266/ESP32)
+     * @param port TCP port to listen on
+     * @param security Security level
+     * @return Reference to this for chaining
+     * @note Requires WiFi to be connected before calling initialize()
+     * 
+     * Example:
+     *   #include <WiFi.h>  // or <ESP8266WiFi.h>
+     *   WiFiServer wifiServer(502);
+     *   runtime.addWiFi(wifiServer, PLC_SEC_PASSWORD);
+     */
+    template<typename TServer, typename TClient>
+    VovkPLCRuntime& addTCP(TServer& server, PLCSecurity security = PLC_SEC_PASSWORD) {
+        auto* transport = new PLCTCPTransport<TServer, TClient>(server);
+        _transports.addTransport(transport, security, "TCP", true);
+        return *this;
+    }
+    
+    /**
+     * @brief Add a custom transport
+     * @param transport Pointer to transport (user manages lifetime)
+     * @param security Security level
+     * @param name Optional name for logging
+     * @return Reference to this for chaining
+     */
+    VovkPLCRuntime& addTransport(PLCTransportInterface* transport, 
+                                  PLCSecurity security = PLC_SEC_NONE,
+                                  const char* name = nullptr) {
+        _transports.addTransport(transport, security, name, false);
+        return *this;
+    }
+    
+    /**
+     * @brief Add a user for authentication
+     * @param username Username
+     * @param password Password
+     * @param permissions User permissions (PERM_MONITOR, PERM_OPERATOR, PERM_PROGRAMMER, PERM_FULL)
+     * @return Reference to this for chaining
+     */
+    VovkPLCRuntime& addUser(const char* username, const char* password, uint8_t permissions) {
+        _auth.addUser(username, password, permissions);
+        return *this;
+    }
+    
+    /**
+     * @brief Get transport manager for advanced configuration
+     */
+    PLCTransportManager& transports() { return _transports; }
+    
+    /**
+     * @brief Get session manager for advanced configuration
+     */
+    PLCSessionManager& sessions() { return _sessions; }
+    
+    /**
+     * @brief Get auth provider for advanced configuration
+     */
+    PLCAuthProvider& auth() { return _auth; }
+#endif // PLCRUNTIME_TRANSPORT
 
     void loadProgramUnsafe(const u8* program, u32 prog_size) {
         this->program.loadUnsafe(program, prog_size);
@@ -1029,6 +1121,20 @@ public:
 #else // __WASM__
         // Production code for microcontrollers
         // Listen for input from [serial, ethernet, wifi, etc.]
+
+#ifdef PLCRUNTIME_TRANSPORT
+        // Poll all registered transports for incoming connections/data
+        _transports.poll();
+        
+        // Check if any transport has data available
+        uint8_t transportIndex = 0;
+        _activeTransport = _transports.getActiveTransport(&transportIndex);
+        
+        // If we have transport data, process it through the transport system
+        // Note: The existing Serial protocol can still be used in parallel
+        // The transport system uses the same protocol but through different mediums
+#endif // PLCRUNTIME_TRANSPORT
+
 #ifdef PLCRUNTIME_SERIAL_ENABLED
 
         if (print_info_first_time) {
@@ -1467,11 +1573,11 @@ public:
 #endif // PLCRUNTIME_SERIAL_ENABLED
 
 #ifdef PLCRUNTIME_ETHERNET_ENABLED
-        // To be implemented
+        // Legacy placeholder - use PLCRUNTIME_TRANSPORT with addTCP() instead
 #endif // PLCRUNTIME_ETHERNET_ENABLED
 
 #ifdef PLCRUNTIME_WIFI_ENABLED
-        // To be implemented
+        // Legacy placeholder - use PLCRUNTIME_TRANSPORT with addTCP() instead
 #endif // PLCRUNTIME_WIFI_ENABLED
 #endif // __WASM__
     }
