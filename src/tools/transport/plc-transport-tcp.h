@@ -32,21 +32,29 @@ private:
     uint16_t _port;
     bool _ownsServer;
     char _clientAddr[16] = {0};
+    PLCTransportType _transportType = TRANSPORT_WIFI;  // Default to WiFi, can be changed
+    const char* _transportName = "TCP";
     
 public:
     /**
      * @brief Create transport with specified port (creates server internally)
      * @param port TCP port to listen on
+     * @param type Transport type (TRANSPORT_WIFI or TRANSPORT_ETHERNET)
      */
-    PLCTCPTransport(uint16_t port) 
-        : _port(port), _ownsServer(true) {}
+    PLCTCPTransport(uint16_t port, PLCTransportType type = TRANSPORT_WIFI) 
+        : _port(port), _ownsServer(true), _transportType(type) {
+        _transportName = (type == TRANSPORT_ETHERNET) ? "Ethernet" : "WiFi";
+    }
     
     /**
      * @brief Create transport with existing server
      * @param server Reference to existing server
+     * @param type Transport type (TRANSPORT_WIFI or TRANSPORT_ETHERNET)
      */
-    PLCTCPTransport(TServer& server) 
-        : _server(&server), _port(0), _ownsServer(false) {}
+    PLCTCPTransport(TServer& server, PLCTransportType type = TRANSPORT_WIFI) 
+        : _server(&server), _port(0), _ownsServer(false), _transportType(type) {
+        _transportName = (type == TRANSPORT_ETHERNET) ? "Ethernet" : "WiFi";
+    }
     
     ~PLCTCPTransport() {
         if (_ownsServer && _server) {
@@ -121,10 +129,60 @@ public:
         if (_client) _client.flush(); 
     }
     
-    const char* name() override { return "TCP"; }
+    const char* name() override { return _transportName; }
     bool isNetworkTransport() override { return true; }
+    PLCTransportType transportType() override { return _transportType; }
     
     const char* clientAddress() override { return _clientAddr; }
+    
+    void getConnectionInfo(PLCConnectionInfo& info) override {
+        PLCTransportInterface::getConnectionInfo(info);
+        info.port = _port;
+        
+        // Get local IP, gateway, subnet based on transport type
+        #if defined(ESP8266) || defined(ESP32)
+        if (_transportType == TRANSPORT_WIFI) {
+            IPAddress localIP = WiFi.localIP();
+            IPAddress gateway = WiFi.gatewayIP();
+            IPAddress subnet = WiFi.subnetMask();
+            uint8_t* mac = WiFi.macAddress(info.mac);
+            (void)mac; // Suppress unused warning
+            
+            info.ip[0] = localIP[0]; info.ip[1] = localIP[1];
+            info.ip[2] = localIP[2]; info.ip[3] = localIP[3];
+            info.gateway[0] = gateway[0]; info.gateway[1] = gateway[1];
+            info.gateway[2] = gateway[2]; info.gateway[3] = gateway[3];
+            info.subnet[0] = subnet[0]; info.subnet[1] = subnet[1];
+            info.subnet[2] = subnet[2]; info.subnet[3] = subnet[3];
+        }
+        #endif
+        
+        #if defined(ETHERNET_H) || defined(Ethernet_h)
+        if (_transportType == TRANSPORT_ETHERNET) {
+            IPAddress localIP = Ethernet.localIP();
+            IPAddress gateway = Ethernet.gatewayIP();
+            IPAddress subnet = Ethernet.subnetMask();
+            // Ethernet library doesn't have getMacAddress in same way
+            
+            info.ip[0] = localIP[0]; info.ip[1] = localIP[1];
+            info.ip[2] = localIP[2]; info.ip[3] = localIP[3];
+            info.gateway[0] = gateway[0]; info.gateway[1] = gateway[1];
+            info.gateway[2] = gateway[2]; info.gateway[3] = gateway[3];
+            info.subnet[0] = subnet[0]; info.subnet[1] = subnet[1];
+            info.subnet[2] = subnet[2]; info.subnet[3] = subnet[3];
+        }
+        #endif
+        
+        // Client info if connected
+        if (_client && _client.connected()) {
+            #if defined(ESP8266) || defined(ESP32)
+            IPAddress clientIP = _client.remoteIP();
+            info.clientIp[0] = clientIP[0]; info.clientIp[1] = clientIP[1];
+            info.clientIp[2] = clientIP[2]; info.clientIp[3] = clientIP[3];
+            info.clientPort = _client.remotePort();
+            #endif
+        }
+    }
     
     // Access to underlying client/server if needed
     TClient& client() { return _client; }

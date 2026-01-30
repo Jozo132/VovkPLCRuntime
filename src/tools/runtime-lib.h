@@ -437,31 +437,51 @@ public:
      * @brief Add a Serial transport
      * @param stream Serial stream (e.g., Serial, Serial1)
      * @param security Security level (default: none)
+     * @param baudrate Baudrate for info reporting (default: 115200)
      * @return Reference to this for chaining
      */
-    VovkPLCRuntime& addSerial(Stream& stream, PLCSecurity security = PLC_SEC_NONE) {
-        PLCSerialTransport* transport = new PLCSerialTransport(stream);
+    VovkPLCRuntime& addSerial(Stream& stream, PLCSecurity security = PLC_SEC_NONE, uint32_t baudrate = 115200) {
+        PLCSerialTransport* transport = new PLCSerialTransport(stream, baudrate);
         _transports.addTransport(transport, security, "Serial", true);
         return *this;
     }
     
     /**
-     * @brief Add a WiFi TCP server transport (ESP8266/ESP32)
-     * @param port TCP port to listen on
+     * @brief Add a TCP server transport (WiFi or Ethernet)
+     * @param server Reference to server (WiFiServer, EthernetServer)
      * @param security Security level
+     * @param type Transport type (TRANSPORT_WIFI or TRANSPORT_ETHERNET)
      * @return Reference to this for chaining
-     * @note Requires WiFi to be connected before calling initialize()
+     * @note Requires network to be connected before calling initialize()
      * 
      * Example:
      *   #include <WiFi.h>  // or <ESP8266WiFi.h>
      *   WiFiServer wifiServer(502);
-     *   runtime.addWiFi(wifiServer, PLC_SEC_PASSWORD);
+     *   runtime.addTCP<WiFiServer, WiFiClient>(wifiServer, PLC_SEC_PASSWORD, TRANSPORT_WIFI);
      */
     template<typename TServer, typename TClient>
-    VovkPLCRuntime& addTCP(TServer& server, PLCSecurity security = PLC_SEC_PASSWORD) {
-        auto* transport = new PLCTCPTransport<TServer, TClient>(server);
-        _transports.addTransport(transport, security, "TCP", true);
+    VovkPLCRuntime& addTCP(TServer& server, PLCSecurity security = PLC_SEC_PASSWORD, 
+                           PLCTransportType type = TRANSPORT_WIFI) {
+        auto* transport = new PLCTCPTransport<TServer, TClient>(server, type);
+        const char* name = (type == TRANSPORT_ETHERNET) ? "Ethernet" : "WiFi";
+        _transports.addTransport(transport, security, name, true);
         return *this;
+    }
+    
+    /**
+     * @brief Add a WiFi transport (convenience wrapper)
+     */
+    template<typename TServer, typename TClient>
+    VovkPLCRuntime& addWiFi(TServer& server, PLCSecurity security = PLC_SEC_PASSWORD) {
+        return addTCP<TServer, TClient>(server, security, TRANSPORT_WIFI);
+    }
+    
+    /**
+     * @brief Add an Ethernet transport (convenience wrapper)
+     */
+    template<typename TServer, typename TClient>
+    VovkPLCRuntime& addEthernet(TServer& server, PLCSecurity security = PLC_SEC_PASSWORD) {
+        return addTCP<TServer, TClient>(server, security, TRANSPORT_ETHERNET);
     }
     
     /**
@@ -504,6 +524,78 @@ public:
      * @brief Get auth provider for advanced configuration
      */
     PLCAuthProvider& auth() { return _auth; }
+    
+    /**
+     * @brief Get number of configured transports
+     */
+    uint8_t getTransportCount() { return _transports.count(); }
+    
+    /**
+     * @brief Get connection info for a specific transport
+     * @param index Transport index (0 to getTransportCount()-1)
+     * @param info Reference to info structure to fill
+     * @return true if index is valid
+     */
+    bool getConnectionInfo(uint8_t index, PLCConnectionInfo& info) {
+        PLCTransportInterface* t = _transports.get(index);
+        if (!t) return false;
+        t->getConnectionInfo(info);
+        // Add auth requirement from transport entry
+        PLCTransportEntry* entry = _transports.getEntry(index);
+        if (entry) {
+            info.requiresAuth = (entry->security != PLC_SEC_NONE);
+        }
+        return true;
+    }
+    
+    /**
+     * @brief Print connection info for all transports to Serial
+     */
+    void printConnectionInfo() {
+        Serial.println(F("\n=== Connection Interfaces ==="));
+        for (uint8_t i = 0; i < _transports.count(); i++) {
+            PLCConnectionInfo info;
+            if (getConnectionInfo(i, info)) {
+                Serial.print(F("Transport ")); Serial.print(i);
+                Serial.print(F(": ")); Serial.println(info.name);
+                Serial.print(F("  Type: "));
+                switch (info.type) {
+                    case TRANSPORT_SERIAL: Serial.println(F("Serial")); break;
+                    case TRANSPORT_WIFI: Serial.println(F("WiFi")); break;
+                    case TRANSPORT_ETHERNET: Serial.println(F("Ethernet")); break;
+                    case TRANSPORT_BLUETOOTH: Serial.println(F("Bluetooth")); break;
+                    case TRANSPORT_RS485: Serial.println(F("RS485")); break;
+                    case TRANSPORT_CAN: Serial.println(F("CAN")); break;
+                    case TRANSPORT_LORA: Serial.println(F("LoRa")); break;
+                    default: Serial.println(F("Custom")); break;
+                }
+                Serial.print(F("  Auth Required: ")); 
+                Serial.println(info.requiresAuth ? F("Yes") : F("No"));
+                Serial.print(F("  Connected: ")); 
+                Serial.println(info.isConnected ? F("Yes") : F("No"));
+                
+                if (info.type == TRANSPORT_SERIAL) {
+                    Serial.print(F("  Baudrate: ")); Serial.println(info.baudrate);
+                } else if (info.isNetwork) {
+                    char ipStr[16];
+                    info.formatIP(ipStr, sizeof(ipStr), info.ip);
+                    Serial.print(F("  IP: ")); Serial.println(ipStr);
+                    info.formatIP(ipStr, sizeof(ipStr), info.gateway);
+                    Serial.print(F("  Gateway: ")); Serial.println(ipStr);
+                    info.formatIP(ipStr, sizeof(ipStr), info.subnet);
+                    Serial.print(F("  Subnet: ")); Serial.println(ipStr);
+                    Serial.print(F("  Port: ")); Serial.println(info.port);
+                    
+                    if (info.isConnected) {
+                        info.formatIP(ipStr, sizeof(ipStr), info.clientIp);
+                        Serial.print(F("  Client: ")); Serial.print(ipStr);
+                        Serial.print(F(":")); Serial.println(info.clientPort);
+                    }
+                }
+            }
+        }
+        Serial.println(F("=============================\n"));
+    }
 #endif // PLCRUNTIME_TRANSPORT
 
     void loadProgramUnsafe(const u8* program, u32 prog_size) {

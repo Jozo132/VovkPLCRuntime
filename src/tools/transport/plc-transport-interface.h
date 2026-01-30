@@ -25,6 +25,64 @@
 
 #include <Arduino.h>
 
+// ============================================================================
+// Transport Type Enumeration
+// ============================================================================
+
+/**
+ * @brief Transport type identifiers
+ */
+enum PLCTransportType : uint8_t {
+    TRANSPORT_UNKNOWN = 0,
+    TRANSPORT_SERIAL = 1,
+    TRANSPORT_WIFI = 2,
+    TRANSPORT_ETHERNET = 3,
+    TRANSPORT_BLUETOOTH = 4,
+    TRANSPORT_RS485 = 5,
+    TRANSPORT_CAN = 6,
+    TRANSPORT_LORA = 7,
+    TRANSPORT_CUSTOM = 255
+};
+
+// ============================================================================
+// Connection Info Structure
+// ============================================================================
+
+/**
+ * @brief Structure holding transport connection information
+ */
+struct PLCConnectionInfo {
+    PLCTransportType type = TRANSPORT_UNKNOWN;
+    const char* name = nullptr;
+    bool isNetwork = false;
+    bool isConnected = false;
+    bool requiresAuth = false;
+    
+    // Serial-specific
+    uint32_t baudrate = 0;
+    
+    // Network-specific
+    uint8_t ip[4] = {0, 0, 0, 0};
+    uint8_t gateway[4] = {0, 0, 0, 0};
+    uint8_t subnet[4] = {0, 0, 0, 0};
+    uint8_t mac[6] = {0, 0, 0, 0, 0, 0};
+    uint16_t port = 0;
+    
+    // Client info (when connected)
+    uint8_t clientIp[4] = {0, 0, 0, 0};
+    uint16_t clientPort = 0;
+    
+    // Helper to format IP as string
+    void formatIP(char* buf, size_t bufSize, const uint8_t* ip) const {
+        snprintf(buf, bufSize, "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
+    }
+    
+    void formatMAC(char* buf, size_t bufSize, const uint8_t* mac) const {
+        snprintf(buf, bufSize, "%02X:%02X:%02X:%02X:%02X:%02X", 
+                 mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    }
+};
+
 /**
  * @brief Abstract transport interface for custom protocols.
  * 
@@ -167,6 +225,26 @@ public:
      * @return Port number or 0
      */
     virtual uint16_t clientPort() { return 0; }
+    
+    // === Connection Info ===
+    
+    /**
+     * @brief Get transport type
+     * @return Transport type identifier
+     */
+    virtual PLCTransportType transportType() { return TRANSPORT_CUSTOM; }
+    
+    /**
+     * @brief Get comprehensive connection information
+     * @param info Reference to info structure to fill
+     */
+    virtual void getConnectionInfo(PLCConnectionInfo& info) {
+        info.type = transportType();
+        info.name = name();
+        info.isNetwork = isNetworkTransport();
+        info.isConnected = connected();
+        // Subclasses fill in specific details
+    }
     
     // === Helper: Print support ===
     

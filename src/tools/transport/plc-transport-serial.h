@@ -25,13 +25,16 @@
 class PLCSerialTransport : public PLCTransportInterface {
 private:
     Stream* _stream;
+    uint32_t _baudrate;
     
 public:
     /**
      * @brief Construct with a Stream reference
      * @param stream Reference to Serial, Serial1, SoftwareSerial, etc.
+     * @param baudrate Baudrate (for info reporting, user must call Serial.begin())
      */
-    PLCSerialTransport(Stream& stream) : _stream(&stream) {}
+    PLCSerialTransport(Stream& stream, uint32_t baudrate = 115200) 
+        : _stream(&stream), _baudrate(baudrate) {}
     
     bool begin() override { 
         // Assume Serial.begin() is called by user
@@ -80,8 +83,17 @@ public:
     const char* name() override { return "Serial"; }
     bool isNetworkTransport() override { return false; }
     
-    // Direct access to underlying stream if needed
+    PLCTransportType transportType() override { return TRANSPORT_SERIAL; }
+    
+    void getConnectionInfo(PLCConnectionInfo& info) override {
+        PLCTransportInterface::getConnectionInfo(info);
+        info.baudrate = _baudrate;
+    }
+    
+    // Accessors
     Stream* stream() { return _stream; }
+    uint32_t baudrate() const { return _baudrate; }
+    void setBaudrate(uint32_t baud) { _baudrate = baud; }
 };
 
 #endif // PLCRUNTIME_TRANSPORT
