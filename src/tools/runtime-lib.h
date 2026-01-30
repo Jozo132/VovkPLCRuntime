@@ -2015,15 +2015,22 @@ template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<i32>() { return TY
 template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<u32>() { return TYPE_U32; }
 template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<f32>() { return TYPE_F32; }
 // Handle 'int' and 'long' types carefully to avoid redefinition when they alias fixed-width types
-// On ARM32: int32_t = long, int != long (both 32-bit but distinct types)
-// On x86/x64: int32_t = int, long may differ
+// Different platforms have different type mappings:
+// - ARM32: int32_t = long, int is separate
+// - ESP32 (Xtensa): int32_t = int, long is separate  
+// - ESP32-C3 (RISC-V): int32_t = long, int is separate
+// We use compiler-specific checks to avoid redefinition errors
 #if INTPTR_MAX == INT32_MAX  // 32-bit platform
-#if defined(__arm__) || defined(__ARM_ARCH)
-  // ARM32: i32 = long, so only add int (not long)
+#if defined(__arm__) || defined(__ARM_ARCH) || defined(__riscv) || defined(__RISCV__)
+  // ARM32 and RISC-V: int32_t = long, so add int (which is distinct from long)
 template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<int>() { return TYPE_I32; }
 template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<unsigned int>() { return TYPE_U32; }
+#elif defined(ESP32) && !defined(__riscv)
+  // ESP32 Xtensa: int32_t = int, add long
+template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<long>() { return TYPE_I32; }
+template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<unsigned long>() { return TYPE_U32; }
 #else
-  // Other 32-bit: i32 = int, so only add long (not int)
+  // Other 32-bit: typically int32_t = int, add long if different
 template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<long>() { return TYPE_I32; }
 template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<unsigned long>() { return TYPE_U32; }
 #endif
