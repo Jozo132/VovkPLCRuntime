@@ -12,6 +12,7 @@
   "flash": { "size": 0, "used": 0 },
   "execution": { "steps": 0, "stackSize": 0 },
   "problems": [
-    { "severity": "error", "message": "Connection flows backward (destination must be right of source)", "line": 1, "column": 2, "file": "main", "block": "Network 1 - Ladder with backward connection", "language": "LADDER", "token": "c[0]" }
+    { "severity": "error", "message": "Connection flows backward (destination must be right of source)", "line": 1, "column": 2, "file": "main", "block": "Network 1 - Ladder with backward connection", "language": "LADDER", "token": "c[0]" },
+    { "severity": "warning", "message": "Input node has no connection and is not at the power rail", "line": 1, "column": 3, "file": "main", "block": "Network 1 - Ladder with backward connection", "language": "LADDER", "token": "n1" }
   ]
 }

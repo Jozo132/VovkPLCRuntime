@@ -1495,10 +1495,13 @@ public:
                     skipLine();
                 }
 
-                if (block.source_end <= block.source_start) {
-                    setError("Empty or unterminated BLOCK");
+                // Check for unterminated block (source_end == source_start means END_BLOCK was never found)
+                if (block.source_end == 0) {
+                    setError("Unterminated BLOCK - missing END_BLOCK");
                     return false;
                 }
+
+                // Empty blocks are allowed (source_end <= source_start after trimming)
 
                 block.used = true;
                 program_block_count++;

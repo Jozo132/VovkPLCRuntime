@@ -1020,7 +1020,7 @@ class VovkPLC_class {
                 }
             }
             if (parts.length >= 21) {
-                // Legacy format without timer/counter info
+                // @ts-ignore // Legacy format without timer/counter info
                 return {
                     ...base,
                     control_offset: +parts[10],
@@ -1035,9 +1035,8 @@ class VovkPLC_class {
                     marker_size: +parts[19],
                     device: parts[20],
                 }
-            }
-            return {
-                // Very old legacy format
+            } // @ts-ignore // Very old legacy format
+            return {                
                 ...base,
                 input_offset: +parts[10],
                 input_size: +parts[11],
@@ -1100,7 +1099,7 @@ class VovkPLC_class {
      * Retrieves runtime information and configuration from the PLC using direct buffer access.
      * This is the preferred method over printInfo() as it avoids stream parsing overhead.
      *
-     * @returns {RuntimeInfo} - An object containing runtime properties (version, offsets, etc.).
+     * @returns {RuntimeInfo | string} - An object containing runtime properties (version, offsets, etc.).
      */
     getInfo = () => {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
