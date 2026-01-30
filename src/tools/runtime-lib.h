@@ -485,7 +485,7 @@ public:
      * @param permissions User permissions (PERM_MONITOR, PERM_OPERATOR, PERM_PROGRAMMER, PERM_FULL)
      * @return Reference to this for chaining
      */
-    VovkPLCRuntime& addUser(const char* username, const char* password, uint8_t permissions) {
+    VovkPLCRuntime& addUser(const char* username, const char* password, uint16_t permissions) {
         _auth.addUser(username, password, permissions);
         return *this;
     }
