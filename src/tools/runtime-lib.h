@@ -133,6 +133,7 @@ struct DeviceHealth {
 // Allows embedded devices to register named symbols that can be discovered
 // by the VovkPLC Editor for driver/plugin integration.
 // Enable with: #define PLCRUNTIME_VARIABLE_REGISTRATION_ENABLED
+// If manual sync is desired, define PLCRUNTIME_VARIABLE_REGISTRATION_MANUAL_SYNC and the user is required to read and write the values manually.
 
 #ifdef PLCRUNTIME_VARIABLE_REGISTRATION_ENABLED
 
@@ -860,7 +861,59 @@ public:
         STDOUT_PRINT.println(F("]"));
     }
 
-    // Sync registered symbols with PLC memory (call before/after PLC cycle)
+    // Sync registered input symbols TO PLC memory (call BEFORE PLC cycle)
+    // This writes user-set input variables into the PLC memory so the program can read them
+    void syncInputsToMemory() {
+        for (u16 i = 0; i < g_symbolRegistry.count; i++) {
+            RegisteredSymbol& sym = g_symbolRegistry.symbols[i];
+            // Only sync inputs and controls (user-writable before PLC execution)
+            if (sym.area != AREA_INPUT && sym.area != AREA_CONTROL) continue;
+            
+            u32 offset = getAreaOffset(sym.area) + sym.address;
+            
+            if (sym.type == TYPE_BIT) {
+                bool* val = (bool*)sym.valuePtr();
+                u8 byte_val = 0;
+                get_u8(memory, offset, byte_val);
+                if (*val) byte_val |= (1 << sym.bit);
+                else byte_val &= ~(1 << sym.bit);
+                memory[offset] = byte_val;
+            } else {
+                u8 size = getSymbolTypeSize(sym.type);
+                u8* val = (u8*)sym.valuePtr();
+                for (u8 j = 0; j < size; j++) {
+                    memory[offset + j] = val[j];
+                }
+            }
+        }
+    }
+
+    // Sync registered output/marker symbols FROM PLC memory (call AFTER PLC cycle)
+    // This reads PLC memory back into user variables so they reflect the PLC state
+    void syncOutputsFromMemory() {
+        for (u16 i = 0; i < g_symbolRegistry.count; i++) {
+            RegisteredSymbol& sym = g_symbolRegistry.symbols[i];
+            // Sync outputs, markers, and system (readable after PLC execution)
+            if (sym.area != AREA_OUTPUT && sym.area != AREA_MARKER && sym.area != AREA_SYSTEM) continue;
+            
+            u32 offset = getAreaOffset(sym.area) + sym.address;
+            
+            if (sym.type == TYPE_BIT) {
+                bool* val = (bool*)sym.valuePtr();
+                u8 byte_val = 0;
+                get_u8(memory, offset, byte_val);
+                *val = (byte_val >> sym.bit) & 1;
+            } else {
+                u8 size = getSymbolTypeSize(sym.type);
+                u8* val = (u8*)sym.valuePtr();
+                for (u8 j = 0; j < size; j++) {
+                    get_u8(memory, offset + j, val[j]);
+                }
+            }
+        }
+    }
+
+    // Legacy/full sync functions for backward compatibility
     void syncSymbolsFromMemory() {
         for (u16 i = 0; i < g_symbolRegistry.count; i++) {
             RegisteredSymbol& sym = g_symbolRegistry.symbols[i];
@@ -884,9 +937,6 @@ public:
     void syncSymbolsToMemory() {
         for (u16 i = 0; i < g_symbolRegistry.count; i++) {
             RegisteredSymbol& sym = g_symbolRegistry.symbols[i];
-            // Skip inputs (read-only from PLC perspective) and system (read-only)
-            if (sym.area == AREA_INPUT || sym.area == AREA_SYSTEM) continue;
-            
             u32 offset = getAreaOffset(sym.area) + sym.address;
             
             if (sym.type == TYPE_BIT) {
@@ -1543,6 +1593,13 @@ RuntimeError VovkPLCRuntime::run(u8* program, u32 prog_size) {
 #ifndef __WASM__ // WASM can optionally execute the global loop check, embedded systems must always call this
     IntervalGlobalLoopCheck();
 #endif // __WASM__
+
+#ifdef PLCRUNTIME_VARIABLE_REGISTRATION_ENABLED
+#ifndef PLCRUNTIME_VARIABLE_REGISTRATION_MANUAL_SYNC
+    // Sync registered input variables to PLC memory before execution
+    syncInputsToMemory();
+#endif // PLCRUNTIME_VARIABLE_REGISTRATION_MANUAL_SYNC
+#endif // PLCRUNTIME_VARIABLE_REGISTRATION_ENABLED
     u32 start_us = (u32) micros();
     
     // Calculate period (time between run() calls)
@@ -1585,6 +1642,13 @@ RuntimeError VovkPLCRuntime::run(u8* program, u32 prog_size) {
     // until the NEXT call to run(), where updateGlobals() will clear it 
     // if is_first_cycle is false.
     if (is_first_cycle) is_first_cycle = false;
+
+#ifdef PLCRUNTIME_VARIABLE_REGISTRATION_ENABLED
+#ifndef PLCRUNTIME_VARIABLE_REGISTRATION_MANUAL_SYNC
+    // Sync registered output/marker variables from PLC memory after execution
+    syncOutputsFromMemory();
+#endif // PLCRUNTIME_VARIABLE_REGISTRATION_MANUAL_SYNC
+#endif // PLCRUNTIME_VARIABLE_REGISTRATION_ENABLED
     
     return status;
 }
