@@ -127,6 +127,212 @@ struct DeviceHealth {
     u32 max_jitter_us;
 };
 
+// ============================================================================
+// Symbol Registration System
+// ============================================================================
+// Allows embedded devices to register named symbols that can be discovered
+// by the VovkPLC Editor for driver/plugin integration.
+// Enable with: #define PLCRUNTIME_VARIABLE_REGISTRATION_ENABLED
+
+#ifdef PLCRUNTIME_VARIABLE_REGISTRATION_ENABLED
+
+#ifndef PLCRUNTIME_MAX_REGISTERED_SYMBOLS
+#define PLCRUNTIME_MAX_REGISTERED_SYMBOLS 64
+#endif
+
+// Memory area types for registered symbols
+enum SymbolArea : u8 {
+    AREA_CONTROL = 0,  // K - Control/Constants
+    AREA_INPUT   = 1,  // I/X - Inputs
+    AREA_OUTPUT  = 2,  // Q/Y - Outputs
+    AREA_SYSTEM  = 3,  // S - System
+    AREA_MARKER  = 4,  // M - Markers
+    AREA_TIMER   = 5,  // T - Timers
+    AREA_COUNTER = 6,  // C - Counters
+};
+
+// Data type identifiers for registered symbols
+enum SymbolType : u8 {
+    TYPE_BIT  = 0,   // Single bit (bool)
+    TYPE_I8   = 1,   // Signed 8-bit
+    TYPE_U8   = 2,   // Unsigned 8-bit
+    TYPE_I16  = 3,   // Signed 16-bit
+    TYPE_U16  = 4,   // Unsigned 16-bit
+    TYPE_I32  = 5,   // Signed 32-bit
+    TYPE_U32  = 6,   // Unsigned 32-bit
+    TYPE_F32  = 7,   // 32-bit float
+    TYPE_I64  = 8,   // Signed 64-bit
+    TYPE_U64  = 9,   // Unsigned 64-bit
+    TYPE_F64  = 10,  // 64-bit float
+};
+
+// Get type size in bytes (0 for bit type)
+inline u8 getSymbolTypeSize(SymbolType type) {
+    switch (type) {
+        case TYPE_BIT:  return 0;
+        case TYPE_I8:   return 1;
+        case TYPE_U8:   return 1;
+        case TYPE_I16:  return 2;
+        case TYPE_U16:  return 2;
+        case TYPE_I32:  return 4;
+        case TYPE_U32:  return 4;
+        case TYPE_F32:  return 4;
+        case TYPE_I64:  return 8;
+        case TYPE_U64:  return 8;
+        case TYPE_F64:  return 8;
+        default:        return 0;
+    }
+}
+
+// Get type name string
+inline const char* getSymbolTypeName(SymbolType type) {
+    switch (type) {
+        case TYPE_BIT:  return "bit";
+        case TYPE_I8:   return "i8";
+        case TYPE_U8:   return "u8";
+        case TYPE_I16:  return "i16";
+        case TYPE_U16:  return "u16";
+        case TYPE_I32:  return "i32";
+        case TYPE_U32:  return "u32";
+        case TYPE_F32:  return "f32";
+        case TYPE_I64:  return "i64";
+        case TYPE_U64:  return "u64";
+        case TYPE_F64:  return "f64";
+        default:        return "?";
+    }
+}
+
+// Get area prefix character
+inline char getSymbolAreaChar(SymbolArea area) {
+    switch (area) {
+        case AREA_CONTROL: return 'K';
+        case AREA_INPUT:   return 'I';
+        case AREA_OUTPUT:  return 'Q';
+        case AREA_SYSTEM:  return 'S';
+        case AREA_MARKER:  return 'M';
+        case AREA_TIMER:   return 'T';
+        case AREA_COUNTER: return 'C';
+        default:           return '?';
+    }
+}
+
+// Registered symbol descriptor - uses const char* pointers to string literals
+struct RegisteredSymbol {
+    const char* name;       // Symbol name (pointer to string literal)
+    const char* comment;    // Optional comment (pointer to string literal, or nullptr)
+    u32 address;            // Memory address or byte offset
+    u8 bit;                 // Bit position (0-7) for bit types, 0 otherwise
+    SymbolArea area;        // Memory area (I, Q, M, S, etc.)
+    SymbolType type;        // Data type
+    void* value_ptr;        // Pointer to the cached value for reference binding
+
+    // Check if this symbol is valid (registered)
+    bool isValid() const { return name != nullptr; }
+};
+
+// Global symbol table storage
+struct SymbolRegistry {
+    RegisteredSymbol symbols[PLCRUNTIME_MAX_REGISTERED_SYMBOLS];
+    u16 count = 0;
+
+    // Separate value storage for different types
+    bool bit_values[PLCRUNTIME_MAX_REGISTERED_SYMBOLS];
+    u8 u8_values[PLCRUNTIME_MAX_REGISTERED_SYMBOLS];
+    i8 i8_values[PLCRUNTIME_MAX_REGISTERED_SYMBOLS];
+    u16 u16_values[PLCRUNTIME_MAX_REGISTERED_SYMBOLS];
+    i16 i16_values[PLCRUNTIME_MAX_REGISTERED_SYMBOLS];
+    u32 u32_values[PLCRUNTIME_MAX_REGISTERED_SYMBOLS];
+    i32 i32_values[PLCRUNTIME_MAX_REGISTERED_SYMBOLS];
+    f32 f32_values[PLCRUNTIME_MAX_REGISTERED_SYMBOLS];
+#ifdef USE_X64_OPS
+    u64 u64_values[PLCRUNTIME_MAX_REGISTERED_SYMBOLS];
+    i64 i64_values[PLCRUNTIME_MAX_REGISTERED_SYMBOLS];
+    f64 f64_values[PLCRUNTIME_MAX_REGISTERED_SYMBOLS];
+#endif
+
+    // Type-specific counters for value storage indexing
+    u16 bit_count = 0;
+    u16 u8_count = 0;
+    u16 i8_count = 0;
+    u16 u16_count = 0;
+    u16 i16_count = 0;
+    u16 u32_count = 0;
+    u16 i32_count = 0;
+    u16 f32_count = 0;
+#ifdef USE_X64_OPS
+    u16 u64_count = 0;
+    u16 i64_count = 0;
+    u16 f64_count = 0;
+#endif
+
+    void reset() {
+        count = 0;
+        bit_count = 0;
+        u8_count = 0;
+        i8_count = 0;
+        u16_count = 0;
+        i16_count = 0;
+        u32_count = 0;
+        i32_count = 0;
+        f32_count = 0;
+#ifdef USE_X64_OPS
+        u64_count = 0;
+        i64_count = 0;
+        f64_count = 0;
+#endif
+        for (u16 i = 0; i < PLCRUNTIME_MAX_REGISTERED_SYMBOLS; i++) {
+            symbols[i].name = nullptr;
+            symbols[i].comment = nullptr;
+            symbols[i].value_ptr = nullptr;
+        }
+    }
+
+    // Allocate value storage and return pointer based on type
+    void* allocateValue(SymbolType type) {
+        switch (type) {
+            case TYPE_BIT:  return (bit_count < PLCRUNTIME_MAX_REGISTERED_SYMBOLS) ? &bit_values[bit_count++] : nullptr;
+            case TYPE_U8:   return (u8_count < PLCRUNTIME_MAX_REGISTERED_SYMBOLS) ? &u8_values[u8_count++] : nullptr;
+            case TYPE_I8:   return (i8_count < PLCRUNTIME_MAX_REGISTERED_SYMBOLS) ? &i8_values[i8_count++] : nullptr;
+            case TYPE_U16:  return (u16_count < PLCRUNTIME_MAX_REGISTERED_SYMBOLS) ? &u16_values[u16_count++] : nullptr;
+            case TYPE_I16:  return (i16_count < PLCRUNTIME_MAX_REGISTERED_SYMBOLS) ? &i16_values[i16_count++] : nullptr;
+            case TYPE_U32:  return (u32_count < PLCRUNTIME_MAX_REGISTERED_SYMBOLS) ? &u32_values[u32_count++] : nullptr;
+            case TYPE_I32:  return (i32_count < PLCRUNTIME_MAX_REGISTERED_SYMBOLS) ? &i32_values[i32_count++] : nullptr;
+            case TYPE_F32:  return (f32_count < PLCRUNTIME_MAX_REGISTERED_SYMBOLS) ? &f32_values[f32_count++] : nullptr;
+#ifdef USE_X64_OPS
+            case TYPE_U64:  return (u64_count < PLCRUNTIME_MAX_REGISTERED_SYMBOLS) ? &u64_values[u64_count++] : nullptr;
+            case TYPE_I64:  return (i64_count < PLCRUNTIME_MAX_REGISTERED_SYMBOLS) ? &i64_values[i64_count++] : nullptr;
+            case TYPE_F64:  return (f64_count < PLCRUNTIME_MAX_REGISTERED_SYMBOLS) ? &f64_values[f64_count++] : nullptr;
+#endif
+            default: return nullptr;
+        }
+    }
+
+    // Add a symbol to the registry
+    RegisteredSymbol* add(const char* name, const char* comment, u32 address, u8 bit, SymbolArea area, SymbolType type) {
+        if (count >= PLCRUNTIME_MAX_REGISTERED_SYMBOLS) return nullptr;
+        
+        void* val_ptr = allocateValue(type);
+        if (!val_ptr) return nullptr;
+
+        RegisteredSymbol& sym = symbols[count];
+        sym.name = name;
+        sym.comment = comment;
+        sym.address = address;
+        sym.bit = bit;
+        sym.area = area;
+        sym.type = type;
+        sym.value_ptr = val_ptr;
+        
+        count++;
+        return &sym;
+    }
+};
+
+// Global symbol registry instance
+static SymbolRegistry g_symbolRegistry;
+
+#endif // PLCRUNTIME_VARIABLE_REGISTRATION_ENABLED
+
 class VovkPLCRuntime {
 private:
     bool started_up = false;
@@ -520,6 +726,222 @@ public:
         return writeArea_u8(memory, offset, value, size);
     }
 
+    // ========================================================================
+    // Symbol Registration API
+    // ========================================================================
+    // Register named symbols for editor discovery and driver/plugin integration.
+    // Symbols are registered at compile time using string literals.
+    // Use I/X for inputs, Q/Y for outputs, M for markers, S for system, K for controls.
+
+#ifdef PLCRUNTIME_VARIABLE_REGISTRATION_ENABLED
+
+    // --- Bit Registration (returns bool&) ---
+
+    // Register Input bit: I/X (address, bit, name, optional comment)
+    bool& registerIBit(u32 address, u8 bit, const char* name, const char* comment = nullptr) {
+        RegisteredSymbol* sym = g_symbolRegistry.add(name, comment, address, bit, AREA_INPUT, TYPE_BIT);
+        if (!sym) { static bool dummy = false; return dummy; }
+        return *((bool*)sym->value_ptr);
+    }
+    // Alias: X = I (Mitsubishi/OMRON style)
+    bool& registerXBit(u32 address, u8 bit, const char* name, const char* comment = nullptr) {
+        return registerIBit(address, bit, name, comment);
+    }
+
+    // Register Output bit: Q/Y (address, bit, name, optional comment)
+    bool& registerQBit(u32 address, u8 bit, const char* name, const char* comment = nullptr) {
+        RegisteredSymbol* sym = g_symbolRegistry.add(name, comment, address, bit, AREA_OUTPUT, TYPE_BIT);
+        if (!sym) { static bool dummy = false; return dummy; }
+        return *((bool*)sym->value_ptr);
+    }
+    // Alias: Y = Q (Mitsubishi/OMRON style)
+    bool& registerYBit(u32 address, u8 bit, const char* name, const char* comment = nullptr) {
+        return registerQBit(address, bit, name, comment);
+    }
+
+    // Register Marker bit: M (address, bit, name, optional comment)
+    bool& registerMBit(u32 address, u8 bit, const char* name, const char* comment = nullptr) {
+        RegisteredSymbol* sym = g_symbolRegistry.add(name, comment, address, bit, AREA_MARKER, TYPE_BIT);
+        if (!sym) { static bool dummy = false; return dummy; }
+        return *((bool*)sym->value_ptr);
+    }
+
+    // Register System bit: S (address, bit, name, optional comment) - typically read-only
+    bool& registerSBit(u32 address, u8 bit, const char* name, const char* comment = nullptr) {
+        RegisteredSymbol* sym = g_symbolRegistry.add(name, comment, address, bit, AREA_SYSTEM, TYPE_BIT);
+        if (!sym) { static bool dummy = false; return dummy; }
+        return *((bool*)sym->value_ptr);
+    }
+
+    // Register Control bit: K (address, bit, name, optional comment)
+    bool& registerKBit(u32 address, u8 bit, const char* name, const char* comment = nullptr) {
+        RegisteredSymbol* sym = g_symbolRegistry.add(name, comment, address, bit, AREA_CONTROL, TYPE_BIT);
+        if (!sym) { static bool dummy = false; return dummy; }
+        return *((bool*)sym->value_ptr);
+    }
+
+    // --- Helper to map C++ types to SymbolType ---
+private:
+    template<typename T> static SymbolType getSymbolTypeFor();
+
+public:
+    // --- Numeric Registration (returns T&) ---
+
+    // Register Input word: IW (address, name, optional comment)
+    template<typename T>
+    T& registerI(u32 address, const char* name, const char* comment = nullptr) {
+        SymbolType stype = getSymbolTypeFor<T>();
+        RegisteredSymbol* sym = g_symbolRegistry.add(name, comment, address, 0, AREA_INPUT, stype);
+        if (!sym) { static T dummy = T(); return dummy; }
+        return *((T*)sym->value_ptr);
+    }
+    // Alias: X = I
+    template<typename T>
+    T& registerX(u32 address, const char* name, const char* comment = nullptr) {
+        return registerI<T>(address, name, comment);
+    }
+
+    // Register Output word: QW (address, name, optional comment)
+    template<typename T>
+    T& registerQ(u32 address, const char* name, const char* comment = nullptr) {
+        SymbolType stype = getSymbolTypeFor<T>();
+        RegisteredSymbol* sym = g_symbolRegistry.add(name, comment, address, 0, AREA_OUTPUT, stype);
+        if (!sym) { static T dummy = T(); return dummy; }
+        return *((T*)sym->value_ptr);
+    }
+    // Alias: Y = Q
+    template<typename T>
+    T& registerY(u32 address, const char* name, const char* comment = nullptr) {
+        return registerQ<T>(address, name, comment);
+    }
+
+    // Register Marker word: MW (address, name, optional comment)
+    template<typename T>
+    T& registerM(u32 address, const char* name, const char* comment = nullptr) {
+        SymbolType stype = getSymbolTypeFor<T>();
+        RegisteredSymbol* sym = g_symbolRegistry.add(name, comment, address, 0, AREA_MARKER, stype);
+        if (!sym) { static T dummy = T(); return dummy; }
+        return *((T*)sym->value_ptr);
+    }
+
+    // Register System word: SW (address, name, optional comment)
+    template<typename T>
+    T& registerS(u32 address, const char* name, const char* comment = nullptr) {
+        SymbolType stype = getSymbolTypeFor<T>();
+        RegisteredSymbol* sym = g_symbolRegistry.add(name, comment, address, 0, AREA_SYSTEM, stype);
+        if (!sym) { static T dummy = T(); return dummy; }
+        return *((T*)sym->value_ptr);
+    }
+
+    // Register Control word: KW (address, name, optional comment)
+    template<typename T>
+    T& registerK(u32 address, const char* name, const char* comment = nullptr) {
+        SymbolType stype = getSymbolTypeFor<T>();
+        RegisteredSymbol* sym = g_symbolRegistry.add(name, comment, address, 0, AREA_CONTROL, stype);
+        if (!sym) { static T dummy = T(); return dummy; }
+        return *((T*)sym->value_ptr);
+    }
+
+    // --- Symbol Table Query ---
+
+    // Get number of registered symbols
+    u16 getSymbolCount() const { return g_symbolRegistry.count; }
+
+    // Get symbol by index
+    const RegisteredSymbol* getSymbol(u16 index) const {
+        if (index >= g_symbolRegistry.count) return nullptr;
+        return &g_symbolRegistry.symbols[index];
+    }
+
+    // Print symbol table (for PS command)
+    void printSymbols() {
+        // Format: [PS,count,{name,area,address,bit,type,comment},...]\n
+        STDOUT_PRINT.print(F("[PS,"));
+        STDOUT_PRINT.print(g_symbolRegistry.count);
+        for (u16 i = 0; i < g_symbolRegistry.count; i++) {
+            const RegisteredSymbol& sym = g_symbolRegistry.symbols[i];
+            STDOUT_PRINT.print(F(",{"));
+            STDOUT_PRINT.print(sym.name);
+            STDOUT_PRINT.print(F(","));
+            STDOUT_PRINT.print(getSymbolAreaChar(sym.area));
+            STDOUT_PRINT.print(F(","));
+            STDOUT_PRINT.print(sym.address);
+            STDOUT_PRINT.print(F(","));
+            STDOUT_PRINT.print(sym.bit);
+            STDOUT_PRINT.print(F(","));
+            STDOUT_PRINT.print(getSymbolTypeName(sym.type));
+            STDOUT_PRINT.print(F(","));
+            // Comment: print empty if nullptr
+            if (sym.comment) STDOUT_PRINT.print(sym.comment);
+            STDOUT_PRINT.print(F("}"));
+        }
+        STDOUT_PRINT.println(F("]"));
+    }
+
+    // Sync registered symbols with PLC memory (call before/after PLC cycle)
+    void syncSymbolsFromMemory() {
+        for (u16 i = 0; i < g_symbolRegistry.count; i++) {
+            RegisteredSymbol& sym = g_symbolRegistry.symbols[i];
+            u32 offset = getAreaOffset(sym.area) + sym.address;
+            
+            if (sym.type == TYPE_BIT) {
+                bool* val = (bool*)sym.value_ptr;
+                u8 byte_val = 0;
+                get_u8(memory, offset, byte_val);
+                *val = (byte_val >> sym.bit) & 1;
+            } else {
+                u8 size = getSymbolTypeSize(sym.type);
+                u8* val = (u8*)sym.value_ptr;
+                for (u8 j = 0; j < size; j++) {
+                    get_u8(memory, offset + j, val[j]);
+                }
+            }
+        }
+    }
+
+    void syncSymbolsToMemory() {
+        for (u16 i = 0; i < g_symbolRegistry.count; i++) {
+            RegisteredSymbol& sym = g_symbolRegistry.symbols[i];
+            // Skip inputs (read-only from PLC perspective) and system (read-only)
+            if (sym.area == AREA_INPUT || sym.area == AREA_SYSTEM) continue;
+            
+            u32 offset = getAreaOffset(sym.area) + sym.address;
+            
+            if (sym.type == TYPE_BIT) {
+                bool* val = (bool*)sym.value_ptr;
+                u8 byte_val = 0;
+                get_u8(memory, offset, byte_val);
+                if (*val) byte_val |= (1 << sym.bit);
+                else byte_val &= ~(1 << sym.bit);
+                memory[offset] = byte_val;
+            } else {
+                u8 size = getSymbolTypeSize(sym.type);
+                u8* val = (u8*)sym.value_ptr;
+                for (u8 j = 0; j < size; j++) {
+                    memory[offset + j] = val[j];
+                }
+            }
+        }
+    }
+
+private:
+    // Get memory offset for a given area
+    u32 getAreaOffset(SymbolArea area) const {
+        switch (area) {
+            case AREA_CONTROL: return control_offset;
+            case AREA_INPUT:   return input_offset;
+            case AREA_OUTPUT:  return output_offset;
+            case AREA_SYSTEM:  return system_offset;
+            case AREA_MARKER:  return marker_offset;
+            case AREA_TIMER:   return timer_offset;
+            case AREA_COUNTER: return counter_offset;
+            default:           return 0;
+        }
+    }
+
+public:
+#endif // PLCRUNTIME_VARIABLE_REGISTRATION_ENABLED
+
     #ifdef RUNTIME_THREAD_IMPL
     void threadSetup(u32 period_us, thread_handle_t handle = nullptr) {
         thread_setup(period_us, handle);
@@ -602,6 +1024,7 @@ public:
             //  - Memory format:    'MF<u32><u32><u8><u8>' (address, size, value, checksum)
             //  - Source download:  'SD<u32><u8[]><u8>' (size, data, checksum) // Only available if PLCRUNTIME_SOURCE_ENABLED is defined
             //  - Source upload:    'SU<u32><u8>' (size, checksum) // Only available if PLCRUNTIME_SOURCE_ENABLED is defined
+            //  - Symbol list:      'SL<u8>' (checksum) // Only available if PLCRUNTIME_VARIABLE_REGISTRATION_ENABLED is defined
             // If the program is downloaded and the checksum is invalid, the runtime will restart
             u8 cmd[2] = { 0, 0 };
             u32 size = 0;
@@ -633,6 +1056,7 @@ public:
             bool memory_format = cmd[0] == 'M' && cmd[1] == 'F';
             bool source_download = cmd[0] == 'S' && cmd[1] == 'D';
             bool source_upload = cmd[0] == 'S' && cmd[1] == 'U';
+            bool symbol_list = cmd[0] == 'S' && cmd[1] == 'L';
 
             if (ping) {
                 Serial.println(F("<VovkPLC>"));
@@ -990,6 +1414,22 @@ public:
                 Serial.println(F("SOURCE DOWNLOAD - Not implemented"));
             } else if (source_upload) {
                 Serial.println(F("SOURCE UPLOAD - Not implemented"));
+            } else if (symbol_list) {
+                // Read the checksum
+                checksum = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+
+                // Verify the checksum
+                if (checksum != checksum_calc) {
+                    Serial.println(F("Invalid checksum"));
+                    return;
+                }
+
+#ifdef PLCRUNTIME_VARIABLE_REGISTRATION_ENABLED
+                printSymbols();
+#else
+                // No symbols registered - return empty list
+                Serial.println(F("[PS,0]"));
+#endif // PLCRUNTIME_VARIABLE_REGISTRATION_ENABLED
             }
     }
 #endif // PLCRUNTIME_SERIAL_ENABLED
@@ -1405,3 +1845,31 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
         default: return UNKNOWN_INSTRUCTION;
     }
 }
+// ============================================================================
+// Template Specializations for Symbol Type Mapping
+// ============================================================================
+// Must be defined outside the class after the class definition.
+
+#ifdef PLCRUNTIME_VARIABLE_REGISTRATION_ENABLED
+
+template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<bool>()  { return TYPE_BIT; }
+template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<i8>()    { return TYPE_I8; }
+template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<u8>()    { return TYPE_U8; }
+template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<i16>()   { return TYPE_I16; }
+template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<u16>()   { return TYPE_U16; }
+template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<i32>()   { return TYPE_I32; }
+template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<u32>()   { return TYPE_U32; }
+template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<f32>()   { return TYPE_F32; }
+// Handle 'int' which may differ from i32 on some platforms
+template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<int>()   { return (sizeof(int) == 2) ? TYPE_I16 : TYPE_I32; }
+template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<unsigned int>() { return (sizeof(unsigned int) == 2) ? TYPE_U16 : TYPE_U32; }
+// Handle 'long' which may differ
+template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<long>()  { return (sizeof(long) == 4) ? TYPE_I32 : TYPE_I64; }
+template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<unsigned long>() { return (sizeof(unsigned long) == 4) ? TYPE_U32 : TYPE_U64; }
+#ifdef USE_X64_OPS
+template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<i64>()   { return TYPE_I64; }
+template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<u64>()   { return TYPE_U64; }
+template<> inline SymbolType VovkPLCRuntime::getSymbolTypeFor<f64>()   { return TYPE_F64; }
+#endif // USE_X64_OPS
+
+#endif // PLCRUNTIME_VARIABLE_REGISTRATION_ENABLED
