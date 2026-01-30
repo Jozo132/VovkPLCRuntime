@@ -1235,7 +1235,7 @@ public:
         }
 
         // If the serial port is available and the first character is not 'P' or 'M', skip the character
-        while (Serial.available() && Serial.peek() != 'R' && Serial.peek() != 'P' && Serial.peek() != 'M' && Serial.peek() != 'S' && Serial.peek() != '?') Serial.read();
+        while (Serial.available() && Serial.peek() != 'R' && Serial.peek() != 'P' && Serial.peek() != 'M' && Serial.peek() != 'S' && Serial.peek() != 'T' && Serial.peek() != '?') Serial.read();
         if (Serial.available() > 1 || Serial.peek() == '?') {
             // Command syntax:
             // <command>[<size>][<data>]<checksum>
@@ -1255,6 +1255,7 @@ public:
             //  - Source download:  'SD<u32><u8[]><u8>' (size, data, checksum) // Only available if PLCRUNTIME_SOURCE_ENABLED is defined
             //  - Source upload:    'SU<u32><u8>' (size, checksum) // Only available if PLCRUNTIME_SOURCE_ENABLED is defined
             //  - Symbol list:      'SL<u8>' (checksum) // Only available if PLCRUNTIME_VARIABLE_REGISTRATION_ENABLED is defined
+            //  - Transport info:   'TI<u8>' (checksum) // Only available if PLCRUNTIME_TRANSPORT is defined
             // If the program is downloaded and the checksum is invalid, the runtime will restart
             u8 cmd[2] = { 0, 0 };
             u32 size = 0;
@@ -1287,6 +1288,7 @@ public:
             bool source_download = cmd[0] == 'S' && cmd[1] == 'D';
             bool source_upload = cmd[0] == 'S' && cmd[1] == 'U';
             bool symbol_list = cmd[0] == 'S' && cmd[1] == 'L';
+            bool transport_info = cmd[0] == 'T' && cmd[1] == 'I';
 
             if (ping) {
                 Serial.println(F("<VovkPLC>"));
@@ -1660,6 +1662,68 @@ public:
                 // No symbols registered - return empty list
                 Serial.println(F("[PS,0]"));
 #endif // PLCRUNTIME_VARIABLE_REGISTRATION_ENABLED
+            } else if (transport_info) {
+                // Read the checksum
+                checksum = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+
+                // Verify the checksum
+                if (checksum != checksum_calc) {
+                    Serial.println(F("Invalid checksum"));
+                    return;
+                }
+
+#ifdef PLCRUNTIME_TRANSPORT
+                // Output format: [TI,<count>,{transport1},{transport2},...]
+                // Each transport in braces: {type,name,isNetwork,requiresAuth,isConnected,config...}
+                // Config for Serial: baudrate
+                // Config for Network: ip,gateway,subnet,port,mac
+                Serial.print(F("[TI,"));
+                Serial.print(_transports.count());
+                
+                for (uint8_t i = 0; i < _transports.count(); i++) {
+                    PLCConnectionInfo info;
+                    if (getConnectionInfo(i, info)) {
+                        Serial.print(F(",{"));
+                        Serial.print(info.type);  // Transport type enum
+                        Serial.print(F(","));
+                        Serial.print(info.name ? info.name : "");
+                        Serial.print(F(","));
+                        Serial.print(info.isNetwork ? 1 : 0);
+                        Serial.print(F(","));
+                        Serial.print(info.requiresAuth ? 1 : 0);
+                        Serial.print(F(","));
+                        Serial.print(info.isConnected ? 1 : 0);
+                        
+                        if (info.type == TRANSPORT_SERIAL) {
+                            // Serial config: baudrate
+                            Serial.print(F(","));
+                            Serial.print(info.baudrate);
+                        } else if (info.isNetwork) {
+                            // Network config: ip, gateway, subnet, port, mac
+                            char buf[18];
+                            Serial.print(F(","));
+                            info.formatIP(buf, sizeof(buf), info.ip);
+                            Serial.print(buf);
+                            Serial.print(F(","));
+                            info.formatIP(buf, sizeof(buf), info.gateway);
+                            Serial.print(buf);
+                            Serial.print(F(","));
+                            info.formatIP(buf, sizeof(buf), info.subnet);
+                            Serial.print(buf);
+                            Serial.print(F(","));
+                            Serial.print(info.port);
+                            Serial.print(F(","));
+                            info.formatMAC(buf, sizeof(buf), info.mac);
+                            Serial.print(buf);
+                        }
+                        Serial.print(F("}"));
+                    }
+                }
+                Serial.println(F("]"));
+#else
+                // Transport system not enabled - return empty
+                Serial.println(F("[TI,0]"));
+#endif // PLCRUNTIME_TRANSPORT
             }
         }
 #endif // PLCRUNTIME_SERIAL_ENABLED
