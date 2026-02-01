@@ -1,0 +1,43 @@
+// Test user-defined functions
+
+// Simple function with no parameters
+function getConstant(): i32 {
+    return 42;
+}
+
+// Function with parameters
+function add(a: i32, b: i32): i32 {
+    return a + b;
+}
+
+// Function with different types
+function multiply(x: i16, y: i16): i16 {
+    return x * y;
+}
+
+// Void function (no return type specified means void)
+function doNothing() {
+    let temp: i32 @ auto;
+    temp = 1;
+}
+
+// Test calling functions
+let result1: i32 @ MW100;
+let result2: i32 @ MW104;
+let result3: i16 @ MW108;
+
+result1 = getConstant();       // Should be 42
+result2 = add(10, 20);         // Should be 30
+result3 = multiply(5, 6);      // Should be 30
+
+// Forward reference - call before definition
+let result4: i32 @ MW110;
+result4 = subtractForward(100, 25);  // Should be 75
+
+function subtractForward(a: i32, b: i32): i32 {
+    return a - b;
+}
+
+// Nested function calls
+let result5: i32 @ MW114;
+result5 = add(getConstant(), 8);  // Should be 42 + 8 = 50
