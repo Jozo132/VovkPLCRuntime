@@ -1,0 +1,10 @@
+// Test 6: If/Else Control Flow
+// Tests if/else conditional execution
+
+let x: i32 @ M0 = 50;
+let result: i32 @ M4 = 0;
+if (x > 25) {
+    result = 1;
+} else {
+    result = 2;
+}

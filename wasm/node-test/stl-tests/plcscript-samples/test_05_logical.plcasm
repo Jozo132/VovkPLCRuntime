@@ -1,0 +1,9 @@
+# Expected output for test_05_logical
+# Auto-generated - edit tokens as needed, bytecode is regenerated on --update
+#
+# Required PLCASM tokens (must appear in transpiled output):
+u8.and
+u8.or
+u8.not
+#
+# BYTECODE: 0301190301C00300190301C1180301C0180301C1C0100203190301C2180301C0180301C1C1100203190301C3180301C0C3100203190301C4FF

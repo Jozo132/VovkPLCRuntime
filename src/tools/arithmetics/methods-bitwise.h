@@ -276,41 +276,42 @@ namespace PLCMethods {
         return STATUS_SUCCESS;
     }
 
+    // Shift operations: shift amount is always u8 (max useful shift is 63 bits)
     RuntimeError handle_BW_LSHIFT_X8(RuntimeStack& stack) {
         u8 b = stack.pop_u8();
         u8 a = stack.pop_u8();
-        stack.push_u8(a << b);
+        stack.push_u8(a << (b & 0x07));
         return STATUS_SUCCESS;
     }
     RuntimeError handle_BW_LSHIFT_X16(RuntimeStack& stack) {
-        u16 b = stack.pop_u16();
+        u8 b = stack.pop_u8();
         u16 a = stack.pop_u16();
-        stack.push_u16(a << b);
+        stack.push_u16(a << (b & 0x0F));
         return STATUS_SUCCESS;
     }
     RuntimeError handle_BW_LSHIFT_X32(RuntimeStack& stack) {
-        u32 b = stack.pop_u32();
+        u8 b = stack.pop_u8();
         u32 a = stack.pop_u32();
-        stack.push_u32(a << b);
+        stack.push_u32(a << (b & 0x1F));
         return STATUS_SUCCESS;
     }
 
     RuntimeError handle_BW_RSHIFT_X8(RuntimeStack& stack) {
         u8 b = stack.pop_u8();
         u8 a = stack.pop_u8();
-        stack.push_u8(a >> b);
+        stack.push_u8(a >> (b & 0x07));
         return STATUS_SUCCESS;
     }
     RuntimeError handle_BW_RSHIFT_X16(RuntimeStack& stack) {
-        u16 b = stack.pop_u16();
+        u8 b = stack.pop_u8();
         u16 a = stack.pop_u16();
-        stack.push_u16(a >> b);
+        stack.push_u16(a >> (b & 0x0F));
         return STATUS_SUCCESS;
     }
     RuntimeError handle_BW_RSHIFT_X32(RuntimeStack& stack) {
-        u32 b = stack.pop_u32();
+        u8 b = stack.pop_u8();
         u32 a = stack.pop_u32();
-        stack.push_u32(a >> b);
+        stack.push_u32(a >> (b & 0x1F));
         return STATUS_SUCCESS;
     }
 
@@ -339,15 +340,15 @@ namespace PLCMethods {
         return STATUS_SUCCESS;
     }
     RuntimeError handle_BW_LSHIFT_X64(RuntimeStack& stack) {
-        u64 b = stack.pop_u64();
+        u8 b = stack.pop_u8();
         u64 a = stack.pop_u64();
-        stack.push_u64(a << b);
+        stack.push_u64(a << (b & 0x3F));
         return STATUS_SUCCESS;
     }
     RuntimeError handle_BW_RSHIFT_X64(RuntimeStack& stack) {
-        u64 b = stack.pop_u64();
+        u8 b = stack.pop_u8();
         u64 a = stack.pop_u64();
-        stack.push_u64(a >> b);
+        stack.push_u64(a >> (b & 0x3F));
         return STATUS_SUCCESS;
     }
 #endif // USE_X64_OPS

@@ -1,0 +1,7 @@
+// Test 12: Compound Expressions
+// Tests expression with parentheses for operation precedence
+
+let a: i32 @ M0 = 10;
+let b: i32 @ M4 = 20;
+let c: i32 @ M8 = 30;
+let result: i32 @ M12 = (a + b) * c;

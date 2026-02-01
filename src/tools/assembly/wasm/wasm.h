@@ -130,7 +130,7 @@ char __streamInRead() {
 }
 
 
-int streamAvailable() { // Return the size of the buffer
+WASM_EXPORT int streamAvailable() { // Return the size of the buffer
     if (__wasm_stream_in_index__ >= __wasm_stream_in_cursor__) return __wasm_stream_in_index__ - __wasm_stream_in_cursor__;
     return __WASM_STREAM_SIZE_IN__ - __wasm_stream_in_cursor__ + __wasm_stream_in_index__;
 }

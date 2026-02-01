@@ -4,19 +4,22 @@
 // Usage:
 //   npm run explain < input.asm           # Explain PLCASM code
 //   npm run explain < input.stl           # Explain STL code (auto-detected)
+//   npm run explain < input.plcscript     # Explain PLCScript code (auto-detected)
 //   npm run explain < input.json          # Explain Ladder Graph JSON (auto-detected)
 //   echo "A I0.0\n= Q0.0" | npm run explain
+//   echo "var x: u8 = 5; x + 3" | npm run explain
 //   echo '{"nodes":[...],"connections":[...]}' | npm run explain
 //   echo "58004090..." | npm run explain  # Explain raw bytecode in hex format
 //
 // The script will:
-//   1. Auto-detect the input language (Bytecode Hex, Ladder Graph JSON, STL, or PLCASM)
+//   1. Auto-detect the input language (Bytecode Hex, Ladder Graph JSON, PLCScript, STL, or PLCASM)
 //   2. If Bytecode Hex, load directly and execute
 //   3. If Ladder Graph, show the Ladder->STL transpilation
-//   4. If STL, show the STL->PLCASM transpilation
-//   5. Show the PLCASM->Bytecode compilation with symbol/label resolution
-//   6. Run the bytecode in full debug mode showing stack state at each step
-//   7. Limit execution to 100 steps to prevent infinite loops
+//   4. If PLCScript, show the PLCScript->PLCASM transpilation
+//   5. If STL, show the STL->PLCASM transpilation
+//   6. Show the PLCASM->Bytecode compilation with symbol/label resolution
+//   7. Run the bytecode in full debug mode showing stack state at each step
+//   8. Limit execution to 100 steps to prevent infinite loops
 
 import VovkPLC from '../dist/VovkPLC.js'
 import path from 'path'
@@ -38,19 +41,22 @@ explain.js - CLI tool for explaining PLC code compilation and execution
 Usage:
   npm run explain < input.asm           # Explain PLCASM code
   npm run explain < input.stl           # Explain STL code (auto-detected)
+  npm run explain < input.plcscript     # Explain PLCScript code (auto-detected)
   npm run explain < input.json          # Explain Ladder Graph JSON (auto-detected)
   echo "A I0.0" | npm run explain
+  echo "var x: u8 = 5; x + 3" | npm run explain
   echo '{"nodes":[...],"connections":[...]}' | npm run explain
   echo "58004090..." | npm run explain  # Explain raw bytecode in hex format
 
 The script will:
-  1. Auto-detect the input language (Bytecode Hex, Ladder Graph JSON, STL, or PLCASM)
+  1. Auto-detect the input language (Bytecode Hex, Ladder Graph JSON, PLCScript, STL, or PLCASM)
   2. If Bytecode Hex, load directly and execute
   3. If Ladder Graph, show the Ladder->STL transpilation
-  4. If STL, show the STL->PLCASM transpilation
-  5. Show the PLCASM->Bytecode compilation with symbol/label resolution
-  6. Run the bytecode in full debug mode showing stack state at each step
-  7. Limit execution to ${maxSteps} steps to prevent infinite loops
+  4. If PLCScript, show the PLCScript->PLCASM transpilation
+  5. If STL, show the STL->PLCASM transpilation
+  6. Show the PLCASM->Bytecode compilation with symbol/label resolution
+  7. Run the bytecode in full debug mode showing stack state at each step
+  8. Limit execution to ${maxSteps} steps to prevent infinite loops
 
 Options:
   --max-steps=N   Maximum execution steps (default: 100)
@@ -59,6 +65,7 @@ Options:
 Examples:
   echo -e "A I0.0\\n= Q0.0" | npm run explain
   echo -e "u8.const 1\\nu8.const 2\\nu8.add\\nexit" | npm run explain
+  echo "var x: u8 = 5; x + 3" | npm run explain
   echo '{"nodes":[{"id":"n1","type":"contact","symbol":"X0.0","x":0,"y":0},{"id":"n2","type":"coil","symbol":"Y0.0","x":1,"y":0}],"connections":[{"sources":["n1"],"destinations":["n2"]}]}' | npm run explain
   echo "58 00 40 60 00 80 FF" | npm run explain  # Raw bytecode hex
 `)
@@ -165,6 +172,25 @@ function detectLanguage(code) {
         /^DEC[IBDR]?\s+M/i,     // DEC, DECI, DECB, DECD, DECR with memory address
     ]
     
+    // PLCScript-specific patterns
+    const plcscriptPatterns = [
+        /^let\s+\w+\s*:/i,          // let x: type
+        /^const\s+\w+\s*:/i,        // const x: type
+        /^function\s+\w+\s*\(/i,    // function name(
+        /^for\s*\(/i,               // for (
+        /^while\s*\(/i,             // while (
+        /^if\s*\(/i,                // if (
+        /^else\s*{/i,               // else {
+        /^return\s+/i,              // return value
+        /^return;/i,                // return;
+        /:\s*(u8|u16|u32|u64|i8|i16|i32|i64|f32|f64|bool)\s*[@=;]/i, // : type @, : type = or : type;
+        /\+\+|--/,                  // ++ or -- operators
+        /\+=|-=|\*=|\/=/,           // compound assignment
+        /\?\s*[^:]+\s*:/,           // ternary operator
+        /&&|\|\|/,                  // logical operators
+        /!=/,                       // not equal (different from STL)
+    ]
+    
     // PLCASM-specific patterns
     const plcasmPatterns = [
         /^u8\./i,               // u8.const, u8.add, etc.
@@ -192,8 +218,15 @@ function detectLanguage(code) {
     
     let stlScore = 0
     let plcasmScore = 0
+    let plcscriptScore = 0
     
     for (const line of lines) {
+        for (const pattern of plcscriptPatterns) {
+            if (pattern.test(line)) {
+                plcscriptScore++
+                break
+            }
+        }
         for (const pattern of stlPatterns) {
             if (pattern.test(line)) {
                 stlScore++
@@ -208,6 +241,10 @@ function detectLanguage(code) {
         }
     }
     
+    // If we have clear PLCScript patterns, it's PLCScript
+    if (plcscriptScore > 0 && plcscriptScore >= stlScore && plcscriptScore >= plcasmScore) {
+        return 'plcscript'
+    }
     // If we have clear PLCASM patterns, it's PLCASM
     if (plcasmScore > 0 && plcasmScore >= stlScore) {
         return 'plcasm'
@@ -496,6 +533,100 @@ const run = async () => {
             stepOffset = 1
         }
         
+        // Step 2: If PLCScript, transpile to PLCASM
+        if (language === 'plcscript') {
+            console.log('┌─────────────────────────────────────────────────────────────────┐')
+            console.log('│ STEP 2: PLCScript → PLCASM Transpilation                       │')
+            console.log('└─────────────────────────────────────────────────────────────────┘')
+            console.log()
+            
+            // Use shared buffer method - write directly to circular input buffer
+            const inBufferPtr = runtime.wasm_exports.get_in_buffer_ptr()
+            const inBufferSize = runtime.wasm_exports.get_in_buffer_size()
+            const memory = new Uint8Array(runtime.wasm.exports.memory.buffer)
+            
+            // Clear buffer and write source directly (linear write from start)
+            runtime.wasm_exports.streamClear() // sets cursor=0, index=0
+            const sourceLen = Math.min(input.length, inBufferSize - 1)
+            for (let i = 0; i < sourceLen; i++) {
+                memory[inBufferPtr + i] = input.charCodeAt(i)
+            }
+            memory[inBufferPtr + sourceLen] = 0 // null terminate
+            // Set index to sourceLen so streamAvailable() returns the right value
+            runtime.wasm_exports.set_in_index(sourceLen)
+            // Cursor stays at 0 (set by streamClear)
+            
+            // Load from stream buffer and compile
+            runtime.wasm_exports.plcscript_load_from_stream()
+            
+            readCapturedOutput() // clear any previous output
+            
+            // Compile PLCScript
+            const success = runtime.wasm_exports.plcscript_compile()
+            
+            const compileOutput = readCapturedOutput()
+            if (compileOutput && compileOutput.trim()) {
+                for (const line of compileOutput.split('\n')) {
+                    if (line.trim()) console.log(`  ${line}`)
+                }
+                console.log()
+            }
+            
+            if (!success || runtime.wasm_exports.plcscript_hasError()) {
+                // Get error details
+                const getString = (ptr) => {
+                    if (!ptr) return ''
+                    const mem = new Uint8Array(runtime.wasm.exports.memory.buffer)
+                    let str = ''
+                    let i = ptr
+                    while (mem[i] !== 0 && i < mem.length) {
+                        str += String.fromCharCode(mem[i])
+                        i++
+                    }
+                    return str
+                }
+                
+                const errorMsg = getString(runtime.wasm_exports.plcscript_getError())
+                const errorLine = runtime.wasm_exports.plcscript_getErrorLine()
+                const errorCol = runtime.wasm_exports.plcscript_getErrorColumn()
+                
+                console.error('  ✗ PLCScript compilation failed')
+                console.error()
+                console.error(`  Location: line ${errorLine}, col ${errorCol}`)
+                console.error(`  Error: ${errorMsg}`)
+                process.exit(1)
+            }
+            
+            // Get output PLCASM via shared buffer
+            runtime.wasm_exports.flush_out_buffer() // Clear output buffer first
+            runtime.wasm_exports.plcscript_output_to_stream()
+            
+            const outBufferPtr = runtime.wasm_exports.get_out_buffer_ptr()
+            const outIndex = runtime.wasm_exports.get_out_index()
+            const outMem = new Uint8Array(runtime.wasm.exports.memory.buffer)
+            
+            plcasm = ''
+            for (let i = 0; i < outIndex; i++) {
+                plcasm += String.fromCharCode(outMem[outBufferPtr + i])
+            }
+            
+            // Display generated PLCASM
+            if (plcasm.trim()) {
+                const plcasmLines = plcasm.split('\n')
+                plcasmLines.forEach((line, i) => {
+                    if (line.trim()) {
+                        console.log(`  ${String(i + 1).padStart(3)}│ ${line}`)
+                    }
+                })
+            } else {
+                console.log('  (No PLCASM output generated)')
+            }
+            console.log()
+            console.log('  ✓ PLCScript transpiled to PLCASM successfully')
+            console.log()
+            stepOffset = 1
+        }
+        
         // Step 2/3: If STL (or from ladder graph), transpile to PLCASM
         if (language === 'stl' || language === 'ladder-graph') {
             const stepNum = 2 + stepOffset
@@ -586,6 +717,7 @@ const run = async () => {
         let execStepNum = 3
         if (language === 'bytecode-hex') execStepNum = 3
         else if (language === 'project') execStepNum = 3
+        else if (language === 'plcscript') execStepNum = 4
         else if (language === 'ladder-graph') execStepNum = 5
         else if (language === 'stl') execStepNum = 4
         

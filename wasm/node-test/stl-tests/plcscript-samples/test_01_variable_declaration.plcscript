@@ -1,0 +1,6 @@
+// Test 1: Variable Declaration and Assignment
+// Tests basic variable declarations with different types and memory addresses
+
+let x: u8 @ M0 = 10;
+let y: i32 @ M10 = -500;
+let z: f32 @ M20 = 3.14;

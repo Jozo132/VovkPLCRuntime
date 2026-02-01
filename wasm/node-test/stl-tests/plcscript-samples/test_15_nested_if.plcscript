@@ -1,0 +1,8 @@
+// Nested if test
+let x: i32 @ M0 = 10;
+let y: i32 @ M10 = 5;
+if (x > 5) {
+    if (y > 3) {
+        x = 1;
+    }
+}

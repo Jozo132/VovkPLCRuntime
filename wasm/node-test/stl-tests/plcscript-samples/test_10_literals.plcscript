@@ -1,0 +1,6 @@
+// Test 10: Integer Literals and Masking
+// Tests integer literals with bitwise AND masking
+
+let hex_val: u8 @ M0 = 255;
+let bin_val: u8 @ M1 = 240;
+let combined: u8 @ M2 = hex_val & bin_val;

@@ -1,0 +1,7 @@
+# Expected output for test_11_type_conversion
+# Auto-generated - edit tokens as needed, bytecode is regenerated on --update
+#
+# Required PLCASM tokens (must appear in transpiled output):
+cvt
+#
+# BYTECODE: 09000003E8190901C0180901C0100903190301C4180901C010090B190B01C8FF

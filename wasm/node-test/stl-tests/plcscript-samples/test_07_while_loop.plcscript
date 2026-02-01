@@ -1,0 +1,7 @@
+// Test 7: While Loop
+// Tests while loop with counter increment
+
+let counter: i32 @ M0 = 0;
+while (counter < 10) {
+    counter = counter + 1;
+}

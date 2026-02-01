@@ -1,0 +1,12 @@
+# Expected output for test_04_bitwise
+# Auto-generated - edit tokens as needed, bytecode is regenerated on --update
+#
+# Required PLCASM tokens (must appear in transpiled output):
+bw.and.x8
+bw.or.x8
+bw.xor.x8
+bw.not.x8
+bw.shl.x8
+bw.shr.x8
+#
+# BYTECODE: 03F0190301C0030F190301C1180301C0180301C1A0190301C2180301C0180301C1A4190301C3180301C0180301C1A8190301C4180301C0AC190301C5180301C00302B0190301C6180301C00304B4190301C7FF

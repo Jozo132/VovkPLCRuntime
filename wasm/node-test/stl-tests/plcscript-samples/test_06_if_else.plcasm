@@ -1,0 +1,9 @@
+# Expected output for test_06_if_else
+# Auto-generated - edit tokens as needed, bytecode is regenerated on --update
+#
+# Required PLCASM tokens (must appear in transpiled output):
+cmp_gt
+jmp_if
+jmp
+#
+# BYTECODE: 0900000032190901C00900000000190901C4180901C00900000019D209E2003009000000011409190901C41609E0003D09000000021409190901C41609FF

@@ -1,0 +1,6 @@
+// Test 11: Type Conversions
+// Tests implicit type conversions using cvt instruction
+
+let a: i32 @ M0 = 1000;
+let b: u8 @ M4 = a;
+let c: f32 @ M8 = a;

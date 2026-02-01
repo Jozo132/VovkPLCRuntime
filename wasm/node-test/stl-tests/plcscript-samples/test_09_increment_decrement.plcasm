@@ -1,0 +1,8 @@
+# Expected output for test_09_increment_decrement
+# Auto-generated - edit tokens as needed, bytecode is regenerated on --update
+#
+# Required PLCASM tokens (must appear in transpiled output):
+i32.add
+i32.sub
+#
+# BYTECODE: 090000000A190901C0180901C0140909000000012009190901C01609180901C0140909000000012109190901C01609FF

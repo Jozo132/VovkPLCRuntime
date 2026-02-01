@@ -30,6 +30,7 @@
 #include "stl-linter.h"
 #include "ladder-compiler.h"
 #include "ladder-linter.h"
+#include "plcscript-compiler.h"
 #include "shared-symbols.h"
 
 // ============================================================================
@@ -275,6 +276,7 @@ public:
     PLCASMLinter plcasm_compiler;
     STLLinter stl_compiler;
     LadderLinter ladder_compiler;
+    PLCScriptCompiler plcscript_compiler;
 
     // Project-level edge memory counter for differentiation bits (shared across all blocks)
     int project_edge_mem_counter;
@@ -1438,6 +1440,7 @@ public:
                         else if (strEqI(langStr, "FBD")) block.language = LANG_FBD;
                         else if (strEqI(langStr, "ST")) block.language = LANG_ST;
                         else if (strEqI(langStr, "IL")) block.language = LANG_IL;
+                        else if (strEqI(langStr, "PLCSCRIPT")) block.language = LANG_PLCSCRIPT;
                         else {
                             char err[128];
                             int ei = 0;
@@ -1978,6 +1981,11 @@ public:
                 if (!convertLadderToPLCASM(block)) return false;
                 break;
 
+            case LANG_PLCSCRIPT:
+                // PLCScript block - convert TypeScript-like code to PLCASM
+                if (!convertPLCScriptToPLCASM(block)) return false;
+                break;
+
             default:
                 setError("Unsupported language for compilation");
                 appendToCombinedPLCASM("// ERROR: Unsupported language for compilation\n");
@@ -2047,6 +2055,29 @@ public:
 
         // Append the generated PLCASM to combined buffer
         if (!appendToCombinedPLCASM(stl_compiler.output)) return false;
+        if (!appendCharToCombinedPLCASM('\n')) return false;
+
+        return true;
+    }
+
+    // Convert PLCScript block to PLCASM and append to combined buffer
+    bool convertPLCScriptToPLCASM(ProgramBlock& block) {
+        plcscript_compiler.reset();
+
+        int source_len = string_len(block_source);
+        plcscript_compiler.setSource(block_source, source_len);
+
+        bool success = plcscript_compiler.compile();
+
+        if (!success || plcscript_compiler.hasError) {
+            setErrorFull("PLCScript Compiler", plcscript_compiler.errorMessage,
+                plcscript_compiler.errorLine, plcscript_compiler.errorColumn,
+                block_source, source_len, nullptr, 0);
+            return false;
+        }
+
+        // Append the generated PLCASM to combined buffer
+        if (!appendToCombinedPLCASM(plcscript_compiler.output)) return false;
         if (!appendCharToCombinedPLCASM('\n')) return false;
 
         return true;

@@ -1,0 +1,10 @@
+# Expected output for test_02_arithmetic
+# Auto-generated - edit tokens as needed, bytecode is regenerated on --update
+#
+# Required PLCASM tokens (must appear in transpiled output):
+i32.add
+i32.sub
+i32.mul
+i32.div
+#
+# BYTECODE: 0900000064190901C00900000019190901C4180901C0180901C42009190901C8180901C0180901C42109190901CC180901C0180901C42209190901D0180901C0180901C42309190901D4FF

@@ -1,0 +1,8 @@
+// Test 5: Logical Operations
+// Tests &&, ||, ! logical operations
+
+let a: u8 @ M0 = 1;
+let b: u8 @ M1 = 0;
+let and_result: u8 @ M2 = a && b;
+let or_result: u8 @ M3 = a || b;
+let not_result: u8 @ M4 = !a;

@@ -1,0 +1,10 @@
+# Expected output for test_07_while_loop
+# Auto-generated - edit tokens as needed, bytecode is regenerated on --update
+#
+# Required PLCASM tokens (must appear in transpiled output):
+cmp_lt
+jmp_if
+jmp
+i32.add
+#
+# BYTECODE: 0900000000190901C0180901C0090000000AD309E2002D180901C0090000000120091409190901C01609E00009FF

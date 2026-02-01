@@ -1,0 +1,9 @@
+# Expected output for test_01_variable_declaration
+# Auto-generated - edit tokens as needed, bytecode is regenerated on --update
+#
+# Required PLCASM tokens (must appear in transpiled output):
+u8.move_to
+i32.move_to
+f32.move_to
+#
+# BYTECODE: 030A190301C009FFFFFE0C190901CA0B4048F5C2190B01D4FF

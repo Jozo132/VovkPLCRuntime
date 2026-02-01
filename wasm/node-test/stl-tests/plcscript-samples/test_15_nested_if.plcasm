@@ -1,0 +1,9 @@
+# Expected output for test_15_nested_if
+# Auto-generated - edit tokens as needed, bytecode is regenerated on --update
+#
+# Required PLCASM tokens (must appear in transpiled output):
+cmp_gt
+jmp_if
+jmp
+#
+# BYTECODE: 090000000A190901C00900000005190901CA180901C00900000005D209E2003B180901CA0900000003D209E2003B09000000011409190901C01609FF

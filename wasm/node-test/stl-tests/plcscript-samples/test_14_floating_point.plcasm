@@ -1,0 +1,10 @@
+# Expected output for test_14_floating_point
+# Auto-generated - edit tokens as needed, bytecode is regenerated on --update
+#
+# Required PLCASM tokens (must appear in transpiled output):
+f32.add
+f32.sub
+f32.mul
+f32.div
+#
+# BYTECODE: 0B4048F5C2190B01C00B40000000190B01CA180B01C0180B01CA200B190B01D4180B01C0180B01CA210B190B01DE180B01C0180B01CA220B190B01E8180B01C0180B01CA230B190B01F2FF

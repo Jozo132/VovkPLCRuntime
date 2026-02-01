@@ -119,6 +119,7 @@ enum PLCSourceLanguage {
     LANG_SFC = 0x05,        // Sequential Function Chart
     LANG_ST = 0x06,         // Structured Text
     LANG_IL = 0x07,         // Instruction List (IEC 61131-3)
+    LANG_PLCSCRIPT = 0x08,  // PLCScript (TypeScript/ES7 subset with PLC extensions)
     LANG_CUSTOM = 0xFF,     // Custom/user-defined language
 };
 

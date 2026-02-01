@@ -1,0 +1,9 @@
+# Expected output for test_08_for_loop
+# Auto-generated - edit tokens as needed, bytecode is regenerated on --update
+#
+# Required PLCASM tokens (must appear in transpiled output):
+cmp_lt
+jmp_if
+jmp
+#
+# BYTECODE: 0900000000190901C00900000000190901C4180901C40900000005D309E2004EE00039180901C4090000000120091409190901C41609E00012180901C0180901C420091409190901C01609E00023FF

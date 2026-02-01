@@ -1,0 +1,6 @@
+// Test 9: Increment/Decrement
+// Tests ++ and -- operators
+
+let x: i32 @ M0 = 10;
+x++;
+x--;

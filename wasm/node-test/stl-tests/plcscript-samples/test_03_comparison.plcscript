@@ -1,0 +1,11 @@
+// Test 3: Comparison Operations
+// Tests >, <, ==, !=, >=, <= comparisons
+
+let a: i32 @ M0 = 50;
+let b: i32 @ M4 = 100;
+let gt: u8 @ M8 = a > b;
+let lt: u8 @ M9 = a < b;
+let eq: u8 @ M10 = a == b;
+let ne: u8 @ M11 = a != b;
+let ge: u8 @ M12 = a >= b;
+let le: u8 @ M13 = a <= b;

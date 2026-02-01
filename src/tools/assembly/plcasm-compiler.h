@@ -479,6 +479,35 @@ bool isInteger(StringView string, int& output) {
         is_negative = true;
         i++;
     }
+    // Check for hex prefix 0x or 0X
+    if (string.length > i + 2 && string[i] == '0' && (string[i + 1] == 'x' || string[i + 1] == 'X')) {
+        i += 2;
+        for (; i < string.length && string[i] != '\0'; i++) {
+            char c = string[i];
+            int digit = 0;
+            if (c >= '0' && c <= '9') digit = c - '0';
+            else if (c >= 'a' && c <= 'f') digit = c - 'a' + 10;
+            else if (c >= 'A' && c <= 'F') digit = c - 'A' + 10;
+            else return false;
+            number = number * 16 + digit;
+        }
+        if (is_negative) number = -number;
+        output = number;
+        return true;
+    }
+    // Check for binary prefix 0b or 0B
+    if (string.length > i + 2 && string[i] == '0' && (string[i + 1] == 'b' || string[i + 1] == 'B')) {
+        i += 2;
+        for (; i < string.length && string[i] != '\0'; i++) {
+            char c = string[i];
+            if (c != '0' && c != '1') return false;
+            number = number * 2 + (c - '0');
+        }
+        if (is_negative) number = -number;
+        output = number;
+        return true;
+    }
+    // Decimal number
     for (; i < string.length && string[i] != '\0'; i++) {
         if (!isDigit(string[i])) {
             return false;
@@ -2229,6 +2258,7 @@ public:
                         else if (token_p1 == "sfc") lang_id = LANG_SFC;
                         else if (token_p1 == "st") lang_id = LANG_ST;
                         else if (token_p1 == "il") lang_id = LANG_IL;
+                        else if (token_p1 == "plcscript") lang_id = LANG_PLCSCRIPT;
                         else if (token_p1 == "custom") lang_id = LANG_CUSTOM;
                         else if (!e_int) lang_id = (u8) value_int;
                         else { if (buildError(token_p1, "expected language name or id")) return true; }
@@ -2260,6 +2290,33 @@ public:
                     if (token == "br.read") { line.size = InstructionCompiler::push_br_read(bytecode); _line_push; }
                     if (token == "br.drop") { line.size = InstructionCompiler::push_br_drop(bytecode); _line_push; }
                     if (token == "br.clr") { line.size = InstructionCompiler::push_br_clr(bytecode); _line_push; }
+                }
+
+                { // Bitwise operations (bw.and.x8, bw.or.x16, bw.xor.x32, bw.not.x64, bw.shl.x8, bw.shr.x16, etc.)
+                    if (token == "bw.and.x8") { line.size = InstructionCompiler::push(bytecode, BW_AND_X8); _line_push; }
+                    if (token == "bw.and.x16") { line.size = InstructionCompiler::push(bytecode, BW_AND_X16); _line_push; }
+                    if (token == "bw.and.x32") { line.size = InstructionCompiler::push(bytecode, BW_AND_X32); _line_push; }
+                    if (token == "bw.and.x64") { line.size = InstructionCompiler::push(bytecode, BW_AND_X64); _line_push; }
+                    if (token == "bw.or.x8") { line.size = InstructionCompiler::push(bytecode, BW_OR_X8); _line_push; }
+                    if (token == "bw.or.x16") { line.size = InstructionCompiler::push(bytecode, BW_OR_X16); _line_push; }
+                    if (token == "bw.or.x32") { line.size = InstructionCompiler::push(bytecode, BW_OR_X32); _line_push; }
+                    if (token == "bw.or.x64") { line.size = InstructionCompiler::push(bytecode, BW_OR_X64); _line_push; }
+                    if (token == "bw.xor.x8") { line.size = InstructionCompiler::push(bytecode, BW_XOR_X8); _line_push; }
+                    if (token == "bw.xor.x16") { line.size = InstructionCompiler::push(bytecode, BW_XOR_X16); _line_push; }
+                    if (token == "bw.xor.x32") { line.size = InstructionCompiler::push(bytecode, BW_XOR_X32); _line_push; }
+                    if (token == "bw.xor.x64") { line.size = InstructionCompiler::push(bytecode, BW_XOR_X64); _line_push; }
+                    if (token == "bw.not.x8") { line.size = InstructionCompiler::push(bytecode, BW_NOT_X8); _line_push; }
+                    if (token == "bw.not.x16") { line.size = InstructionCompiler::push(bytecode, BW_NOT_X16); _line_push; }
+                    if (token == "bw.not.x32") { line.size = InstructionCompiler::push(bytecode, BW_NOT_X32); _line_push; }
+                    if (token == "bw.not.x64") { line.size = InstructionCompiler::push(bytecode, BW_NOT_X64); _line_push; }
+                    if (token == "bw.shl.x8") { line.size = InstructionCompiler::push(bytecode, BW_LSHIFT_X8); _line_push; }
+                    if (token == "bw.shl.x16") { line.size = InstructionCompiler::push(bytecode, BW_LSHIFT_X16); _line_push; }
+                    if (token == "bw.shl.x32") { line.size = InstructionCompiler::push(bytecode, BW_LSHIFT_X32); _line_push; }
+                    if (token == "bw.shl.x64") { line.size = InstructionCompiler::push(bytecode, BW_LSHIFT_X64); _line_push; }
+                    if (token == "bw.shr.x8") { line.size = InstructionCompiler::push(bytecode, BW_RSHIFT_X8); _line_push; }
+                    if (token == "bw.shr.x16") { line.size = InstructionCompiler::push(bytecode, BW_RSHIFT_X16); _line_push; }
+                    if (token == "bw.shr.x32") { line.size = InstructionCompiler::push(bytecode, BW_RSHIFT_X32); _line_push; }
+                    if (token == "bw.shr.x64") { line.size = InstructionCompiler::push(bytecode, BW_RSHIFT_X64); _line_push; }
                 }
 
                 { // Handle Bit operations (PLC specific)
@@ -2536,6 +2593,28 @@ public:
                         if (hasNext && token.endsWith(".copy")) { line.size = InstructionCompiler::push_copy(bytecode, type); _line_push; }
                         // if (hasNext && token.endsWith(".swap")) { line.size = InstructionCompiler::push_swap(bytecode, type); _line_push; }
                         if (hasNext && token.endsWith(".drop")) { line.size = InstructionCompiler::push_drop(bytecode, type); _line_push; }
+                        // Pick value from stack at byte depth
+                        if (hasNext && token.endsWith(".pick")) {
+                            int depth_value = 0;
+                            bool e_int = intFromToken(token_p1, depth_value);
+                            if (e_int) {
+                                bool rewind = false;
+                                if (buildErrorExpectedIntSameLine(token, token_p1, rewind)) return true;
+                                if (rewind) continue;
+                            }
+                            i++; line.size = InstructionCompiler::push_pick(bytecode, type, (MY_PTR_t)depth_value); _line_push;
+                        }
+                        // Poke (write) top value to stack at byte depth
+                        if (hasNext && token.endsWith(".poke")) {
+                            int depth_value = 0;
+                            bool e_int = intFromToken(token_p1, depth_value);
+                            if (e_int) {
+                                bool rewind = false;
+                                if (buildErrorExpectedIntSameLine(token, token_p1, rewind)) return true;
+                                if (rewind) continue;
+                            }
+                            i++; line.size = InstructionCompiler::push_poke(bytecode, type, (MY_PTR_t)depth_value); _line_push;
+                        }
                         if (token.endsWith(".cmp_lt")) { line.size = InstructionCompiler::push(bytecode, CMP_LT, type); _line_push; }
                         if (token.endsWith(".cmp_gt")) { line.size = InstructionCompiler::push(bytecode, CMP_GT, type); _line_push; }
                         if (token.endsWith(".cmp_eq")) { line.size = InstructionCompiler::push(bytecode, CMP_EQ, type); _line_push; }

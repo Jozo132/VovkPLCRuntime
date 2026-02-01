@@ -1,0 +1,11 @@
+// Test 4: Bitwise Operations
+// Tests &, |, ^, ~, <<, >> bitwise operations
+
+let a: u8 @ M0 = 240;
+let b: u8 @ M1 = 15;
+let and_result: u8 @ M2 = a & b;
+let or_result: u8 @ M3 = a | b;
+let xor_result: u8 @ M4 = a ^ b;
+let not_result: u8 @ M5 = ~a;
+let shl_result: u8 @ M6 = a << 2;
+let shr_result: u8 @ M7 = a >> 4;

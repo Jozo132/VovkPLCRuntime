@@ -1,0 +1,9 @@
+// Test 2: Arithmetic Operations
+// Tests +, -, *, / operations on i32 values
+
+let a: i32 @ M0 = 100;
+let b: i32 @ M4 = 25;
+let sum: i32 @ M8 = a + b;
+let diff: i32 @ M12 = a - b;
+let prod: i32 @ M16 = a * b;
+let quot: i32 @ M20 = a / b;

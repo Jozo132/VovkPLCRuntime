@@ -1,0 +1,32 @@
+VOVKPLCPROJECT PLCScriptBasicTest
+VERSION 1.0
+
+MEMORY
+    OFFSET 0
+    AVAILABLE 1024
+    K 64
+    X 64
+    Y 64
+    S 64
+    M 256
+    T 16
+    C 8
+END_MEMORY
+
+FLASH
+    SIZE 32768
+END_FLASH
+
+SYMBOLS
+END_SYMBOLS
+
+FILE main
+    BLOCK LANG=PLCSCRIPT Main - Basic PLCScript test
+// Simple PLCScript test - variable declarations with PLC addresses
+let counter: i16 @ MW10 = 100;
+let output: bool @ Y0.0;
+
+// Simple assignment
+output = true;
+    END_BLOCK
+END_FILE

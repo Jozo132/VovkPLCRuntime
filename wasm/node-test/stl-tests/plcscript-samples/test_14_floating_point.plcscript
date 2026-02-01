@@ -1,0 +1,7 @@
+// Floating point arithmetic test
+let x: f32 @ M0 = 3.14;
+let y: f32 @ M10 = 2.0;
+let sum: f32 @ M20 = x + y;
+let diff: f32 @ M30 = x - y;
+let prod: f32 @ M40 = x * y;
+let quot: f32 @ M50 = x / y;

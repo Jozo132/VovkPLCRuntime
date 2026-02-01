@@ -1,0 +1,8 @@
+// Multiple data types test
+let a: u8 @ M0 = 10;
+let b: i8 @ M1 = -5;
+let c: u16 @ M10 = 1000;
+let d: i16 @ M20 = -500;
+let e: u32 @ M30 = 100000;
+let f: i32 @ M40 = -50000;
+let g: f32 @ M50 = 3.14;

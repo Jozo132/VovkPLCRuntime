@@ -1,0 +1,7 @@
+// Test 8: For Loop
+// Tests for loop with sum accumulator
+
+let sum: i32 @ M0 = 0;
+for (let i: i32 @ M4 = 0; i < 5; i = i + 1) {
+    sum = sum + i;
+}

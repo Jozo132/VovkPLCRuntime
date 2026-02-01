@@ -1,0 +1,8 @@
+# Expected output for test_12_compound_expressions
+# Auto-generated - edit tokens as needed, bytecode is regenerated on --update
+#
+# Required PLCASM tokens (must appear in transpiled output):
+i32.add
+i32.mul
+#
+# BYTECODE: 090000000A190901C00900000014190901C4090000001E190901C8180901C0180901C42009180901C82209190901CCFF

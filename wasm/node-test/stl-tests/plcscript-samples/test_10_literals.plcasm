@@ -1,0 +1,8 @@
+# Expected output for test_10_literals
+# Auto-generated - edit tokens as needed, bytecode is regenerated on --update
+#
+# Required PLCASM tokens (must appear in transpiled output):
+u8.move_to
+bw.and.x8
+#
+# BYTECODE: 03FF190301C003F0190301C1180301C0180301C1A0190301C2FF

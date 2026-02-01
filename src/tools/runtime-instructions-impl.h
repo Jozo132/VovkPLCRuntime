@@ -57,6 +57,7 @@ const FSH* LANG_NAME(u8 lang_id) {
         case LANG_SFC: return F("SFC");
         case LANG_ST: return F("ST");
         case LANG_IL: return F("IL");
+        case LANG_PLCSCRIPT: return F("PLCSCRIPT");
         case LANG_CUSTOM: return F("CUSTOM");
         default: return F("UNDEFINED");
     }
@@ -73,6 +74,7 @@ const char* LANG_NAME_LOWER(u8 lang_id) {
         case LANG_SFC: return "sfc";
         case LANG_ST: return "st";
         case LANG_IL: return "il";
+        case LANG_PLCSCRIPT: return "plcscript";
         case LANG_CUSTOM: return "custom";
         default: return "undefined";
     }
