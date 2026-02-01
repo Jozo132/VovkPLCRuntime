@@ -1947,6 +1947,8 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
         case SWAP: return PLCMethods::SWAP(this->stack, program, prog_size, index);
         case DROP: return PLCMethods::DROP(this->stack, program, prog_size, index);
         case CLEAR: return PLCMethods::CLEAR(this->stack);
+        case PICK: return PLCMethods::PICK(this->stack, program, prog_size, index);
+        case POKE: return PLCMethods::POKE(this->stack, program, prog_size, index);
         case JMP: return PLCMethods::handle_JMP(this->stack, program, prog_size, index);
         case JMP_IF: return PLCMethods::handle_JMP_IF(this->stack, program, prog_size, index);
         case JMP_IF_NOT: return PLCMethods::handle_JMP_IF_NOT(this->stack, program, prog_size, index);

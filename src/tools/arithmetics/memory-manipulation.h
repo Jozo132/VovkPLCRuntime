@@ -790,6 +790,183 @@ namespace PLCMethods {
     }
 
 
+    // Pick (copy) value from stack at byte depth and push to top
+    // Format: [ PICK, type, depth (MY_PTR_t) ]
+    // Depth is in bytes from top of stack (0 = top)
+    RuntimeError PICK(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
+        u32 size = 1 + MY_PTR_SIZE_BYTES;
+        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        u8 data_type = 0;
+        MY_PTR_t depth = 0;
+        extract_status = ProgramExtract.type_u8(program, prog_size, index, &data_type);
+        if (extract_status != STATUS_SUCCESS) return extract_status;
+        extract_status = ProgramExtract.type_pointer(program, prog_size, index, &depth);
+        if (extract_status != STATUS_SUCCESS) return extract_status;
+        
+        // Check if depth is within stack bounds
+        if (depth >= stack.size()) return STACK_UNDERFLOW;
+        
+        // Get size of the type to pick
+        u8 type_size = 0;
+        switch (data_type) {
+            case type_pointer: type_size = MY_PTR_SIZE_BYTES; break;
+            case type_bool:
+            case type_u8:
+            case type_i8: type_size = 1; break;
+            case type_u16:
+            case type_i16: type_size = 2; break;
+            case type_u32:
+            case type_i32:
+            case type_f32: type_size = 4; break;
+#ifdef USE_X64_OPS
+            case type_u64:
+            case type_i64:
+            case type_f64: type_size = 8; break;
+#endif
+            default: return INVALID_DATA_TYPE;
+        }
+        
+        // Check if the full value is within stack bounds
+        if (depth + type_size > stack.size()) return STACK_UNDERFLOW;
+        
+        // Read value from stack at depth (byte-by-byte, big-endian)
+        // depth is from top, so we read from stack.size() - depth - type_size
+        u32 base_index = stack.size() - depth - type_size;
+        
+        switch (data_type) {
+            case type_pointer: {
+                MY_PTR_t value = 0;
+                for (u8 i = 0; i < MY_PTR_SIZE_BYTES; i++) {
+                    value = (value << 8) | stack.peek(stack.size() - base_index - MY_PTR_SIZE_BYTES + i);
+                }
+                return stack.push_pointer(value);
+            }
+            case type_bool: return stack.push_bool(stack.peek(depth));
+            case type_u8: return stack.push_u8(stack.peek(depth));
+            case type_i8: return stack.push_i8((i8)stack.peek(depth));
+            case type_u16: {
+                u16 value = ((u16)stack.peek(depth + 1) << 8) | stack.peek(depth);
+                return stack.push_u16(value);
+            }
+            case type_i16: {
+                i16 value = ((i16)stack.peek(depth + 1) << 8) | stack.peek(depth);
+                return stack.push_i16(value);
+            }
+            case type_u32:
+            case type_i32:
+            case type_f32: {
+                u32 value = 0;
+                for (u8 i = 0; i < 4; i++) {
+                    value = (value << 8) | stack.peek(depth + 3 - i);
+                }
+                return stack.push_u32(value);
+            }
+#ifdef USE_X64_OPS
+            case type_u64:
+            case type_i64:
+            case type_f64: {
+                u64 value = 0;
+                for (u8 i = 0; i < 8; i++) {
+                    value = (value << 8) | stack.peek(depth + 7 - i);
+                }
+                return stack.push_u64(value);
+            }
+#endif
+            default: return INVALID_DATA_TYPE;
+        }
+    }
+
+
+    // Poke (write) top of stack to stack at byte depth (does not pop the source value)
+    // Format: [ POKE, type, depth (MY_PTR_t) ]
+    // Depth is in bytes from top of stack (after accounting for source value)
+    RuntimeError POKE(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
+        u32 size = 1 + MY_PTR_SIZE_BYTES;
+        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        u8 data_type = 0;
+        MY_PTR_t depth = 0;
+        extract_status = ProgramExtract.type_u8(program, prog_size, index, &data_type);
+        if (extract_status != STATUS_SUCCESS) return extract_status;
+        extract_status = ProgramExtract.type_pointer(program, prog_size, index, &depth);
+        if (extract_status != STATUS_SUCCESS) return extract_status;
+        
+        // Get size of the type to poke
+        u8 type_size = 0;
+        switch (data_type) {
+            case type_pointer: type_size = MY_PTR_SIZE_BYTES; break;
+            case type_bool:
+            case type_u8:
+            case type_i8: type_size = 1; break;
+            case type_u16:
+            case type_i16: type_size = 2; break;
+            case type_u32:
+            case type_i32:
+            case type_f32: type_size = 4; break;
+#ifdef USE_X64_OPS
+            case type_u64:
+            case type_i64:
+            case type_f64: type_size = 8; break;
+#endif
+            default: return INVALID_DATA_TYPE;
+        }
+        
+        // Check stack has enough data (source value + depth + target space)
+        // Depth is measured from below the source value
+        if (stack.size() < type_size) return STACK_UNDERFLOW;
+        if (depth + type_size > stack.size() - type_size) return STACK_UNDERFLOW;
+        
+        // Calculate target index (from bottom of stack)
+        // depth is from the top (excluding source value), so target is at:
+        // stack.size() - type_size (source) - depth - type_size (target)
+        u32 target_index = stack.size() - type_size - depth - type_size;
+        
+        // Read source value and write to target position byte-by-byte
+        switch (data_type) {
+            case type_bool:
+            case type_u8:
+            case type_i8: {
+                u8 value = stack.peek(0);  // Top of stack
+                stack.stack.set(target_index, value);
+                return STATUS_SUCCESS;
+            }
+            case type_u16:
+            case type_i16: {
+                // Read source (top 2 bytes)
+                u8 hi = stack.peek(1);
+                u8 lo = stack.peek(0);
+                stack.stack.set(target_index, hi);
+                stack.stack.set(target_index + 1, lo);
+                return STATUS_SUCCESS;
+            }
+            case type_u32:
+            case type_i32:
+            case type_f32: {
+                for (u8 i = 0; i < 4; i++) {
+                    stack.stack.set(target_index + i, stack.peek(3 - i));
+                }
+                return STATUS_SUCCESS;
+            }
+#ifdef USE_X64_OPS
+            case type_u64:
+            case type_i64:
+            case type_f64: {
+                for (u8 i = 0; i < 8; i++) {
+                    stack.stack.set(target_index + i, stack.peek(7 - i));
+                }
+                return STATUS_SUCCESS;
+            }
+#endif
+            case type_pointer: {
+                for (u8 i = 0; i < MY_PTR_SIZE_BYTES; i++) {
+                    stack.stack.set(target_index + i, stack.peek(MY_PTR_SIZE_BYTES - 1 - i));
+                }
+                return STATUS_SUCCESS;
+            }
+            default: return INVALID_DATA_TYPE;
+        }
+    }
+
+
     template <typename A, typename B> RuntimeError _SWAP_CUSTOM(RuntimeStack& stack) {
         if (sizeof(A) + sizeof(B) > stack.size()) return STACK_UNDERFLOW;
         B b = stack.pop_custom<B>();

@@ -437,6 +437,22 @@ public:
         location[1] = type;
         return 2;
     }
+    // Pick (copy) value from stack at byte depth to top
+    // Format: [ PICK, type, depth (MY_PTR_t) ]
+    static u8 push_pick(u8* location, PLCRuntimeInstructionSet type, MY_PTR_t depth) {
+        location[0] = PICK;
+        location[1] = type;
+        for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[i + 2] = (depth >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
+        return 2 + sizeof(MY_PTR_t);
+    }
+    // Poke (write) top value to stack at byte depth
+    // Format: [ POKE, type, depth (MY_PTR_t) ]
+    static u8 push_poke(u8* location, PLCRuntimeInstructionSet type, MY_PTR_t depth) {
+        location[0] = POKE;
+        location[1] = type;
+        for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[i + 2] = (depth >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
+        return 2 + sizeof(MY_PTR_t);
+    }
 
     // Push timer instruction with pointer (timer address) and constant u32 (preset time)
     // Format: [opcode][timer_addr (MY_PTR_t)][pt_value (u32)]

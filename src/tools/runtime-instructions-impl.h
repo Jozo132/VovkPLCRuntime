@@ -108,6 +108,8 @@ bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
         case SWAP:
         case DROP:
         case CLEAR:
+        case PICK:
+        case POKE:
         case ADD:
         case SUB:
         case MUL:
@@ -331,6 +333,8 @@ const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
         case SWAP: return F("SWAP");
         case DROP: return F("DROP");
         case CLEAR: return F("CLEAR");
+        case PICK: return F("PICK");
+        case POKE: return F("POKE");
         case ADD: return F("ADD");
         case SUB: return F("SUB");
         case MUL: return F("MUL");
@@ -563,6 +567,8 @@ u8 OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
         case SWAP: return 3;
         case DROP: return 2;
         case CLEAR: return 1;
+        case PICK: return 2 + MY_PTR_SIZE_BYTES;
+        case POKE: return 2 + MY_PTR_SIZE_BYTES;
         case ADD: return 2;
         case SUB: return 2;
         case MUL: return 2;
