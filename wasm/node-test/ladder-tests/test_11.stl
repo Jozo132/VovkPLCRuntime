@@ -1,0 +1,11 @@
+A X0.0
+FP M100.0
+A(
+    L MW10
+    L #10
+    <=I
+)
+JCN _op0
+INCI MW10
+_op0:
+= Y0.0

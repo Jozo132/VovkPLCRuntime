@@ -1,0 +1,14 @@
+{
+  "comment": "Network 1",
+  "nodes": [
+    { "id": "FhfLfbasNHX6r", "x": 0, "y": 0, "type": "contact", "symbol": "X0.0", "inverted": false, "trigger": "rising" },
+    { "id": "hv2vmh1PbpTmE", "x": 4, "y": 0, "type": "coil", "symbol": "Y0.0", "inverted": false },
+    { "id": "mgeshj7m1Il2E", "x": 1, "y": 0, "type": "fb_cmp_lte", "symbol": "", "inverted": false, "dataType": "i16", "in1": "M10", "in2": "#10" },
+    { "id": "mgm3KsC86mOsd", "x": 2, "y": 0, "type": "fb_inc", "symbol": "M10", "inverted": false, "dataType": "i16", "address": "M10" }
+  ],
+  "connections": [
+    { "sources": ["FhfLfbasNHX6r"], "destinations": ["mgeshj7m1Il2E"] },
+    { "sources": ["mgeshj7m1Il2E"], "destinations": ["mgm3KsC86mOsd"] },
+    { "sources": ["mgm3KsC86mOsd"], "destinations": ["hv2vmh1PbpTmE"] }
+  ]
+}
