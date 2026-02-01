@@ -817,11 +817,11 @@ WASM_EXPORT int ladder_lint_get_output_length() {
 }
 
 WASM_EXPORT bool ladder_lint_has_error() {
-    return ladderLinter.has_error;
+    return ladderLinter.hasError();
 }
 
 WASM_EXPORT const char* ladder_lint_get_error() {
-    return ladderLinter.error_msg;
+    return ladderLinter.getErrorMsg();
 }
 
 WASM_EXPORT void ladder_lint_clear() {

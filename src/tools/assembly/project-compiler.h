@@ -2071,13 +2071,13 @@ public:
             copyLadderProblems();
         }
 
-        if (!success || ladder_compiler.has_error) {
+        if (!success || ladder_compiler.hasError()) {
             if (ladder_compiler.problem_count > 0) {
                 // Problems already copied above, just set error flag
                 has_error = true;
             } else {
                 // Fallback to old error handling
-                setErrorFull("Ladder Compiler", ladder_compiler.error_msg, 1, 1,
+                setErrorFull("Ladder Compiler", ladder_compiler.getErrorMsg(), 1, 1,
                     block_source, source_len, nullptr, 0);
             }
             return false;
