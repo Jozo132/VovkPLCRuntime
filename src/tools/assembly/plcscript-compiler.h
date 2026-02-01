@@ -2401,9 +2401,12 @@ public:
             // Expect ':'
             expect(PSTOK_COLON, "Expected ':' in ternary expression");
             
-            // False branch
+            // False branch - set targetType so literals match true branch type
             emitLabel(falseLabel);
+            PLCScriptVarType savedTarget = targetType;
+            targetType = trueType;
             (void)parseTernary(); // Right-associative, discard type (should match trueType)
+            targetType = savedTarget;
             
             emitLabel(endLabel);
             
@@ -2590,7 +2593,11 @@ public:
         
         while (check(PSTOK_PIPE_PIPE)) {
             nextToken();
+            // Set target type so literals are treated as bool
+            PLCScriptVarType savedTarget = targetType;
+            targetType = PSTYPE_BOOL;
             (void)parseLogicalAnd();
+            targetType = savedTarget;
             emitLine("u8.or");
             left = PSTYPE_BOOL;
         }
@@ -2603,7 +2610,11 @@ public:
         
         while (check(PSTOK_AMP_AMP)) {
             nextToken();
+            // Set target type so literals are treated as bool
+            PLCScriptVarType savedTarget = targetType;
+            targetType = PSTYPE_BOOL;
             (void)parseBitwiseOr();
+            targetType = savedTarget;
             emitLine("u8.and");
             left = PSTYPE_BOOL;
         }
@@ -2616,7 +2627,11 @@ public:
         
         while (check(PSTOK_PIPE)) {
             nextToken();
+            // Set target type so literals match the left operand's type
+            PLCScriptVarType savedTarget = targetType;
+            targetType = left;
             (void)parseBitwiseXor();
+            targetType = savedTarget;
             emit("bw.or.");
             if (left == PSTYPE_U8 || left == PSTYPE_I8 || left == PSTYPE_BOOL) emitLine("x8");
             else if (left == PSTYPE_U16 || left == PSTYPE_I16) emitLine("x16");
@@ -2632,7 +2647,11 @@ public:
         
         while (check(PSTOK_CARET)) {
             nextToken();
+            // Set target type so literals match the left operand's type
+            PLCScriptVarType savedTarget = targetType;
+            targetType = left;
             (void)parseBitwiseAnd();
+            targetType = savedTarget;
             emit("bw.xor.");
             if (left == PSTYPE_U8 || left == PSTYPE_I8 || left == PSTYPE_BOOL) emitLine("x8");
             else if (left == PSTYPE_U16 || left == PSTYPE_I16) emitLine("x16");
@@ -2648,7 +2667,11 @@ public:
         
         while (check(PSTOK_AMPERSAND)) {
             nextToken();
+            // Set target type so literals match the left operand's type
+            PLCScriptVarType savedTarget = targetType;
+            targetType = left;
             (void)parseEquality();
+            targetType = savedTarget;
             emit("bw.and.");
             if (left == PSTYPE_U8 || left == PSTYPE_I8 || left == PSTYPE_BOOL) emitLine("x8");
             else if (left == PSTYPE_U16 || left == PSTYPE_I16) emitLine("x16");
@@ -2665,7 +2688,11 @@ public:
         while (check(PSTOK_EQ_EQ) || check(PSTOK_BANG_EQ)) {
             bool isEq = check(PSTOK_EQ_EQ);
             nextToken();
+            // Set target type so literals match the left operand's type
+            PLCScriptVarType savedTarget = targetType;
+            targetType = left;
             (void)parseComparison();
+            targetType = savedTarget;
             emitCompareOp(isEq ? "eq" : "neq", left);
             left = PSTYPE_BOOL;
         }
@@ -2683,7 +2710,11 @@ public:
             else if (check(PSTOK_LT_EQ)) op = "lte";
             else if (check(PSTOK_GT_EQ)) op = "gte";
             nextToken();
+            // Set target type so literals match the left operand's type
+            PLCScriptVarType savedTarget = targetType;
+            targetType = left;
             (void)parseShift();
+            targetType = savedTarget;
             emitCompareOp(op, left);
             left = PSTYPE_BOOL;
         }
@@ -2727,7 +2758,11 @@ public:
         while (check(PSTOK_PLUS) || check(PSTOK_MINUS)) {
             bool isAdd = check(PSTOK_PLUS);
             nextToken();
+            // Set target type so literals match the left operand's type
+            PLCScriptVarType savedTarget = targetType;
+            targetType = left;
             (void)parseMultiplicative();
+            targetType = savedTarget;
             emitBinaryOp(isAdd ? "add" : "sub", left);
         }
         
@@ -2743,7 +2778,11 @@ public:
             else if (check(PSTOK_SLASH)) op = "div";
             else op = "mod";
             nextToken();
+            // Set target type so literals match the left operand's type
+            PLCScriptVarType savedTarget = targetType;
+            targetType = left;
             (void)parseUnary();
+            targetType = savedTarget;
             emitBinaryOp(op, left);
         }
         

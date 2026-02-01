@@ -1,0 +1,286 @@
+VOVKPLCPROJECT AllLanguagesComprehensiveTest
+VERSION 3.0
+
+MEMORY
+    OFFSET 0
+    AVAILABLE 2048
+    K 64
+    X 64
+    Y 64
+    S 256
+    M 512
+    T 90
+    C 40
+END_MEMORY
+
+FLASH
+    SIZE 65536
+END_FLASH
+
+SYMBOLS
+    // Digital Inputs
+    start_btn : bit : X0.0
+    stop_btn : bit : X0.1
+    mode_select : bit : X0.2
+    sensor1 : bit : X0.3
+    sensor2 : bit : X0.4
+    emergency_stop : bit : X0.5
+
+    // Digital Outputs
+    motor1 : bit : Y0.0
+    motor2 : bit : Y0.1
+    alarm_light : bit : Y0.2
+    status_led : bit : Y0.3
+    valve1 : bit : Y0.4
+    valve2 : bit : Y0.5
+
+    // Internal Memory - Bits
+    motor1_running : bit : M0.0
+    motor2_running : bit : M0.1
+    system_ready : bit : M0.2
+    error_flag : bit : M0.3
+
+    // Integer Variables
+    process_counter : i16 : M10
+    cycle_count : i32 : M12
+    set_point : i16 : M16
+    actual_value : i16 : M18
+    error_code : i16 : M20
+    timer_preset : i16 : M22
+    
+    // Floating Point Variables
+    temperature : f32 : M24
+    pressure : f32 : M28
+    flow_rate : f32 : M32
+    pid_output : f32 : M36
+END_SYMBOLS
+
+PROGRAM main
+
+    // =========================================================================
+    // BLOCK 1: PLCASM - Low-level bit manipulation and control logic
+    // Demonstrates direct bytecode-style programming
+    // =========================================================================
+    BLOCK LANG=PLCASM Network_1_PLCASM_Initialization
+// Read start button and stop button, control motor1
+u8.readBit start_btn
+u8.readBit stop_btn
+u8.not
+u8.and
+u8.writeBit motor1_running
+
+// Check emergency stop - if pressed, clear all running flags
+u8.readBit emergency_stop
+jump_if_not no_emergency
+u8.writeBitOff motor1_running
+u8.writeBitOff motor2_running
+u8.writeBitOn error_flag
+no_emergency:
+
+// Increment process counter
+i16.load_from process_counter
+i16.const 1
+i16.add
+i16.move_to process_counter
+    END_BLOCK
+
+    // =========================================================================
+    // BLOCK 2: STL - Structured Text List for ladder-like logic
+    // Demonstrates standard IEC 61131-3 instruction list programming
+    // =========================================================================
+    BLOCK LANG=STL Network_2_STL_Motor_Control
+// Motor 1 Start/Stop Circuit with latch
+LD start_btn
+O motor1
+AN stop_btn
+AN emergency_stop
+= motor1
+
+// Motor 2 controlled by mode select and sensor
+LD mode_select
+A sensor1
+A sensor2
+= motor2
+
+// Status LED on when any motor running
+LD motor1
+O motor2
+= status_led
+
+// Alarm when error flag is set
+LD error_flag
+= alarm_light
+    END_BLOCK
+
+    // =========================================================================
+    // BLOCK 3: LADDER - Visual ladder logic for interlocking
+    // Demonstrates graphical programming with contacts, coils, timers, comparisons
+    // =========================================================================
+    BLOCK LANG=LADDER Network_3_Ladder_Process_Control
+{
+  "comment": "Process Control - Timers and Comparisons",
+  "nodes": [
+    { "id": "contact_start", "x": 0, "y": 0, "type": "contact", "symbol": "start_btn", "inverted": false, "trigger": "rising" },
+    { "id": "contact_not_stop", "x": 1, "y": 0, "type": "contact", "symbol": "stop_btn", "inverted": true, "trigger": "normal" },
+    { "id": "timer_delay", "x": 2, "y": 0, "type": "timer_ton", "symbol": "T0", "inverted": false, "preset": "T#5s" },
+    { "id": "compare_setpoint", "x": 3, "y": 0, "type": "fb_cmp_ge", "symbol": "", "inverted": false, "dataType": "i16", "in1": "M18", "in2": "M16" },
+    { "id": "coil_valve1", "x": 4, "y": 0, "type": "coil", "symbol": "valve1", "inverted": false },
+    
+    { "id": "contact_mode", "x": 0, "y": 1, "type": "contact", "symbol": "mode_select", "inverted": false, "trigger": "normal" },
+    { "id": "contact_sensor1", "x": 1, "y": 1, "type": "contact", "symbol": "sensor1", "inverted": false, "trigger": "normal" },
+    { "id": "timer_pulse", "x": 2, "y": 1, "type": "timer_tof", "symbol": "T1", "inverted": false, "preset": "T#2s" },
+    { "id": "coil_valve2", "x": 3, "y": 1, "type": "coil_set", "symbol": "valve2", "inverted": false },
+    
+    { "id": "contact_emergency", "x": 0, "y": 2, "type": "contact", "symbol": "emergency_stop", "inverted": false, "trigger": "falling" },
+    { "id": "coil_reset_v2", "x": 1, "y": 2, "type": "coil_rset", "symbol": "valve2", "inverted": false }
+  ],
+  "connections": [
+    { "sources": [ "contact_start" ], "destinations": [ "contact_not_stop" ] },
+    { "sources": [ "contact_not_stop" ], "destinations": [ "timer_delay" ] },
+    { "sources": [ "timer_delay" ], "destinations": [ "compare_setpoint" ] },
+    { "sources": [ "compare_setpoint" ], "destinations": [ "coil_valve1" ] },
+    
+    { "sources": [ "contact_mode" ], "destinations": [ "contact_sensor1" ] },
+    { "sources": [ "contact_sensor1" ], "destinations": [ "timer_pulse" ] },
+    { "sources": [ "timer_pulse" ], "destinations": [ "coil_valve2" ] },
+    
+    { "sources": [ "contact_emergency" ], "destinations": [ "coil_reset_v2" ] }
+  ]
+}
+    END_BLOCK
+
+    // =========================================================================
+    // BLOCK 4: PLCScript - TypeScript-like high-level programming
+    // Demonstrates variables, expressions, control flow, and functions
+    // =========================================================================
+    BLOCK LANG=PLCSCRIPT Network_4_PLCScript_Calculations
+
+// Function to clamp a value between min and max
+function clamp(value: i16, minVal: i16, maxVal: i16): i16 {
+    if (value < minVal) {
+        return minVal;
+    }
+    if (value > maxVal) {
+        return maxVal;
+    }
+    return value;
+}
+
+// Function to calculate simple moving average (simulated)
+function calcAverage(a: i32, b: i32, c: i32): i32 {
+    return (a + b + c) / 3;
+}
+
+// Local variables with fixed memory addresses (avoid stack leak)
+let rawInput: i16 @ M60 = 0;
+let scaledValue: i16 @ M62 = 0;
+let errorDelta: i16 @ M64 = 0;
+
+// Read and process setpoint
+rawInput = 500;  // Simulated input value
+
+// Scale the input (divide by 10)
+scaledValue = rawInput / 10;
+
+// Clamp to valid range (0-100)
+scaledValue = clamp(scaledValue, 0, 100);
+
+// Store to actual value symbol
+let actualVal: i16 @ M18 = scaledValue;
+
+// Calculate error (setpoint - actual)
+let setpointVal: i16 @ M16;
+setpointVal = 75;  // Set the setpoint
+errorDelta = setpointVal - actualVal;
+
+// Store error for diagnostics
+let errorStore: i16 @ M20 = errorDelta;
+
+// Cycle counter using 32-bit integer
+let cycles: i32 @ M12;
+cycles = cycles + 1;
+
+// Conditional logic for error handling
+if (errorDelta < -10 || errorDelta > 10) {
+    // Large error - set error flag
+    let errFlag: bool @ M0.3 = true;
+} else {
+    let errFlag: bool @ M0.3 = false;
+}
+
+// For loop to simulate iterative calculation
+let accumulator: i32 @ M40 = 0;  // Use fixed address to avoid stack leak
+for (let i: i32 @ M44 = 0; i < 5; i = i + 1) {
+    accumulator = accumulator + i * 2;
+}
+
+// While loop example - use fixed address
+let countdown: i16 @ M48 = 10;
+while (countdown > 0) {
+    countdown = countdown - 1;
+}
+
+// Floating point calculations for PID-like processing
+let tempReading: f32 @ M24 = 25.5;
+let pressureReading: f32 @ M28 = 101.325;
+let flowCalc: f32 @ M32;
+
+// Simple formula: flow = temp * 0.1 + pressure * 0.01
+flowCalc = tempReading * 0.1 + pressureReading * 0.01;
+
+// Nested function call test - use fixed address
+let avgResult: i32 @ M50;
+avgResult = calcAverage(10, 20, 30);
+
+// Bitwise operations - use fixed addresses
+let flags: i16 @ M54 = 0xFF;
+let mask: i16 @ M56 = 0x0F;
+let masked: i16 @ M58;
+masked = flags & mask;   // AND operation
+masked = masked | 0x10;  // OR operation
+masked = masked ^ 0x05;  // XOR operation
+
+    END_BLOCK
+
+    // =========================================================================
+    // BLOCK 5: STL - Additional math operations
+    // Demonstrates arithmetic instructions
+    // =========================================================================
+    BLOCK LANG=STL Network_5_STL_Math_Operations
+// Load counter, multiply by 2, store back
+L MW10
+L 2
+*I
+T MW10
+
+// Compare actual vs setpoint for alarm
+L MW18
+L MW16
+-I
+L 20
+<I
+JC no_large_error
+S Y0.2
+no_large_error:
+    END_BLOCK
+
+    // =========================================================================
+    // BLOCK 6: PLCASM - Final output processing
+    // Copy flags to physical outputs
+    // =========================================================================
+    BLOCK LANG=PLCASM Network_6_PLCASM_Output_Mapping
+// Copy internal running flags to physical outputs
+u8.readBit motor1_running
+u8.writeBit motor1
+
+u8.readBit motor2_running
+u8.writeBit motor2
+
+// System ready when no errors
+u8.readBit error_flag
+u8.not
+u8.writeBit system_ready
+    END_BLOCK
+
+END_PROGRAM
+
