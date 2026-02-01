@@ -602,7 +602,7 @@ public:
     // Error handling
     // ========================================================================
     
-    void setError(const char* msg) {
+    virtual void setError(const char* msg) {
         if (hasError) return;
         hasError = true;
         errorLine = currentLine;
@@ -615,7 +615,7 @@ public:
         errorMessage[i] = '\0';
     }
     
-    void setErrorAt(const char* msg, int line, int col) {
+    virtual void setErrorAt(const char* msg, int line, int col) {
         if (hasError) return;
         hasError = true;
         errorLine = line;

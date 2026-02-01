@@ -31,6 +31,7 @@
 #include "ladder-compiler.h"
 #include "ladder-linter.h"
 #include "plcscript-compiler.h"
+#include "plcscript-linter.h"
 #include "shared-symbols.h"
 
 // ============================================================================
@@ -276,7 +277,7 @@ public:
     PLCASMLinter plcasm_compiler;
     STLLinter stl_compiler;
     LadderLinter ladder_compiler;
-    PLCScriptCompiler plcscript_compiler;
+    PLCScriptLinter plcscript_compiler;
 
     // Project-level edge memory counter for differentiation bits (shared across all blocks)
     int project_edge_mem_counter;
@@ -437,6 +438,34 @@ public:
             int ti = 0;
             while (src.token_buf[ti] && ti < 63) { dest.token_buf[ti] = src.token_buf[ti]; ti++; }
             dest.token_buf[ti] = '\0';
+            dest.token_text = dest.token_buf;
+            // Copy program and block names
+            int pi = 0;
+            while (current_file[pi] && pi < 63) { dest.program[pi] = current_file[pi]; pi++; }
+            dest.program[pi] = '\0';
+            int bi = 0;
+            while (current_block[bi] && bi < 63) { dest.block[bi] = current_block[bi]; bi++; }
+            dest.block[bi] = '\0';
+        }
+    }
+
+    // Copy all problems (warnings, errors, info) from PLCScript linter to project's problem list
+    void copyPLCScriptProblems() {
+        for (int i = 0; i < plcscript_compiler.getProblemCount() && problem_count < MAX_LINT_PROBLEMS; i++) {
+            const LinterProblem* src = plcscript_compiler.getProblem(i);
+            if (!src) continue;
+            LinterProblem& dest = problems[problem_count++];
+            dest.type = src->type;
+            dest.line = src->line;
+            dest.column = src->column;
+            dest.length = src->length;
+            dest.lang = LANG_PLCSCRIPT;
+            // Copy message
+            int mi = 0;
+            while (src->message[mi] && mi < 127) { dest.message[mi] = src->message[mi]; mi++; }
+            dest.message[mi] = '\0';
+            // Token is not tracked in PLCScript linter the same way - clear it
+            dest.token_buf[0] = '\0';
             dest.token_text = dest.token_buf;
             // Copy program and block names
             int pi = 0;
@@ -2063,16 +2092,28 @@ public:
     // Convert PLCScript block to PLCASM and append to combined buffer
     bool convertPLCScriptToPLCASM(ProgramBlock& block) {
         plcscript_compiler.reset();
+        plcscript_compiler.clearProblems();
 
         int source_len = string_len(block_source);
         plcscript_compiler.setSource(block_source, source_len);
 
         bool success = plcscript_compiler.compile();
 
+        // Always copy problems (warnings, info, errors) from PLCScript compiler
+        if (plcscript_compiler.getProblemCount() > 0) {
+            copyPLCScriptProblems();
+        }
+
         if (!success || plcscript_compiler.hasError) {
-            setErrorFull("PLCScript Compiler", plcscript_compiler.errorMessage,
-                plcscript_compiler.errorLine, plcscript_compiler.errorColumn,
-                block_source, source_len, nullptr, 0);
+            if (plcscript_compiler.getProblemCount() > 0) {
+                // Problems already copied above, just set error flag
+                has_error = true;
+            } else {
+                // Fallback to old error handling
+                setErrorFull("PLCScript Compiler", plcscript_compiler.errorMessage,
+                    plcscript_compiler.errorLine, plcscript_compiler.errorColumn,
+                    block_source, source_len, nullptr, 0);
+            }
             return false;
         }
 
