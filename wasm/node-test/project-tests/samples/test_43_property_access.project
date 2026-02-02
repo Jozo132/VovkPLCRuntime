@@ -1,0 +1,96 @@
+VOVKPLCPROJECT PropertyAccessTest
+VERSION 1.0
+
+// Test file for timer and counter property access
+// Tests both direct (T0.ET) and symbolic (my_timer.ET) property access
+
+MEMORY
+    OFFSET 0
+    AVAILABLE 1024
+    S 64
+    X 64
+    Y 64
+    M 256
+END_MEMORY
+
+SYMBOLS
+    // Timer symbols
+    my_timer : timer : T0
+    
+    // Counter symbols
+    my_counter : counter : C0
+    
+    // Variables to store results
+    timer_et : u32 : MD0
+    counter_cv : u32 : MD4
+    
+    // Ladder test output addresses
+    ladder_timer_et : u32 : MD32
+    ladder_counter_cv : u32 : MD36
+END_SYMBOLS
+
+PROGRAM main
+    // Test direct timer property access
+    BLOCK LANG=STL DirectTimerAccess
+L T0.ET          // Load timer 0 elapsed time
+T MD0            // Store to marker double 0
+    END_BLOCK
+    
+    // Test symbolic timer property access
+    BLOCK LANG=STL SymbolicTimerAccess
+L my_timer.ET    // Load timer elapsed time via symbol
+T timer_et       // Store to symbolic variable
+    END_BLOCK
+    
+    // Test direct counter property access
+    BLOCK LANG=STL DirectCounterAccess
+L C0.CV          // Load counter 0 current value
+T MD4            // Store to marker double 4
+    END_BLOCK
+    
+    // Test symbolic counter property access
+    BLOCK LANG=STL SymbolicCounterAccess
+L my_counter.CV  // Load counter current value via symbol
+T counter_cv     // Store to symbolic variable
+    END_BLOCK
+    
+    // Test PLCASM direct property access
+    BLOCK LANG=PLCASM PlcasmDirectAccess
+u32.load_from T0.ET       // Load timer 0 elapsed time
+u32.move_to M8            // Store to marker 8
+u32.load_from C0.CV       // Load counter 0 current value
+u32.move_to M12           // Store to marker 12
+    END_BLOCK
+    
+    // Test PLCASM symbolic property access
+    BLOCK LANG=PLCASM PlcasmSymbolicAccess
+u32.load_from my_timer.ET    // Load timer ET via symbol
+u32.move_to M16              // Store to marker 16
+u32.load_from my_counter.CV  // Load counter CV via symbol
+u32.move_to M20              // Store to marker 20
+    END_BLOCK
+    
+    // Test PLCScript property access
+    BLOCK LANG=PLCSCRIPT PlcScriptAccess
+let et: u32 @ MD24 = my_timer.ET;    // Read timer elapsed time
+let cv: u32 @ MD28 = my_counter.CV;  // Read counter current value
+    END_BLOCK
+    
+    // Test Ladder property access using fb_move
+    BLOCK LANG=LADDER LadderPropertyAccess
+{
+  "comment": "Test timer/counter property access in Ladder using fb_move",
+  "nodes": [
+    { "id": "n1", "x": 0, "y": 0, "type": "contact", "symbol": "X0.0", "trigger": "normal" },
+    { "id": "n2", "x": 2, "y": 0, "type": "fb_move", "dataType": "u32", "in1": "T0.ET", "out": "ladder_timer_et" },
+    { "id": "n3", "x": 4, "y": 0, "type": "fb_move", "dataType": "u32", "in1": "C0.CV", "out": "ladder_counter_cv" },
+    { "id": "n4", "x": 6, "y": 0, "type": "coil", "symbol": "Y0.0" }
+  ],
+  "connections": [
+    { "sources": [ "n1" ], "destinations": [ "n2" ] },
+    { "sources": [ "n2" ], "destinations": [ "n3" ] },
+    { "sources": [ "n3" ], "destinations": [ "n4" ] }
+  ]
+}
+    END_BLOCK
+END_PROGRAM

@@ -198,7 +198,227 @@ public:
         }
         return false;
     }
+
+    // Check if type is a timer type
+    static bool isTimerType(const char* type) {
+        return sharedStrEqI(type, "timer") || sharedStrEqI(type, "ton") || 
+               sharedStrEqI(type, "tof") || sharedStrEqI(type, "tp");
+    }
+
+    // Check if type is a counter type
+    static bool isCounterType(const char* type) {
+        return sharedStrEqI(type, "counter") || sharedStrEqI(type, "ctu") || 
+               sharedStrEqI(type, "ctd") || sharedStrEqI(type, "ctud");
+    }
 };
+
+// ============================================================================
+// Structure Property Definitions
+// ============================================================================
+// Defines the accessible properties for built-in structured types (Timer, Counter)
+// and provides infrastructure for user-defined structures.
+
+struct StructProperty {
+    char name[16];          // Property name (e.g., "Q", "ET", "CV")
+    u8 offset;              // Byte offset within the struct
+    u8 type_size;           // Size in bytes (0 = bit type)
+    u8 bit_pos;             // Bit position (0-7) for bit types, 255 for non-bit
+    bool readable;          // Can be read
+    bool writable;          // Can be written
+};
+
+// Maximum number of properties per struct type
+#define MAX_STRUCT_PROPERTIES 8
+
+// Built-in Timer properties (matches TIMER_OFFSET_* in methods-timer.h)
+// Timer struct: [ET:u32][StartTime:u32][Flags:u8] = 9 bytes
+//   Flags: bit0=Q, bit1=RUNNING, bit2=IN_OLD
+static const StructProperty timerProperties[] = {
+    { "Q",   8, 0, 0, true, false },   // Q output - FLAGS byte, bit 0 (read-only)
+    { "ET",  0, 4, 255, true, false }, // Elapsed Time - offset 0, u32 (read-only)
+    { "IN",  8, 0, 2, true, false },   // Previous IN - FLAGS byte, bit 2 (read-only, internal)
+    { "RUN", 8, 0, 1, true, false },   // Running flag - FLAGS byte, bit 1 (read-only, internal)
+};
+static const int timerPropertyCount = 4;
+
+// Built-in Counter properties (matches COUNTER_OFFSET_* in methods-counter.h)
+// Counter struct: [CV:u32][Flags:u8] = 5 bytes
+//   Flags: bit0=Q, bit1=INPUT_OLD
+static const StructProperty counterProperties[] = {
+    { "Q",  4, 0, 0, true, false },   // Q output - FLAGS byte, bit 0 (read-only)
+    { "CV", 0, 4, 255, true, true },  // Current Value - offset 0, u32 (read/write)
+    { "IN", 4, 0, 1, true, false },   // Previous input - FLAGS byte, bit 1 (read-only, internal)
+};
+static const int counterPropertyCount = 3;
+
+// ============================================================================
+// User-Defined Structure Support
+// ============================================================================
+// Allows users to define custom structure types with named fields
+
+#define MAX_USER_STRUCT_TYPES 16
+
+struct UserStructType {
+    char name[32];                              // Type name (e.g., "MyStruct")
+    StructProperty fields[MAX_STRUCT_PROPERTIES]; // Field definitions
+    int field_count;                            // Number of fields
+    u8 total_size;                              // Total size in bytes
+
+    void reset() {
+        name[0] = '\0';
+        field_count = 0;
+        total_size = 0;
+        for (int i = 0; i < MAX_STRUCT_PROPERTIES; i++) {
+            fields[i].name[0] = '\0';
+            fields[i].offset = 0;
+            fields[i].type_size = 0;
+            fields[i].bit_pos = 255;
+            fields[i].readable = true;
+            fields[i].writable = true;
+        }
+    }
+
+    // Find a field by name (case-insensitive)
+    const StructProperty* findField(const char* fieldName) const {
+        for (int i = 0; i < field_count; i++) {
+            if (sharedStrEqI(fields[i].name, fieldName)) {
+                return &fields[i];
+            }
+        }
+        return nullptr;
+    }
+};
+
+// Global user struct type registry
+static UserStructType userStructTypes[MAX_USER_STRUCT_TYPES];
+static int userStructTypeCount = 0;
+
+inline void resetUserStructTypes() {
+    userStructTypeCount = 0;
+    for (int i = 0; i < MAX_USER_STRUCT_TYPES; i++) {
+        userStructTypes[i].reset();
+    }
+}
+
+inline UserStructType* findUserStructType(const char* typeName) {
+    for (int i = 0; i < userStructTypeCount; i++) {
+        if (sharedStrEqI(userStructTypes[i].name, typeName)) {
+            return &userStructTypes[i];
+        }
+    }
+    return nullptr;
+}
+
+inline UserStructType* addUserStructType(const char* typeName) {
+    if (userStructTypeCount >= MAX_USER_STRUCT_TYPES) return nullptr;
+    UserStructType& st = userStructTypes[userStructTypeCount++];
+    st.reset();
+    int i = 0;
+    while (typeName[i] && i < 31) { st.name[i] = typeName[i]; i++; }
+    st.name[i] = '\0';
+    return &st;
+}
+
+// ============================================================================
+// Property Resolution Result
+// ============================================================================
+// Result structure for resolving a property access expression
+
+struct PropertyResolution {
+    bool success;           // True if resolution succeeded
+    u32 address;            // Final memory address (base + property offset)
+    u8 type_size;           // Size of the property in bytes (0 = bit)
+    u8 bit_pos;             // Bit position for bit types, 255 otherwise
+    bool is_bit;            // True if this is a bit access
+    bool readable;          // Can be read
+    bool writable;          // Can be written
+    char error[64];         // Error message if resolution failed
+};
+
+// ============================================================================
+// Property Resolution Functions
+// ============================================================================
+
+// Resolve a timer property access (e.g., "Q", "ET")
+inline PropertyResolution resolveTimerProperty(u32 timerBaseAddress, const char* propName) {
+    PropertyResolution result = {};
+    for (int i = 0; i < timerPropertyCount; i++) {
+        if (sharedStrEqI(timerProperties[i].name, propName)) {
+            result.success = true;
+            result.address = timerBaseAddress + timerProperties[i].offset;
+            result.type_size = timerProperties[i].type_size;
+            result.bit_pos = timerProperties[i].bit_pos;
+            result.is_bit = (timerProperties[i].bit_pos != 255);
+            result.readable = timerProperties[i].readable;
+            result.writable = timerProperties[i].writable;
+            return result;
+        }
+    }
+    result.success = false;
+    // Build error message
+    int j = 0;
+    const char* err = "Unknown timer property: ";
+    while (err[j] && j < 40) { result.error[j] = err[j]; j++; }
+    int k = 0;
+    while (propName[k] && j < 63) { result.error[j++] = propName[k++]; }
+    result.error[j] = '\0';
+    return result;
+}
+
+// Resolve a counter property access (e.g., "Q", "CV")
+inline PropertyResolution resolveCounterProperty(u32 counterBaseAddress, const char* propName) {
+    PropertyResolution result = {};
+    for (int i = 0; i < counterPropertyCount; i++) {
+        if (sharedStrEqI(counterProperties[i].name, propName)) {
+            result.success = true;
+            result.address = counterBaseAddress + counterProperties[i].offset;
+            result.type_size = counterProperties[i].type_size;
+            result.bit_pos = counterProperties[i].bit_pos;
+            result.is_bit = (counterProperties[i].bit_pos != 255);
+            result.readable = counterProperties[i].readable;
+            result.writable = counterProperties[i].writable;
+            return result;
+        }
+    }
+    result.success = false;
+    int j = 0;
+    const char* err = "Unknown counter property: ";
+    while (err[j] && j < 40) { result.error[j] = err[j]; j++; }
+    int k = 0;
+    while (propName[k] && j < 63) { result.error[j++] = propName[k++]; }
+    result.error[j] = '\0';
+    return result;
+}
+
+// Resolve a user-defined struct property access
+inline PropertyResolution resolveUserStructProperty(const UserStructType* structType, u32 baseAddress, const char* propName) {
+    PropertyResolution result = {};
+    const StructProperty* field = structType->findField(propName);
+    if (field) {
+        result.success = true;
+        result.address = baseAddress + field->offset;
+        result.type_size = field->type_size;
+        result.bit_pos = field->bit_pos;
+        result.is_bit = (field->bit_pos != 255);
+        result.readable = field->readable;
+        result.writable = field->writable;
+        return result;
+    }
+    result.success = false;
+    int j = 0;
+    const char* err = "Unknown field '";
+    while (err[j] && j < 20) { result.error[j] = err[j]; j++; }
+    int k = 0;
+    while (propName[k] && j < 40) { result.error[j++] = propName[k++]; }
+    const char* in = "' in struct '";
+    k = 0;
+    while (in[k] && j < 55) { result.error[j++] = in[k++]; }
+    k = 0;
+    while (structType->name[k] && j < 62) { result.error[j++] = structType->name[k++]; }
+    if (j < 63) result.error[j++] = '\'';
+    result.error[j] = '\0';
+    return result;
+}
 
 // ============================================================================
 // Global Shared Symbol Table Instance

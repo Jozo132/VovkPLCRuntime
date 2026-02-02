@@ -94,8 +94,8 @@ async function readStdin() {
 function detectLanguage(code) {
     const trimmed = code.trim()
     
-    // Check for project file format first (starts with PROJECT keyword)
-    if (/^PROJECT\s+\w+/i.test(trimmed)) {
+    // Check for project file format first (starts with VOVKPLCPROJECT keyword)
+    if (/^(VOVKPLC)?PROJECT\s+\w+/i.test(trimmed)) {
         return 'project'
     }
     

@@ -3119,6 +3119,119 @@ public:
                 return parseFunctionCall(name);
             }
             
+            // Check for property access (e.g., my_timer.ET, my_counter.CV)
+            if (check(PSTOK_DOT)) {
+                nextToken(); // consume dot
+                
+                // Expect property name
+                if (!check(PSTOK_IDENTIFIER)) {
+                    setError("Expected property name after '.'");
+                    return PSTYPE_VOID;
+                }
+                
+                char propName[32];
+                int pi = 0;
+                while (currentToken.text[pi] && pi < 31) {
+                    propName[pi] = currentToken.text[pi];
+                    pi++;
+                }
+                propName[pi] = '\0';
+                nextToken();
+                
+                // Look up the symbol to determine if it's a timer or counter
+                SharedSymbol* sharedSym = sharedSymbols.findSymbol(name);
+                bool isTimer = false;
+                bool isCounter = false;
+                
+                if (sharedSym) {
+                    isTimer = SharedSymbolTable::isTimerType(sharedSym->type);
+                    isCounter = SharedSymbolTable::isCounterType(sharedSym->type);
+                }
+                
+                // Try to resolve as timer/counter property
+                PLCScriptVarType resultType = PSTYPE_VOID;
+                bool foundProperty = false;
+                
+                if (isTimer) {
+                    for (int p = 0; p < timerPropertyCount; p++) {
+                        if (strEqCI(propName, timerProperties[p].name)) {
+                            foundProperty = true;
+                            // Build address: symbol_addr.property
+                            char fullAddr[64];
+                            int idx = 0;
+                            for (int k = 0; name[k] && idx < 60; k++) fullAddr[idx++] = name[k];
+                            fullAddr[idx++] = '.';
+                            for (int k = 0; propName[k] && idx < 63; k++) fullAddr[idx++] = propName[k];
+                            fullAddr[idx] = '\0';
+                            
+                            // Determine type based on property
+                            if (timerProperties[p].bit_pos != 0xFF) {
+                                // Bit property (Q, IN, RUN)
+                                emit("u8.readBit ");
+                                emit(fullAddr);
+                                emit("\n");
+                                resultType = PSTYPE_BOOL;
+                            } else {
+                                // Value property (ET)
+                                u8 ts = timerProperties[p].type_size;
+                                if (ts == 4) {
+                                    emit("u32.load_from ");
+                                    resultType = PSTYPE_U32;
+                                } else {
+                                    emit("u8.load_from ");
+                                    resultType = PSTYPE_U8;
+                                }
+                                emit(fullAddr);
+                                emit("\n");
+                            }
+                            break;
+                        }
+                    }
+                } else if (isCounter) {
+                    for (int p = 0; p < counterPropertyCount; p++) {
+                        if (strEqCI(propName, counterProperties[p].name)) {
+                            foundProperty = true;
+                            // Build address: symbol_addr.property
+                            char fullAddr[64];
+                            int idx = 0;
+                            for (int k = 0; name[k] && idx < 60; k++) fullAddr[idx++] = name[k];
+                            fullAddr[idx++] = '.';
+                            for (int k = 0; propName[k] && idx < 63; k++) fullAddr[idx++] = propName[k];
+                            fullAddr[idx] = '\0';
+                            
+                            // Determine type based on property
+                            if (counterProperties[p].bit_pos != 0xFF) {
+                                // Bit property (Q, IN)
+                                emit("u8.readBit ");
+                                emit(fullAddr);
+                                emit("\n");
+                                resultType = PSTYPE_BOOL;
+                            } else {
+                                // Value property (CV)
+                                u8 ts = counterProperties[p].type_size;
+                                if (ts == 4) {
+                                    emit("u32.load_from ");
+                                    resultType = PSTYPE_U32;
+                                } else {
+                                    emit("u8.load_from ");
+                                    resultType = PSTYPE_U8;
+                                }
+                                emit(fullAddr);
+                                emit("\n");
+                            }
+                            break;
+                        }
+                    }
+                }
+                
+                if (!foundProperty) {
+                    setError("Unknown property");
+                    return PSTYPE_VOID;
+                }
+                
+                return resultType;
+            }
+            
             // Variable reference - first check local symbol table
             PLCScriptSymbol* sym = findSymbol(name);
             

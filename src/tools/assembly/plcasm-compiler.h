@@ -25,6 +25,7 @@
 #ifdef __WASM__
 
 #include "wasm/wasm.h"
+#include "shared-symbols.h"
 
 #include "./../runtime-types.h"
 
@@ -816,6 +817,148 @@ public:
         return 0; // unknown type
     }
 
+    // ========================================================================
+    // Structure Property Access Resolution
+    // ========================================================================
+    // Resolves property access like T0.Q, my_timer.ET, C0.CV into memory addresses.
+    // Returns true on error, false on success.
+    //
+    // Input format: "T0.Q", "my_timer.ET", "C0.CV"
+    // For direct T/C addresses: base + (index * struct_size) + property_offset
+    // For symbol references: symbol_base_address + property_offset
+
+    // Check if a string contains a property access (has a dot followed by a letter)
+    bool hasPropertyAccess(const StringView& str) {
+        for (int i = 0; i < str.length - 1; i++) {
+            if (str.data[i] == '.') {
+                char next = str.data[i + 1];
+                // Property access if next char is a letter (not a digit for bit access)
+                if ((next >= 'A' && next <= 'Z') || (next >= 'a' && next <= 'z')) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // Parse property access from a string like "T0.Q" or "my_timer.ET"
+    // Returns: false = success, true = error
+    // On success: address, bit, is_bit, type_size are set
+    bool parsePropertyAccess(const StringView& str, int& address, int& bit, bool& is_bit, u8& type_size) {
+        // Find the dot
+        int dot_pos = -1;
+        for (int i = 0; i < str.length; i++) {
+            if (str.data[i] == '.') {
+                dot_pos = i;
+                break;
+            }
+        }
+        if (dot_pos < 0 || dot_pos >= str.length - 1) return true;
+
+        // Extract base and property parts
+        char base_buf[64] = {0};
+        char prop_buf[16] = {0};
+        
+        for (int i = 0; i < dot_pos && i < 63; i++) {
+            base_buf[i] = str.data[i];
+        }
+        base_buf[dot_pos] = '\0';
+        
+        int prop_len = str.length - dot_pos - 1;
+        for (int i = 0; i < prop_len && i < 15; i++) {
+            prop_buf[i] = str.data[dot_pos + 1 + i];
+        }
+        prop_buf[prop_len] = '\0';
+
+        // Determine if base is a direct address (T0, C0) or a symbol name
+        char prefix = base_buf[0];
+        bool is_timer_prefix = (prefix == 'T' || prefix == 't');
+        bool is_counter_prefix = (prefix == 'C' || prefix == 'c');
+        
+        u32 base_address = 0;
+        bool is_timer = false;
+        bool is_counter = false;
+
+        if ((is_timer_prefix || is_counter_prefix) && base_buf[1] >= '0' && base_buf[1] <= '9') {
+            // Direct address like T0, C5
+            int index = 0;
+            for (int i = 1; base_buf[i] >= '0' && base_buf[i] <= '9'; i++) {
+                index = index * 10 + (base_buf[i] - '0');
+            }
+            if (is_timer_prefix) {
+                base_address = plcasm_timer_offset + (index * PLCRUNTIME_TIMER_STRUCT_SIZE);
+                is_timer = true;
+            } else {
+                base_address = plcasm_counter_offset + (index * PLCRUNTIME_COUNTER_STRUCT_SIZE);
+                is_counter = true;
+            }
+        } else {
+            // Symbol name - look it up
+            StringView base_sv = { base_buf, (int)string_len(base_buf) };
+            Symbol* sym = findSymbol(base_sv);
+            if (!sym) {
+                // Also check shared symbols
+                SharedSymbol* shared = findSharedSymbol(base_buf);
+                if (!shared) return true; // Symbol not found
+                
+                // Determine type from shared symbol
+                if (SharedSymbolTable::isTimerType(shared->type)) {
+                    is_timer = true;
+                    // For timer symbols, address is the timer index
+                    base_address = plcasm_timer_offset + (shared->address * PLCRUNTIME_TIMER_STRUCT_SIZE);
+                } else if (SharedSymbolTable::isCounterType(shared->type)) {
+                    is_counter = true;
+                    base_address = plcasm_counter_offset + (shared->address * PLCRUNTIME_COUNTER_STRUCT_SIZE);
+                } else {
+                    // Check user-defined struct types
+                    UserStructType* ust = findUserStructType(shared->type);
+                    if (ust) {
+                        PropertyResolution res = resolveUserStructProperty(ust, shared->address, prop_buf);
+                        if (!res.success) return true;
+                        address = res.address;
+                        bit = res.is_bit ? res.bit_pos : 0;
+                        is_bit = res.is_bit;
+                        type_size = res.type_size;
+                        return false;
+                    }
+                    return true; // Not a structured type
+                }
+            } else {
+                // Check local symbol type
+                // Timer/counter symbols store the index, not the memory address
+                if (str_cmp(sym->type, "timer") || str_cmp(sym->type, "ton") || 
+                    str_cmp(sym->type, "tof") || str_cmp(sym->type, "tp")) {
+                    is_timer = true;
+                    base_address = plcasm_timer_offset + (sym->address * PLCRUNTIME_TIMER_STRUCT_SIZE);
+                } else if (str_cmp(sym->type, "counter") || str_cmp(sym->type, "ctu") || 
+                           str_cmp(sym->type, "ctd") || str_cmp(sym->type, "ctud")) {
+                    is_counter = true;
+                    base_address = plcasm_counter_offset + (sym->address * PLCRUNTIME_COUNTER_STRUCT_SIZE);
+                } else {
+                    return true; // Not a timer/counter type
+                }
+            }
+        }
+
+        // Resolve the property
+        PropertyResolution res;
+        if (is_timer) {
+            res = resolveTimerProperty(base_address, prop_buf);
+        } else if (is_counter) {
+            res = resolveCounterProperty(base_address, prop_buf);
+        } else {
+            return true;
+        }
+
+        if (!res.success) return true;
+
+        address = res.address;
+        bit = res.is_bit ? res.bit_pos : 0;
+        is_bit = res.is_bit;
+        type_size = res.type_size;
+        return false;
+    }
+
     bool parseSymbolAddress(const StringView& addr_str, u32& address, u8& bit, bool& is_bit, Token& error_token) {
         // Parse addresses like: 130, M4, X0.1, Y0.1, etc.
         is_bit = false;
@@ -1603,6 +1746,19 @@ public:
     }
 
     bool addressFromToken(Token& token, int& output) {
+        // First check for property access (e.g., T0.ET, my_timer.ET)
+        if (hasPropertyAccess(token.string)) {
+            int address = 0, bit = 0;
+            bool is_bit = false;
+            u8 type_size = 0;
+            bool err = parsePropertyAccess(token.string, address, bit, is_bit, type_size);
+            if (!err) {
+                output = address;
+                return false;
+            }
+            // Fall through to other parsing methods if property access failed
+        }
+
         int offset = 0;
         int multiplier = 1;
         StringView number;
@@ -1691,7 +1847,19 @@ public:
 
     // Parse "2.7" into address and bit, where we separate the two with a dot. The bits range from 0 to 7
     // Also resolves symbols like "button1" to their defined address
+    // Now also supports property access like "T0.Q", "my_timer.ET"
     bool memoryBitFromToken(Token& token, int& address, int& bit) {
+        // First check for property access (e.g., T0.Q, my_timer.ET)
+        if (hasPropertyAccess(token.string)) {
+            bool is_bit = false;
+            u8 type_size = 0;
+            bool err = parsePropertyAccess(token.string, address, bit, is_bit, type_size);
+            if (!err) {
+                return false; // Successfully parsed property access
+            }
+            // Fall through to other parsing methods if property access failed
+        }
+
         int offset = 0;
         StringView number = token.string;
         bool has_prefix = parsePrefixedAddressToken(token, number, offset);

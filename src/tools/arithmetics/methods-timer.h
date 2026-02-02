@@ -22,6 +22,23 @@ union u8A_to_u32 { u8 u8A[4]; u32 val; };
 #define TIMER_OFFSET_FLAGS 8
 #define TIMER_STRUCT_SIZE 9
 
+// Timer Structure Property Access
+// These define the accessible properties of a timer for property access syntax
+// Property: offset within struct, size in bytes (0 = bit), bit position (255 = not a bit)
+// Usage: T0.Q, T0.ET, my_timer.Q, my_timer.ET
+//
+// Properties:
+//   .Q   - Output bit (read-only from user perspective, set by timer logic)
+//   .ET  - Elapsed Time in ms (u32, read-only)
+//   .IN  - Previous input state (bit, internal use)
+//   .RUN - Running flag (bit, internal use)
+
+// Property identifiers for timer struct
+#define TIMER_PROP_Q      0   // Q output bit - offset 8 (FLAGS), bit 0
+#define TIMER_PROP_ET     1   // Elapsed Time - offset 0, u32
+#define TIMER_PROP_IN     2   // Previous IN state - offset 8 (FLAGS), bit 2  
+#define TIMER_PROP_RUN    3   // Running flag - offset 8 (FLAGS), bit 1
+
 namespace PLCMethods {
 
     // Helper to read u32 from memory array

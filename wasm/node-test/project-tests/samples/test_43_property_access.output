@@ -1,0 +1,40 @@
+{
+  "success": 1,
+  "project": { "name": "PropertyAccessTest", "version": "1.0" },
+  "bytecode": "FC 01 C0 01 01 C9 01 FD 02 18 05 01 C0 10 05 09 19 09 00 C0 FD 02 18 05 01 C0 10 05 03 19 03 00 00 FD 02 18 05 01 C9 10 05 09 19 09 00 C4 FD 02 18 05 01 C9 10 05 03 19 03 00 04 FD 01 18 05 01 C0 19 05 00 C8 18 05 01 C9 19 05 00 CC FD 01 18 05 01 C0 19 05 00 D0 18 05 01 C9 19 05 00 D4 FD 08 18 05 01 C0 19 05 00 D8 18 05 01 C9 19 05 00 DC FF FD 03 58 00 40 14 03 E2 00 87 18 05 01 C0 10 05 03 19 03 00 20 14 03 E2 00 97 18 05 01 C9 10 05 03 19 03 00 24 60 00 80 FF",
+  "bytecodeLength": 155,
+  "checksum": 194,
+  "files": [
+    { "path": "main", "firstBlockIndex": 0, "blockCount": 8, "executionOrder": 0 }
+  ],
+  "blocks": [
+    { "file": "main", "name": "DirectTimerAccess", "language": "STL", "offset": 7, "size": 13 },
+    { "file": "main", "name": "SymbolicTimerAccess", "language": "STL", "offset": 20, "size": 13 },
+    { "file": "main", "name": "DirectCounterAccess", "language": "STL", "offset": 33, "size": 13 },
+    { "file": "main", "name": "SymbolicCounterAccess", "language": "STL", "offset": 46, "size": 13 },
+    { "file": "main", "name": "PlcasmDirectAccess", "language": "PLCASM", "offset": 59, "size": 18 },
+    { "file": "main", "name": "PlcasmSymbolicAccess", "language": "PLCASM", "offset": 77, "size": 18 },
+    { "file": "main", "name": "PlcScriptAccess", "language": "UNKNOWN", "offset": 95, "size": 19 },
+    { "file": "main", "name": "LadderPropertyAccess", "language": "LADDER", "offset": 114, "size": 40 }
+  ],
+  "symbols": [
+    { "name": "my_timer", "type": "timer", "address": "0" },
+    { "name": "my_counter", "type": "counter", "address": "0" },
+    { "name": "timer_et", "type": "u32", "address": "0" },
+    { "name": "counter_cv", "type": "u32", "address": "4" },
+    { "name": "ladder_timer_et", "type": "u32", "address": "32" },
+    { "name": "ladder_counter_cv", "type": "u32", "address": "36" }
+  ],
+  "memoryAreas": [
+    { "name": "S", "start": 0, "end": 63 },
+    { "name": "X", "start": 64, "end": 127 },
+    { "name": "Y", "start": 128, "end": 191 },
+    { "name": "M", "start": 192, "end": 447 },
+    { "name": "T", "start": 448, "end": 456 },
+    { "name": "C", "start": 457, "end": 461 }
+  ],
+  "memory": { "available": 1024, "used": 192 },
+  "flash": { "size": 32768, "used": 155 },
+  "execution": { "steps": 33, "stackSize": 0 },
+  "problems": []
+}

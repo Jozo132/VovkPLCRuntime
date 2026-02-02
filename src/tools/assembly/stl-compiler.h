@@ -469,11 +469,75 @@ public:
         return strEq(type, "counter") || strEq(type, "ctu") || strEq(type, "ctd") || strEq(type, "ctud");
     }
 
+    // Helper to check if address contains property access (e.g., T0.Q, my_timer.ET)
+    bool hasPropertyAccess(const char* addr) {
+        if (!addr) return false;
+        for (int i = 0; addr[i] && addr[i + 1]; i++) {
+            if (addr[i] == '.') {
+                char next = addr[i + 1];
+                // Property access if next char is a letter (not a digit for bit access)
+                if ((next >= 'A' && next <= 'Z') || (next >= 'a' && next <= 'z')) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     // Convert STL address to PLCASM address
     // STL uses: I0.0 (input), Q0.0 (output), M0.0 (marker), etc.
     // PLCASM uses: X0.0 (input), Y0.0 (output), M0.0 (marker), S0 (system), C0 (control)
+    // Now also handles property access like T0.Q, my_timer.ET
     virtual void convertAddress(const char* stlAddr, char* plcasmAddr) {
         int i = 0, j = 0;
+        
+        // Check for property access (e.g., T0.Q, my_timer.ET)
+        // These are passed through as-is to PLCASM which will resolve them
+        if (hasPropertyAccess(stlAddr)) {
+            // Check if it's a symbol-based property access
+            // Find the dot position
+            int dot_pos = -1;
+            for (int k = 0; stlAddr[k]; k++) {
+                if (stlAddr[k] == '.') {
+                    dot_pos = k;
+                    break;
+                }
+            }
+            
+            if (dot_pos > 0) {
+                // Extract base name before dot
+                char base[64] = {0};
+                for (int k = 0; k < dot_pos && k < 63; k++) {
+                    base[k] = stlAddr[k];
+                }
+                
+                // Check if base is a symbol
+                if (!isDirectAddress(base)) {
+                    SharedSymbol* sym = findSharedSymbol(base);
+                    if (sym && (isTimerType(sym->type) || isCounterType(sym->type))) {
+                        // Symbol-based property access on timer/counter
+                        // Convert: my_timer.Q -> T<idx>.Q
+                        char prefix = isTimerType(sym->type) ? 'T' : 'C';
+                        plcasmAddr[j++] = prefix;
+                        u32 idx = sym->address;
+                        if (idx >= 100) { plcasmAddr[j++] = '0' + (idx / 100); idx %= 100; }
+                        if (idx >= 10 || sym->address >= 100) { plcasmAddr[j++] = '0' + (idx / 10); idx %= 10; }
+                        plcasmAddr[j++] = '0' + idx;
+                        // Copy the property part (including dot)
+                        for (int k = dot_pos; stlAddr[k]; k++) {
+                            plcasmAddr[j++] = stlAddr[k];
+                        }
+                        plcasmAddr[j] = '\0';
+                        return;
+                    }
+                }
+            }
+            
+            // Direct address with property or unknown - pass through as-is
+            while (stlAddr[i]) plcasmAddr[j++] = stlAddr[i++];
+            plcasmAddr[j] = '\0';
+            return;
+        }
         
         // First, check if this is a symbol name (not a direct address)
         if (!isDirectAddress(stlAddr)) {
@@ -612,6 +676,168 @@ public:
     // MW10 → M10, IW0 → X0, QD4 → Y4
     void convertTypedAddress(const char* stlAddr, char* plcasmAddr, const char** outType = nullptr) {
         int i = 0, j = 0;
+        
+        // Check for property access first (e.g., my_timer.ET, T0.Q)
+        // Property access is detected by a dot followed by a letter
+        if (hasPropertyAccess(stlAddr)) {
+            // Find the dot position
+            int dotPos = 0;
+            while (stlAddr[dotPos] && stlAddr[dotPos] != '.') dotPos++;
+            
+            if (stlAddr[dotPos] == '.') {
+                // Extract base name and property
+                char baseName[64];
+                int k = 0;
+                for (int p = 0; p < dotPos && p < 63; p++) {
+                    baseName[k++] = stlAddr[p];
+                }
+                baseName[k] = '\0';
+                const char* propName = &stlAddr[dotPos + 1];
+                
+                // Check if base is a timer (T0, T1, etc.) or counter (C0, C1, etc.)
+                char baseUpper = baseName[0];
+                if (baseUpper >= 'a' && baseUpper <= 'z') baseUpper -= 32;
+                
+                bool isTimer = (baseUpper == 'T' && baseName[1] >= '0' && baseName[1] <= '9');
+                bool isCounter = (baseUpper == 'C' && baseName[1] >= '0' && baseName[1] <= '9');
+                
+                // Note: For symbolic names (my_timer.ET), we can't determine the type here
+                // since STL compiler doesn't have access to the symbol table.
+                // In that case, we default to u8 and let PLCASM handle the resolution.
+                // For direct T/C references, we can look up the property type.
+                
+                if (isTimer) {
+                    // Look up timer property type
+                    for (int p = 0; p < timerPropertyCount; p++) {
+                        // Case-insensitive compare
+                        bool match = true;
+                        const char* pn = timerProperties[p].name;
+                        const char* pp = propName;
+                        while (*pn && *pp) {
+                            char c1 = *pn, c2 = *pp;
+                            if (c1 >= 'a' && c1 <= 'z') c1 -= 32;
+                            if (c2 >= 'a' && c2 <= 'z') c2 -= 32;
+                            if (c1 != c2) { match = false; break; }
+                            pn++; pp++;
+                        }
+                        if (match && !*pn && !*pp) {
+                            // Found property - set type
+                            if (outType) {
+                                u8 ts = timerProperties[p].type_size;
+                                if (timerProperties[p].bit_pos != 0xFF) {
+                                    *outType = "u8"; // Bit properties use u8 for bit operations
+                                } else if (ts == 1) {
+                                    *outType = "u8";
+                                } else if (ts == 2) {
+                                    *outType = "u16";
+                                } else if (ts == 4) {
+                                    *outType = "u32";
+                                } else {
+                                    *outType = "u32";
+                                }
+                            }
+                            break;
+                        }
+                    }
+                } else if (isCounter) {
+                    // Look up counter property type
+                    for (int p = 0; p < counterPropertyCount; p++) {
+                        // Case-insensitive compare
+                        bool match = true;
+                        const char* pn = counterProperties[p].name;
+                        const char* pp = propName;
+                        while (*pn && *pp) {
+                            char c1 = *pn, c2 = *pp;
+                            if (c1 >= 'a' && c1 <= 'z') c1 -= 32;
+                            if (c2 >= 'a' && c2 <= 'z') c2 -= 32;
+                            if (c1 != c2) { match = false; break; }
+                            pn++; pp++;
+                        }
+                        if (match && !*pn && !*pp) {
+                            // Found property - set type
+                            if (outType) {
+                                u8 ts = counterProperties[p].type_size;
+                                if (counterProperties[p].bit_pos != 0xFF) {
+                                    *outType = "u8"; // Bit properties use u8 for bit operations
+                                } else if (ts == 1) {
+                                    *outType = "u8";
+                                } else if (ts == 2) {
+                                    *outType = "u16";
+                                } else if (ts == 4) {
+                                    *outType = "u32";
+                                } else {
+                                    *outType = "u32";
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+                
+                // For symbolic names without direct type info, we need to guess based on property name
+                // Since we know common timer/counter property names, we can infer the type
+                if (outType && !isTimer && !isCounter) {
+                    // Try to match known timer property names
+                    bool foundType = false;
+                    for (int p = 0; p < timerPropertyCount && !foundType; p++) {
+                        bool match = true;
+                        const char* pn = timerProperties[p].name;
+                        const char* pp = propName;
+                        while (*pn && *pp) {
+                            char c1 = *pn, c2 = *pp;
+                            if (c1 >= 'a' && c1 <= 'z') c1 -= 32;
+                            if (c2 >= 'a' && c2 <= 'z') c2 -= 32;
+                            if (c1 != c2) { match = false; break; }
+                            pn++; pp++;
+                        }
+                        if (match && !*pn && !*pp) {
+                            u8 ts = timerProperties[p].type_size;
+                            if (timerProperties[p].bit_pos != 0xFF) {
+                                *outType = "u8";
+                            } else if (ts == 4) {
+                                *outType = "u32";
+                            } else {
+                                *outType = "u8";
+                            }
+                            foundType = true;
+                        }
+                    }
+                    // Try counter properties
+                    for (int p = 0; p < counterPropertyCount && !foundType; p++) {
+                        bool match = true;
+                        const char* pn = counterProperties[p].name;
+                        const char* pp = propName;
+                        while (*pn && *pp) {
+                            char c1 = *pn, c2 = *pp;
+                            if (c1 >= 'a' && c1 <= 'z') c1 -= 32;
+                            if (c2 >= 'a' && c2 <= 'z') c2 -= 32;
+                            if (c1 != c2) { match = false; break; }
+                            pn++; pp++;
+                        }
+                        if (match && !*pn && !*pp) {
+                            u8 ts = counterProperties[p].type_size;
+                            if (counterProperties[p].bit_pos != 0xFF) {
+                                *outType = "u8";
+                            } else if (ts == 4) {
+                                *outType = "u32";
+                            } else {
+                                *outType = "u8";
+                            }
+                            foundType = true;
+                        }
+                    }
+                    // If still not found, default to u32 (common for ET, CV)
+                    if (!foundType) {
+                        *outType = "u32";
+                    }
+                }
+                
+                // Copy address as-is for PLCASM to handle
+                while (stlAddr[i]) plcasmAddr[j++] = stlAddr[i++];
+                plcasmAddr[j] = '\0';
+                return;
+            }
+        }
         
         char first = stlAddr[0];
         if (first >= 'a' && first <= 'z') first -= 32; // Uppercase

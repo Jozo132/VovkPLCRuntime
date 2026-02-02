@@ -16,6 +16,21 @@
 #define COUNTER_OFFSET_FLAGS 4
 #define COUNTER_STRUCT_SIZE 5
 
+// Counter Structure Property Access
+// These define the accessible properties of a counter for property access syntax
+// Property: offset within struct, size in bytes (0 = bit), bit position (255 = not a bit)
+// Usage: C0.Q, C0.CV, my_counter.Q, my_counter.CV
+//
+// Properties:
+//   .Q   - Output bit (true when CV >= PV)
+//   .CV  - Current Value (u32, read/write)
+//   .IN  - Previous input state (bit, internal use)
+
+// Property identifiers for counter struct
+#define COUNTER_PROP_Q     0   // Q output bit - offset 4 (FLAGS), bit 0
+#define COUNTER_PROP_CV    1   // Current Value - offset 0, u32
+#define COUNTER_PROP_IN    2   // Previous IN state - offset 4 (FLAGS), bit 1
+
 namespace PLCMethods {
 
     /**
