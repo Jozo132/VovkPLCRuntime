@@ -4,10 +4,9 @@ VERSION 3.0
 MEMORY
     OFFSET 0
     AVAILABLE 2048
-    K 64
+    S 64
     X 64
     Y 64
-    S 256
     M 512
     T 90
     C 40

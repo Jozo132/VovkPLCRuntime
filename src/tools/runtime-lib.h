@@ -27,9 +27,9 @@
 #define PLCRUNTIME_MAX_PROGRAM_SIZE 104857
 #endif // __WASM__
 
-#ifndef PLCRUNTIME_NUM_OF_CONTROLS
-#define PLCRUNTIME_NUM_OF_CONTROLS 64
-#endif // PLCRUNTIME_NUM_OF_CONTROLS
+#ifndef PLCRUNTIME_NUM_OF_SYSTEMS
+#define PLCRUNTIME_NUM_OF_SYSTEMS 64
+#endif // PLCRUNTIME_NUM_OF_SYSTEMS
 
 #ifndef PLCRUNTIME_NUM_OF_INPUTS
 #define PLCRUNTIME_NUM_OF_INPUTS 64
@@ -38,10 +38,6 @@
 #ifndef PLCRUNTIME_NUM_OF_OUTPUTS
 #define PLCRUNTIME_NUM_OF_OUTPUTS 64
 #endif // PLCRUNTIME_NUM_OF_OUTPUTS
-
-#ifndef PLCRUNTIME_NUM_OF_SYSTEMS
-#define PLCRUNTIME_NUM_OF_SYSTEMS 256
-#endif // PLCRUNTIME_NUM_OF_SYSTEMS
 
 #ifndef PLCRUNTIME_NUM_OF_MARKERS
 #define PLCRUNTIME_NUM_OF_MARKERS 256
@@ -61,24 +57,20 @@
 // Counter struct size: CV(4) + Flags(1) = 5 bytes
 #define PLCRUNTIME_COUNTER_STRUCT_SIZE 5
 
-#ifndef PLCRUNTIME_CONTROL_OFFSET
-#define PLCRUNTIME_CONTROL_OFFSET 0
-#endif // PLCRUNTIME_CONTROL_OFFSET
+#ifndef PLCRUNTIME_SYSTEM_OFFSET
+#define PLCRUNTIME_SYSTEM_OFFSET 0
+#endif // PLCRUNTIME_SYSTEM_OFFSET
 
 #ifndef PLCRUNTIME_INPUT_OFFSET
-#define PLCRUNTIME_INPUT_OFFSET (PLCRUNTIME_CONTROL_OFFSET + PLCRUNTIME_NUM_OF_CONTROLS)
+#define PLCRUNTIME_INPUT_OFFSET (PLCRUNTIME_SYSTEM_OFFSET + PLCRUNTIME_NUM_OF_SYSTEMS)
 #endif // PLCRUNTIME_INPUT_OFFSET
 
 #ifndef PLCRUNTIME_OUTPUT_OFFSET
 #define PLCRUNTIME_OUTPUT_OFFSET (PLCRUNTIME_INPUT_OFFSET + PLCRUNTIME_NUM_OF_INPUTS)
 #endif // PLCRUNTIME_OUTPUT_OFFSET
 
-#ifndef PLCRUNTIME_SYSTEM_OFFSET
-#define PLCRUNTIME_SYSTEM_OFFSET (PLCRUNTIME_OUTPUT_OFFSET + PLCRUNTIME_NUM_OF_OUTPUTS)
-#endif // PLCRUNTIME_SYSTEM_OFFSET
-
 #ifndef PLCRUNTIME_MARKER_OFFSET
-#define PLCRUNTIME_MARKER_OFFSET (PLCRUNTIME_SYSTEM_OFFSET + PLCRUNTIME_NUM_OF_SYSTEMS)
+#define PLCRUNTIME_MARKER_OFFSET (PLCRUNTIME_OUTPUT_OFFSET + PLCRUNTIME_NUM_OF_OUTPUTS)
 #endif // PLCRUNTIME_MARKER_OFFSET
 
 #ifndef PLCRUNTIME_TIMER_OFFSET
@@ -146,13 +138,12 @@ struct DeviceHealth {
 
 // Memory area types for registered symbols
 enum SymbolArea : u8 {
-    AREA_CONTROL = 0,  // K - Control/Constants
+    AREA_SYSTEM = 0,  // S - System
     AREA_INPUT = 1,  // I/X - Inputs
     AREA_OUTPUT = 2,  // Q/Y - Outputs
-    AREA_SYSTEM = 3,  // S - System
-    AREA_MARKER = 4,  // M - Markers
-    AREA_TIMER = 5,  // T - Timers
-    AREA_COUNTER = 6,  // C - Counters
+    AREA_MARKER = 3,  // M - Markers
+    AREA_TIMER = 4,  // T - Timers
+    AREA_COUNTER = 5,  // C - Counters
 };
 
 // Data type identifiers for registered symbols
@@ -209,10 +200,9 @@ inline const char* getSymbolTypeName(SymbolType type) {
 // Get area prefix character
 inline char getSymbolAreaChar(SymbolArea area) {
     switch (area) {
-        case AREA_CONTROL: return 'K';
+        case AREA_SYSTEM:  return 'S';
         case AREA_INPUT:   return 'I';
         case AREA_OUTPUT:  return 'Q';
-        case AREA_SYSTEM:  return 'S';
         case AREA_MARKER:  return 'M';
         case AREA_TIMER:   return 'T';
         case AREA_COUNTER: return 'C';
@@ -354,10 +344,9 @@ private:
         }
     }
 public:
-    u32 control_offset = PLCRUNTIME_CONTROL_OFFSET; // Control offset in memory
+    u32 system_offset = PLCRUNTIME_SYSTEM_OFFSET; // System offset in memory
     u32 input_offset = PLCRUNTIME_INPUT_OFFSET; // Input offset in memory
     u32 output_offset = PLCRUNTIME_OUTPUT_OFFSET; // Output offset in memory
-    u32 system_offset = PLCRUNTIME_SYSTEM_OFFSET; // System offset in memory
     u32 marker_offset = PLCRUNTIME_MARKER_OFFSET; // Marker offset in memory
     u32 timer_offset = PLCRUNTIME_TIMER_OFFSET; // Timer offset in memory (T0, T1, ...)
     u32 counter_offset = PLCRUNTIME_COUNTER_OFFSET; // Counter offset in memory (C0, C1, ...)
@@ -407,10 +396,9 @@ public:
 
     void printProperties() {
 #ifdef __WASM__
-        Serial.printf("Controls [%d] at offset %d\n", PLCRUNTIME_NUM_OF_CONTROLS, control_offset);
+        Serial.printf("Systems [%d] at offset %d\n", PLCRUNTIME_NUM_OF_SYSTEMS, system_offset);
         Serial.printf("Inputs [%d] at offset %d\n", PLCRUNTIME_NUM_OF_INPUTS, input_offset);
         Serial.printf("Outputs [%d] at offset %d\n", PLCRUNTIME_NUM_OF_OUTPUTS, output_offset);
-        Serial.printf("Systems [%d] at offset %d\n", PLCRUNTIME_NUM_OF_SYSTEMS, system_offset);
         Serial.printf("Markers [%d] at offset %d\n", PLCRUNTIME_NUM_OF_MARKERS, marker_offset);
         Serial.printf("Stack: %d (%d)\n", stack.size(), PLCRUNTIME_MAX_STACK_SIZE);
         Serial.printf("Memory: %d\n", PLCRUNTIME_MAX_MEMORY_SIZE);
@@ -700,47 +688,47 @@ public:
     // Print the stack buffer to the serial port
     int printStack();
 
-    void setControl(u32 index, byte value) {
-        memory[index + control_offset] = value;
+    void setSystem(u32 index, byte value) {
+        memory[index + system_offset] = value;
     }
 
-    void setControlBit(u32 index, u8 bit, bool value) {
+    void setSystemBit(u32 index, u8 bit, bool value) {
         byte temp = 0;
-        bool error = get_u8(memory, index + control_offset, temp);
+        bool error = get_u8(memory, index + system_offset, temp);
         if (error) return;
         if (value) temp |= (1 << bit);
         else temp &= ~(1 << bit);
-        memory[index + control_offset] = temp;
+        memory[index + system_offset] = temp;
     }
 
 #ifndef __AVR__
-    void setControlBit(float index, bool value) {
+    void setSystemBit(float index, bool value) {
         u32 i = (u32) index;
         u32 b = (u32) ((index - ((float) i)) * 10);
         b = b > 7 ? 7 : b;
-        setControlBit(i, b, value);
+        setSystemBit(i, b, value);
     }
 #endif // __AVR__
 
-    byte getControl(u32 index) {
+    byte getSystem(u32 index) {
         byte value = 0;
-        get_u8(memory, index + control_offset, value);
+        get_u8(memory, index + system_offset, value);
         return value;
     }
 
-    bool getControlBit(u32 index, u8 bit) {
+    bool getSystemBit(u32 index, u8 bit) {
         byte temp = 0;
-        bool error = get_u8(memory, index + control_offset, temp);
+        bool error = get_u8(memory, index + system_offset, temp);
         if (error) return false;
         return temp & (1 << bit);
     }
 
 #ifndef __AVR__
-    bool getControlBit(float index) {
+    bool getSystemBit(float index) {
         u32 i = (u32) index;
         u32 b = (u32) ((index - ((float) i)) * 10);
         b = b > 7 ? 7 : b;
-        return getControlBit(i, b);
+        return getSystemBit(i, b);
     }
 #endif // __AVR__
 
@@ -790,28 +778,6 @@ public:
         u32 b = (u32) ((index - ((float) i)) * 10);
         b = b > 7 ? 7 : b;
         return getOutputBit(i, b);
-    }
-#endif // __AVR__
-
-    byte getSystem(u32 index) {
-        byte value = 0;
-        get_u8(memory, index + system_offset, value);
-        return value;
-    }
-
-    bool getSystemBit(u32 index, u8 bit) {
-        byte temp = 0;
-        bool error = get_u8(memory, index + system_offset, temp);
-        if (error) return false;
-        return temp & (1 << bit);
-    }
-
-#ifndef __AVR__
-    bool getSystemBit(float index) {
-        u32 i = (u32) index;
-        u32 b = (u32) ((index - ((float) i)) * 10);
-        b = b > 7 ? 7 : b;
-        return getSystemBit(i, b);
     }
 #endif // __AVR__
 
@@ -933,13 +899,6 @@ public:
         return *((bool*) sym->valuePtr());
     }
 
-    // Register System bit: S (address, bit, name, optional comment) - typically read-only
-    bool& registerSBit(u32 address, u8 bit, const char* name, const char* comment = nullptr) {
-        RegisteredSymbol* sym = g_symbolRegistry.add(name, comment, address, bit, AREA_SYSTEM, TYPE_BIT);
-        if (!sym) { static bool dummy = false; return dummy; }
-        return *((bool*) sym->valuePtr());
-    }
-
     // Register Control bit: K (address, bit, name, optional comment)
     bool& registerKBit(u32 address, u8 bit, const char* name, const char* comment = nullptr) {
         RegisteredSymbol* sym = g_symbolRegistry.add(name, comment, address, bit, AREA_CONTROL, TYPE_BIT);
@@ -987,15 +946,6 @@ public:
     T& registerM(u32 address, const char* name, const char* comment = nullptr) {
         SymbolType stype = getSymbolTypeFor<T>();
         RegisteredSymbol* sym = g_symbolRegistry.add(name, comment, address, 0, AREA_MARKER, stype);
-        if (!sym) { static T dummy = T(); return dummy; }
-        return *((T*) sym->valuePtr());
-    }
-
-    // Register System word: SW (address, name, optional comment)
-    template<typename T>
-    T& registerS(u32 address, const char* name, const char* comment = nullptr) {
-        SymbolType stype = getSymbolTypeFor<T>();
-        RegisteredSymbol* sym = g_symbolRegistry.add(name, comment, address, 0, AREA_SYSTEM, stype);
         if (!sym) { static T dummy = T(); return dummy; }
         return *((T*) sym->valuePtr());
     }
@@ -1077,8 +1027,8 @@ public:
     void syncOutputsFromMemory() {
         for (u16 i = 0; i < g_symbolRegistry.count; i++) {
             RegisteredSymbol& sym = g_symbolRegistry.symbols[i];
-            // Sync outputs, markers, and system (readable after PLC execution)
-            if (sym.area != AREA_OUTPUT && sym.area != AREA_MARKER && sym.area != AREA_SYSTEM) continue;
+            // Sync outputs and markers (readable after PLC execution)
+            if (sym.area != AREA_OUTPUT && sym.area != AREA_MARKER) continue;
 
             u32 offset = getAreaOffset(sym.area) + sym.address;
 
@@ -1144,10 +1094,9 @@ private:
     // Get memory offset for a given area
     u32 getAreaOffset(SymbolArea area) const {
         switch (area) {
-            case AREA_CONTROL: return control_offset;
+            case AREA_SYSTEM:  return system_offset;
             case AREA_INPUT:   return input_offset;
             case AREA_OUTPUT:  return output_offset;
-            case AREA_SYSTEM:  return system_offset;
             case AREA_MARKER:  return marker_offset;
             case AREA_TIMER:   return timer_offset;
             case AREA_COUNTER: return counter_offset;
@@ -1182,15 +1131,13 @@ public:
         STDOUT_PRINT.print(PLCRUNTIME_MAX_STACK_SIZE); STDOUT_PRINT.print(F(","));
         STDOUT_PRINT.print(PLCRUNTIME_MAX_MEMORY_SIZE); STDOUT_PRINT.print(F(","));
         STDOUT_PRINT.print(PLCRUNTIME_MAX_PROGRAM_SIZE); STDOUT_PRINT.print(F(","));
-        // IO map (Controls, Inputs, Outputs, Systems, Markers, Timers, Counters)
-        STDOUT_PRINT.print(control_offset); STDOUT_PRINT.print(F(","));
-        STDOUT_PRINT.print(PLCRUNTIME_NUM_OF_CONTROLS); STDOUT_PRINT.print(F(","));
+        // IO map (Systems, Inputs, Outputs, Markers, Timers, Counters)
+        STDOUT_PRINT.print(system_offset); STDOUT_PRINT.print(F(","));
+        STDOUT_PRINT.print(PLCRUNTIME_NUM_OF_SYSTEMS); STDOUT_PRINT.print(F(","));
         STDOUT_PRINT.print(input_offset); STDOUT_PRINT.print(F(","));
         STDOUT_PRINT.print(PLCRUNTIME_NUM_OF_INPUTS); STDOUT_PRINT.print(F(","));
         STDOUT_PRINT.print(output_offset); STDOUT_PRINT.print(F(","));
         STDOUT_PRINT.print(PLCRUNTIME_NUM_OF_OUTPUTS); STDOUT_PRINT.print(F(","));
-        STDOUT_PRINT.print(system_offset); STDOUT_PRINT.print(F(","));
-        STDOUT_PRINT.print(PLCRUNTIME_NUM_OF_SYSTEMS); STDOUT_PRINT.print(F(","));
         STDOUT_PRINT.print(marker_offset); STDOUT_PRINT.print(F(","));
         STDOUT_PRINT.print(PLCRUNTIME_NUM_OF_MARKERS); STDOUT_PRINT.print(F(","));
         STDOUT_PRINT.print(timer_offset); STDOUT_PRINT.print(F(","));
@@ -1754,7 +1701,7 @@ void VovkPLCRuntime::clear(RuntimeProgram& program) {
 int VovkPLCRuntime::printStack() { return stack.print(); }
 
 void VovkPLCRuntime::updateGlobals() {
-    u32 base = control_offset;
+    u32 base = system_offset;
     u8 state = 0;
     state = state << 1 | P_10s; // 2.7
     state = state << 1 | P_5s; // 2.6

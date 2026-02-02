@@ -4,10 +4,9 @@ VERSION 2.0
 MEMORY
     OFFSET 0
     AVAILABLE 1024
-    K 64
+    S 64
     X 64
     Y 64
-    S 256
     M 256
     T 90
     C 40

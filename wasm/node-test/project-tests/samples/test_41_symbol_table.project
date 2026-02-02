@@ -7,10 +7,9 @@ VERSION 3.0
 MEMORY
     OFFSET 0
     AVAILABLE 1024
-    K 32
+    S 32
     X 32
     Y 32
-    S 128
     M 256
     T 64
     C 32

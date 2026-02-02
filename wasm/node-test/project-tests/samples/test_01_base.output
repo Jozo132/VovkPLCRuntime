@@ -1,9 +1,9 @@
 {
   "success": 1,
   "project": { "name": "MultiBlockWithSymbols", "version": "3.0" },
-  "bytecode": "58 00 14 E2 00 10 69 00 40 04 00 0A 19 04 01 C0 FD 01 58 00 40 59 00 40 C3 C0 E2 00 20 68 00 80 18 08 01 C0 08 00 01 20 08 19 08 01 C0 FD 02 59 00 40 EB 00 03 70 00 80 FD 03 58 00 40 8C 02 24 00 59 00 40 C0 61 00 80 FF",
+  "bytecode": "58 00 14 E2 00 10 69 00 40 04 00 0A 19 04 00 C0 FD 01 58 00 40 59 00 40 C3 C0 E2 00 20 68 00 80 18 08 00 C0 08 00 01 20 08 19 08 00 C0 FD 02 59 00 40 EB 00 03 70 00 80 FD 03 58 00 40 8C 01 24 00 59 00 40 C0 61 00 80 FF",
   "bytecodeLength": 73,
-  "checksum": 161,
+  "checksum": 45,
   "files": [
     { "path": "main", "firstBlockIndex": 0, "blockCount": 3, "executionOrder": 0 }
   ],
@@ -17,16 +17,15 @@
     { "name": "stop_btn", "type": "bit", "address": "64.1" },
     { "name": "motor", "type": "bit", "address": "128.0" },
     { "name": "error_led", "type": "bit", "address": "128.1" },
-    { "name": "counter", "type": "i16", "address": "448" }
+    { "name": "counter", "type": "i16", "address": "192" }
   ],
   "memoryAreas": [
     { "name": "K", "start": 0, "end": 63 },
     { "name": "X", "start": 64, "end": 127 },
     { "name": "Y", "start": 128, "end": 191 },
-    { "name": "S", "start": 192, "end": 447 },
-    { "name": "M", "start": 448, "end": 703 },
-    { "name": "T", "start": 704, "end": 793 },
-    { "name": "C", "start": 794, "end": 833 }
+    { "name": "M", "start": 192, "end": 447 },
+    { "name": "T", "start": 448, "end": 537 },
+    { "name": "C", "start": 538, "end": 577 }
   ],
   "memory": { "available": 1024, "used": 194 },
   "flash": { "size": 32768, "used": 73 },

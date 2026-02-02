@@ -158,10 +158,9 @@ public:
 
         // Determine memory area and offset
         switch (prefix) {
-            case 'K': case 'C': base_offset = plcasm_control_offset; num_start = 1; break;
+            case 'S': case 'C': base_offset = plcasm_system_offset; num_start = 1; break;
             case 'I': case 'X': base_offset = plcasm_input_offset; num_start = 1; break;
             case 'Q': case 'Y': base_offset = plcasm_output_offset; num_start = 1; break;
-            case 'S': base_offset = plcasm_system_offset; num_start = 1; break;
             case 'M': base_offset = plcasm_marker_offset; num_start = 1; break;
             case 'T': base_offset = plcasm_timer_offset; num_start = 1; break;
             default:
@@ -358,10 +357,10 @@ public:
         if (sym) return true;
 
         // Check if it's a valid address format
-        // Valid prefixes: I, Q, M, S, X, Y, K, C, T, P (pulse), # (immediate)
+        // Valid prefixes: I, Q, M, S, X, Y, C, T, P (pulse), # (immediate)
         switch (first) {
             case 'I': case 'Q': case 'M': case 'S': case 'X': case 'Y':
-            case 'K': case 'C': case 'T': case '#':
+            case 'C': case 'T': case '#':
                 return true;
             case 'P':
                 // P_On, P_Off, P_1s etc.
@@ -395,7 +394,7 @@ public:
         int i = 0;
         switch (first) {
             case 'I': case 'Q': case 'M': case 'S': case 'X': case 'Y':
-            case 'K': case 'C': case 'T':
+            case 'C': case 'T':
                 hasPrefix = true;
                 i = 1;
                 break;
@@ -454,18 +453,15 @@ public:
             } else if (addr >= plcasm_marker_offset) {
                 prefix = 'M';
                 offset = addr - plcasm_marker_offset;
-            } else if (addr >= plcasm_system_offset) {
-                prefix = 'S';
-                offset = addr - plcasm_system_offset;
             } else if (addr >= plcasm_output_offset) {
                 prefix = 'Y';
                 offset = addr - plcasm_output_offset;
             } else if (addr >= plcasm_input_offset) {
                 prefix = 'X';
                 offset = addr - plcasm_input_offset;
-            } else if (addr >= plcasm_control_offset) {
-                prefix = 'K';
-                offset = addr - plcasm_control_offset;
+            } else if (addr >= plcasm_system_offset) {
+                prefix = 'S';
+                offset = addr - plcasm_system_offset;
             }
 
             int j = 0;

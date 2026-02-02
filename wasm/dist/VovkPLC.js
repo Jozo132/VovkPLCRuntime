@@ -78,7 +78,7 @@ const SUPPORT = checkSupport()
  *     setMicros: (micros: number) => void, // Sets the system microsecond counter.
  *     getMillis: () => number, // Gets the system millisecond counter.
  *     getMicros: () => number, // Gets the system microsecond counter.
- *     setRuntimeOffsets: (controlOffset: number, inputOffset: number, outputOffset: number, systemOffset: number, markerOffset: number) => void, // Sets the memory offsets for control, input, output, system, and marker areas.
+ *     setRuntimeOffsets: (systemOffset: number, inputOffset: number, outputOffset: number, markerOffset: number) => void, // Sets the memory offsets for system, input, output, and marker areas.
  *     run: () => number, // Executes a single program scan cycle. Returns status code.
  *     runDirty: () => number, // Executed a single cycle without cleaning certain flags (Dirty).
  *     run_unit_test: () => void, // Runs the internal unit test suite.
@@ -996,44 +996,40 @@ class VovkPLC_class {
                 memory: +parts[8],
                 program: +parts[9],
             }
-            if (parts.length >= 27) {
-                // New format with timer and counter info
+            if (parts.length >= 25) {
+                // New format with timer and counter info (S/system area removed)
                 return {
                     ...base,
-                    control_offset: +parts[10],
-                    control_size: +parts[11],
+                    system_offset: +parts[10],
+                    system_size: +parts[11],
                     input_offset: +parts[12],
                     input_size: +parts[13],
                     output_offset: +parts[14],
                     output_size: +parts[15],
-                    system_offset: +parts[16],
-                    system_size: +parts[17],
-                    marker_offset: +parts[18],
-                    marker_size: +parts[19],
-                    timer_offset: +parts[20],
-                    timer_count: +parts[21],
-                    timer_struct_size: +parts[22],
-                    counter_offset: +parts[23],
-                    counter_count: +parts[24],
-                    counter_struct_size: +parts[25],
-                    device: parts[26],
+                    marker_offset: +parts[16],
+                    marker_size: +parts[17],
+                    timer_offset: +parts[18],
+                    timer_count: +parts[19],
+                    timer_struct_size: +parts[20],
+                    counter_offset: +parts[21],
+                    counter_count: +parts[22],
+                    counter_struct_size: +parts[23],
+                    device: parts[24],
                 }
             }
-            if (parts.length >= 21) {
+            if (parts.length >= 19) {
                 // @ts-ignore // Legacy format without timer/counter info
                 return {
                     ...base,
-                    control_offset: +parts[10],
-                    control_size: +parts[11],
+                    system_offset: +parts[10],
+                    system_size: +parts[11],
                     input_offset: +parts[12],
                     input_size: +parts[13],
                     output_offset: +parts[14],
                     output_size: +parts[15],
-                    system_offset: +parts[16],
-                    system_size: +parts[17],
-                    marker_offset: +parts[18],
-                    marker_size: +parts[19],
-                    device: parts[20],
+                    marker_offset: +parts[16],
+                    marker_size: +parts[17],
+                    device: parts[18],
                 }
             } // @ts-ignore // Very old legacy format
             return {                
@@ -1076,14 +1072,12 @@ class VovkPLC_class {
      *     stack: number,
      *     memory: number,
      *     program: number,
-     *     control_offset: number,
-     *     control_size: number,
+     *     system_offset: number,
+     *     system_size: number,
      *     input_offset: number,
      *     input_size: number,
      *     output_offset: number,
      *     output_size: number,
-     *     system_offset: number,
-     *     system_size: number,
      *     marker_offset: number,
      *     marker_size: number,
      *     timer_offset: number,
@@ -1168,18 +1162,17 @@ class VovkPLC_class {
 
     /**
      * Sets the memory offsets for the PLC runtime memory areas.
-     * This allows custom memory layout configuration for control, input, output, system, and marker areas.
+     * This allows custom memory layout configuration for system, input, output, and marker areas.
      *
-     * @param {number} controlOffset - Offset for the control area.
+     * @param {number} systemOffset - Offset for the system area.
      * @param {number} inputOffset - Offset for the input area.
      * @param {number} outputOffset - Offset for the output area.
-     * @param {number} systemOffset - Offset for the system area.
      * @param {number} markerOffset - Offset for the marker area.
      */
-    setRuntimeOffsets = (controlOffset, inputOffset, outputOffset, systemOffset, markerOffset) => {
+    setRuntimeOffsets = (systemOffset, inputOffset, outputOffset, markerOffset) => {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         if (!this.wasm_exports.setRuntimeOffsets) throw new Error("'setRuntimeOffsets' function not found")
-        this.wasm_exports.setRuntimeOffsets(controlOffset, inputOffset, outputOffset, systemOffset, markerOffset)
+        this.wasm_exports.setRuntimeOffsets(systemOffset, inputOffset, outputOffset, markerOffset)
     }
 
     /**
@@ -3587,8 +3580,8 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
     getDeviceHealth = () => this.call('getDeviceHealth')
     /** @type { () => Promise<void> } */
     resetDeviceHealth = () => this.call('resetDeviceHealth')
-    /** @type { (controlOffset: number, inputOffset: number, outputOffset: number, systemOffset: number, markerOffset: number) => Promise<void> } */
-    setRuntimeOffsets = (controlOffset, inputOffset, outputOffset, systemOffset, markerOffset) => this.call('setRuntimeOffsets', controlOffset, inputOffset, outputOffset, systemOffset, markerOffset)
+    /** @type { (systemOffset: number, inputOffset: number, outputOffset: number, markerOffset: number) => Promise<void> } */
+    setRuntimeOffsets = (systemOffset, inputOffset, outputOffset, markerOffset) => this.call('setRuntimeOffsets', systemOffset, inputOffset, outputOffset, markerOffset)
     /** @type { (assembly: string) => Promise<any> } */
     downloadAssembly = assembly => this.call('downloadAssembly', assembly)
     /** @type { (plcasm: string, options?: { run?: boolean }) => Promise<CompileResult> } */

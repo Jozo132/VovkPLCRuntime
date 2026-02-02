@@ -1272,21 +1272,18 @@ public:
             if (sharedSym->address >= plcasm_input_offset && sharedSym->address < plcasm_output_offset) {
                 areaPrefix = 'X';
                 relativeAddr = sharedSym->address - plcasm_input_offset;
-            } else if (sharedSym->address >= plcasm_output_offset && sharedSym->address < plcasm_system_offset) {
+            } else if (sharedSym->address >= plcasm_output_offset && sharedSym->address < plcasm_marker_offset) {
                 areaPrefix = 'Y';
                 relativeAddr = sharedSym->address - plcasm_output_offset;
-            } else if (sharedSym->address >= plcasm_system_offset && sharedSym->address < plcasm_marker_offset) {
-                areaPrefix = 'S';
-                relativeAddr = sharedSym->address - plcasm_system_offset;
             } else if (sharedSym->address >= plcasm_marker_offset && sharedSym->address < plcasm_timer_offset) {
                 areaPrefix = 'M';
                 relativeAddr = sharedSym->address - plcasm_marker_offset;
-            } else if (sharedSym->address >= plcasm_timer_offset && sharedSym->address < plcasm_control_offset) {
+            } else if (sharedSym->address >= plcasm_timer_offset && sharedSym->address < plcasm_counter_offset) {
                 areaPrefix = 'T';
                 relativeAddr = sharedSym->address - plcasm_timer_offset;
-            } else if (sharedSym->address >= plcasm_control_offset) {
+            } else if (sharedSym->address >= plcasm_counter_offset) {
                 areaPrefix = 'C';
-                relativeAddr = sharedSym->address - plcasm_control_offset;
+                relativeAddr = sharedSym->address - plcasm_counter_offset;
             }
             
             int outIdx = 0;
@@ -1336,7 +1333,7 @@ public:
             case 'Y': baseOffset = plcasm_output_offset; break;
             case 'M': baseOffset = plcasm_marker_offset; break;
             case 'S': baseOffset = plcasm_system_offset; break;
-            case 'C': baseOffset = plcasm_control_offset; break;
+            case 'C': baseOffset = plcasm_counter_offset; break;
             case 'T': baseOffset = plcasm_timer_offset; break;
             default:
                 setError("Invalid address prefix");
@@ -1445,28 +1442,25 @@ public:
         sym->bitIndex = shared->is_bit ? shared->bit : 0;
 
         // Build PLCASM address string
-        // Determine area prefix from address range
+        // Determine area prefix from address range (S - System removed)
         char areaPrefix = 'M'; // Default
         u32 relativeAddr = shared->address;
 
         if (shared->address >= plcasm_input_offset && shared->address < plcasm_output_offset) {
             areaPrefix = 'X';
             relativeAddr = shared->address - plcasm_input_offset;
-        } else if (shared->address >= plcasm_output_offset && shared->address < plcasm_system_offset) {
+        } else if (shared->address >= plcasm_output_offset && shared->address < plcasm_marker_offset) {
             areaPrefix = 'Y';
             relativeAddr = shared->address - plcasm_output_offset;
-        } else if (shared->address >= plcasm_system_offset && shared->address < plcasm_marker_offset) {
-            areaPrefix = 'S';
-            relativeAddr = shared->address - plcasm_system_offset;
         } else if (shared->address >= plcasm_marker_offset && shared->address < plcasm_timer_offset) {
             areaPrefix = 'M';
             relativeAddr = shared->address - plcasm_marker_offset;
-        } else if (shared->address >= plcasm_timer_offset && shared->address < plcasm_control_offset) {
+        } else if (shared->address >= plcasm_timer_offset && shared->address < plcasm_counter_offset) {
             areaPrefix = 'T';
             relativeAddr = shared->address - plcasm_timer_offset;
-        } else if (shared->address >= plcasm_control_offset) {
+        } else if (shared->address >= plcasm_counter_offset) {
             areaPrefix = 'C';
-            relativeAddr = shared->address - plcasm_control_offset;
+            relativeAddr = shared->address - plcasm_counter_offset;
         }
 
         int outIdx = 0;

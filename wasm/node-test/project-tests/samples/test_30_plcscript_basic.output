@@ -1,9 +1,9 @@
 {
   "success": 1,
   "project": { "name": "PLCScriptBasicTest", "version": "1.0" },
-  "bytecode": "FD 08 08 00 64 19 08 01 CA 03 01 14 02 60 00 80 16 02 FF",
+  "bytecode": "FD 08 08 00 64 19 08 00 CA 03 01 14 02 60 00 80 16 02 FF",
   "bytecodeLength": 19,
-  "checksum": 246,
+  "checksum": 145,
   "files": [
     { "path": "main", "firstBlockIndex": 0, "blockCount": 1, "executionOrder": 0 }
   ],
@@ -15,10 +15,9 @@
     { "name": "K", "start": 0, "end": 63 },
     { "name": "X", "start": 64, "end": 127 },
     { "name": "Y", "start": 128, "end": 191 },
-    { "name": "S", "start": 192, "end": 255 },
-    { "name": "M", "start": 256, "end": 511 },
-    { "name": "T", "start": 512, "end": 527 },
-    { "name": "C", "start": 528, "end": 535 }
+    { "name": "M", "start": 192, "end": 447 },
+    { "name": "T", "start": 448, "end": 463 },
+    { "name": "C", "start": 464, "end": 471 }
   ],
   "memory": { "available": 1024, "used": 192 },
   "flash": { "size": 32768, "used": 19 },

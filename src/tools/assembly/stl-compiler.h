@@ -440,7 +440,6 @@ public:
                 plcasmAddr[j++] = 'T'; i++; break;  // Timer -> T (with struct size multiplier)
             case 'X': plcasmAddr[j++] = 'X'; i++; break;  // Already PLCASM format
             case 'Y': plcasmAddr[j++] = 'Y'; i++; break;
-            case 'K': plcasmAddr[j++] = 'K'; i++; break;  // K maps to controls
             case 'P':
                 // Special: P_1s or similar pulse macro
                 while (stlAddr[i]) plcasmAddr[j++] = stlAddr[i++];

@@ -1,9 +1,9 @@
 {
   "success": 1,
   "project": { "name": "STLTimer", "version": "1.0" },
-  "bytecode": "FD 02 58 00 40 30 02 C0 00 00 13 88 60 00 80 FF",
+  "bytecode": "FD 02 58 00 40 30 01 C0 00 00 13 88 60 00 80 FF",
   "bytecodeLength": 16,
-  "checksum": 143,
+  "checksum": 81,
   "files": [
     { "path": "main", "firstBlockIndex": 0, "blockCount": 1, "executionOrder": 0 }
   ],
@@ -15,10 +15,9 @@
     { "name": "K", "start": 0, "end": 63 },
     { "name": "X", "start": 64, "end": 127 },
     { "name": "Y", "start": 128, "end": 191 },
-    { "name": "S", "start": 192, "end": 447 },
-    { "name": "M", "start": 448, "end": 703 },
-    { "name": "T", "start": 704, "end": 793 },
-    { "name": "C", "start": 794, "end": 833 }
+    { "name": "M", "start": 192, "end": 447 },
+    { "name": "T", "start": 448, "end": 537 },
+    { "name": "C", "start": 538, "end": 577 }
   ],
   "memory": { "available": 1024, "used": 192 },
   "flash": { "size": 32768, "used": 16 },

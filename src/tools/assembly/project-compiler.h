@@ -46,10 +46,9 @@
 // MEMORY
 //   OFFSET <start>              // Required: starting offset
 //   AVAILABLE <bytes>           // Required: total available memory size
-//   K <size>                    // Required: Controls/Constants (100% usage assumed)
+//   S <size>                    // Required: System (100% usage assumed)
 //   X <size>                    // Required: Inputs (100% usage assumed)
 //   Y <size>                    // Required: Outputs (100% usage assumed)
-//   S <size>                    // Required: System (usage based on access)
 //   M <size>                    // Required: Markers (usage based on access)
 //   T <size>                    // Required: Timers (usage based on access)
 //   C <size>                    // Required: Counters (usage based on access)
@@ -841,9 +840,9 @@ public:
             return true;
         }
 
-        // Required sequence: OFFSET, AVAILABLE, K, X, Y, S, M, T, C
-        const char* required_areas[] = { "K", "X", "Y", "S", "M", "T", "C" };
-        const int num_required = 7;
+        // Required sequence: OFFSET, AVAILABLE, S, X, Y, M, T, C
+        const char* required_areas[] = { "S", "X", "Y", "M", "T", "C" };
+        const int num_required = 6;
         
         u32 current_offset = 0;
         bool has_offset = false;
@@ -887,9 +886,9 @@ public:
                 continue;
             }
 
-            // Then: memory areas in strict order K, X, Y, S, M, T, C
+            // Then: memory areas in strict order S, X, Y, M, T, C
             if (area_index >= num_required) {
-                setError("Too many memory areas - expected only K, X, Y, S, M, T, C");
+                setError("Too many memory areas - expected only S, X, Y, M, T, C");
                 return false;
             }
 
@@ -987,17 +986,16 @@ public:
         // Set up default memory areas with sequential sizes
         // Format: name, size (offsets calculated sequentially from 0)
         const struct { const char* name; u32 size; } defaults[] = {
-            { "K", 64 },    // Control variables
+            { "S", 64 },    // System variables
             { "X", 64 },    // Inputs
             { "Y", 64 },    // Outputs
-            { "S", 256 },   // System variables
             { "M", 256 },   // Markers
             { "T", 90 },    // Timers
             { "C", 40 },    // Counters
         };
 
         u32 current_offset = 0;
-        for (int i = 0; i < 7 && memory_area_count < PROJECT_MAX_MEMORY_AREAS; i++) {
+        for (int i = 0; i < 6 && memory_area_count < PROJECT_MAX_MEMORY_AREAS; i++) {
             MemoryArea& area = memory_areas[memory_area_count];
             area.reset();
             int j = 0;
@@ -1574,7 +1572,7 @@ public:
 
         appendToCombinedPLCASM("// |                          Initial setup                             |\n");
         appendToCombinedPLCASM("// +--------------------------------------------------------------------+\n");
-        appendToCombinedPLCASM("u8.readBit K20.0\njmp_if_not ____SKIP_STARTUP\n\n");
+        appendToCombinedPLCASM("u8.readBit S20.0\njmp_if_not ____SKIP_STARTUP\n\n");
         appendToCombinedPLCASM("// Write default values\n");
 
         bool has_content = false;
@@ -2334,20 +2332,18 @@ public:
             total_used += (memory_areas[i].end - memory_areas[i].start + 1);
         }
         
-        // For S, M, T, C - track highest accessed address in each area
+        // For M, T, C - track highest accessed address in each area
         // We scan the bytecode for memory access instructions
-        u32 max_addr_S = 0, max_addr_M = 0, max_addr_T = 0, max_addr_C = 0;
-        bool used_S = false, used_M = false, used_T = false, used_C = false;
+        u32 max_addr_M = 0, max_addr_T = 0, max_addr_C = 0;
+        bool used_M = false, used_T = false, used_C = false;
         
         // Get area boundaries
-        u32 S_start = 0, S_end = 0;
         u32 M_start = 0, M_end = 0;
         u32 T_start = 0, T_end = 0;
         u32 C_start = 0, C_end = 0;
         
         for (int i = 0; i < memory_area_count; i++) {
-            if (strEqI(memory_areas[i].name, "S")) { S_start = memory_areas[i].start; S_end = memory_areas[i].end; }
-            else if (strEqI(memory_areas[i].name, "M")) { M_start = memory_areas[i].start; M_end = memory_areas[i].end; }
+            if (strEqI(memory_areas[i].name, "M")) { M_start = memory_areas[i].start; M_end = memory_areas[i].end; }
             else if (strEqI(memory_areas[i].name, "T")) { T_start = memory_areas[i].start; T_end = memory_areas[i].end; }
             else if (strEqI(memory_areas[i].name, "C")) { C_start = memory_areas[i].start; C_end = memory_areas[i].end; }
         }
@@ -2375,10 +2371,7 @@ public:
                 u32 addr = output[i + 1] | (output[i + 2] << 8);
                 
                 // Determine which area this address belongs to
-                if (addr >= S_start && addr <= S_end) {
-                    used_S = true;
-                    if (addr > max_addr_S) max_addr_S = addr;
-                } else if (addr >= M_start && addr <= M_end) {
+                if (addr >= M_start && addr <= M_end) {
                     used_M = true;
                     if (addr > max_addr_M) max_addr_M = addr;
                 } else if (addr >= T_start && addr <= T_end) {
@@ -2401,10 +2394,7 @@ public:
             if (type_size < 1) type_size = 1;  // Minimum 1 byte for bits
             u32 end_addr = addr + type_size - 1;  // Last byte used by this symbol
             
-            if (addr >= S_start && addr <= S_end) {
-                used_S = true;
-                if (end_addr > max_addr_S) max_addr_S = end_addr;
-            } else if (addr >= M_start && addr <= M_end) {
+            if (addr >= M_start && addr <= M_end) {
                 used_M = true;
                 if (end_addr > max_addr_M) max_addr_M = end_addr;
             } else if (addr >= T_start && addr <= T_end) {
@@ -2417,9 +2407,6 @@ public:
         }
         
         // Add used bytes for each area (from start to highest accessed address + type size)
-        if (used_S && max_addr_S >= S_start) {
-            total_used += (max_addr_S - S_start + 1);
-        }
         if (used_M && max_addr_M >= M_start) {
             total_used += (max_addr_M - M_start + 1);
         }

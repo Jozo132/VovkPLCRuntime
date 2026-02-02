@@ -44,10 +44,6 @@
 #define PLCRUNTIME_NUM_OF_MARKERS 256
 #endif // PLCRUNTIME_NUM_OF_MARKERS
 
-#ifndef PLCRUNTIME_NUM_OF_SYSTEMS
-#define PLCRUNTIME_NUM_OF_SYSTEMS 256
-#endif // PLCRUNTIME_NUM_OF_SYSTEMS
-
 #ifndef PLCRUNTIME_CONTROL_OFFSET
 #define PLCRUNTIME_CONTROL_OFFSET 0
 #endif // PLCRUNTIME_CONTROL_OFFSET
@@ -60,12 +56,8 @@
 #define PLCRUNTIME_OUTPUT_OFFSET (PLCRUNTIME_INPUT_OFFSET + PLCRUNTIME_NUM_OF_INPUTS)
 #endif // PLCRUNTIME_OUTPUT_OFFSET
 
-#ifndef PLCRUNTIME_SYSTEM_OFFSET
-#define PLCRUNTIME_SYSTEM_OFFSET (PLCRUNTIME_OUTPUT_OFFSET + PLCRUNTIME_NUM_OF_OUTPUTS)
-#endif // PLCRUNTIME_SYSTEM_OFFSET
-
 #ifndef PLCRUNTIME_MARKER_OFFSET
-#define PLCRUNTIME_MARKER_OFFSET (PLCRUNTIME_SYSTEM_OFFSET + PLCRUNTIME_NUM_OF_SYSTEMS)
+#define PLCRUNTIME_MARKER_OFFSET (PLCRUNTIME_OUTPUT_OFFSET + PLCRUNTIME_NUM_OF_OUTPUTS)
 #endif // PLCRUNTIME_MARKER_OFFSET
 
 #ifndef PLCRUNTIME_TIMER_OFFSET
@@ -76,10 +68,9 @@
 #define PLCRUNTIME_COUNTER_OFFSET (PLCRUNTIME_TIMER_OFFSET + (PLCRUNTIME_NUM_OF_TIMERS * PLCRUNTIME_TIMER_STRUCT_SIZE))
 #endif // PLCRUNTIME_COUNTER_OFFSET
 
-static u32 plcasm_control_offset = PLCRUNTIME_CONTROL_OFFSET;
+static u32 plcasm_system_offset = PLCRUNTIME_SYSTEM_OFFSET;
 static u32 plcasm_input_offset = PLCRUNTIME_INPUT_OFFSET;
 static u32 plcasm_output_offset = PLCRUNTIME_OUTPUT_OFFSET;
-static u32 plcasm_system_offset = PLCRUNTIME_SYSTEM_OFFSET;
 static u32 plcasm_marker_offset = PLCRUNTIME_MARKER_OFFSET;
 static u32 plcasm_timer_offset = PLCRUNTIME_TIMER_OFFSET;
 static u32 plcasm_counter_offset = PLCRUNTIME_COUNTER_OFFSET;
@@ -839,8 +830,8 @@ public:
         int num_start = 0;
 
         // Determine memory area and offset
-        if (prefix == 'C' || prefix == 'c') {
-            base_offset = plcasm_control_offset;
+        if (prefix == 'S' || prefix == 's') {
+            base_offset = plcasm_system_offset;
             num_start = 1;
         } else if (prefix == 'X' || prefix == 'x') {
             base_offset = plcasm_input_offset;
@@ -848,11 +839,14 @@ public:
         } else if (prefix == 'Y' || prefix == 'y') {
             base_offset = plcasm_output_offset;
             num_start = 1;
-        } else if (prefix == 'S' || prefix == 's') {
-            base_offset = plcasm_system_offset;
-            num_start = 1;
         } else if (prefix == 'M' || prefix == 'm') {
             base_offset = plcasm_marker_offset;
+            num_start = 1;
+        } else if (prefix == 'T' || prefix == 't') {
+            base_offset = plcasm_timer_offset;
+            num_start = 1;
+        } else if (prefix == 'C' || prefix == 'c') {
+            base_offset = plcasm_counter_offset;
             num_start = 1;
         } else if (prefix >= '0' && prefix <= '9') {
             // Direct numeric address
@@ -1547,11 +1541,10 @@ public:
     bool memoryOffsetFromPrefix(char prefix, int& offset, int& multiplier) {
         multiplier = 1; // Default multiplier for byte-addressable areas
         switch (prefix) {
-            case 'K': case 'k': offset = (int) plcasm_control_offset; return true;
+            case 'S': case 's': offset = (int) plcasm_system_offset; return true;
             case 'X': case 'x': offset = (int) plcasm_input_offset; return true;
             case 'Y': case 'y': offset = (int) plcasm_output_offset; return true;
             case 'M': case 'm': offset = (int) plcasm_marker_offset; return true;
-            case 'S': case 's': offset = (int) plcasm_system_offset; return true;
             case 'T': case 't': offset = (int) plcasm_timer_offset; multiplier = PLCRUNTIME_TIMER_STRUCT_SIZE; return true;
             case 'C': case 'c': offset = (int) plcasm_counter_offset; multiplier = PLCRUNTIME_COUNTER_STRUCT_SIZE; return true;
             default: return false;
@@ -1566,10 +1559,9 @@ public:
 
     bool memorySizeFromPrefix(char prefix, int& size, const char*& name) {
         switch (prefix) {
-            case 'K': case 'k': size = PLCRUNTIME_NUM_OF_CONTROLS; name = "controls"; return true;
+            case 'S': case 's': size = PLCRUNTIME_NUM_OF_SYSTEMS; name = "systems"; return true;
             case 'X': case 'x': size = PLCRUNTIME_NUM_OF_INPUTS; name = "inputs"; return true;
             case 'Y': case 'y': size = PLCRUNTIME_NUM_OF_OUTPUTS; name = "outputs"; return true;
-            case 'S': case 's': size = PLCRUNTIME_NUM_OF_SYSTEMS; name = "systems"; return true;
             case 'M': case 'm': size = PLCRUNTIME_NUM_OF_MARKERS; name = "markers"; return true;
             case 'T': case 't': size = PLCRUNTIME_NUM_OF_TIMERS; name = "timers"; return true;
             case 'C': case 'c': size = PLCRUNTIME_NUM_OF_COUNTERS; name = "counters"; return true;
@@ -2916,7 +2908,7 @@ WASM_EXPORT void printInfo() {
 static char info_buffer[512];
 
 WASM_EXPORT const char* getInfoString() {
-    sprintf(info_buffer, "[VovkPLCRuntime,%s,%d,%d,%d,%d,%s,%d,%d,%d,%u,%d,%u,%d,%u,%d,%u,%d,%u,%d,%u,%d,%d,%u,%d,%d,%s]",
+    sprintf(info_buffer, "[VovkPLCRuntime,%s,%d,%d,%d,%d,%s,%d,%d,%d,%u,%d,%u,%d,%u,%d,%u,%d,%u,%d,%d,%u,%d,%d,%s]",
         VOVKPLC_ARCH,
         VOVKPLCRUNTIME_VERSION_MAJOR,
         VOVKPLCRUNTIME_VERSION_MINOR,
@@ -2926,14 +2918,12 @@ WASM_EXPORT const char* getInfoString() {
         PLCRUNTIME_MAX_STACK_SIZE,
         PLCRUNTIME_MAX_MEMORY_SIZE,
         PLCRUNTIME_MAX_PROGRAM_SIZE,
-        runtime.control_offset,
-        PLCRUNTIME_NUM_OF_CONTROLS,
+        runtime.system_offset,
+        PLCRUNTIME_NUM_OF_SYSTEMS,
         runtime.input_offset,
         PLCRUNTIME_NUM_OF_INPUTS,
         runtime.output_offset,
         PLCRUNTIME_NUM_OF_OUTPUTS,
-        runtime.system_offset,
-        PLCRUNTIME_NUM_OF_SYSTEMS,
         runtime.marker_offset,
         PLCRUNTIME_NUM_OF_MARKERS,
         runtime.timer_offset,
@@ -2947,37 +2937,33 @@ WASM_EXPORT const char* getInfoString() {
     return info_buffer;
 }
 
-WASM_EXPORT void setRuntimeOffsets(u32 controlOffset, u32 inputOffset, u32 outputOffset, u32 systemOffset, u32 markerOffset) {
-    plcasm_control_offset = controlOffset;
+WASM_EXPORT void setRuntimeOffsets(u32 systemOffset, u32 inputOffset, u32 outputOffset, u32 markerOffset) {
+    plcasm_system_offset = systemOffset;
     plcasm_input_offset = inputOffset;
     plcasm_output_offset = outputOffset;
-    plcasm_system_offset = systemOffset;
     plcasm_marker_offset = markerOffset;
     // Timer and counter offsets are auto-calculated based on marker offset
     plcasm_timer_offset = markerOffset + PLCRUNTIME_NUM_OF_MARKERS;
     plcasm_counter_offset = plcasm_timer_offset + (PLCRUNTIME_NUM_OF_TIMERS * PLCRUNTIME_TIMER_STRUCT_SIZE);
-    runtime.control_offset = controlOffset;
+    runtime.system_offset = systemOffset;
     runtime.input_offset = inputOffset;
     runtime.output_offset = outputOffset;
-    runtime.system_offset = systemOffset;
     runtime.marker_offset = markerOffset;
     runtime.timer_offset = plcasm_timer_offset;
     runtime.counter_offset = plcasm_counter_offset;
 }
 
 // Extended version with timer and counter offsets
-WASM_EXPORT void setRuntimeOffsetsEx(u32 controlOffset, u32 inputOffset, u32 outputOffset, u32 systemOffset, u32 markerOffset, u32 timerOffset, u32 counterOffset) {
-    plcasm_control_offset = controlOffset;
+WASM_EXPORT void setRuntimeOffsetsEx(u32 systemOffset, u32 inputOffset, u32 outputOffset, u32 markerOffset, u32 timerOffset, u32 counterOffset) {
+    plcasm_system_offset = systemOffset;
     plcasm_input_offset = inputOffset;
     plcasm_output_offset = outputOffset;
-    plcasm_system_offset = systemOffset;
     plcasm_marker_offset = markerOffset;
     plcasm_timer_offset = timerOffset;
     plcasm_counter_offset = counterOffset;
-    runtime.control_offset = controlOffset;
+    runtime.system_offset = systemOffset;
     runtime.input_offset = inputOffset;
     runtime.output_offset = outputOffset;
-    runtime.system_offset = systemOffset;
     runtime.marker_offset = markerOffset;
     runtime.timer_offset = timerOffset;
     runtime.counter_offset = counterOffset;

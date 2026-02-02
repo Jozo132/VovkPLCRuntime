@@ -57,7 +57,7 @@ VERSION 1.0.0
 MEMORY
     OFFSET 0
     AVAILABLE 1024
-    K 64
+    S 64
     X 64
     Y 64
     S 64
@@ -107,7 +107,7 @@ VERSION 1.0.0
 MEMORY
     OFFSET 0
     AVAILABLE 1024
-    K 64
+    S 64
     X 64
     Y 64
     S 64
@@ -153,7 +153,7 @@ VERSION 1.0.0
 MEMORY
     OFFSET 0
     AVAILABLE 1024
-    K 64
+    S 64
     X 64
     Y 64
     S 64
@@ -201,7 +201,7 @@ VERSION 1.0.0
 MEMORY
     OFFSET 0
     AVAILABLE 1024
-    K 64
+    S 64
     X 64
     Y 64
     S 64
@@ -253,7 +253,7 @@ VERSION 1.0.0
 MEMORY
     OFFSET 0
     AVAILABLE 1024
-    K 64
+    S 64
     X 64
     Y 64
     S 64
@@ -306,7 +306,7 @@ VERSION 1.0.0
 MEMORY
     OFFSET 0
     AVAILABLE 1024
-    K 64
+    S 64
     X 64
     Y 64
     S 64
@@ -355,7 +355,7 @@ VERSION 1.0.0
 MEMORY
     OFFSET 0
     AVAILABLE 1024
-    K 64
+    S 64
     X 64
     Y 64
     S 64
@@ -402,7 +402,7 @@ VERSION 1.0.0
 MEMORY
     OFFSET 0
     AVAILABLE 1024
-    K 64
+    S 64
     X 64
     Y 64
     S 64
@@ -451,7 +451,7 @@ VERSION 1.0.0
 MEMORY
     OFFSET 0
     AVAILABLE 1024
-    K 64
+    S 64
     X 64
     Y 64
     S 64
@@ -498,7 +498,7 @@ VERSION 1.0.0
 MEMORY
     OFFSET 0
     AVAILABLE 1024
-    K 64
+    S 64
     X 64
     Y 64
     S 64
@@ -549,7 +549,7 @@ VERSION 1.0.0
 MEMORY
     OFFSET 0
     AVAILABLE 1024
-    K 64
+    S 64
     X 64
     Y 64
     S 64
@@ -593,7 +593,7 @@ VERSION 1.0.0
 MEMORY
     OFFSET 0
     AVAILABLE 1024
-    K 64
+    S 64
     X 64
     Y 64
     S 64
