@@ -31,4 +31,5 @@
 #include "tools/assembly/ladder-linter.h"
 #include "tools/assembly/plcscript-linter.h"
 #include "tools/assembly/st-compiler.h"
+#include "tools/assembly/st-linter.h"
 #include "tools/assembly/project-compiler.h"

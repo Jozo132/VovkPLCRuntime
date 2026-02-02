@@ -32,6 +32,7 @@
 #include "ladder-linter.h"
 #include "plcscript-compiler.h"
 #include "plcscript-linter.h"
+#include "st-linter.h"
 #include "shared-symbols.h"
 
 // ============================================================================
@@ -281,6 +282,7 @@ public:
     STLLinter stl_compiler;
     LadderLinter ladder_compiler;
     PLCScriptLinter plcscript_compiler;
+    STLinter st_compiler;
 
     // Project-level edge memory counter for differentiation bits (shared across all blocks)
     int project_edge_mem_counter;
@@ -491,6 +493,33 @@ public:
             while (src->message[mi] && mi < 127) { dest.message[mi] = src->message[mi]; mi++; }
             dest.message[mi] = '\0';
             // Token is not tracked in PLCScript linter the same way - clear it
+            dest.token_buf[0] = '\0';
+            dest.token_text = dest.token_buf;
+            // Copy program and block names
+            int pi = 0;
+            while (current_file[pi] && pi < 63) { dest.program[pi] = current_file[pi]; pi++; }
+            dest.program[pi] = '\0';
+            int bi = 0;
+            while (current_block[bi] && bi < 63) { dest.block[bi] = current_block[bi]; bi++; }
+            dest.block[bi] = '\0';
+        }
+    }
+
+    // Copy all problems (warnings, errors, info) from ST linter to project's problem list
+    void copySTProblems() {
+        for (int i = 0; i < st_compiler.problem_count && problem_count < MAX_LINT_PROBLEMS; i++) {
+            LinterProblem& src = st_compiler.problems[i];
+            LinterProblem& dest = problems[problem_count++];
+            dest.type = src.type;
+            dest.line = src.line;
+            dest.column = src.column;
+            dest.length = src.length;
+            dest.lang = LANG_ST;
+            // Copy message
+            int mi = 0;
+            while (src.message[mi] && mi < 127) { dest.message[mi] = src.message[mi]; mi++; }
+            dest.message[mi] = '\0';
+            // Token is not tracked in ST linter the same way - clear it
             dest.token_buf[0] = '\0';
             dest.token_text = dest.token_buf;
             // Copy program and block names
@@ -1516,6 +1545,40 @@ public:
         stl_compiler.symbol_count = symbol_count < STL_MAX_SYMBOLS ? symbol_count : STL_MAX_SYMBOLS;
     }
 
+    // Copy project symbols to ST compiler's shared symbol table
+    void copySymbolsToST() {
+        SharedSymbolTable& stSymbols = st_compiler.getSharedSymbols();
+        stSymbols.symbol_count = 0;
+
+        for (int i = 0; i < symbol_count && i < SHARED_MAX_SYMBOLS; i++) {
+            ProjectSymbol& psym = symbols[i];
+            SharedSymbol& ssym = stSymbols.symbols[i];
+
+            // Copy name
+            int j = 0;
+            while (psym.name[j] && j < 63) {
+                ssym.name[j] = psym.name[j];
+                j++;
+            }
+            ssym.name[j] = '\0';
+
+            // Copy type
+            j = 0;
+            while (psym.type[j] && j < 15) {
+                ssym.type[j] = psym.type[j];
+                j++;
+            }
+            ssym.type[j] = '\0';
+
+            ssym.address = psym.address;
+            ssym.bit = psym.bit;
+            ssym.is_bit = psym.is_bit;
+            ssym.type_size = psym.type_size;
+        }
+
+        stSymbols.symbol_count = symbol_count < SHARED_MAX_SYMBOLS ? symbol_count : SHARED_MAX_SYMBOLS;
+    }
+
     // Track a timer index as used
     void markTimerUsed(int index) {
         if (index >= 0 && index < MAX_TIMERS) {
@@ -2293,6 +2356,11 @@ public:
                 if (!convertPLCScriptToPLCASM(block)) return false;
                 break;
 
+            case LANG_ST:
+                // Structured Text block - convert to PLCScript then to PLCASM
+                if (!convertSTToPLCASM(block)) return false;
+                break;
+
             default:
                 setError("Unsupported language for compilation");
                 appendToCombinedPLCASM("// ERROR: Unsupported language for compilation\n");
@@ -2391,6 +2459,74 @@ public:
                 setErrorFull("PLCScript Compiler", plcscript_compiler.errorMessage,
                     plcscript_compiler.errorLine, plcscript_compiler.errorColumn,
                     block_source, source_len, nullptr, 0);
+            }
+            return false;
+        }
+
+        // Append the generated PLCASM to combined buffer
+        if (!appendToCombinedPLCASM(plcscript_compiler.output)) return false;
+        if (!appendCharToCombinedPLCASM('\n')) return false;
+
+        return true;
+    }
+
+    // Convert Structured Text (ST) block to PLCScript then to PLCASM
+    bool convertSTToPLCASM(ProgramBlock& block) {
+        // Step 1: Compile ST to PLCScript
+        st_compiler.reset();
+        st_compiler.clearProblems();
+        copySymbolsToST();
+
+        int source_len = string_len(block_source);
+        st_compiler.setSource(block_source, source_len);
+
+        bool success = st_compiler.compile();
+
+        // Copy any problems from ST compiler
+        if (st_compiler.problem_count > 0) {
+            copySTProblems();
+        }
+
+        if (!success || st_compiler.has_error) {
+            if (st_compiler.problem_count > 0) {
+                // Problems already copied above, just set error flag
+                has_error = true;
+            } else {
+                // Fallback to old error handling
+                setErrorFull("ST Compiler", st_compiler.error_message,
+                    st_compiler.error_line, st_compiler.error_column,
+                    block_source, source_len, nullptr, 0);
+            }
+            return false;
+        }
+
+        // Step 2: Compile the generated PLCScript to PLCASM
+        plcscript_compiler.reset();
+        plcscript_compiler.clearProblems();
+
+        const char* plcscript_output = st_compiler.getOutput();
+        int plcscript_len = st_compiler.getOutputLength();
+
+        // PLCScript compiler needs non-const source - copy to temporary buffer
+        static char st_to_plcscript_buffer[65536];
+        for (int i = 0; i < plcscript_len && i < 65535; i++) {
+            st_to_plcscript_buffer[i] = plcscript_output[i];
+        }
+        st_to_plcscript_buffer[plcscript_len < 65535 ? plcscript_len : 65535] = '\0';
+
+        plcscript_compiler.setSource(st_to_plcscript_buffer, plcscript_len);
+        success = plcscript_compiler.compile();
+
+        if (!success || plcscript_compiler.hasError) {
+            // Internal error: PLCScript generated from ST failed
+            if (plcscript_compiler.getProblemCount() > 0) {
+                const LinterProblem* prob = plcscript_compiler.getProblem(0);
+                setErrorFull("ST Compiler (PLCScript stage)", prob->message, prob->line, prob->column,
+                    plcscript_output, plcscript_len, nullptr, 0);
+            } else {
+                setErrorFull("ST Compiler (PLCScript stage)", plcscript_compiler.errorMessage,
+                    plcscript_compiler.errorLine, plcscript_compiler.errorColumn,
+                    plcscript_output, plcscript_len, nullptr, 0);
             }
             return false;
         }

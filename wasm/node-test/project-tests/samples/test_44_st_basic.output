@@ -1,0 +1,28 @@
+{
+  "success": 1,
+  "project": { "name": "st_test", "version": "1.0.0" },
+  "bytecode": "FD 06 08 00 00 14 08 19 08 02 40 16 08 08 00 0A 14 08 19 08 02 4A 16 08 03 00 14 02 60 00 C4 16 02 18 08 02 40 18 08 02 4A D3 08 E2 00 54 18 08 02 40 08 00 01 20 08 14 08 19 08 02 40 16 08 18 08 02 40 08 00 05 D4 08 E2 00 54 03 01 14 02 60 00 C4 16 02 FF",
+  "bytecodeLength": 85,
+  "checksum": 25,
+  "files": [
+    { "path": "main", "firstBlockIndex": 0, "blockCount": 1, "executionOrder": 0 }
+  ],
+  "blocks": [
+    { "file": "main", "name": "main_st", "language": "ST", "offset": 0, "size": 84 }
+  ],
+  "symbols": [
+    { "name": "counter", "type": "i16", "address": "192" },
+    { "name": "limit", "type": "i16", "address": "194" },
+    { "name": "flag", "type": "bool", "address": "196.0" }
+  ],
+  "memoryAreas": [
+    { "name": "S", "start": 0, "end": 15 },
+    { "name": "X", "start": 16, "end": 23 },
+    { "name": "Y", "start": 24, "end": 31 },
+    { "name": "M", "start": 32, "end": 95 }
+  ],
+  "memory": { "available": 1024, "used": 32 },
+  "flash": { "size": 32768, "used": 85 },
+  "execution": { "steps": 28, "stackSize": 0 },
+  "problems": []
+}

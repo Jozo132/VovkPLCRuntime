@@ -1,0 +1,42 @@
+VOVKPLCPROJECT st_test
+VERSION 1.0.0
+
+MEMORY
+  OFFSET 0
+  AVAILABLE 1024
+  S 16
+  X 8
+  Y 8
+  M 64
+END_MEMORY
+
+FLASH
+  SIZE 32768
+END_FLASH
+
+SYMBOLS
+  counter : i16 : M0
+  limit : i16 : M2
+  flag : bool : M4.0
+END_SYMBOLS
+
+FILE main
+  BLOCK LANG=ST main_st
+VAR
+    temp : INT;
+END_VAR
+
+// Initialize counter and limit
+counter := 0;
+limit := 10;
+flag := FALSE;
+
+// Simple loop logic
+IF counter < limit THEN
+    counter := counter + 1;
+    IF counter >= 5 THEN
+        flag := TRUE;
+    END_IF;
+END_IF;
+  END_BLOCK
+END_FILE

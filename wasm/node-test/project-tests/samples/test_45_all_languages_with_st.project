@@ -1,0 +1,66 @@
+VOVKPLCPROJECT all_languages_with_st
+VERSION 1.0.0
+
+MEMORY
+  OFFSET 0
+  AVAILABLE 2048
+  S 16
+  X 8
+  Y 8
+  M 128
+END_MEMORY
+
+FLASH
+  SIZE 65536
+END_FLASH
+
+SYMBOLS
+  plcasm_var : u16 : M0
+  stl_var : u16 : M2
+  ladder_flag : bool : M4.0
+  plcscript_counter : i32 : M8
+  st_result : i16 : M12
+END_SYMBOLS
+
+FILE main
+  BLOCK LANG=PLCASM init
+// Initialize plcasm_var
+u16.const 100
+u16.move_to M0
+  END_BLOCK
+
+  BLOCK LANG=STL process_stl
+// STL block
+L #200
+T stl_var
+  END_BLOCK
+
+  BLOCK LANG=LADDER ladder_logic
+{
+  "nodes": [
+    {"id": "contact1", "type": "contact", "x": 0, "y": 0, "symbol": "X0.0"},
+    {"id": "coil1", "type": "coil", "x": 1, "y": 0, "symbol": "ladder_flag"}
+  ],
+  "connections": [
+    {"sources": ["contact1"], "destinations": ["coil1"]}
+  ]
+}
+  END_BLOCK
+
+  BLOCK LANG=PLCSCRIPT script_block
+// PLCScript counter increment
+let counter: i32 @ plcscript_counter = 0
+counter = counter + 1
+  END_BLOCK
+
+  BLOCK LANG=ST st_block
+VAR
+    local_temp : INT;
+END_VAR
+
+// Structured Text computation
+st_result := 42;
+local_temp := st_result + 8;
+st_result := local_temp;
+  END_BLOCK
+END_FILE
