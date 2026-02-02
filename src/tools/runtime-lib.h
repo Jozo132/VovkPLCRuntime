@@ -864,7 +864,7 @@ public:
     // ========================================================================
     // Register named symbols for editor discovery and driver/plugin integration.
     // Symbols are registered at compile time using string literals.
-    // Use I/X for inputs, Q/Y for outputs, M for markers, S for system, K for controls.
+    // Use I/X for inputs, Q/Y for outputs, M for markers, S for system.
 
 #ifdef PLCRUNTIME_VARIABLE_REGISTRATION_ENABLED
 
@@ -899,9 +899,9 @@ public:
         return *((bool*) sym->valuePtr());
     }
 
-    // Register Control bit: K (address, bit, name, optional comment)
-    bool& registerKBit(u32 address, u8 bit, const char* name, const char* comment = nullptr) {
-        RegisteredSymbol* sym = g_symbolRegistry.add(name, comment, address, bit, AREA_CONTROL, TYPE_BIT);
+    // Register System bit: S (address, bit, name, optional comment)
+    bool& registerSBit(u32 address, u8 bit, const char* name, const char* comment = nullptr) {
+        RegisteredSymbol* sym = g_symbolRegistry.add(name, comment, address, bit, AREA_SYSTEM, TYPE_BIT);
         if (!sym) { static bool dummy = false; return dummy; }
         return *((bool*) sym->valuePtr());
     }
@@ -950,11 +950,11 @@ public:
         return *((T*) sym->valuePtr());
     }
 
-    // Register Control word: KW (address, name, optional comment)
+    // Register System word: SW (address, name, optional comment)
     template<typename T>
-    T& registerK(u32 address, const char* name, const char* comment = nullptr) {
+    T& registerS(u32 address, const char* name, const char* comment = nullptr) {
         SymbolType stype = getSymbolTypeFor<T>();
-        RegisteredSymbol* sym = g_symbolRegistry.add(name, comment, address, 0, AREA_CONTROL, stype);
+        RegisteredSymbol* sym = g_symbolRegistry.add(name, comment, address, 0, AREA_SYSTEM, stype);
         if (!sym) { static T dummy = T(); return dummy; }
         return *((T*) sym->valuePtr());
     }
@@ -1000,8 +1000,8 @@ public:
     void syncInputsToMemory() {
         for (u16 i = 0; i < g_symbolRegistry.count; i++) {
             RegisteredSymbol& sym = g_symbolRegistry.symbols[i];
-            // Only sync inputs and controls (user-writable before PLC execution)
-            if (sym.area != AREA_INPUT && sym.area != AREA_CONTROL) continue;
+            // Only sync inputs and system variables (user-writable before PLC execution)
+            if (sym.area != AREA_INPUT && sym.area != AREA_SYSTEM) continue;
 
             u32 offset = getAreaOffset(sym.area) + sym.address;
 
