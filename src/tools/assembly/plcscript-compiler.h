@@ -25,6 +25,7 @@
 #ifdef __WASM__
 
 #include "plcasm-compiler.h"
+#include "shared-symbols.h"
 
 // ============================================================================
 // PLCScript Language Specification
@@ -1255,6 +1256,69 @@ public:
     // ========================================================================
     
     bool parseAddress(PLCScriptSymbol* sym, const char* addr) {
+        // First, check if this is a symbol name from the shared symbol table
+        SharedSymbol* sharedSym = sharedSymbols.findSymbol(addr);
+        if (sharedSym) {
+            // Found a symbol - use its resolved address
+            sym->memoryOffset = sharedSym->address;
+            sym->isBit = sharedSym->is_bit;
+            sym->bitIndex = sharedSym->is_bit ? sharedSym->bit : 0;
+            
+            // Build PLCASM address string from the shared symbol's address
+            // Determine area prefix from address range
+            char areaPrefix = 'M'; // Default
+            u32 relativeAddr = sharedSym->address;
+            
+            if (sharedSym->address >= plcasm_input_offset && sharedSym->address < plcasm_output_offset) {
+                areaPrefix = 'X';
+                relativeAddr = sharedSym->address - plcasm_input_offset;
+            } else if (sharedSym->address >= plcasm_output_offset && sharedSym->address < plcasm_system_offset) {
+                areaPrefix = 'Y';
+                relativeAddr = sharedSym->address - plcasm_output_offset;
+            } else if (sharedSym->address >= plcasm_system_offset && sharedSym->address < plcasm_marker_offset) {
+                areaPrefix = 'S';
+                relativeAddr = sharedSym->address - plcasm_system_offset;
+            } else if (sharedSym->address >= plcasm_marker_offset && sharedSym->address < plcasm_timer_offset) {
+                areaPrefix = 'M';
+                relativeAddr = sharedSym->address - plcasm_marker_offset;
+            } else if (sharedSym->address >= plcasm_timer_offset && sharedSym->address < plcasm_control_offset) {
+                areaPrefix = 'T';
+                relativeAddr = sharedSym->address - plcasm_timer_offset;
+            } else if (sharedSym->address >= plcasm_control_offset) {
+                areaPrefix = 'C';
+                relativeAddr = sharedSym->address - plcasm_control_offset;
+            }
+            
+            int outIdx = 0;
+            sym->address[outIdx++] = areaPrefix;
+            
+            // Write byte number
+            char numBuf[16];
+            int numLen = 0;
+            u32 n = relativeAddr;
+            if (n == 0) {
+                numBuf[numLen++] = '0';
+            } else {
+                while (n > 0) {
+                    numBuf[numLen++] = '0' + (n % 10);
+                    n /= 10;
+                }
+            }
+            for (int k = numLen - 1; k >= 0; k--) {
+                sym->address[outIdx++] = numBuf[k];
+            }
+            
+            // Add bit position if this is a bit symbol
+            if (sharedSym->is_bit) {
+                sym->address[outIdx++] = '.';
+                sym->address[outIdx++] = '0' + sharedSym->bit;
+            }
+            
+            sym->address[outIdx] = '\0';
+            return true;
+        }
+        
+        // Not a symbol - parse as raw address
         // Parse the address - just prefix + number (type determines width)
         // Examples: M10, X0, Y0.0, T0, C0
         // Legacy MW10/MD20 still accepted (W/D/B suffix ignored)
@@ -1341,6 +1405,104 @@ public:
         }
         
         sym->address[outIdx] = '\0';
+        return true;
+    }
+
+    // Helper to convert a SharedSymbol to a PLCScriptSymbol (for using project symbols in expressions)
+    PLCScriptVarType sharedSymbolToPLCScriptType(const SharedSymbol* shared) {
+        // Map SharedSymbol type names to PLCScript types
+        // SharedSymbol types: bit, i8, u8, i16, u16, i32, u32, i64, u64, f32, f64
+        const char* t = shared->type;
+        if (strEqCI(t, "bit") || strEqCI(t, "bool")) return PSTYPE_BOOL;
+        if (strEqCI(t, "i8")) return PSTYPE_I8;
+        if (strEqCI(t, "u8") || strEqCI(t, "byte")) return PSTYPE_U8;
+        if (strEqCI(t, "i16") || strEqCI(t, "int")) return PSTYPE_I16;
+        if (strEqCI(t, "u16") || strEqCI(t, "uint") || strEqCI(t, "word")) return PSTYPE_U16;
+        if (strEqCI(t, "i32") || strEqCI(t, "dint")) return PSTYPE_I32;
+        if (strEqCI(t, "u32") || strEqCI(t, "udint") || strEqCI(t, "dword")) return PSTYPE_U32;
+        if (strEqCI(t, "i64") || strEqCI(t, "lint")) return PSTYPE_I64;
+        if (strEqCI(t, "u64") || strEqCI(t, "ulint") || strEqCI(t, "lword")) return PSTYPE_U64;
+        if (strEqCI(t, "f32") || strEqCI(t, "real") || strEqCI(t, "float")) return PSTYPE_F32;
+        if (strEqCI(t, "f64") || strEqCI(t, "lreal") || strEqCI(t, "double")) return PSTYPE_F64;
+        return PSTYPE_I16; // Default to i16
+    }
+
+    bool populateFromSharedSymbol(PLCScriptSymbol* sym, const SharedSymbol* shared) {
+        // Copy name
+        int i = 0;
+        while (shared->name[i] && i < PLCSCRIPT_MAX_IDENTIFIER_LEN - 1) {
+            sym->name[i] = shared->name[i];
+            i++;
+        }
+        sym->name[i] = '\0';
+
+        // Set type
+        sym->type = sharedSymbolToPLCScriptType(shared);
+
+        // Set address info
+        sym->memoryOffset = shared->address;
+        sym->isBit = shared->is_bit;
+        sym->bitIndex = shared->is_bit ? shared->bit : 0;
+
+        // Build PLCASM address string
+        // Determine area prefix from address range
+        char areaPrefix = 'M'; // Default
+        u32 relativeAddr = shared->address;
+
+        if (shared->address >= plcasm_input_offset && shared->address < plcasm_output_offset) {
+            areaPrefix = 'X';
+            relativeAddr = shared->address - plcasm_input_offset;
+        } else if (shared->address >= plcasm_output_offset && shared->address < plcasm_system_offset) {
+            areaPrefix = 'Y';
+            relativeAddr = shared->address - plcasm_output_offset;
+        } else if (shared->address >= plcasm_system_offset && shared->address < plcasm_marker_offset) {
+            areaPrefix = 'S';
+            relativeAddr = shared->address - plcasm_system_offset;
+        } else if (shared->address >= plcasm_marker_offset && shared->address < plcasm_timer_offset) {
+            areaPrefix = 'M';
+            relativeAddr = shared->address - plcasm_marker_offset;
+        } else if (shared->address >= plcasm_timer_offset && shared->address < plcasm_control_offset) {
+            areaPrefix = 'T';
+            relativeAddr = shared->address - plcasm_timer_offset;
+        } else if (shared->address >= plcasm_control_offset) {
+            areaPrefix = 'C';
+            relativeAddr = shared->address - plcasm_control_offset;
+        }
+
+        int outIdx = 0;
+        sym->address[outIdx++] = areaPrefix;
+
+        // Write byte number
+        char numBuf[16];
+        int numLen = 0;
+        u32 n = relativeAddr;
+        if (n == 0) {
+            numBuf[numLen++] = '0';
+        } else {
+            while (n > 0) {
+                numBuf[numLen++] = '0' + (n % 10);
+                n /= 10;
+            }
+        }
+        for (int k = numLen - 1; k >= 0; k--) {
+            sym->address[outIdx++] = numBuf[k];
+        }
+
+        // Add bit position if this is a bit symbol
+        if (shared->is_bit) {
+            sym->address[outIdx++] = '.';
+            sym->address[outIdx++] = '0' + shared->bit;
+        }
+
+        sym->address[outIdx] = '\0';
+        
+        sym->isConst = false;
+        sym->isLocal = false;
+        sym->isAutoAddress = false;
+        sym->isParam = false;
+        sym->stackSlot = -1;
+        sym->hasInitializer = false;
+        
         return true;
     }
     
@@ -2463,7 +2625,16 @@ public:
                 sym = &tempSym;
             }
             
-            nextToken();
+            // If not found locally and not a direct address, check shared symbol table
+            if (!sym && !isDirectAddress) {
+                SharedSymbol* sharedSym = sharedSymbols.findSymbol(varName);
+                if (sharedSym) {
+                    populateFromSharedSymbol(&tempSym, sharedSym);
+                    sym = &tempSym;
+                }
+            }
+            
+            nextToken();;
             
             if (check(PSTOK_EQ)) {
                 // Simple assignment
@@ -2954,8 +3125,20 @@ public:
                 return parseFunctionCall(name);
             }
             
-            // Variable reference
+            // Variable reference - first check local symbol table
             PLCScriptSymbol* sym = findSymbol(name);
+            
+            // If not found locally, check shared symbol table (project symbols)
+            PLCScriptSymbol tempSym;
+            if (!sym) {
+                SharedSymbol* sharedSym = sharedSymbols.findSymbol(name);
+                if (sharedSym) {
+                    memset(&tempSym, 0, sizeof(tempSym));
+                    populateFromSharedSymbol(&tempSym, sharedSym);
+                    sym = &tempSym;
+                }
+            }
+            
             if (!sym) {
                 setError("Undefined variable");
                 return PSTYPE_VOID;

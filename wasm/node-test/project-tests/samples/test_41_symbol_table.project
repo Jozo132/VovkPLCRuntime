@@ -1,0 +1,235 @@
+VOVKPLCPROJECT SymbolTableTest
+VERSION 3.0
+
+// This test verifies that all language compilers correctly use the symbol table
+// for both bit and numeric variable access without requiring explicit addresses.
+
+MEMORY
+    OFFSET 0
+    AVAILABLE 1024
+    K 32
+    X 32
+    Y 32
+    S 128
+    M 256
+    T 64
+    C 32
+END_MEMORY
+
+FLASH
+    SIZE 32768
+END_FLASH
+
+SYMBOLS
+    // =====================================================
+    // Digital Inputs (bits)
+    // =====================================================
+    input_a : bit : X0.0
+    input_b : bit : X0.1
+    input_c : bit : X0.2
+    input_d : bit : X0.3
+    reset_btn : bit : X0.4
+
+    // =====================================================
+    // Digital Outputs (bits)
+    // =====================================================
+    output_x : bit : Y0.0
+    output_y : bit : Y0.1
+    output_z : bit : Y0.2
+    led_status : bit : Y0.3
+
+    // =====================================================
+    // Internal Markers (bits)
+    // =====================================================
+    flag_running : bit : M0.0
+    flag_error : bit : M0.1
+    flag_complete : bit : M0.2
+    flag_ready : bit : M0.3
+    edge_mem_a : bit : M0.4
+    edge_mem_b : bit : M0.5
+
+    // =====================================================
+    // Integer Variables (16-bit)
+    // =====================================================
+    counter_value : i16 : M10
+    set_point : i16 : M12
+    actual_value : i16 : M14
+    error_value : i16 : M16
+    result_a : i16 : M18
+    result_b : i16 : M20
+
+    // =====================================================
+    // 32-bit Integer Variables
+    // =====================================================
+    total_count : i32 : M30
+    accumulated : i32 : M34
+
+    // =====================================================
+    // Float Variables
+    // =====================================================
+    temperature : f32 : M40
+    coefficient : f32 : M44
+END_SYMBOLS
+
+PROGRAM main
+
+    // =========================================================================
+    // BLOCK 1: PLCASM - Test symbol resolution for bits and numbers
+    // =========================================================================
+    BLOCK LANG=PLCASM Network_1_PLCASM_Symbols
+// Test 1: Bit operations with symbols
+// Read input_a AND input_b, write to flag_running
+u8.readBit input_a
+u8.readBit input_b
+u8.and
+u8.writeBit flag_running
+
+// Read flag_running, write to output_x
+u8.readBit flag_running
+u8.writeBit output_x
+
+// Test 2: Numeric operations with symbols
+// Load counter_value, add 1, store back
+i16.load_from counter_value
+i16.const 1
+i16.add
+i16.move_to counter_value
+
+// Test 3: Conditionally set error flag
+// if input_c is on AND input_d is off, set flag_error
+u8.readBit input_c
+u8.readBit input_d
+u8.not
+u8.and
+u8.writeBit flag_error
+
+// Test 4: 32-bit operations with symbols
+i32.load_from total_count
+i32.const 10
+i32.add
+i32.move_to total_count
+
+// Test 5: Float operations with symbols
+f32.load_from temperature
+f32.const 1.5
+f32.add
+f32.move_to temperature
+    END_BLOCK
+
+    // =========================================================================
+    // BLOCK 2: STL - Test symbol resolution in Siemens-style code
+    // =========================================================================
+    BLOCK LANG=STL Network_2_STL_Symbols
+// Test 1: Boolean logic with symbols
+// Read input_a OR input_b -> output_y
+A input_a
+O input_b
+= output_y
+
+// Test 2: Negated inputs with symbols
+AN input_c
+A input_d
+= flag_complete
+
+// Test 3: Integer operations with symbols
+L set_point
+L #100
++I
+T set_point
+
+// Test 4: Load and compare with symbols
+L actual_value
+L set_point
+-I
+T error_value
+
+// Test 5: Multiple bit writes with symbols
+A flag_running
+= led_status
+    END_BLOCK
+
+    // =========================================================================
+    // BLOCK 3: LADDER - Test symbol resolution in graphical logic
+    // =========================================================================
+    BLOCK LANG=LADDER Network_3_Ladder_Symbols
+{
+    "nodes": [
+        { "id": "n1", "x": 0, "y": 0, "type": "contact", "symbol": "input_a", "inverted": false, "trigger": "normal" },
+        { "id": "n2", "x": 1, "y": 0, "type": "contact", "symbol": "input_b", "inverted": false, "trigger": "normal" },
+        { "id": "n3", "x": 2, "y": 0, "type": "coil", "symbol": "output_z", "inverted": false },
+        { "id": "n4", "x": 0, "y": 1, "type": "contact", "symbol": "reset_btn", "inverted": true, "trigger": "normal" },
+        { "id": "n5", "x": 1, "y": 1, "type": "coil_set", "symbol": "flag_ready", "inverted": false }
+    ],
+    "connections": [
+        { "sources": ["n1"], "destinations": ["n2"] },
+        { "sources": ["n2"], "destinations": ["n3"] },
+        { "sources": ["n4"], "destinations": ["n5"] }
+    ]
+}
+    END_BLOCK
+
+    // =========================================================================
+    // BLOCK 4: PLCScript - Test symbol resolution in high-level code
+    // =========================================================================
+    BLOCK LANG=PLCSCRIPT Network_4_PLCScript_Symbols
+// Test 1: Read symbols and write to other symbols using symbol names!
+// PLCScript now supports symbol names in @ address notation
+let localCounter: i16 @ result_a = 0;  // Uses result_a symbol (resolves to M18)
+let localResult: i16 @ result_b = 0;   // Uses result_b symbol (resolves to M20)
+
+// Read from symbol addresses
+localCounter = localCounter + 5;
+
+// Test 2: Conditional logic with bit symbols (using symbol names)
+if (input_a) {  // Uses input_a symbol (resolves to X0.0)
+    localResult = 100;
+} else {
+    localResult = 0;
+}
+
+// Test 3: Nested condition with symbol names
+if (input_b && input_c) {  // Uses input_b AND input_c symbols
+    localCounter = localCounter + 10;
+}
+
+// Test 4: Loop example
+let loopIdx: i16 @ M22 = 0;  // Can still use raw addresses
+for (loopIdx = 0; loopIdx < 3; loopIdx = loopIdx + 1) {
+    localResult = localResult + loopIdx;
+}
+
+// Test 5: Store computed value using symbol name
+flag_complete = true;  // Uses flag_complete symbol (resolves to M0.2)
+    END_BLOCK
+
+    // =========================================================================
+    // BLOCK 5: LADDER - Comparator block with symbols
+    // =========================================================================
+    BLOCK LANG=LADDER Network_5_Ladder_Comparator
+{
+    "nodes": [
+        { "id": "cmp1", "x": 0, "y": 0, "type": "fb_cmp_gt", "symbol": "", "inverted": false, "dataType": "i16", "in1": "counter_value", "in2": "#10" },
+        { "id": "out1", "x": 1, "y": 0, "type": "coil", "symbol": "flag_error", "inverted": false }
+    ],
+    "connections": [
+        { "sources": ["cmp1"], "destinations": ["out1"] }
+    ]
+}
+    END_BLOCK
+
+    // =========================================================================
+    // BLOCK 6: LADDER - Math operation with symbols
+    // =========================================================================
+    BLOCK LANG=LADDER Network_6_Ladder_Math
+{
+    "nodes": [
+        { "id": "sw1", "x": 0, "y": 0, "type": "contact", "symbol": "input_a", "inverted": false, "trigger": "normal" },
+        { "id": "add1", "x": 1, "y": 0, "type": "fb_add", "symbol": "", "inverted": false, "dataType": "i16", "in1": "result_a", "in2": "#5", "out": "result_b" }
+    ],
+    "connections": [
+        { "sources": ["sw1"], "destinations": ["add1"] }
+    ]
+}
+    END_BLOCK
+
+END_PROGRAM
