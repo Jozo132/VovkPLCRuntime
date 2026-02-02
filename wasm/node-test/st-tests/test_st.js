@@ -36,11 +36,11 @@ import { fileURLToPath } from 'url'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-// Parse CLI args
-const args = process.argv.slice(2)
-const updateMode = args.includes('--update')
-const verboseMode = args.includes('--verbose')
-const testFilter = args.find(a => !a.startsWith('--')) || null
+// Check if running as main module or imported
+const isMainModule = process.argv[1] && (
+    process.argv[1].endsWith('test_st.js') ||
+    process.argv[1].includes('test_st')
+)
 
 // ANSI colors
 const RED = '\x1b[31m'
@@ -50,11 +50,6 @@ const CYAN = '\x1b[36m'
 const RESET = '\x1b[0m'
 const BOLD = '\x1b[1m'
 const DIM = '\x1b[2m'
-
-let passed = 0
-let failed = 0
-let updated = 0
-const failures = []
 
 // Helper to read string from WASM memory
 const getString = (runtime, ptr) => {
@@ -78,38 +73,38 @@ const streamCode = (runtime, code) => {
 }
 
 // Compile ST to PLCScript
-const compileST = (runtime, source, verbose = false) => {
+const compileST = (runtime, source, verbose = false, log = console.log.bind(console)) => {
     // Clear and stream source
     runtime.wasm_exports.streamClear()
     streamCode(runtime, source)
     
     if (verbose) {
-        console.log(`Streamed ${source.length} bytes`)
-        console.log(`Stream available: ${runtime.wasm_exports.streamAvailable()}`)
+        log(`Streamed ${source.length} bytes`)
+        log(`Stream available: ${runtime.wasm_exports.streamAvailable()}`)
     }
     
     // Load from stream
     runtime.wasm_exports.st_compiler_load_from_stream()
     
     if (verbose) {
-        console.log(`After load, stream available: ${runtime.wasm_exports.streamAvailable()}`)
-        console.log(`Input length after load: ${runtime.wasm_exports.st_compiler_get_input_length()}`)
+        log(`After load, stream available: ${runtime.wasm_exports.streamAvailable()}`)
+        log(`Input length after load: ${runtime.wasm_exports.st_compiler_get_input_length()}`)
         // Debug: check input buffer contents
         const inputPreview = getString(runtime, runtime.wasm_exports.st_compiler_debug_get_input_preview())
-        console.log(`Input preview: "${inputPreview.substring(0, 50)}..."`)
+        log(`Input preview: "${inputPreview.substring(0, 50)}..."`)
     }
     
     // Compile
     const errorCode = runtime.wasm_exports.st_compiler_compile()
     
     if (verbose) {
-        console.log(`Compile returned: ${errorCode}`)
-        console.log(`Has error: ${runtime.wasm_exports.st_compiler_has_error()}`)
-        console.log(`Output length: ${runtime.wasm_exports.st_compiler_get_output_length()}`)
+        log(`Compile returned: ${errorCode}`)
+        log(`Has error: ${runtime.wasm_exports.st_compiler_has_error()}`)
+        log(`Output length: ${runtime.wasm_exports.st_compiler_get_output_length()}`)
         if (runtime.wasm_exports.st_compiler_has_error()) {
             const errTokenText = getString(runtime, runtime.wasm_exports.st_compiler_get_error_token_text())
             const errTokenType = runtime.wasm_exports.st_compiler_get_error_token_type()
-            console.log(`Error token: "${errTokenText}" (type ${errTokenType})`)
+            log(`Error token: "${errTokenText}" (type ${errTokenType})`)
         }
     }
     
@@ -127,7 +122,7 @@ const compileST = (runtime, source, verbose = false) => {
             for (let i = 0; i < outIndex; i++) {
                 output += String.fromCharCode(outMem[outBufferPtr + i])
             }
-            console.log(`Output so far:\n${output}`)
+            log(`Output so far:\n${output}`)
         }
         
         if (hasError) {
@@ -229,13 +224,63 @@ const extractTokens = (plcscript) => {
     return tokens
 }
 
-const run = async () => {
+/**
+ * @typedef {Object} TestResult
+ * @property {string} name - Test name
+ * @property {boolean} passed - Whether the test passed
+ * @property {string} [error] - Error message if failed
+ * @property {string} [info] - Additional info
+ */
+
+/**
+ * @typedef {Object} SuiteResult
+ * @property {string} name - Suite name
+ * @property {number} passed - Number of passed tests
+ * @property {number} failed - Number of failed tests
+ * @property {number} total - Total number of tests
+ * @property {TestResult[]} tests - Individual test results
+ * @property {Object[]} [failures] - Detailed failure information
+ */
+
+/**
+ * Run Structured Text (ST) Compiler unit tests
+ * @param {Object} [options] - Options
+ * @param {boolean} [options.silent] - If true, suppress console output
+ * @param {boolean} [options.verbose] - If true, show verbose output
+ * @returns {Promise<SuiteResult>}
+ */
+export async function runTests(options = {}) {
+    const { silent = false, verbose: optVerbose = false } = options
+    const log = silent ? () => {} : console.log.bind(console)
+    
+    /** @type {TestResult[]} */
+    const testResults = []
+    /** @type {Object[]} */
+    const failures = []
+    let passed = 0
+    let failed = 0
+    let updated = 0
+    
+    // Parse CLI args only when not in silent mode
+    const args = !silent ? process.argv.slice(2) : []
+    const updateMode = !silent && args.includes('--update')
+    const verboseMode = optVerbose || (!silent && args.includes('--verbose'))
+    const testFilter = !silent ? args.find(a => !a.startsWith('--')) || null : null
+    
     const wasmPath = path.resolve(__dirname, '../../dist/VovkPLC.wasm')
 
     if (!fs.existsSync(wasmPath)) {
-        console.error(`${RED}WASM file not found!${RESET}`)
-        console.error('Run "npm run build" first.')
-        process.exit(1)
+        const error = `WASM file not found at ${wasmPath}`
+        if (!silent) {
+            console.error(`${RED}${error}${RESET}`)
+            console.error('Run "npm run build" first.')
+        }
+        return {
+            name: 'Structured Text (ST) Compiler',
+            passed: 0, failed: 1, total: 1,
+            tests: [{ name: 'WASM Load', passed: false, error }],
+            failures: [{ name: 'WASM Load', error }]
+        }
     }
 
     const runtime = new VovkPLC(wasmPath)
@@ -244,8 +289,14 @@ const run = async () => {
     const samplesDir = path.join(__dirname, 'st-samples')
     
     if (!fs.existsSync(samplesDir)) {
-        console.error(`${RED}Samples directory not found: ${samplesDir}${RESET}`)
-        process.exit(1)
+        const error = `Samples directory not found: ${samplesDir}`
+        if (!silent) console.error(`${RED}${error}${RESET}`)
+        return {
+            name: 'Structured Text (ST) Compiler',
+            passed: 0, failed: 1, total: 1,
+            tests: [{ name: 'Find Samples', passed: false, error }],
+            failures: [{ name: 'Find Samples', error }]
+        }
     }
 
     const files = fs.readdirSync(samplesDir)
@@ -261,31 +312,43 @@ const run = async () => {
             tc.toLowerCase().includes(testFilter.toLowerCase())
         )
         if (testCases.length === 0) {
-            console.error(`${RED}No test cases matching '${testFilter}'${RESET}`)
-            process.exit(1)
+            const error = `No test cases matching '${testFilter}'`
+            if (!silent) console.error(`${RED}${error}${RESET}`)
+            return {
+                name: 'Structured Text (ST) Compiler',
+                passed: 0, failed: 1, total: 1,
+                tests: [{ name: 'Find Tests', passed: false, error }],
+                failures: [{ name: 'Find Tests', error }]
+            }
         }
     }
 
     if (testCases.length === 0) {
-        console.error(`${RED}No test cases found in ${samplesDir}${RESET}`)
-        process.exit(1)
+        const error = `No test cases found in ${samplesDir}`
+        if (!silent) console.error(`${RED}${error}${RESET}`)
+        return {
+            name: 'Structured Text (ST) Compiler',
+            passed: 0, failed: 1, total: 1,
+            tests: [{ name: 'Find Tests', passed: false, error }],
+            failures: [{ name: 'Find Tests', error }]
+        }
     }
 
-    console.log(`${BOLD}${CYAN}╔══════════════════════════════════════════════════════════════════╗${RESET}`)
-    console.log(`${BOLD}${CYAN}║         Structured Text (ST) → PLCScript Compiler Tests          ║${RESET}`)
-    console.log(`${BOLD}${CYAN}╚══════════════════════════════════════════════════════════════════╝${RESET}`)
-    console.log()
+    log(`${BOLD}${CYAN}╔══════════════════════════════════════════════════════════════════╗${RESET}`)
+    log(`${BOLD}${CYAN}║         Structured Text (ST) → PLCScript Compiler Tests          ║${RESET}`)
+    log(`${BOLD}${CYAN}╚══════════════════════════════════════════════════════════════════╝${RESET}`)
+    log()
     
     if (updateMode) {
-        console.log(`${YELLOW}Running in UPDATE mode - regenerating expected outputs${RESET}`)
-        console.log()
+        log(`${YELLOW}Running in UPDATE mode - regenerating expected outputs${RESET}`)
+        log()
     }
     
     if (testFilter) {
-        console.log(`${CYAN}Filter: ${testFilter}${RESET}`)
+        log(`${CYAN}Filter: ${testFilter}${RESET}`)
     }
-    console.log(`Found ${testCases.length} test case(s)`)
-    console.log()
+    log(`Found ${testCases.length} test case(s)`)
+    log()
 
     for (const testCase of testCases) {
         const stPath = path.join(samplesDir, `${testCase}.st`)
@@ -299,13 +362,13 @@ const run = async () => {
         let generatedPLCScript = ''
         
         if (verboseMode) {
-            console.log(`\nProcessing: ${testCase}`)
-            console.log(`ST source length: ${stSource.length}`)
+            log(`\nProcessing: ${testCase}`)
+            log(`ST source length: ${stSource.length}`)
         }
 
         try {
             // STEP 1: Compile ST → PLCScript
-            const stResult = compileST(runtime, stSource.trim(), verboseMode)
+            const stResult = compileST(runtime, stSource.trim(), verboseMode, log)
 
             if (stResult.error) {
                 testErrors.push(`ST compile error: ${stResult.error}`)
@@ -345,8 +408,9 @@ const run = async () => {
                 const newContent = generateExpectedOutput(testCase, tokens)
                 fs.writeFileSync(expectedPath, newContent)
                 
-                console.log(`${YELLOW}~${RESET} ${testName} - Updated`)
+                log(`${YELLOW}~${RESET} ${testName} - Updated`)
                 updated++
+                testResults.push({ name: testName, passed: true, info: 'updated' })
                 continue
             }
 
@@ -354,27 +418,32 @@ const run = async () => {
             if (testErrors.length === 0) {
                 const flags = []
                 if (!hasExpectedFile) flags.push('no expected file')
-                const suffix = flags.length > 0 ? ` ${DIM}(${flags.join(', ')})${RESET}` : ''
-                console.log(`${GREEN}✓${RESET} ${testName}${suffix}`)
+                const lineCount = generatedPLCScript.split('\n').filter(l => l.trim()).length
+                const info = `${lineCount} lines` + (flags.length > 0 ? `, ${flags.join(', ')}` : '')
+                const suffix = ` ${DIM}(${info})${RESET}`
+                log(`${GREEN}✓${RESET} ${testName}${suffix}`)
                 passed++
+                testResults.push({ name: testName, passed: true, info })
                 
                 // Verbose output for passing tests
                 if (verboseMode) {
-                    console.log()
-                    console.log(`${DIM}${'─'.repeat(60)}${RESET}`)
-                    console.log(`${CYAN}PLCScript Output:${RESET}`)
-                    console.log(generatedPLCScript.split('\n').map(l => `  ${DIM}${l}${RESET}`).join('\n'))
-                    console.log(`${DIM}${'─'.repeat(60)}${RESET}`)
-                    console.log()
+                    log()
+                    log(`${DIM}${'─'.repeat(60)}${RESET}`)
+                    log(`${CYAN}PLCScript Output:${RESET}`)
+                    log(generatedPLCScript.split('\n').map(l => `  ${DIM}${l}${RESET}`).join('\n'))
+                    log(`${DIM}${'─'.repeat(60)}${RESET}`)
+                    log()
                 }
             } else {
-                console.log(`${RED}✗${RESET} ${testName}`)
-                failures.push({ 
+                log(`${RED}✗${RESET} ${testName}`)
+                const failureInfo = { 
                     name: testName, 
                     errors: testErrors, 
                     plcscript: generatedPLCScript,
                     stSource 
-                })
+                }
+                failures.push(failureInfo)
+                testResults.push({ name: testName, passed: false, error: testErrors.join('; ') })
                 failed++
             }
 
@@ -382,61 +451,75 @@ const run = async () => {
             if (testErrors.length === 0) {
                 testErrors.push(error.message)
             }
-            console.log(`${RED}✗${RESET} ${testName}`)
-            failures.push({ 
+            log(`${RED}✗${RESET} ${testName}`)
+            const failureInfo = { 
                 name: testName, 
                 errors: testErrors, 
                 plcscript: generatedPLCScript,
                 stSource 
-            })
+            }
+            failures.push(failureInfo)
+            testResults.push({ name: testName, passed: false, error: testErrors.join('; ') })
             failed++
         }
     }
 
     // Summary
-    console.log()
-    console.log('─'.repeat(68))
+    log()
+    log('─'.repeat(68))
 
     // Show detailed failures
     if (failures.length > 0 && !updateMode) {
-        console.log()
-        console.log(`${BOLD}${RED}Failed Tests:${RESET}`)
-        console.log()
+        log()
+        log(`${BOLD}${RED}Failed Tests:${RESET}`)
+        log()
 
         for (const failure of failures) {
-            console.log(`${BOLD}${failure.name}:${RESET}`)
+            log(`${BOLD}${failure.name}:${RESET}`)
             for (const err of failure.errors) {
-                console.log(`  ${RED}• ${err}${RESET}`)
+                log(`  ${RED}• ${err}${RESET}`)
             }
             
             // Show verbose output for failed tests
             if (verboseMode && failure.stSource) {
-                console.log()
-                console.log(`${CYAN}ST Source:${RESET}`)
-                console.log(failure.stSource.split('\n').map(l => `  ${DIM}${l}${RESET}`).join('\n'))
-                console.log()
+                log()
+                log(`${CYAN}ST Source:${RESET}`)
+                log(failure.stSource.split('\n').map(l => `  ${DIM}${l}${RESET}`).join('\n'))
+                log()
                 if (failure.plcscript) {
-                    console.log(`${CYAN}Generated PLCScript:${RESET}`)
-                    console.log(failure.plcscript.split('\n').map(l => `  ${DIM}${l}${RESET}`).join('\n'))
+                    log(`${CYAN}Generated PLCScript:${RESET}`)
+                    log(failure.plcscript.split('\n').map(l => `  ${DIM}${l}${RESET}`).join('\n'))
                 }
             }
-            console.log()
+            log()
         }
     }
 
-    console.log()
+    log()
     if (updateMode) {
-        console.log(`${YELLOW}Updated ${updated} expected output file(s)${RESET}`)
+        log(`${YELLOW}Updated ${updated} expected output file(s)${RESET}`)
     } else {
         const total = passed + failed
         if (failed === 0) {
-            console.log(`${GREEN}Results: ${passed}/${total} tests passed${RESET}`)
+            log(`${GREEN}Results: ${passed}/${total} tests passed${RESET}`)
         } else {
-            console.log(`${RED}Results: ${passed}/${total} tests passed, ${failed} failed${RESET}`)
+            log(`${RED}Results: ${passed}/${total} tests passed, ${failed} failed${RESET}`)
         }
     }
 
-    process.exit(failed > 0 && !updateMode ? 1 : 0)
+    return {
+        name: 'Structured Text (ST) Compiler',
+        passed,
+        failed,
+        total: passed + failed,
+        tests: testResults,
+        failures
+    }
 }
 
-run()
+// Run if executed directly
+if (isMainModule) {
+    runTests().then(result => {
+        process.exit(result.failed > 0 ? 1 : 0)
+    })
+}

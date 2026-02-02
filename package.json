@@ -18,7 +18,10 @@
     "test_st": "node --no-warnings wasm/node-test/st-tests/test_st.js",
     "memory_leak_test": "node wasm/memory_leak_test.js",
     "memory_leak_test:verbose": "node wasm/memory_leak_test.js --verbose",
-    "test": "npm run test_ladder && npm run test_ladder_linter && npm run test_project && npm run test_plcscript && npm run test_st"
+    "test": "node --no-warnings wasm/unit_test.js --verbose",
+    "test:short": "node --no-warnings wasm/unit_test.js --short",
+    "test:debug": "node --no-warnings wasm/unit_test.js --debug",
+    "test:all": "npm run test_ladder && npm run test_ladder_linter && npm run test_project && npm run test_plcscript && npm run test_st"
   },
   "keywords": [
     "plc",

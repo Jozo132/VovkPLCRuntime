@@ -48,11 +48,11 @@ import { fileURLToPath } from 'url'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-// Parse CLI args
-const args = process.argv.slice(2)
-const updateMode = args.includes('--update')
-const verboseMode = args.includes('--verbose')
-const testFilter = args.find(a => !a.startsWith('--')) || null
+// Check if running as main module or imported
+const isMainModule = process.argv[1] && (
+    process.argv[1].endsWith('test_plcscript.js') ||
+    process.argv[1].includes('test_plcscript')
+)
 
 // ANSI colors
 const RED = '\x1b[31m'
@@ -62,11 +62,6 @@ const CYAN = '\x1b[36m'
 const RESET = '\x1b[0m'
 const BOLD = '\x1b[1m'
 const DIM = '\x1b[2m'
-
-let passed = 0
-let failed = 0
-let updated = 0
-const failures = []
 
 // Helper to read string from WASM memory
 const getString = (runtime, ptr) => {
@@ -249,12 +244,60 @@ const formatTestName = (filename) => {
         .replace(/\b\w/g, c => c.toUpperCase())
 }
 
-const run = async () => {
+/**
+ * @typedef {Object} TestResult
+ * @property {string} name - Test name
+ * @property {boolean} passed - Whether the test passed
+ * @property {string} [error] - Error message if failed
+ * @property {string} [info] - Additional info
+ */
+
+/**
+ * @typedef {Object} SuiteResult
+ * @property {string} name - Suite name
+ * @property {number} passed - Number of passed tests
+ * @property {number} failed - Number of failed tests
+ * @property {number} total - Total number of tests
+ * @property {TestResult[]} tests - Individual test results
+ * @property {Object[]} [failures] - Detailed failure information
+ */
+
+/**
+ * Run PLCScript Compiler unit tests
+ * @param {Object} [options] - Options
+ * @param {boolean} [options.silent] - If true, suppress console output
+ * @param {boolean} [options.verbose] - If true, show verbose output
+ * @returns {Promise<SuiteResult>}
+ */
+export async function runTests(options = {}) {
+    const { silent = false, verbose: optVerbose = false } = options
+    const log = silent ? () => {} : console.log.bind(console)
+    
+    /** @type {TestResult[]} */
+    const testResults = []
+    /** @type {Object[]} */
+    const failures = []
+    let passed = 0
+    let failed = 0
+    let updated = 0
+    
+    // Parse CLI args only when not in silent mode
+    const args = !silent ? process.argv.slice(2) : []
+    const updateMode = !silent && args.includes('--update')
+    const verboseMode = optVerbose || (!silent && args.includes('--verbose'))
+    const testFilter = !silent ? args.find(a => !a.startsWith('--')) || null : null
+    
     const wasmPath = path.resolve(__dirname, '../../dist/VovkPLC.wasm')
 
     if (!fs.existsSync(wasmPath)) {
-        console.error(`${RED}WASM file not found!${RESET}`)
-        process.exit(1)
+        const error = `WASM file not found at ${wasmPath}`
+        if (!silent) console.error(`${RED}${error}${RESET}`)
+        return {
+            name: 'PLCScript Compiler & Runtime',
+            passed: 0, failed: 1, total: 1,
+            tests: [{ name: 'WASM Load', passed: false, error }],
+            failures: [{ name: 'WASM Load', error }]
+        }
     }
 
     const runtime = new VovkPLC(wasmPath)
@@ -263,8 +306,14 @@ const run = async () => {
     const samplesDir = path.join(__dirname, 'plcscript-samples')
     
     if (!fs.existsSync(samplesDir)) {
-        console.error(`${RED}Samples directory not found: ${samplesDir}${RESET}`)
-        process.exit(1)
+        const error = `Samples directory not found: ${samplesDir}`
+        if (!silent) console.error(`${RED}${error}${RESET}`)
+        return {
+            name: 'PLCScript Compiler & Runtime',
+            passed: 0, failed: 1, total: 1,
+            tests: [{ name: 'Find Samples', passed: false, error }],
+            failures: [{ name: 'Find Samples', error }]
+        }
     }
 
     const files = fs.readdirSync(samplesDir)
@@ -280,31 +329,43 @@ const run = async () => {
             tc.toLowerCase().includes(testFilter.toLowerCase())
         )
         if (testCases.length === 0) {
-            console.error(`${RED}No test cases matching '${testFilter}'${RESET}`)
-            process.exit(1)
+            const error = `No test cases matching '${testFilter}'`
+            if (!silent) console.error(`${RED}${error}${RESET}`)
+            return {
+                name: 'PLCScript Compiler & Runtime',
+                passed: 0, failed: 1, total: 1,
+                tests: [{ name: 'Find Tests', passed: false, error }],
+                failures: [{ name: 'Find Tests', error }]
+            }
         }
     }
 
     if (testCases.length === 0) {
-        console.error(`${RED}No test cases found in ${samplesDir}${RESET}`)
-        process.exit(1)
+        const error = `No test cases found in ${samplesDir}`
+        if (!silent) console.error(`${RED}${error}${RESET}`)
+        return {
+            name: 'PLCScript Compiler & Runtime',
+            passed: 0, failed: 1, total: 1,
+            tests: [{ name: 'Find Tests', passed: false, error }],
+            failures: [{ name: 'Find Tests', error }]
+        }
     }
 
-    console.log(`${BOLD}${CYAN}╔══════════════════════════════════════════════════════════════════╗${RESET}`)
-    console.log(`${BOLD}${CYAN}║         PLCScript End-to-End Compiler & Runtime Tests            ║${RESET}`)
-    console.log(`${BOLD}${CYAN}╚══════════════════════════════════════════════════════════════════╝${RESET}`)
-    console.log()
+    log(`${BOLD}${CYAN}╔══════════════════════════════════════════════════════════════════╗${RESET}`)
+    log(`${BOLD}${CYAN}║         PLCScript End-to-End Compiler & Runtime Tests            ║${RESET}`)
+    log(`${BOLD}${CYAN}╚══════════════════════════════════════════════════════════════════╝${RESET}`)
+    log()
     
     if (updateMode) {
-        console.log(`${YELLOW}Running in UPDATE mode - regenerating expected outputs${RESET}`)
-        console.log()
+        log(`${YELLOW}Running in UPDATE mode - regenerating expected outputs${RESET}`)
+        log()
     }
     
     if (testFilter) {
-        console.log(`${CYAN}Filter: ${testFilter}${RESET}`)
+        log(`${CYAN}Filter: ${testFilter}${RESET}`)
     }
-    console.log(`Found ${testCases.length} test case(s)`)
-    console.log()
+    log(`Found ${testCases.length} test case(s)`)
+    log()
 
     for (const testCase of testCases) {
         const plcscriptPath = path.join(samplesDir, `${testCase}.plcscript`)
@@ -421,7 +482,8 @@ const run = async () => {
                 const newContent = generateExpectedOutput(testCase, tokens, generatedBytecode)
                 fs.writeFileSync(expectedPath, newContent)
                 
-                console.log(`${YELLOW}~${RESET} ${testName} - Updated (${bytecodeSize} bytes)`)
+                log(`${YELLOW}~${RESET} ${testName} - Updated (${bytecodeSize} bytes)`)
+                testResults.push({ name: testName, passed: true, info: `updated, ${bytecodeSize} bytes` })
                 updated++
                 continue
             }
@@ -431,23 +493,27 @@ const run = async () => {
                 const flags = []
                 if (!hasExpectedFile) flags.push('no expected file')
                 if (!hasExpectFile) flags.push('no memory check')
-                const suffix = flags.length > 0 ? ` ${DIM}(${flags.join(', ')})${RESET}` : ''
-                console.log(`${GREEN}✓${RESET} ${testName}${suffix}`)
+                const infoBase = `${bytecodeSize} bytes`
+                const info = flags.length > 0 ? `${infoBase}, ${flags.join(', ')}` : infoBase
+                const suffix = ` ${DIM}(${info})${RESET}`
+                log(`${GREEN}✓${RESET} ${testName}${suffix}`)
                 passed++
+                testResults.push({ name: testName, passed: true, info })
                 
                 // Verbose output for passing tests
                 if (verboseMode) {
-                    console.log()
-                    console.log(`${DIM}${'─'.repeat(60)}${RESET}`)
-                    console.log(`${CYAN}PLCASM Output:${RESET}`)
-                    console.log(generatedPlcasm.split('\n').map(l => `  ${DIM}${l}${RESET}`).join('\n'))
-                    console.log()
-                    console.log(`${CYAN}Bytecode (${bytecodeSize} bytes):${RESET} ${generatedBytecode}`)
-                    console.log(`${DIM}${'─'.repeat(60)}${RESET}`)
-                    console.log()
+                    log()
+                    log(`${DIM}${'─'.repeat(60)}${RESET}`)
+                    log(`${CYAN}PLCASM Output:${RESET}`)
+                    log(generatedPlcasm.split('\n').map(l => `  ${DIM}${l}${RESET}`).join('\n'))
+                    log()
+                    log(`${CYAN}Bytecode (${bytecodeSize} bytes):${RESET} ${generatedBytecode}`)
+                    log(`${DIM}${'─'.repeat(60)}${RESET}`)
+                    log()
                 }
             } else {
-                console.log(`${RED}✗${RESET} ${testName}`)
+                log(`${RED}✗${RESET} ${testName}`)
+                testResults.push({ name: testName, passed: false, error: testErrors[0] })
                 failures.push({ 
                     name: testName, 
                     errors: testErrors, 
@@ -463,7 +529,8 @@ const run = async () => {
             if (testErrors.length === 0) {
                 testErrors.push(error.message)
             }
-            console.log(`${RED}✗${RESET} ${testName}`)
+            log(`${RED}✗${RESET} ${testName}`)
+            testResults.push({ name: testName, passed: false, error: testErrors[0] })
             failures.push({ 
                 name: testName, 
                 errors: testErrors, 
@@ -477,54 +544,69 @@ const run = async () => {
     }
 
     // Summary
-    console.log()
-    console.log('─'.repeat(68))
+    log()
+    log('─'.repeat(68))
 
     // Show detailed failures
-    if (failures.length > 0 && !updateMode) {
-        console.log()
-        console.log(`${BOLD}${RED}Failed Tests:${RESET}`)
-        console.log()
+    if (failures.length > 0 && !updateMode && !silent) {
+        log()
+        log(`${BOLD}${RED}Failed Tests:${RESET}`)
+        log()
 
         for (const failure of failures) {
-            console.log(`${BOLD}${failure.name}:${RESET}`)
+            log(`${BOLD}${failure.name}:${RESET}`)
             for (const err of failure.errors) {
-                console.log(`  ${RED}• ${err}${RESET}`)
+                log(`  ${RED}• ${err}${RESET}`)
             }
             
             // Show verbose output for failed tests
             if (verboseMode && failure.plcscript) {
-                console.log()
-                console.log(`${CYAN}PLCScript Source:${RESET}`)
-                console.log(failure.plcscript.split('\n').map(l => `  ${DIM}${l}${RESET}`).join('\n'))
-                console.log()
+                log()
+                log(`${CYAN}PLCScript Source:${RESET}`)
+                log(failure.plcscript.split('\n').map(l => `  ${DIM}${l}${RESET}`).join('\n'))
+                log()
                 if (failure.plcasm) {
-                    console.log(`${CYAN}Generated PLCASM:${RESET}`)
-                    console.log(failure.plcasm.split('\n').map(l => `  ${DIM}${l}${RESET}`).join('\n'))
+                    log(`${CYAN}Generated PLCASM:${RESET}`)
+                    log(failure.plcasm.split('\n').map(l => `  ${DIM}${l}${RESET}`).join('\n'))
                 }
                 if (failure.bytecode) {
-                    console.log()
-                    console.log(`${CYAN}Generated Bytecode (${failure.bytecodeSize} bytes):${RESET} ${failure.bytecode}`)
+                    log()
+                    log(`${CYAN}Generated Bytecode (${failure.bytecodeSize} bytes):${RESET} ${failure.bytecode}`)
                 }
             }
-            console.log()
+            log()
         }
     }
 
-    console.log()
+    log()
     if (updateMode) {
-        console.log(`${YELLOW}Updated ${updated} expected output file(s)${RESET}`)
+        log(`${YELLOW}Updated ${updated} expected output file(s)${RESET}`)
     } else {
         const total = passed + failed
         if (failed === 0) {
-            console.log(`${GREEN}Results: ${passed}/${total} tests passed${RESET}`)
-            console.log(`${DIM}All tests: compiled, executed, stack verified${RESET}`)
+            log(`${GREEN}Results: ${passed}/${total} tests passed${RESET}`)
+            log(`${DIM}All tests: compiled, executed, stack verified${RESET}`)
         } else {
-            console.log(`${RED}Results: ${passed}/${total} tests passed, ${failed} failed${RESET}`)
+            log(`${RED}Results: ${passed}/${total} tests passed, ${failed} failed${RESET}`)
         }
     }
 
-    process.exit(failed > 0 && !updateMode ? 1 : 0)
+    return {
+        name: 'PLCScript Compiler & Runtime',
+        passed,
+        failed,
+        total: passed + failed,
+        tests: testResults,
+        failures
+    }
 }
 
-run()
+// Run as main module
+if (isMainModule) {
+    runTests().then(result => {
+        if (result.failed > 0) process.exit(1)
+    }).catch(err => {
+        console.error(`${RED}Error: ${err.message}${RESET}`)
+        process.exit(1)
+    })
+}

@@ -16,6 +16,12 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const wasmPath = path.resolve(__dirname, '../../dist/VovkPLC.wasm')
 
+// Check if running as main module or imported
+const isMainModule = process.argv[1] && (
+    process.argv[1].endsWith('test_ladder_linter.js') ||
+    process.argv[1].includes('test_ladder_linter')
+)
+
 // ANSI colors
 const RED = '\x1b[31m'
 const GREEN = '\x1b[32m'
@@ -171,26 +177,65 @@ const testCases = [
     }
 ]
 
-async function runTests() {
+/**
+ * @typedef {Object} TestResult
+ * @property {string} name - Test name
+ * @property {boolean} passed - Whether the test passed
+ * @property {string} [error] - Error message if failed
+ * @property {string} [info] - Additional info
+ */
+
+/**
+ * @typedef {Object} SuiteResult
+ * @property {string} name - Suite name
+ * @property {number} passed - Number of passed tests
+ * @property {number} failed - Number of failed tests
+ * @property {number} total - Total number of tests
+ * @property {TestResult[]} tests - Individual test results
+ * @property {Object[]} [failures] - Detailed failure information
+ */
+
+/**
+ * Run Ladder Linter unit tests
+ * @param {Object} [options] - Options
+ * @param {boolean} [options.silent] - If true, suppress console output
+ * @param {boolean} [options.verbose] - If true, show verbose output
+ * @returns {Promise<SuiteResult>}
+ */
+export async function runTests(options = {}) {
+    const { silent = false, verbose = false } = options
+    const log = silent ? () => {} : console.log.bind(console)
+    
+    /** @type {TestResult[]} */
+    const testResults = []
+    /** @type {Object[]} */
+    const failures = []
+    let passed = 0
+    let failed = 0
+    
     if (!fs.existsSync(wasmPath)) {
-        console.error(`${RED}Error: WASM file not found at ${wasmPath}${RESET}`)
-        console.error('Run "npm run build" first.')
-        process.exit(1)
+        const error = `WASM file not found at ${wasmPath}`
+        if (!silent) {
+            console.error(`${RED}Error: ${error}${RESET}`)
+            console.error('Run "npm run build" first.')
+        }
+        return {
+            name: 'Ladder Linter',
+            passed: 0, failed: 1, total: 1,
+            tests: [{ name: 'WASM Load', passed: false, error }],
+            failures: [{ name: 'WASM Load', error }]
+        }
     }
 
     // Initialize runtime
     const runtime = await VovkPLC.createWorker(wasmPath, { silent: true })
 
-    console.log(`${BOLD}${CYAN}╔══════════════════════════════════════════════════════════════════╗${RESET}`)
-    console.log(`${BOLD}${CYAN}║              Ladder Linter Unit Tests                            ║${RESET}`)
-    console.log(`${BOLD}${CYAN}╚══════════════════════════════════════════════════════════════════╝${RESET}`)
-    console.log()
-    console.log(`Found ${testCases.length} test case(s)`)
-    console.log()
-
-    let passed = 0
-    let failed = 0
-    const failures = []
+    log(`${BOLD}${CYAN}╔══════════════════════════════════════════════════════════════════╗${RESET}`)
+    log(`${BOLD}${CYAN}║              Ladder Linter Unit Tests                            ║${RESET}`)
+    log(`${BOLD}${CYAN}╚══════════════════════════════════════════════════════════════════╝${RESET}`)
+    log()
+    log(`Found ${testCases.length} test case(s)`)
+    log()
 
     try {
         for (const testCase of testCases) {
@@ -206,17 +251,21 @@ async function runTests() {
                 if (errorsMatch && warningsMatch) {
                     // Build status suffix
                     let suffix = ''
+                    let info = ''
                     if (errors.length > 0 || warnings.length > 0) {
                         const parts = []
                         if (errors.length > 0) parts.push(`${errors.length} error${errors.length > 1 ? 's' : ''}`)
                         if (warnings.length > 0) parts.push(`${warnings.length} warning${warnings.length > 1 ? 's' : ''}`)
                         suffix = ` ${CYAN}(${parts.join(', ')})${RESET}`
+                        info = `(${parts.join(', ')})`
                     }
-                    console.log(`${GREEN}✓${RESET} ${testCase.name}${suffix}`)
+                    log(`${GREEN}✓${RESET} ${testCase.name}${suffix}`)
                     passed++
+                    testResults.push({ name: testCase.name, passed: true, info: info || undefined })
                 } else {
-                    console.log(`${RED}✗${RESET} ${testCase.name}`)
+                    log(`${RED}✗${RESET} ${testCase.name}`)
                     failed++
+                    testResults.push({ name: testCase.name, passed: false, error: `Expected ${testCase.expectErrors} errors, ${testCase.expectWarnings}+ warnings; got ${errors.length} errors, ${warnings.length} warnings` })
                     failures.push({
                         name: testCase.name,
                         expected: { errors: testCase.expectErrors, warnings: testCase.expectWarnings },
@@ -225,8 +274,9 @@ async function runTests() {
                     })
                 }
             } catch (e) {
-                console.log(`${RED}✗${RESET} ${testCase.name} - Exception: ${e.message}`)
+                log(`${RED}✗${RESET} ${testCase.name} - Exception: ${e.message}`)
                 failed++
+                testResults.push({ name: testCase.name, passed: false, error: e.message })
                 failures.push({
                     name: testCase.name,
                     error: e.message
@@ -234,47 +284,59 @@ async function runTests() {
             }
         }
 
-        console.log()
-        console.log('─'.repeat(68))
+        log()
+        log('─'.repeat(68))
 
         // Show detailed failures
-        if (failures.length > 0) {
-            console.log()
-            console.log(`${BOLD}${RED}Failed Tests:${RESET}`)
-            console.log()
+        if (failures.length > 0 && !silent) {
+            log()
+            log(`${BOLD}${RED}Failed Tests:${RESET}`)
+            log()
 
             for (const failure of failures) {
-                console.log(`${BOLD}${failure.name}:${RESET}`)
+                log(`${BOLD}${failure.name}:${RESET}`)
                 if (failure.error) {
-                    console.log(`  ${RED}Exception: ${failure.error}${RESET}`)
+                    log(`  ${RED}Exception: ${failure.error}${RESET}`)
                 } else {
-                    console.log(`  Expected: ${failure.expected.errors} errors, ${failure.expected.warnings}+ warnings`)
-                    console.log(`  Actual:   ${failure.actual.errors} errors, ${failure.actual.warnings} warnings`)
+                    log(`  Expected: ${failure.expected.errors} errors, ${failure.expected.warnings}+ warnings`)
+                    log(`  Actual:   ${failure.actual.errors} errors, ${failure.actual.warnings} warnings`)
                     if (failure.problems && failure.problems.length > 0) {
-                        console.log(`  Problems:`)
+                        log(`  Problems:`)
                         for (const p of failure.problems) {
                             const color = p.type === 'error' ? RED : p.type === 'warning' ? YELLOW : CYAN
-                            console.log(`    ${color}[${p.type}]${RESET} (${p.line}:${p.column}) ${p.message}`)
+                            log(`    ${color}[${p.type}]${RESET} (${p.line}:${p.column}) ${p.message}`)
                         }
                     }
                 }
-                console.log()
+                log()
             }
         }
 
         // Summary
         const total = passed + failed
         const statusColor = failed > 0 ? RED : GREEN
-        console.log()
-        console.log(`${BOLD}Results: ${statusColor}${passed}/${total} tests passed${RESET}`)
+        log()
+        log(`${BOLD}Results: ${statusColor}${passed}/${total} tests passed${RESET}`)
 
-        process.exitCode = failed > 0 ? 1 : 0
+        return {
+            name: 'Ladder Linter',
+            passed,
+            failed,
+            total,
+            tests: testResults,
+            failures
+        }
     } finally {
         await runtime.terminate()
     }
 }
 
-runTests().catch(err => {
-    console.error(`${RED}Error: ${err.message}${RESET}`)
-    process.exit(1)
-})
+// Run as main module
+if (isMainModule) {
+    runTests().then(result => {
+        if (result.failed > 0) process.exit(1)
+    }).catch(err => {
+        console.error(`${RED}Error: ${err.message}${RESET}`)
+        process.exit(1)
+    })
+}

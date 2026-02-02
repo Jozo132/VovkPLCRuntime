@@ -20,11 +20,18 @@ import { fileURLToPath } from 'url'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
+// Check if running as main module or imported
+const isMainModule = process.argv[1] && (
+    process.argv[1].endsWith('test_ladder_stl.js') ||
+    process.argv[1].includes('test_ladder_stl')
+)
+
 // ANSI colors
 const RED = '\x1b[31m'
 const GREEN = '\x1b[32m'
 const YELLOW = '\x1b[33m'
 const CYAN = '\x1b[36m'
+const DIM = '\x1b[2m'
 const RESET = '\x1b[0m'
 const BOLD = '\x1b[1m'
 
@@ -75,6 +82,10 @@ function checkSTLForStackLeak(runtime, stlCode) {
             return { success: false, error: 'PLCASM compilation failed' }
         }
         
+        // Get bytecode size before loading program
+        const bytecodeSize = runtime.wasm_exports.getCompiledBytecodeLength ? 
+            runtime.wasm_exports.getCompiledBytecodeLength() : 0
+        
         // Load and run the program
         runtime.wasm_exports.loadCompiledProgram()
         runtime.wasm_exports.run()
@@ -83,10 +94,10 @@ function checkSTLForStackLeak(runtime, stlCode) {
         const stackDepth = runtime.wasm_exports.getStackSize()
         
         if (stackDepth !== 0) {
-            return { success: false, error: `Stack leak: ${stackDepth} byte(s) left on stack`, stackDepth }
+            return { success: false, error: `Stack leak: ${stackDepth} byte(s) left on stack`, stackDepth, bytecodeSize }
         }
         
-        return { success: true, stackDepth: 0 }
+        return { success: true, stackDepth: 0, bytecodeSize }
     } catch (e) {
         return { success: false, error: e.message }
     }
@@ -118,13 +129,55 @@ function compareSTL(expected, actual) {
     return diff
 }
 
-async function runTests() {
+/**
+ * @typedef {Object} TestResult
+ * @property {string} name - Test name
+ * @property {boolean} passed - Whether the test passed
+ * @property {string} [error] - Error message if failed
+ * @property {string} [info] - Additional info
+ */
+
+/**
+ * @typedef {Object} SuiteResult
+ * @property {string} name - Suite name
+ * @property {number} passed - Number of passed tests
+ * @property {number} failed - Number of failed tests
+ * @property {number} total - Total number of tests
+ * @property {TestResult[]} tests - Individual test results
+ * @property {Object[]} [failures] - Detailed failure information
+ */
+
+/**
+ * Run Ladder → STL unit tests
+ * @param {Object} [options] - Options
+ * @param {boolean} [options.silent] - If true, suppress console output
+ * @param {boolean} [options.verbose] - If true, show verbose output
+ * @returns {Promise<SuiteResult>}
+ */
+export async function runTests(options = {}) {
+    const { silent = false, verbose = false } = options
+    const log = silent ? () => {} : console.log.bind(console)
     const wasmPath = path.resolve(__dirname, '../../dist/VovkPLC.wasm')
     
+    /** @type {TestResult[]} */
+    const testResults = []
+    /** @type {Object[]} */
+    const failures = []
+    let passed = 0
+    let failed = 0
+    
     if (!fs.existsSync(wasmPath)) {
-        console.error(`${RED}Error: WASM file not found at ${wasmPath}${RESET}`)
-        console.error('Run "npm run build" first.')
-        process.exit(1)
+        const error = `WASM file not found at ${wasmPath}`
+        if (!silent) {
+            console.error(`${RED}Error: ${error}${RESET}`)
+            console.error('Run "npm run build" first.')
+        }
+        return {
+            name: 'Ladder Graph → STL Compiler',
+            passed: 0, failed: 1, total: 1,
+            tests: [{ name: 'WASM Load', passed: false, error }],
+            failures: [{ name: 'WASM Load', error }]
+        }
     }
 
     // Initialize runtime
@@ -144,20 +197,21 @@ async function runTests() {
         .sort()
     
     if (testCases.length === 0) {
-        console.error(`${RED}No test cases found in ${testDir}${RESET}`)
-        process.exit(1)
+        if (!silent) console.error(`${RED}No test cases found in ${testDir}${RESET}`)
+        return {
+            name: 'Ladder Graph → STL Compiler',
+            passed: 0, failed: 1, total: 1,
+            tests: [{ name: 'Find Tests', passed: false, error: 'No test cases found' }],
+            failures: [{ name: 'Find Tests', error: 'No test cases found' }]
+        }
     }
     
-    console.log(`${BOLD}${CYAN}╔══════════════════════════════════════════════════════════════════╗${RESET}`)
-    console.log(`${BOLD}${CYAN}║           Ladder Graph → STL Compiler Unit Tests                 ║${RESET}`)
-    console.log(`${BOLD}${CYAN}╚══════════════════════════════════════════════════════════════════╝${RESET}`)
-    console.log()
-    console.log(`Found ${testCases.length} test case(s)`)
-    console.log()
-    
-    let passed = 0
-    let failed = 0
-    const failures = []
+    log(`${BOLD}${CYAN}╔══════════════════════════════════════════════════════════════════╗${RESET}`)
+    log(`${BOLD}${CYAN}║           Ladder Graph → STL Compiler Unit Tests                 ║${RESET}`)
+    log(`${BOLD}${CYAN}╚══════════════════════════════════════════════════════════════════╝${RESET}`)
+    log()
+    log(`Found ${testCases.length} test case(s)`)
+    log()
     
     for (const testCase of testCases) {
         const jsonPath = path.join(testDir, `${testCase}.json`)
@@ -178,8 +232,9 @@ async function runTests() {
             const success = runtime.wasm_exports.ladder_standalone_compile()
             
             if (!success) {
-                console.log(`${RED}✗${RESET} ${testCase} - Ladder compilation failed`)
+                log(`${RED}✗${RESET} ${testCase} - Ladder compilation failed`)
                 failed++
+                testResults.push({ name: testCase, passed: false, error: 'Ladder compilation failed' })
                 failures.push({ name: testCase, error: 'Ladder compilation failed' })
                 continue
             }
@@ -196,17 +251,19 @@ async function runTests() {
                 if (!isExpectedLeakTest) {
                     const leakCheck = checkSTLForStackLeak(runtime, actualSTL)
                     if (!leakCheck.success) {
-                        console.log(`${RED}✗${RESET} ${testCase} - Cannot generate .stl file: ${leakCheck.error}`)
-                        console.log(`  Generated STL:`)
-                        actualSTL.split('\n').forEach((line, i) => console.log(`    ${i+1}| ${line}`))
+                        log(`${RED}✗${RESET} ${testCase} - Cannot generate .stl file: ${leakCheck.error}`)
+                        log(`  Generated STL:`)
+                        actualSTL.split('\n').forEach((line, i) => log(`    ${i+1}| ${line}`))
                         failed++
+                        testResults.push({ name: testCase, passed: false, error: `Generated STL has error: ${leakCheck.error}` })
                         failures.push({ name: testCase, error: `Generated STL has error: ${leakCheck.error}`, actual: actualSTL })
                         continue
                     }
                 }
                 fs.writeFileSync(stlPath, actualSTL)
-                console.log(`${CYAN}+${RESET} ${testCase} - Generated expected .stl file`)
+                log(`${CYAN}+${RESET} ${testCase} - Generated expected .stl file`)
                 passed++
+                testResults.push({ name: testCase, passed: true, info: '(generated)' })
                 continue
             }
             
@@ -222,8 +279,9 @@ async function runTests() {
             const isRawTest = normalizedActual.length <= 50
             
             if (!isRawTest && normalizedExpected !== normalizedActual) {
-                console.log(`${RED}✗${RESET} ${testCase} - STL output mismatch`)
+                log(`${RED}✗${RESET} ${testCase} - STL output mismatch`)
                 const diffs = compareSTL(expectedSTL, actualSTL)
+                testResults.push({ name: testCase, passed: false, error: 'STL output mismatch' })
                 failures.push({ name: testCase, diffs, expected: expectedSTL, actual: actualSTL })
                 failed++
                 continue
@@ -235,79 +293,95 @@ async function runTests() {
             if (!leakCheck.success) {
                 if (isExpectedLeakTest) {
                     // This test expects a stack leak - it's a negative test
-                    console.log(`${GREEN}✓${RESET} ${testCase} ${CYAN}(expected stack leak: ${leakCheck.stackDepth} byte(s))${RESET}`)
+                    const info = `expected leak: ${leakCheck.stackDepth}B` + (leakCheck.bytecodeSize ? `, ${leakCheck.bytecodeSize} bytes` : '')
+                    log(`${GREEN}✓${RESET} ${testCase} ${CYAN}(${info})${RESET}`)
                     passed++
+                    testResults.push({ name: testCase, passed: true, info })
                     continue
                 }
-                console.log(`${RED}✗${RESET} ${testCase} - ${leakCheck.error}`)
+                log(`${RED}✗${RESET} ${testCase} - ${leakCheck.error}`)
                 failed++
+                testResults.push({ name: testCase, passed: false, error: leakCheck.error })
                 failures.push({ name: testCase, error: leakCheck.error })
                 continue
             }
             
-            console.log(`${GREEN}✓${RESET} ${testCase}`)
+            const info = leakCheck.bytecodeSize ? `${leakCheck.bytecodeSize} bytes` : undefined
+            log(`${GREEN}✓${RESET} ${testCase}` + (info ? ` ${DIM}(${info})${RESET}` : ''))
             passed++
+            testResults.push({ name: testCase, passed: true, info })
         } catch (e) {
-            console.log(`${RED}✗${RESET} ${testCase} - Error: ${e.message}`)
+            log(`${RED}✗${RESET} ${testCase} - Error: ${e.message}`)
             failed++
+            testResults.push({ name: testCase, passed: false, error: e.message })
             failures.push({ name: testCase, error: e.message })
         }
     }
     
-    console.log()
-    console.log('─'.repeat(68))
+    log()
+    log('─'.repeat(68))
     
     // Show detailed failures
-    if (failures.length > 0) {
-        console.log()
-        console.log(`${BOLD}${RED}Failed Tests:${RESET}`)
-        console.log()
+    if (failures.length > 0 && !silent) {
+        log()
+        log(`${BOLD}${RED}Failed Tests:${RESET}`)
+        log()
         
         for (const failure of failures) {
-            console.log(`${BOLD}${failure.name}:${RESET}`)
+            log(`${BOLD}${failure.name}:${RESET}`)
             if (failure.error) {
-                console.log(`  Error: ${failure.error}`)
+                log(`  Error: ${failure.error}`)
             } else if (failure.diffs && failure.diffs.length > 0) {
-                console.log(`  Changes:`)
+                log(`  Changes:`)
                 // Show removed lines (in expected but not actual)
                 const removed = failure.diffs.filter(d => d.type === '-')
                 const added = failure.diffs.filter(d => d.type === '+')
                 
                 if (removed.length > 0) {
-                    console.log(`    ${RED}Missing (expected but not in output):${RESET}`)
+                    log(`    ${RED}Missing (expected but not in output):${RESET}`)
                     for (const d of removed.slice(0, 10)) {
-                        console.log(`      ${RED}- ${d.line}${RESET}`)
+                        log(`      ${RED}- ${d.line}${RESET}`)
                     }
-                    if (removed.length > 10) console.log(`      ... and ${removed.length - 10} more`)
+                    if (removed.length > 10) log(`      ... and ${removed.length - 10} more`)
                 }
                 
                 if (added.length > 0) {
-                    console.log(`    ${YELLOW}Extra (in output but not expected):${RESET}`)
+                    log(`    ${YELLOW}Extra (in output but not expected):${RESET}`)
                     for (const d of added.slice(0, 10)) {
-                        console.log(`      ${YELLOW}+ ${d.line}${RESET}`)
+                        log(`      ${YELLOW}+ ${d.line}${RESET}`)
                     }
-                    if (added.length > 10) console.log(`      ... and ${added.length - 10} more`)
+                    if (added.length > 10) log(`      ... and ${added.length - 10} more`)
                 }
             } else if (failure.expected && failure.actual) {
-                console.log(`  Expected:\n${failure.expected}`)
-                console.log(`  Actual:\n${failure.actual}`)
+                log(`  Expected:\n${failure.expected}`)
+                log(`  Actual:\n${failure.actual}`)
             }
-            console.log()
+            log()
         }
     }
     
     // Summary
     const total = passed + failed
     const statusColor = failed > 0 ? RED : GREEN
-    console.log()
-    console.log(`${BOLD}Results: ${statusColor}${passed}/${total} tests passed${RESET}`)
+    log()
+    log(`${BOLD}Results: ${statusColor}${passed}/${total} tests passed${RESET}`)
     
-    if (failed > 0) {
-        process.exit(1)
+    return {
+        name: 'Ladder Graph → STL Compiler',
+        passed,
+        failed,
+        total,
+        tests: testResults,
+        failures
     }
 }
 
-runTests().catch(err => {
-    console.error(`${RED}Error: ${err.message}${RESET}`)
-    process.exit(1)
-})
+// Run as main module
+if (isMainModule) {
+    runTests().then(result => {
+        if (result.failed > 0) process.exit(1)
+    }).catch(err => {
+        console.error(`${RED}Error: ${err.message}${RESET}`)
+        process.exit(1)
+    })
+}

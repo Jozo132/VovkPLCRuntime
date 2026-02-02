@@ -3116,6 +3116,10 @@ WASM_EXPORT bool lintAssembly(bool debug = true) {
     return getDefaultLinter().compileAssembly(debug, true);
 }
 
+WASM_EXPORT int getCompiledBytecodeLength() {
+    return defaultCompiler.built_bytecode_length;
+}
+
 WASM_EXPORT void initialize() {
     runtime.initialize();
     IntervalReset();

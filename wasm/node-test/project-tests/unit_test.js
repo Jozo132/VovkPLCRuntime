@@ -30,6 +30,12 @@ import {execSync} from 'child_process'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
+// Check if running as main module or imported
+const isMainModule = process.argv[1] && (
+    process.argv[1].endsWith('unit_test.js') &&
+    process.argv[1].includes('project-tests')
+)
+
 // ANSI colors
 const RED = '\x1b[31m'
 const GREEN = '\x1b[32m'
@@ -547,25 +553,68 @@ function compareOutputs(expected, actual) {
     return diffs
 }
 
-async function runTests() {
+/**
+ * @typedef {Object} TestResult
+ * @property {string} name - Test name
+ * @property {boolean} passed - Whether the test passed
+ * @property {string} [error] - Error message if failed
+ * @property {string} [info] - Additional info
+ */
+
+/**
+ * @typedef {Object} SuiteResult
+ * @property {string} name - Suite name
+ * @property {number} passed - Number of passed tests
+ * @property {number} failed - Number of failed tests
+ * @property {number} total - Total number of tests
+ * @property {TestResult[]} tests - Individual test results
+ * @property {Object[]} [failures] - Detailed failure information
+ */
+
+/**
+ * Run Project Compiler unit tests
+ * @param {Object} [options] - Options
+ * @param {boolean} [options.silent] - If true, suppress console output
+ * @param {boolean} [options.verbose] - If true, show verbose output
+ * @returns {Promise<SuiteResult>}
+ */
+export async function runTests(options = {}) {
+    const { silent = false, verbose: optVerbose = false } = options
+    const log = silent ? () => {} : console.log.bind(console)
+    
+    /** @type {TestResult[]} */
+    const testResults = []
+    /** @type {Object[]} */
+    const failures = []
+    let passed = 0
+    let failed = 0
+    
     const wasmPath = path.resolve(__dirname, '../../dist/VovkPLC.wasm')
 
     // Check for --update flag to force regeneration of expected outputs
-    const updateMode = process.argv.includes('--update') || process.argv.includes('-u')
+    const updateMode = !silent && (process.argv.includes('--update') || process.argv.includes('-u'))
 
     // Check for --verbose flag to show debug output from compiler
-    const verboseMode = process.argv.includes('--verbose') || process.argv.includes('-v')
+    const verboseMode = optVerbose || (!silent && (process.argv.includes('--verbose') || process.argv.includes('-v')))
 
     // Check for --run flag to pipe bytecode to npm run explain
-    const runMode = process.argv.includes('--run') || process.argv.includes('-r')
+    const runMode = !silent && (process.argv.includes('--run') || process.argv.includes('-r'))
 
     // Check for specific test name argument (not a flag)
-    const testFilter = process.argv.slice(2).find(arg => !arg.startsWith('-'))
+    const testFilter = !silent ? process.argv.slice(2).find(arg => !arg.startsWith('-')) : null
 
     if (!fs.existsSync(wasmPath)) {
-        console.error(`${RED}Error: WASM file not found at ${wasmPath}${RESET}`)
-        console.error('Run "npm run build" first.')
-        process.exit(1)
+        const error = `WASM file not found at ${wasmPath}`
+        if (!silent) {
+            console.error(`${RED}Error: ${error}${RESET}`)
+            console.error('Run "npm run build" first.')
+        }
+        return {
+            name: 'Project Compiler',
+            passed: 0, failed: 1, total: 1,
+            tests: [{ name: 'WASM Load', passed: false, error }],
+            failures: [{ name: 'WASM Load', error }]
+        }
     }
 
     // Initialize runtime
@@ -596,48 +645,57 @@ async function runTests() {
         }
         testCases = filtered
         if (testCases.length === 0) {
-            console.error(`${RED}No test found matching '${testFilter}'${RESET}`)
-            console.error(
-                `Available tests: ${files
-                    .filter(f => f.endsWith('.project'))
-                    .map(f => f.replace('.project', ''))
-                    .join(', ')}`,
-            )
-            process.exit(1)
+            if (!silent) {
+                console.error(`${RED}No test found matching '${testFilter}'${RESET}`)
+                console.error(
+                    `Available tests: ${files
+                        .filter(f => f.endsWith('.project'))
+                        .map(f => f.replace('.project', ''))
+                        .join(', ')}`,
+                )
+            }
+            return {
+                name: 'Project Compiler',
+                passed: 0, failed: 1, total: 1,
+                tests: [{ name: 'Find Tests', passed: false, error: `No test found matching '${testFilter}'` }],
+                failures: [{ name: 'Find Tests', error: `No test found matching '${testFilter}'` }]
+            }
         }
     }
 
     if (testCases.length === 0) {
-        console.error(`${RED}No test cases found in ${samplesDir}${RESET}`)
-        process.exit(1)
+        if (!silent) console.error(`${RED}No test cases found in ${samplesDir}${RESET}`)
+        return {
+            name: 'Project Compiler',
+            passed: 0, failed: 1, total: 1,
+            tests: [{ name: 'Find Tests', passed: false, error: 'No test cases found' }],
+            failures: [{ name: 'Find Tests', error: 'No test cases found' }]
+        }
     }
 
-    console.log(`${BOLD}${CYAN}╔══════════════════════════════════════════════════════════════════╗${RESET}`)
-    console.log(`${BOLD}${CYAN}║              Project Compiler Unit Tests                         ║${RESET}`)
-    console.log(`${BOLD}${CYAN}╚══════════════════════════════════════════════════════════════════╝${RESET}`)
-    console.log()
+    log(`${BOLD}${CYAN}╔══════════════════════════════════════════════════════════════════╗${RESET}`)
+    log(`${BOLD}${CYAN}║              Project Compiler Unit Tests                         ║${RESET}`)
+    log(`${BOLD}${CYAN}╚══════════════════════════════════════════════════════════════════╝${RESET}`)
+    log()
     if (updateMode) {
-        console.log(`${YELLOW}Running in UPDATE mode - regenerating expected outputs${RESET}`)
-        console.log()
+        log(`${YELLOW}Running in UPDATE mode - regenerating expected outputs${RESET}`)
+        log()
     }
     if (verboseMode) {
-        console.log(`${YELLOW}Running in VERBOSE mode - showing compiler debug output${RESET}`)
-        console.log()
+        log(`${YELLOW}Running in VERBOSE mode - showing compiler debug output${RESET}`)
+        log()
     }
     if (runMode) {
-        console.log(`${YELLOW}Running in RUN mode - will explain bytecode after compilation${RESET}`)
-        console.log()
+        log(`${YELLOW}Running in RUN mode - will explain bytecode after compilation${RESET}`)
+        log()
     }
     if (testFilter) {
-        console.log(`Running test: ${testFilter}`)
+        log(`Running test: ${testFilter}`)
     } else {
-        console.log(`Found ${testCases.length} test case(s)`)
+        log(`Found ${testCases.length} test case(s)`)
     }
-    console.log()
+    log()
 
-    let passed = 0
-    let failed = 0
-    const failures = []
     const wasm = runtime.wasm_exports
 
     // Calculate max test name length for padding
@@ -655,10 +713,10 @@ async function runTests() {
             streamCode(runtime, projectCode)
 
             if (verboseMode) {
-                console.log(`\n${CYAN}─── Compiling ${testCase} ───${RESET}`)
-                console.log(`${YELLOW}Project source:${RESET}`)
-                console.log(projectCode)
-                console.log(`${YELLOW}Compilation output:${RESET}`)
+                log(`\n${CYAN}─── Compiling ${testCase} ───${RESET}`)
+                log(`${YELLOW}Project source:${RESET}`)
+                log(projectCode)
+                log(`${YELLOW}Compilation output:${RESET}`)
             }
 
             const result = wasm.project_compile(verboseMode ? 1 : 0) // 1 = debug output
@@ -666,7 +724,7 @@ async function runTests() {
             if (verboseMode) {
                 // Read any output from the stream
                 const output = runtime.readStream()
-                if (output) console.log(output)
+                if (output) log(output)
             }
 
             // Generate actual output
@@ -677,8 +735,9 @@ async function runTests() {
                 fs.writeFileSync(outputPath, formatJSON(actualOutput) + '\n')
                 const status = actualOutput.success ? `${actualOutput.bytecodeLength} bytes, ${actualOutput.blocks.length} block(s)` : `error: ${actualOutput.problems[0]?.message || 'unknown'}`
                 const symbol = updateMode && fs.existsSync(outputPath) ? '~' : '+'
-                console.log(`${CYAN}${symbol}${RESET} ${testCase} - ${updateMode ? 'Updated' : 'Generated'} expected .output file (${status})`)
+                log(`${CYAN}${symbol}${RESET} ${testCase} - ${updateMode ? 'Updated' : 'Generated'} expected .output file (${status})`)
                 passed++
+                testResults.push({ name: testCase, passed: true, info: updateMode ? '(updated)' : '(generated)' })
                 continue
             }
 
@@ -695,9 +754,10 @@ async function runTests() {
             }
 
             if (diffs.length > 0) {
-                console.log(`${RED}✗${RESET} ${testCase} - Output mismatch`)
+                log(`${RED}✗${RESET} ${testCase} - Output mismatch`)
                 // Get combined PLCASM for error display (not saved to file)
                 const combinedPLCASM = getString(runtime, wasm.project_getCombinedPLCASM())
+                testResults.push({ name: testCase, passed: false, error: 'Output mismatch' })
                 failures.push({name: testCase, diffs, expected: expectedOutput, actual: actualOutput, combinedPLCASM, bytecodeToExplain})
                 failed++
                 continue
@@ -719,13 +779,17 @@ async function runTests() {
                 const flashUsedStr = String(flashUsed).padStart(5)
 
                 let status = `${bytesStr} bytes  |  ${stepsStr} steps  |  mem: ${memUsedStr}/${memAvail}  |  flash: ${flashUsedStr}/${flashSize}`
+                let info = `${actualOutput.bytecodeLength} bytes`
                 if (actualOutput.execution.stackSize > 0) {
                     status += `   ${YELLOW}stack: ${actualOutput.execution.stackSize}${RESET}`
+                    info += `, stack: ${actualOutput.execution.stackSize}`
                 }
-                console.log(`${GREEN}✓${RESET} ${paddedName} ${status}`)
+                log(`${GREEN}✓${RESET} ${paddedName} ${status}`)
+                testResults.push({ name: testCase, passed: true, info })
             } else {
                 const status = `expected error: line ${actualOutput.problems[0]?.line || '?'}`
-                console.log(`${GREEN}✓${RESET} ${testCase} (${status})`)
+                log(`${GREEN}✓${RESET} ${testCase} (${status})`)
+                testResults.push({ name: testCase, passed: true, info: `(${status})` })
             }
 
             // Store bytecode to explain for passing tests too
@@ -735,47 +799,48 @@ async function runTests() {
 
             passed++
         } catch (e) { // @ts-ignore
-            console.log(`${RED}✗${RESET} ${testCase} - Error: ${e.message}`)
+            log(`${RED}✗${RESET} ${testCase} - Error: ${e.message}`)
             failed++ // @ts-ignore
+            testResults.push({ name: testCase, passed: false, error: e.message })
             failures.push({name: testCase, error: e.message})
         }
     }
 
-    console.log()
-    console.log('─'.repeat(68))
+    log()
+    log('─'.repeat(68))
 
     // Show detailed failures (excluding passed tests that are only there for bytecode explain)
     const actualFailures = failures.filter(f => !f.passed)
-    if (actualFailures.length > 0) {
-        console.log()
-        console.log(`${BOLD}${RED}Failed Tests:${RESET}`)
-        console.log()
+    if (actualFailures.length > 0 && !silent) {
+        log()
+        log(`${BOLD}${RED}Failed Tests:${RESET}`)
+        log()
 
         for (const failure of actualFailures) {
-            console.log(`${BOLD}${failure.name}:${RESET}`)
+            log(`${BOLD}${failure.name}:${RESET}`)
             if (failure.error) {
-                console.log(`  Error: ${failure.error}`)
+                log(`  Error: ${failure.error}`)
             } else if (failure.diffs && failure.diffs.length > 0) {
                 // Check if this is a success mismatch where actual failed
                 const successDiff = failure.diffs.find(d => d.field === 'success')
                 if (successDiff && !failure.actual?.success && failure.actual?.problems?.length > 0) {
                     // Show the actual compilation error prominently
                     const prob = failure.actual.problems[0]
-                    console.log(`  ${RED}Compilation Error:${RESET}`)
-                    console.log(`    ${prob.message}`)
+                    log(`  ${RED}Compilation Error:${RESET}`)
+                    log(`    ${prob.message}`)
                     if (prob.file || prob.block) {
                         let location = '    at'
                         if (prob.file) location += ` ${prob.file}`
                         if (prob.block) location += `/${prob.block}`
                         if (prob.language) location += ` (${prob.language})`
                         location += ` line ${prob.line}:${prob.column}`
-                        console.log(`${CYAN}${location}${RESET}`)
+                        log(`${CYAN}${location}${RESET}`)
                     }
                     
                     // Show combined PLCASM with line numbers if available
                     if (failure.combinedPLCASM) {
-                        console.log()
-                        console.log(`  ${CYAN}Combined PLCASM (error at line ${prob.line}):${RESET}`)
+                        log()
+                        log(`  ${CYAN}Combined PLCASM (error at line ${prob.line}):${RESET}`)
                         const lines = failure.combinedPLCASM.split('\n')
                         const errorLineNum = prob.line || 0
                         // Show context: 3 lines before and after the error
@@ -788,7 +853,7 @@ async function runTests() {
                             const isErrorLine = lineNum === errorLineNum
                             const prefix = isErrorLine ? `${RED}>>` : '  '
                             const suffix = isErrorLine ? RESET : ''
-                            console.log(`  ${prefix}${lineNumStr}│ ${lines[i]}${suffix}`)
+                            log(`  ${prefix}${lineNumStr}│ ${lines[i]}${suffix}`)
                             
                             // Show caret under the error position
                             if (isErrorLine && prob.column) {
@@ -796,21 +861,21 @@ async function runTests() {
                                 const tokenLen = prob.token ? prob.token.length : 1
                                 const padding = ' '.repeat(8 + col)  // 8 = "  >>XXXX│ " prefix length
                                 const caret = '^'.repeat(tokenLen)
-                                console.log(`${padding}${YELLOW}${caret}${RESET}`)
+                                log(`${padding}${YELLOW}${caret}${RESET}`)
                             }
                         }
                     }
-                    console.log()
+                    log()
                 }
 
-                console.log(`  Differences:`)
+                log(`  Differences:`)
                 for (const d of failure.diffs) {
-                    console.log(`    ${d.field}:`)
-                    console.log(`      expected: ${RED}${JSON.stringify(d.expected)}${RESET}`)
-                    console.log(`      actual:   ${YELLOW}${JSON.stringify(d.actual)}${RESET}`)
+                    log(`    ${d.field}:`)
+                    log(`      expected: ${RED}${JSON.stringify(d.expected)}${RESET}`)
+                    log(`      actual:   ${YELLOW}${JSON.stringify(d.actual)}${RESET}`)
                 }
             }
-            console.log()
+            log()
         }
     }
 
@@ -822,11 +887,11 @@ async function runTests() {
     if (runMode) {
         const toExplain = failures.filter(f => f.bytecodeToExplain)
         if (toExplain.length > 0) {
-            console.log()
+            log()
             for (const item of toExplain) { // @ts-ignore
                 const { name, bytecode } = item.bytecodeToExplain
-                console.log(`${CYAN}─── Bytecode Explanation for ${name} ───${RESET}`)
-                console.log()
+                log(`${CYAN}─── Bytecode Explanation for ${name} ───${RESET}`)
+                log()
                 try {
                     const rootDir = path.resolve(__dirname, '../../..')
                     const result = execSync(`node -e "process.stdout.write('${bytecode}')" | npm run explain --silent`, {
@@ -834,14 +899,14 @@ async function runTests() {
                         encoding: 'utf8',
                         stdio: ['pipe', 'pipe', 'pipe']
                     })
-                    console.log(result)
+                    log(result)
                 } catch (err) {
                     // @ts-ignore
-                    console.log(`${RED}Error running explain: ${err.message}${RESET}`)
+                    log(`${RED}Error running explain: ${err.message}${RESET}`)
                     // @ts-ignore
-                    if (err.stdout) console.log(err.stdout)
+                    if (err.stdout) log(err.stdout)
                     // @ts-ignore
-                    if (err.stderr) console.log(`${RED}${err.stderr}${RESET}`)
+                    if (err.stderr) log(`${RED}${err.stderr}${RESET}`)
                 }
             }
         }
@@ -851,15 +916,25 @@ async function runTests() {
         }
     }
 
-    console.log()
-    console.log(`${BOLD}Results: ${statusColor}${passed}/${total} tests passed${RESET}`)
+    log()
+    log(`${BOLD}Results: ${statusColor}${passed}/${total} tests passed${RESET}`)
 
-    if (failed > 0) {
-        process.exit(1)
+    return {
+        name: 'Project Compiler',
+        passed,
+        failed,
+        total,
+        tests: testResults,
+        failures: actualFailures
     }
 }
 
-runTests().catch(err => {
-    console.error(`${RED}Error: ${err.message}${RESET}`)
-    process.exit(1)
-})
+// Run as main module
+if (isMainModule) {
+    runTests().then(result => {
+        if (result.failed > 0) process.exit(1)
+    }).catch(err => {
+        console.error(`${RED}Error: ${err.message}${RESET}`)
+        process.exit(1)
+    })
+}
