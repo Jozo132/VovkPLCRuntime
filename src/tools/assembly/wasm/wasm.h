@@ -139,7 +139,11 @@ bool streamRead(char* arr, int& len, int max) {
     int i = 0;
     while (i < max - 1) {
         if (streamAvailable() == 0) break;
-        arr[i] = __streamInRead();
+        char c = __streamInRead();
+        // Stop at null terminator but don't include it in the buffer/length
+        // This allows JS to send streamIn(0) as end-of-stream marker
+        if (c == '\0') break;
+        arr[i] = c;
         i++;
     }
     arr[i] = '\0';

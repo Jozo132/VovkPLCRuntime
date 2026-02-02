@@ -1,0 +1,6 @@
+# Expected PLCScript output for test_19_case_insensitive
+# Auto-generated - edit tokens as needed
+#
+# Required PLCScript tokens (must appear in transpiled output):
+Counter: i16
+if (Counter == 0)

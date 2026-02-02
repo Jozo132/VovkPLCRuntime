@@ -1,0 +1,7 @@
+# Expected PLCScript output for test_03_var_at_address
+# Auto-generated - edit tokens as needed
+#
+# Required PLCScript tokens (must appear in transpiled output):
+@ XX0.0
+@ YX0.0
+@ MW10

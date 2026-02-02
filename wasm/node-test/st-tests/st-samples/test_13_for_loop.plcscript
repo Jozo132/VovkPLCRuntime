@@ -1,0 +1,6 @@
+# Expected PLCScript output for test_13_for_loop
+# Auto-generated - edit tokens as needed
+#
+# Required PLCScript tokens (must appear in transpiled output):
+for (i = 1; i <= 10; i++)
+sum = sum + i

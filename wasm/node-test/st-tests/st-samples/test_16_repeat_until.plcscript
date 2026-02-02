@@ -1,0 +1,6 @@
+# Expected PLCScript output for test_16_repeat_until
+# Auto-generated - edit tokens as needed
+#
+# Required PLCScript tokens (must appear in transpiled output):
+do {
+} while (!(count >= 10))

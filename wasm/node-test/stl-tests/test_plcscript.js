@@ -257,9 +257,8 @@ const run = async () => {
         process.exit(1)
     }
 
-    console.log('Starting up...')
     const runtime = new VovkPLC(wasmPath)
-    await runtime.initialize(wasmPath, true, true) // silent mode
+    await runtime.initialize(wasmPath, false, true) // silent mode
 
     const samplesDir = path.join(__dirname, 'plcscript-samples')
     

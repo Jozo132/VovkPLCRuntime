@@ -1,0 +1,6 @@
+# Expected PLCScript output for test_09_bitwise_shift
+# Auto-generated - edit tokens as needed
+#
+# Required PLCScript tokens (must appear in transpiled output):
+value << 2
+value >> 1

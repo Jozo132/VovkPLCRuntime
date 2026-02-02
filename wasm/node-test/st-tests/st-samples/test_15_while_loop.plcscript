@@ -1,0 +1,6 @@
+# Expected PLCScript output for test_15_while_loop
+# Auto-generated - edit tokens as needed
+#
+# Required PLCScript tokens (must appear in transpiled output):
+while (count < 10)
+count = count + 1

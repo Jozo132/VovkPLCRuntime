@@ -1,0 +1,6 @@
+# Expected PLCScript output for test_05_assignment
+# Auto-generated - edit tokens as needed
+#
+# Required PLCScript tokens (must appear in transpiled output):
+a = 10
+b = a + 5

@@ -1,0 +1,7 @@
+# Expected PLCScript output for test_20_complex_expression
+# Auto-generated - edit tokens as needed
+#
+# Required PLCScript tokens (must appear in transpiled output):
+(a + b)
+(c - a)
+(b + c)

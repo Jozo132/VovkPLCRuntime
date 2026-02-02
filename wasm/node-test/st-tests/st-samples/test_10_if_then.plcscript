@@ -1,0 +1,6 @@
+# Expected PLCScript output for test_10_if_then
+# Auto-generated - edit tokens as needed
+#
+# Required PLCScript tokens (must appear in transpiled output):
+if (flag)
+result = 1

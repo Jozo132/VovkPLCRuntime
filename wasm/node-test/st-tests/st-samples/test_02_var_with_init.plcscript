@@ -1,0 +1,7 @@
+# Expected PLCScript output for test_02_var_with_init
+# Auto-generated - edit tokens as needed
+#
+# Required PLCScript tokens (must appear in transpiled output):
+= 100
+= true
+3.14

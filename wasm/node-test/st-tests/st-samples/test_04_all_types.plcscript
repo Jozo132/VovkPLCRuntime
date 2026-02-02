@@ -1,0 +1,18 @@
+# Expected PLCScript output for test_04_all_types
+# Auto-generated - edit tokens as needed
+#
+# Required PLCScript tokens (must appear in transpiled output):
+v_sint: i8
+v_int: i16
+v_dint: i32
+v_lint: i64
+v_usint: u8
+v_uint: u16
+v_udint: u32
+v_ulint: u64
+v_byte: u8
+v_word: u16
+v_dword: u32
+v_lword: u64
+v_real: f32
+v_lreal: f64

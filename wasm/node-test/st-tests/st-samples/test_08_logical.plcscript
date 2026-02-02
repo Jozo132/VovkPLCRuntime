@@ -1,0 +1,8 @@
+# Expected PLCScript output for test_08_logical
+# Auto-generated - edit tokens as needed
+#
+# Required PLCScript tokens (must appear in transpiled output):
+a && b
+a || b
+a ^ b
+!a

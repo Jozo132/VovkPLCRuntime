@@ -1,0 +1,5 @@
+# Expected PLCScript output for test_18_return
+# Auto-generated - edit tokens as needed
+#
+# Required PLCScript tokens (must appear in transpiled output):
+return;

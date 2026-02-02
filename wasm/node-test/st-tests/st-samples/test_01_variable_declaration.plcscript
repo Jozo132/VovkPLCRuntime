@@ -1,0 +1,7 @@
+# Expected PLCScript output for test_01_variable_declaration
+# Auto-generated - edit tokens as needed
+#
+# Required PLCScript tokens (must appear in transpiled output):
+counter: i16
+flag: bool
+temperature: f32
