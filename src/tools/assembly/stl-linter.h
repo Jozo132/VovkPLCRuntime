@@ -379,7 +379,7 @@ public:
 
     // Validate address format (e.g., I0.0, Q1, M10.5, T#5s, #123)
     bool isValidAddressFormat(const char* addr) {
-        if (!addr || addr[0] == '\0') return false;
+        if (!addr || addr[0] == '\0') return true;  // Empty address is valid (optional parameter)
 
         char first = addr[0];
         if (first >= 'a' && first <= 'z') first -= 32; // Uppercase
@@ -388,6 +388,15 @@ public:
         if (first == '#') return true;  // Immediate value
         if (first == 'P' && addr[1] == '_') return true;  // P_On, P_Off, etc.
         if (first == 'T' && addr[1] == '#') return true;  // T#5s duration
+
+        // Check for symbol names - if second char is a letter or underscore,
+        // this is likely a symbol name not a direct address (my_timer, counter1, etc.)
+        char second = addr[1];
+        if (second >= 'a' && second <= 'z') second -= 32; // Uppercase
+        if ((second >= 'A' && second <= 'Z') || second == '_') {
+            // This looks like a symbol name (e.g., my_timer2, counter1)
+            return true;  // Let symbol resolution handle validation
+        }
 
         // Standard address prefixes
         bool hasPrefix = false;
@@ -434,7 +443,7 @@ public:
 
     // Override convertAddress to resolve symbols first and validate addresses
     void convertAddress(const char* stlAddr, char* plcasmAddr) override {
-        // Check if it's a symbol name
+        // Check if it's a local symbol name
         STLSymbol* sym = findSymbol(stlAddr);
         if (sym) {
             // Resolve to actual address
@@ -491,6 +500,14 @@ public:
             }
 
             plcasmAddr[j] = '\0';
+            return;
+        }
+
+        // Also check shared symbol table (for project-level symbols like timers/counters)
+        SharedSymbol* sharedSym = findSharedSymbol(stlAddr);
+        if (sharedSym) {
+            // Use the base STL compiler's convertAddress which handles shared symbols
+            STLCompiler::convertAddress(stlAddr, plcasmAddr);
             return;
         }
 

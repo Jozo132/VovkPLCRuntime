@@ -25,6 +25,7 @@
 #ifdef __WASM__
 
 #include "plcasm-compiler.h"
+#include "shared-symbols.h"
 
 // STL Compiler - Transpiles Siemens STL to PLCASM
 // 
@@ -413,11 +414,114 @@ public:
 
     // ============ Address conversion ============
 
+    // Helper to check if a string is a valid direct address (starts with I, Q, M, T, C, X, Y, S, P, or #)
+    // Returns true for direct addresses like M0, T5, I0.0, MW10, T#5s
+    // Returns false for symbol names like my_timer2, counter1 (even if they start with M, T, C, etc.)
+    bool isDirectAddress(const char* addr) {
+        if (!addr || !addr[0]) return false;
+        char first = addr[0];
+        if (first >= 'a' && first <= 'z') first -= 32; // Uppercase
+        
+        // Immediate value
+        if (first == '#') return true;
+        
+        // Check for valid address prefix
+        bool hasPrefix = (first == 'I' || first == 'Q' || first == 'M' || first == 'T' || 
+                         first == 'C' || first == 'X' || first == 'Y' || first == 'S' || first == 'P');
+        
+        if (!hasPrefix) return false;
+        
+        // For P, check for P_On, P_Off patterns
+        if (first == 'P') return (addr[1] == '_');
+        
+        // For T, check for T# duration format
+        if (first == 'T' && addr[1] == '#') return true;
+        
+        // After a valid prefix letter, the next character must be:
+        // - A digit (M0, T5, I0, etc.)
+        // - A type suffix B/W/D/L/R followed by digit (MW10, IW0, etc.)
+        char second = addr[1];
+        
+        // Check for digit directly after prefix
+        if (second >= '0' && second <= '9') return true;
+        
+        // Check for type suffix (B=byte, W=word, D=dword, L=long, R=real)
+        if (second >= 'a' && second <= 'z') second -= 32; // Uppercase
+        if (second == 'B' || second == 'W' || second == 'D' || second == 'L' || second == 'R') {
+            // Must be followed by a digit
+            char third = addr[2];
+            return (third >= '0' && third <= '9');
+        }
+        
+        // If second char is another letter or underscore, it's a symbol name
+        return false;
+    }
+
+    // Helper to check if a type is a timer type
+    bool isTimerType(const char* type) {
+        if (!type) return false;
+        return strEq(type, "timer") || strEq(type, "ton") || strEq(type, "tof") || strEq(type, "tp");
+    }
+
+    // Helper to check if a type is a counter type
+    bool isCounterType(const char* type) {
+        if (!type) return false;
+        return strEq(type, "counter") || strEq(type, "ctu") || strEq(type, "ctd") || strEq(type, "ctud");
+    }
+
     // Convert STL address to PLCASM address
     // STL uses: I0.0 (input), Q0.0 (output), M0.0 (marker), etc.
     // PLCASM uses: X0.0 (input), Y0.0 (output), M0.0 (marker), S0 (system), C0 (control)
     virtual void convertAddress(const char* stlAddr, char* plcasmAddr) {
         int i = 0, j = 0;
+        
+        // First, check if this is a symbol name (not a direct address)
+        if (!isDirectAddress(stlAddr)) {
+            SharedSymbol* sym = findSharedSymbol(stlAddr);
+            if (sym) {
+                // Found a symbol - check if it's a timer or counter
+                if (isTimerType(sym->type)) {
+                    // Timer symbol - output T<index>
+                    plcasmAddr[j++] = 'T';
+                    u32 idx = sym->address;
+                    if (idx >= 100) { plcasmAddr[j++] = '0' + (idx / 100); idx %= 100; }
+                    if (idx >= 10 || sym->address >= 100) { plcasmAddr[j++] = '0' + (idx / 10); idx %= 10; }
+                    plcasmAddr[j++] = '0' + idx;
+                    plcasmAddr[j] = '\0';
+                    return;
+                } else if (isCounterType(sym->type)) {
+                    // Counter symbol - output C<index>
+                    plcasmAddr[j++] = 'C';
+                    u32 idx = sym->address;
+                    if (idx >= 100) { plcasmAddr[j++] = '0' + (idx / 100); idx %= 100; }
+                    if (idx >= 10 || sym->address >= 100) { plcasmAddr[j++] = '0' + (idx / 10); idx %= 10; }
+                    plcasmAddr[j++] = '0' + idx;
+                    plcasmAddr[j] = '\0';
+                    return;
+                } else if (sym->is_bit) {
+                    // Bit symbol - output M<address>.<bit>
+                    plcasmAddr[j++] = 'M';
+                    u32 addr = sym->address;
+                    if (addr >= 100) { plcasmAddr[j++] = '0' + (addr / 100); addr %= 100; }
+                    if (addr >= 10 || sym->address >= 100) { plcasmAddr[j++] = '0' + (addr / 10); addr %= 10; }
+                    plcasmAddr[j++] = '0' + addr;
+                    plcasmAddr[j++] = '.';
+                    plcasmAddr[j++] = '0' + sym->bit;
+                    plcasmAddr[j] = '\0';
+                    return;
+                } else {
+                    // Non-bit symbol - output M<address>
+                    plcasmAddr[j++] = 'M';
+                    u32 addr = sym->address;
+                    if (addr >= 100) { plcasmAddr[j++] = '0' + (addr / 100); addr %= 100; }
+                    if (addr >= 10 || sym->address >= 100) { plcasmAddr[j++] = '0' + (addr / 10); addr %= 10; }
+                    plcasmAddr[j++] = '0' + addr;
+                    plcasmAddr[j] = '\0';
+                    return;
+                }
+            }
+            // Symbol not found - fall through to copy as-is
+        }
         
         // Map first character
         char first = stlAddr[0];

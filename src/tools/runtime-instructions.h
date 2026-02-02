@@ -364,6 +364,9 @@ enum PLCRuntimeInstructionSet {
     CALL_IF_REL,        // Call a function relative to the next instruction address if the top of the stack is true (i16)
     CALL_IF_NOT_REL,    // Call a function relative to the next instruction address if the top of the stack is false (i16)
 
+    // Runtime configuration instruction
+    CONFIG_TC = 0xFC,   // Configure Timer/Counter offsets: [ CONFIG_TC, u16 timer_offset, u8 timer_count, u16 counter_offset, u8 counter_count ] - 7 bytes
+
     // Metadata instructions (for decompilation and debugging)
     LANG = 0xFD,        // Language marker: [ LANG, u8 language_id ] - runtime skips 2 bytes, used to identify source language for decompilation
     COMMENT,            // Comment: [ COMMENT, u8 length, ASCII chars... ] - runtime skips 2+length bytes, embeds comment for decompilation

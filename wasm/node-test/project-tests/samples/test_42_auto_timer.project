@@ -1,0 +1,31 @@
+VOVKPLCPROJECT AutoTimerTest
+VERSION 1.0
+
+MEMORY
+    OFFSET 0
+    AVAILABLE 1024
+    S 64
+    X 64
+    Y 64
+    M 256
+END_MEMORY
+
+SYMBOLS
+    my_timer1 : timer : T5
+    my_timer2 : timer : auto
+    my_timer3 : timer : auto
+    my_counter1 : counter : C3
+    my_counter2 : counter : auto
+END_SYMBOLS
+
+PROGRAM main
+    BLOCK LANG=STL Test
+A X0.0
+TON T5 T#1s
+TON my_timer2 T#2s
+TON my_timer3 T#3s
+CTU C3 #10
+CTU my_counter2 #20
+= Y0.0
+    END_BLOCK
+END_PROGRAM

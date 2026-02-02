@@ -543,9 +543,14 @@ void Token::parse() {
     this->type = TOKEN_UNKNOWN;
     if (this->length == 0) return;
     if (this->length == 1) {
-        char c = string[0];
+        char c = this->string[0];
         if (c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '&' || c == '|' || c == '^' || c == '~' || c == '!' || c == '<' || c == '>' || c == '?' || c == ':' || c == ',' || c == ';' || c == '[' || c == ']' || c == '{' || c == '}' || c == '\'' || c == '"' || c == '`' || c == '\\') {
             this->type = TOKEN_OPERATOR;
+            return;
+        }
+        // Single letter identifiers (T, C, etc.) are valid keywords
+        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_') {
+            this->type = TOKEN_KEYWORD;
             return;
         }
     }
@@ -2000,6 +2005,59 @@ public:
             if (str_cmp(token.string, "$$")) {
                 // Skip past entire symbol definition
                 i += 5; // Skip $$ name | type | address
+                while (i + 1 < token_count && tokens[i + 1].line == token.line) {
+                    i++;
+                }
+                continue;
+            }
+
+            // Handle .runtime_config directive for dynamic T/C configuration
+            // Format: .runtime_config T <offset> <count> C <offset> <count>
+            if (token == ".runtime_config") {
+                // Parse: T <timer_offset> <timer_count> C <counter_offset> <counter_count>
+                if (i + 6 < token_count) {
+                    Token& t_tok = tokens[i + 1];
+                    Token& t_off = tokens[i + 2];
+                    Token& t_cnt = tokens[i + 3];
+                    Token& c_tok = tokens[i + 4];
+                    Token& c_off = tokens[i + 5];
+                    Token& c_cnt = tokens[i + 6];
+                    
+                    if ((t_tok == "T" || t_tok == "t") && (c_tok == "C" || c_tok == "c")) {
+                        int timer_offset_val = 0, timer_count_val = 0;
+                        int counter_offset_val = 0, counter_count_val = 0;
+                        
+                        if (!intFromToken(t_off, timer_offset_val) &&
+                            !intFromToken(t_cnt, timer_count_val) &&
+                            !intFromToken(c_off, counter_offset_val) &&
+                            !intFromToken(c_cnt, counter_count_val)) {
+                            
+                            // Apply the configuration to compiler offsets
+                            plcasm_timer_offset = timer_offset_val;
+                            plcasm_counter_offset = counter_offset_val;
+                            
+                            // Emit CONFIG_TC bytecode instruction to configure runtime at startup
+                            // Format: CONFIG_TC <timer_offset:u16> <timer_count:u8> <counter_offset:u16> <counter_count:u8>
+                            ProgramLine& line = programLines[programLineCount];
+                            line.index = built_bytecode_length;
+                            line.refToken = &token;
+                            u8* bytecode = line.code;
+                            u8 offset = 0;
+                            bytecode[offset++] = CONFIG_TC;
+                            bytecode[offset++] = (timer_offset_val >> 8) & 0xFF;   // timer_offset high byte
+                            bytecode[offset++] = timer_offset_val & 0xFF;          // timer_offset low byte
+                            bytecode[offset++] = timer_count_val & 0xFF;           // timer_count
+                            bytecode[offset++] = (counter_offset_val >> 8) & 0xFF; // counter_offset high byte
+                            bytecode[offset++] = counter_offset_val & 0xFF;        // counter_offset low byte
+                            bytecode[offset++] = counter_count_val & 0xFF;         // counter_count
+                            line.size = offset;
+                            i += 6; // Skip all the tokens we consumed (MUST be before _line_push which has continue)
+                            _line_push;
+                        }
+                    }
+                }
+                // If we get here, format was invalid - just skip the directive token
+                // Skip to end of line
                 while (i + 1 < token_count && tokens[i + 1].line == token.line) {
                     i++;
                 }

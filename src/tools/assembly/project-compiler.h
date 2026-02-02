@@ -50,8 +50,8 @@
 //   X <size>                    // Required: Inputs (100% usage assumed)
 //   Y <size>                    // Required: Outputs (100% usage assumed)
 //   M <size>                    // Required: Markers (usage based on access)
-//   T <size>                    // Required: Timers (usage based on access)
-//   C <size>                    // Required: Counters (usage based on access)
+//   // T and C are auto-calculated based on actual usage in the project.
+//   // They can be specified for backwards compatibility but will be ignored.
 // END_MEMORY
 //
 // FLASH
@@ -59,7 +59,11 @@
 // END_FLASH
 //
 // SYMBOLS
-//   <name> : <type> : <address> [: <comment>]
+//   <name> : <type> : <address> [= <default_value>]
+//   // Timer/Counter symbols support 'auto' for automatic index assignment:
+//   //   my_timer : timer : auto      // Auto-assigns T0, T1, etc.
+//   //   my_counter : counter : auto  // Auto-assigns C0, C1, etc.
+//   // Explicit indices are scanned first, then 'auto' fills remaining slots.
 //   ...
 // END_SYMBOLS
 //
@@ -281,6 +285,19 @@ public:
     // Project-level edge memory counter for differentiation bits (shared across all blocks)
     int project_edge_mem_counter;
 
+    // Timer/Counter auto-allocation tracking
+    // Tracks which T/C indices are explicitly used vs need auto-assignment
+    static const int MAX_TIMERS = 256;
+    static const int MAX_COUNTERS = 256;
+    bool timer_used[MAX_TIMERS];      // Track which timer indices are explicitly used
+    bool counter_used[MAX_COUNTERS];  // Track which counter indices are explicitly used
+    int timer_count;                   // Number of timers actually used (max index + 1)
+    int counter_count;                 // Number of counters actually used (max index + 1)
+    int next_auto_timer;               // Next available timer index for auto-assignment
+    int next_auto_counter;             // Next available counter index for auto-assignment
+    u32 timer_offset;                  // Calculated timer offset (after M area)
+    u32 counter_offset;                // Calculated counter offset (after T area)
+
     // Problems array for multiple error tracking
     LinterProblem problems[MAX_LINT_PROBLEMS];
     int problem_count = 0;
@@ -374,6 +391,16 @@ public:
 
         // Reset project-level edge memory counter (starts at bit 800 = M100.0)
         project_edge_mem_counter = 800;
+
+        // Reset timer/counter tracking
+        for (int i = 0; i < MAX_TIMERS; i++) timer_used[i] = false;
+        for (int i = 0; i < MAX_COUNTERS; i++) counter_used[i] = false;
+        timer_count = 0;
+        counter_count = 0;
+        next_auto_timer = 0;
+        next_auto_counter = 0;
+        timer_offset = 0;
+        counter_offset = 0;
 
         // Reset child compilers' symbol tables
         plcasm_compiler.symbol_count = 0;
@@ -840,9 +867,10 @@ public:
             return true;
         }
 
-        // Required sequence: OFFSET, AVAILABLE, S, X, Y, M, T, C
-        const char* required_areas[] = { "S", "X", "Y", "M", "T", "C" };
-        const int num_required = 6;
+        // Required sequence: OFFSET, AVAILABLE, S, X, Y, M
+        // T and C are auto-calculated based on actual usage
+        const char* required_areas[] = { "S", "X", "Y", "M" };
+        const int num_required = 4;
         
         u32 current_offset = 0;
         bool has_offset = false;
@@ -886,12 +914,8 @@ public:
                 continue;
             }
 
-            // Then: memory areas in strict order S, X, Y, M, T, C
-            if (area_index >= num_required) {
-                setError("Too many memory areas - expected only S, X, Y, M, T, C");
-                return false;
-            }
-
+            // Then: memory areas in strict order S, X, Y, M
+            // (T and C are auto-calculated, so we just skip them if present for backwards compat)
             if (memory_area_count >= PROJECT_MAX_MEMORY_AREAS) {
                 setError("Too many memory areas defined");
                 return false;
@@ -906,8 +930,30 @@ public:
                 return false;
             }
 
+            // Check if this is T or C (auto-calculated, skip for backwards compatibility)
+            if (strEqI(area.name, "T") || strEqI(area.name, "C")) {
+                // Skip the size value for T/C (they are auto-calculated now)
+                u32 ignored_size = 0;
+                readInt(ignored_size);
+                skipWhitespaceNotNewline();
+                // Check for optional RETAIN keyword
+                char word[32];
+                int savedPos = pos;
+                int savedLine = line;
+                int savedCol = column;
+                if (readWord(word, sizeof(word))) {
+                    if (!strEqI(word, "RETAIN")) {
+                        pos = savedPos;
+                        line = savedLine;
+                        column = savedCol;
+                    }
+                }
+                skipLine();
+                continue;  // Skip T/C areas - they will be auto-added later
+            }
+
             // Verify it matches the expected area in sequence
-            if (!strEqI(area.name, required_areas[area_index])) {
+            if (area_index < num_required && !strEqI(area.name, required_areas[area_index])) {
                 char err[128];
                 int ei = 0;
                 const char* msg = "Expected memory area '";
@@ -955,12 +1001,12 @@ public:
 
             area.used = true;
             memory_area_count++;
-            area_index++;
+            if (area_index < num_required) area_index++;
 
             skipLine();
         }
 
-        // Verify all required areas were defined
+        // Verify all required areas were defined (S, X, Y, M)
         if (area_index < num_required) {
             char err[128];
             int ei = 0;
@@ -974,6 +1020,7 @@ public:
         }
 
         // Store total allocated (will be recalculated after compilation based on actual usage)
+        // T and C areas will be added dynamically during finalizeTimerCounterAreas()
         memory_used = current_offset;
 
         // Note: Memory limit checking is handled by the front-end editor based on stats
@@ -985,17 +1032,16 @@ public:
     void setupDefaultMemory() {
         // Set up default memory areas with sequential sizes
         // Format: name, size (offsets calculated sequentially from 0)
+        // Note: T and C are NOT included here - they are auto-calculated based on usage
         const struct { const char* name; u32 size; } defaults[] = {
             { "S", 64 },    // System variables
             { "X", 64 },    // Inputs
             { "Y", 64 },    // Outputs
             { "M", 256 },   // Markers
-            { "T", 90 },    // Timers
-            { "C", 40 },    // Counters
         };
 
         u32 current_offset = 0;
-        for (int i = 0; i < 6 && memory_area_count < PROJECT_MAX_MEMORY_AREAS; i++) {
+        for (int i = 0; i < 4 && memory_area_count < PROJECT_MAX_MEMORY_AREAS; i++) {
             MemoryArea& area = memory_areas[memory_area_count];
             area.reset();
             int j = 0;
@@ -1013,8 +1059,126 @@ public:
         }
         
         // Set default available and used memory
+        // T and C will be added later by finalizeTimerCounterAreas()
         memory_used = current_offset;
         memory_available = current_offset;  // Default: available = used
+    }
+
+    // Finalize timer and counter memory areas based on actual usage
+    // Called after parseSymbols() to calculate T/C offsets and add memory areas
+    void finalizeTimerCounterAreas() {
+        // Find the end of the M area (last defined area before T/C)
+        u32 current_offset = memory_used;
+        
+        // Find M area to get its end
+        for (int i = 0; i < memory_area_count; i++) {
+            if (strEqI(memory_areas[i].name, "M")) {
+                current_offset = memory_areas[i].end + 1;
+                break;
+            }
+        }
+        
+        // Set timer offset (right after M area)
+        timer_offset = current_offset;
+        plcasm_timer_offset = timer_offset;
+        
+        // Calculate timer memory size: count * struct_size
+        // Ensure at least 1 timer slot if any timers are used
+        int timer_slots = timer_count > 0 ? timer_count : 0;
+        u32 timer_size = timer_slots * PLCRUNTIME_TIMER_STRUCT_SIZE;
+        
+        // Add T area to memory_areas if timers are used
+        if (timer_slots > 0 && memory_area_count < PROJECT_MAX_MEMORY_AREAS) {
+            MemoryArea& tarea = memory_areas[memory_area_count];
+            tarea.reset();
+            tarea.name[0] = 'T';
+            tarea.name[1] = '\0';
+            tarea.start = timer_offset;
+            tarea.end = timer_offset + timer_size - 1;
+            tarea.retain = false;
+            tarea.used = true;
+            memory_area_count++;
+        }
+        
+        // Set counter offset (right after T area)
+        counter_offset = timer_offset + timer_size;
+        plcasm_counter_offset = counter_offset;
+        
+        // Calculate counter memory size: count * struct_size
+        int counter_slots = counter_count > 0 ? counter_count : 0;
+        u32 counter_size = counter_slots * PLCRUNTIME_COUNTER_STRUCT_SIZE;
+        
+        // Add C area to memory_areas if counters are used
+        if (counter_slots > 0 && memory_area_count < PROJECT_MAX_MEMORY_AREAS) {
+            MemoryArea& carea = memory_areas[memory_area_count];
+            carea.reset();
+            carea.name[0] = 'C';
+            carea.name[1] = '\0';
+            carea.start = counter_offset;
+            carea.end = counter_offset + counter_size - 1;
+            carea.retain = false;
+            carea.used = true;
+            memory_area_count++;
+        }
+        
+        // Update total memory used
+        memory_used = counter_offset + counter_size;
+        
+        // Update runtime offsets
+        runtime.timer_offset = timer_offset;
+        runtime.counter_offset = counter_offset;
+        
+        if (debug_mode) {
+            Serial.print(F("Timer count: ")); Serial.print(timer_count);
+            Serial.print(F(", offset: ")); Serial.print(timer_offset);
+            Serial.print(F(", size: ")); Serial.println(timer_size);
+            Serial.print(F("Counter count: ")); Serial.print(counter_count);
+            Serial.print(F(", offset: ")); Serial.print(counter_offset);
+            Serial.print(F(", size: ")); Serial.println(counter_size);
+        }
+    }
+
+    // Scan source for T/C references to determine usage before finalizing areas
+    // This catches direct references like T0, T1, C0, C1 in ladder JSON or STL code
+    void scanSourceForTimerCounterUsage() {
+        const char* src = source;
+        int len = source_length;
+        
+        for (int i = 0; i < len - 1; i++) {
+            char c = src[i];
+            
+            // Look for T<number> or C<number> patterns
+            // Must be preceded by non-alphanumeric (or start) and followed by digit
+            bool preceded_ok = (i == 0) || !isAlphaNum(src[i-1]);
+            
+            if (preceded_ok && (c == 'T' || c == 't' || c == 'C' || c == 'c')) {
+                // Check if next char is a digit
+                if (i + 1 < len && isDigit(src[i+1])) {
+                    // Parse the number
+                    int idx = 0;
+                    int j = i + 1;
+                    while (j < len && isDigit(src[j])) {
+                        idx = idx * 10 + (src[j] - '0');
+                        j++;
+                    }
+                    
+                    // Track usage
+                    if (c == 'T' || c == 't') {
+                        markTimerUsed(idx);
+                    } else {
+                        markCounterUsed(idx);
+                    }
+                    
+                    i = j - 1; // Skip past the number
+                }
+            }
+        }
+        
+        if (debug_mode) {
+            Serial.print(F("Source scan found: "));
+            Serial.print(timer_count); Serial.print(F(" timers, "));
+            Serial.print(counter_count); Serial.println(F(" counters"));
+        }
     }
 
     bool parseFlash() {
@@ -1178,20 +1342,68 @@ public:
             psym.type_size = 4;
         } else if (strEqI(type, "u64") || strEqI(type, "i64") || strEqI(type, "f64")) {
             psym.type_size = 8;
+        } else if (strEqI(type, "timer") || strEqI(type, "ton") || strEqI(type, "tof") || strEqI(type, "tp")) {
+            psym.type_size = PLCRUNTIME_TIMER_STRUCT_SIZE;  // Timer struct size
+        } else if (strEqI(type, "counter") || strEqI(type, "ctu") || strEqI(type, "ctd") || strEqI(type, "ctud")) {
+            psym.type_size = PLCRUNTIME_COUNTER_STRUCT_SIZE;  // Counter struct size
         } else {
             psym.type_size = 1; // Default to byte
         }
 
-        // Parse address (simplified - handles numeric and prefixed addresses)
-        psym.address = parseAddress(address, &psym.bit, &psym.is_bit);
+        // Check if this is an "auto" address for timer/counter
+        bool is_auto = strEqI(address, "auto");
+        bool is_timer_type = strEqI(type, "timer") || strEqI(type, "ton") || strEqI(type, "tof") || strEqI(type, "tp");
+        bool is_counter_type = strEqI(type, "counter") || strEqI(type, "ctu") || strEqI(type, "ctd") || strEqI(type, "ctud");
 
-        // Save original address string
-        int k = 0;
-        while (address[k] && k < 31) {
-            psym.address_str[k] = address[k];
-            k++;
+        if (is_auto) {
+            if (is_timer_type) {
+                // Auto-assign next available timer
+                int timer_idx = getNextAutoTimer();
+                if (timer_idx < 0) {
+                    setError("Too many auto-assigned timers (max 256)");
+                    return false;
+                }
+                // Store as T<n> address - will be resolved during finalization
+                psym.address = timer_idx;  // Store index, will multiply by struct size later
+                // Build address string
+                psym.address_str[0] = 'T';
+                int k = 1;
+                if (timer_idx >= 100) { psym.address_str[k++] = '0' + (timer_idx / 100); }
+                if (timer_idx >= 10) { psym.address_str[k++] = '0' + ((timer_idx / 10) % 10); }
+                psym.address_str[k++] = '0' + (timer_idx % 10);
+                psym.address_str[k] = '\0';
+            } else if (is_counter_type) {
+                // Auto-assign next available counter
+                int counter_idx = getNextAutoCounter();
+                if (counter_idx < 0) {
+                    setError("Too many auto-assigned counters (max 256)");
+                    return false;
+                }
+                // Store as C<n> address - will be resolved during finalization
+                psym.address = counter_idx;  // Store index, will multiply by struct size later
+                // Build address string
+                psym.address_str[0] = 'C';
+                int k = 1;
+                if (counter_idx >= 100) { psym.address_str[k++] = '0' + (counter_idx / 100); }
+                if (counter_idx >= 10) { psym.address_str[k++] = '0' + ((counter_idx / 10) % 10); }
+                psym.address_str[k++] = '0' + (counter_idx % 10);
+                psym.address_str[k] = '\0';
+            } else {
+                setError("'auto' address only valid for timer and counter types");
+                return false;
+            }
+        } else {
+            // Parse address (simplified - handles numeric and prefixed addresses)
+            psym.address = parseAddress(address, &psym.bit, &psym.is_bit);
+
+            // Save original address string
+            int k = 0;
+            while (address[k] && k < 31) {
+                psym.address_str[k] = address[k];
+                k++;
+            }
+            psym.address_str[k] = '\0';
         }
-        psym.address_str[k] = '\0';
 
         // Check for default value
         skipWhitespaceNotNewline();
@@ -1304,6 +1516,46 @@ public:
         stl_compiler.symbol_count = symbol_count < STL_MAX_SYMBOLS ? symbol_count : STL_MAX_SYMBOLS;
     }
 
+    // Track a timer index as used
+    void markTimerUsed(int index) {
+        if (index >= 0 && index < MAX_TIMERS) {
+            timer_used[index] = true;
+            if (index >= timer_count) timer_count = index + 1;
+        }
+    }
+
+    // Track a counter index as used
+    void markCounterUsed(int index) {
+        if (index >= 0 && index < MAX_COUNTERS) {
+            counter_used[index] = true;
+            if (index >= counter_count) counter_count = index + 1;
+        }
+    }
+
+    // Get next available timer index for auto-assignment
+    int getNextAutoTimer() {
+        while (next_auto_timer < MAX_TIMERS && timer_used[next_auto_timer]) {
+            next_auto_timer++;
+        }
+        if (next_auto_timer < MAX_TIMERS) {
+            markTimerUsed(next_auto_timer);
+            return next_auto_timer++;
+        }
+        return -1; // No more available
+    }
+
+    // Get next available counter index for auto-assignment
+    int getNextAutoCounter() {
+        while (next_auto_counter < MAX_COUNTERS && counter_used[next_auto_counter]) {
+            next_auto_counter++;
+        }
+        if (next_auto_counter < MAX_COUNTERS) {
+            markCounterUsed(next_auto_counter);
+            return next_auto_counter++;
+        }
+        return -1; // No more available
+    }
+
     u32 parseAddress(const char* addr, u8* bit, bool* is_bit) {
         *is_bit = false;
         *bit = 255;
@@ -1312,7 +1564,7 @@ public:
         u32 base_offset = 0;
         int i = 0;
 
-        // Check for letter prefix (M, I, Q, X, Y, etc.)
+        // Check for letter prefix (M, I, Q, X, Y, T, C, etc.)
         char prefix[8] = { 0 };
         int prefix_len = 0;
         while (addr[i] && isAlpha(addr[i]) && prefix_len < 7) {
@@ -1335,6 +1587,12 @@ public:
                 base_offset = plcasm_output_offset;
             } else if (strEqI(prefix, "M") && prefix_len == 1) {
                 base_offset = plcasm_marker_offset;
+            } else if (strEqI(prefix, "T") && prefix_len == 1) {
+                // Timer address - will use dynamic offset (set during finalization)
+                base_offset = timer_offset;
+            } else if (strEqI(prefix, "C") && prefix_len == 1) {
+                // Counter address - will use dynamic offset (set during finalization)
+                base_offset = counter_offset;
             }
         }
 
@@ -1342,6 +1600,13 @@ public:
         u32 byte_addr = 0;
         while (addr[i] && isDigit(addr[i])) {
             byte_addr = byte_addr * 10 + (addr[i++] - '0');
+        }
+
+        // Track timer/counter usage
+        if (strEqI(prefix, "T") && prefix_len == 1) {
+            markTimerUsed(byte_addr);
+        } else if (strEqI(prefix, "C") && prefix_len == 1) {
+            markCounterUsed(byte_addr);
         }
 
         // Check for bit notation (e.g., X0.1)
@@ -1566,6 +1831,21 @@ public:
         for (int i = name_len; i < 69; i++) appendToCombinedPLCASM(" ");
         appendToCombinedPLCASM("|\n");
         appendToCombinedPLCASM("// +====================================================================+\n\n");
+
+        // Generate runtime configuration directive for T/C offsets
+        // Format: .runtime_config T <offset> <count> C <offset> <count>
+        if (timer_count > 0 || counter_count > 0) {
+            appendToCombinedPLCASM("// Timer/Counter runtime configuration\n");
+            appendToCombinedPLCASM(".runtime_config T ");
+            appendCombinedPLCASMInt(timer_offset);
+            appendToCombinedPLCASM(" ");
+            appendCombinedPLCASMInt(timer_count);
+            appendToCombinedPLCASM(" C ");
+            appendCombinedPLCASMInt(counter_offset);
+            appendToCombinedPLCASM(" ");
+            appendCombinedPLCASMInt(counter_count);
+            appendToCombinedPLCASM("\n\n");
+        }
 
         // Remember position after the main banner, before startup content
         int initial_length = combined_plcasm_length;
@@ -2204,6 +2484,14 @@ public:
         if (!parseMemory()) return false;
         if (!parseFlash()) return false;
         if (!parseSymbols()) return false;
+        
+        // Scan source for T/C references before parsing blocks
+        // This catches direct T0, T1, C0, C1 references in ladder/STL code
+        scanSourceForTimerCounterUsage();
+        
+        // Finalize timer and counter memory areas based on detected usage
+        finalizeTimerCounterAreas();
+        
         if (!parseProgramBlocks()) return false;
 
         if (program_block_count == 0) {
@@ -2217,6 +2505,8 @@ public:
             Serial.print(F("Memory areas: ")); Serial.println(memory_area_count);
             Serial.print(F("Symbols: ")); Serial.println(symbol_count);
             Serial.print(F("Program blocks: ")); Serial.println(program_block_count);
+            Serial.print(F("Timers used: ")); Serial.println(timer_count);
+            Serial.print(F("Counters used: ")); Serial.println(counter_count);
         }
 
         // Pass 1: Convert all blocks to PLCASM and concatenate

@@ -297,6 +297,7 @@ bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
         case CTU_MEM:
         case CTD_CONST:
         case CTD_MEM:
+        case CONFIG_TC:
         case LANG:
         case COMMENT:
         case EXIT: return true;
@@ -520,6 +521,7 @@ const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
         case CTU_MEM: return F("CTU_MEM");
         case CTD_CONST: return F("CTD_CONST");
         case CTD_MEM: return F("CTD_MEM");
+        case CONFIG_TC: return F("CONFIG_TC");
         case LANG: return F("LANG");
         case COMMENT: return F("COMMENT");
         case EXIT: return F("EXIT");
@@ -766,6 +768,7 @@ u8 OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
         case RET_IF_NOT:
         case EXIT: return 1;
 
+        case CONFIG_TC: return 7; // Opcode + timer_offset(u16) + timer_count(u8) + counter_offset(u16) + counter_count(u8)
         case LANG: return 2; // Opcode + language_id
         // COMMENT size is dynamic: 2 + comment_length (handled specially in explain)
         case COMMENT: return 0; // Dynamic size, must be handled specially

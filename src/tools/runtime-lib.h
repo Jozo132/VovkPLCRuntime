@@ -2089,6 +2089,24 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
         case CMP_LT: return PLCMethods::handle_CMP_LT(this->stack, program, prog_size, index);
         case CMP_LTE: return PLCMethods::handle_CMP_LTE(this->stack, program, prog_size, index);
 
+        // Runtime configuration instruction
+        case CONFIG_TC: {
+            // Format: CONFIG_TC <timer_offset:u16> <timer_count:u8> <counter_offset:u16> <counter_count:u8>
+            if (index + 6 > prog_size) return PROGRAM_SIZE_EXCEEDED;
+            u16 t_offset = (program[index] << 8) | program[index + 1];
+            u8 t_count = program[index + 2];
+            u16 c_offset = (program[index + 3] << 8) | program[index + 4];
+            u8 c_count = program[index + 5];
+            index += 6;
+            // Configure runtime offsets
+            this->timer_offset = t_offset;
+            this->counter_offset = c_offset;
+            // Note: t_count and c_count are informational (for validation/debugging)
+            // The actual number of timers/counters is defined by the project, not the runtime
+            (void)t_count; (void)c_count; // Suppress unused warnings
+            return STATUS_SUCCESS;
+        }
+
             // Metadata instructions - runtime skips over these (used for decompilation)
         case LANG: {
             // Skip over language_id byte
