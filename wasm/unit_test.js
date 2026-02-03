@@ -18,7 +18,9 @@ import { runTests as runLadderSTLTests } from './node-test/ladder-tests/test_lad
 import { runTests as runLadderLinterTests } from './node-test/ladder-tests/test_ladder_linter.js'
 import { runTests as runProjectTests } from './node-test/project-tests/unit_test.js'
 import { runTests as runPLCScriptTests } from './node-test/stl-tests/test_plcscript.js'
+import { runTests as runStructTests } from './node-test/plcscript-tests/test_structs.js'
 import { runTests as runSTTests } from './node-test/st-tests/test_st.js'
+import { runTests as runReservedWordTests } from './node-test/project-tests/test_reserved_words.js'
 import { runTests as runMemoryLeakTests } from './memory_leak_test.js'
 
 // ANSI colors
@@ -61,9 +63,19 @@ const testSuites = [
         run: runPLCScriptTests
     },
     {
+        name: 'Typed Structs Integration',
+        shortName: 'structs',
+        run: runStructTests
+    },
+    {
         name: 'Structured Text (ST) Compiler',
         shortName: 'st',
         run: runSTTests
+    },
+    {
+        name: 'Reserved Word Validation',
+        shortName: 'reserved',
+        run: runReservedWordTests
     },
     {
         name: 'Memory Leak Detection',

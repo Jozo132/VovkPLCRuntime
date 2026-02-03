@@ -901,7 +901,20 @@ public:
                 SharedSymbol* shared = findSharedSymbol(base_buf);
                 if (!shared) return true; // Symbol not found
                 
-                // Determine type from shared symbol
+                // IMPORTANT: Check user-defined struct types FIRST, before built-in timer/counter types
+                // This allows user structs named "Counter" etc. to work correctly
+                UserStructType* ust = findUserStructType(shared->type);
+                if (ust) {
+                    PropertyResolution res = resolveUserStructProperty(ust, shared->address, prop_buf);
+                    if (!res.success) return true;
+                    address = res.address;
+                    bit = res.is_bit ? res.bit_pos : 0;
+                    is_bit = res.is_bit;
+                    type_size = res.type_size;
+                    return false;
+                }
+                
+                // Determine type from shared symbol - check built-in types
                 if (SharedSymbolTable::isTimerType(shared->type)) {
                     is_timer = true;
                     // For timer symbols, address is the timer index
@@ -910,17 +923,6 @@ public:
                     is_counter = true;
                     base_address = plcasm_counter_offset + (shared->address * PLCRUNTIME_COUNTER_STRUCT_SIZE);
                 } else {
-                    // Check user-defined struct types
-                    UserStructType* ust = findUserStructType(shared->type);
-                    if (ust) {
-                        PropertyResolution res = resolveUserStructProperty(ust, shared->address, prop_buf);
-                        if (!res.success) return true;
-                        address = res.address;
-                        bit = res.is_bit ? res.bit_pos : 0;
-                        is_bit = res.is_bit;
-                        type_size = res.type_size;
-                        return false;
-                    }
                     return true; // Not a structured type
                 }
             } else {

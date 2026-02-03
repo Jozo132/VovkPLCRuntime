@@ -59,6 +59,13 @@
 //   SIZE <bytes>                // Optional: flash size for bytecode (default 32KB)
 // END_FLASH
 //
+// TYPES                         // Optional: user-defined struct types
+//   <name> = struct {
+//     <field_name>: <field_type>;
+//     ...
+//   };
+// END_TYPES
+//
 // SYMBOLS
 //   <name> : <type> : <address> [= <default_value>]
 //   // Timer/Counter symbols support 'auto' for automatic index assignment:
@@ -77,7 +84,7 @@
 //
 // ... (more FILE blocks)
 //
-// Supported languages: PLCASM, STL, LADDER (JSON)
+// Supported languages: PLCASM, STL, LADDER (JSON), PLCSCRIPT, ST
 //
 // Two-pass compilation:
 //   Pass 1: Parse all files/blocks, detect labels, allocate addresses
@@ -408,8 +415,9 @@ public:
         plcasm_compiler.symbol_count = 0;
         plcasm_compiler.base_symbol_count = 0;
 
-        // Reset shared symbol table for fresh compile/lint
+        // Reset shared symbol table and user struct types for fresh compile/lint
         resetSharedSymbols();
+        resetUserStructTypes();
     }
 
     // ============ Error Handling ============
@@ -737,6 +745,100 @@ public:
             b++;
         }
         return *a == '\0' && *b == '\0';
+    }
+    
+    // Check if a name is a reserved word (type name, instruction, keyword)
+    // Returns true if the name is reserved and should not be used as a symbol/variable
+    bool isReservedWord(const char* name) {
+        if (!name || !name[0]) return false;
+        
+        // Type names (all languages) - only reserve truly problematic ones
+        // Note: "timer" and "counter" are NOT reserved as they are common variable names
+        static const char* typeNames[] = {
+            "bool", "bit", "byte",
+            "i8", "u8", "i16", "u16", "i32", "u32", "i64", "u64",
+            "f32", "f64",
+            // Timer/counter TYPES (instructions)
+            "ton", "tof", "tp",
+            "ctu", "ctd", "ctud",
+            // ST/IEC 61131-3 types
+            "sint", "int", "dint", "lint",
+            "usint", "uint", "udint", "ulint",
+            "real", "lreal",
+            "word", "dword", "lword",
+            "time", "string",
+            nullptr
+        };
+        
+        // PLCASM/STL instructions - only multi-character ones to avoid conflicts
+        // Note: Single-letter instructions (a, x, t, s, l, r, o) are NOT reserved
+        // as they conflict with common single-letter variable names
+        static const char* instructions[] = {
+            // Load/Store
+            "ld", "st", "push", "pop",
+            // Arithmetic
+            "add", "sub", "mul", "div", "mod", "neg", "abs", "inc", "dec",
+            // Logic (multi-char only)
+            "and", "or", "xor", "not",
+            // Comparison
+            "gt", "ge", "lt", "le", "eq", "ne",
+            // Bitwise
+            "shl", "shr", "rol", "ror",
+            // Flow control
+            "jmp", "jz", "jnz", "call", "ret", "nop", "end",
+            // Bit operations
+            "set", "rst", "clr",
+            // Memory
+            "copy", "fill", "swap",
+            // STL specific (multi-char only)
+            "an", "on", "xn",
+            nullptr
+        };
+        
+        // Language keywords
+        static const char* keywords[] = {
+            // PLCScript
+            "let", "const", "if", "else", "while", "for",
+            "function", "return", "break", "continue",
+            "type", "struct", "true", "false", "null",
+            // ST/IEC 61131-3
+            "var", "end_var", "var_input", "var_output", "var_in_out", "var_global", "var_temp",
+            "then", "elsif", "end_if",
+            "case", "of", "end_case",
+            "to", "by", "do", "end_for",
+            "end_while",
+            "repeat", "until", "end_repeat",
+            "exit",
+            "program", "end_program",
+            "function_block", "end_function_block", "end_function",
+            "end_struct", "end_type",
+            "constant", "at", "retain",
+            // Project file keywords
+            "memory", "end_memory", "flash", "end_flash",
+            "symbols", "end_symbols", "types", "end_types",
+            "file", "end_file", "block", "end_block",
+            "vovkplcproject", "version", "size", "offset", "available",
+            "plcasm", "stl", "ladder", "st", "plcscript",
+            "auto",
+            nullptr
+        };
+        
+        // Check type names
+        for (int i = 0; typeNames[i]; i++) {
+            if (strEqI(name, typeNames[i])) return true;
+        }
+        
+        // Check instructions
+        for (int i = 0; instructions[i]; i++) {
+            if (strEqI(name, instructions[i])) return true;
+        }
+        
+        // Check keywords
+        for (int i = 0; keywords[i]; i++) {
+            if (strEqI(name, keywords[i])) return true;
+        }
+        
+        return false;
     }
 
     // Read an identifier/keyword
@@ -1255,6 +1357,211 @@ public:
         return !has_error;
     }
 
+    // ============ Types Section Parser ============
+    // Parse TYPES section for user-defined struct types
+    // Format:
+    // TYPES
+    //   <name> = struct {
+    //     <field_name>: <field_type>;
+    //     ...
+    //   };
+    // END_TYPES
+
+    bool parseTypes() {
+        skipComments();
+
+        if (!matchKeyword("TYPES")) {
+            // TYPES section is optional
+            return true;
+        }
+
+        while (pos < source_length && !has_error) {
+            skipComments();
+
+            if (matchKeyword("END_TYPES")) {
+                break;
+            }
+
+            // Read type name
+            char typeName[32];
+            if (!readWord(typeName, sizeof(typeName))) {
+                skipLine();
+                continue;
+            }
+            
+            // Check if the type name conflicts with a reserved word
+            if (isReservedWord(typeName)) {
+                char err[128];
+                int ei = 0;
+                const char* msg = "Type name '";
+                while (*msg && ei < 80) err[ei++] = *msg++;
+                int ni = 0;
+                while (typeName[ni] && ei < 100) err[ei++] = typeName[ni++];
+                const char* suffix = "' is a reserved word";
+                int si = 0;
+                while (suffix[si] && ei < 126) err[ei++] = suffix[si++];
+                err[ei] = '\0';
+                setError(err);
+                return false;
+            }
+
+            // Expect '='
+            skipWhitespaceNotNewline();
+            if (peek() != '=') {
+                setError("Expected '=' after type name");
+                return false;
+            }
+            advance();
+            skipWhitespaceNotNewline();
+
+            // Expect 'struct'
+            if (!matchKeyword("struct")) {
+                setError("Expected 'struct' after '='");
+                return false;
+            }
+            skipWhitespaceNotNewline();
+
+            // Expect '{'
+            if (peek() != '{') {
+                setError("Expected '{' after 'struct'");
+                return false;
+            }
+            advance();
+
+            // Check if this type already exists
+            UserStructType* existing = findUserStructType(typeName);
+            UserStructType tempStruct;
+            tempStruct.reset();
+            
+            // Copy name to temp
+            int ni = 0;
+            while (typeName[ni] && ni < 31) { tempStruct.name[ni] = typeName[ni]; ni++; }
+            tempStruct.name[ni] = '\0';
+
+            // Parse fields
+            u8 currentOffset = 0;
+            while (pos < source_length && !has_error) {
+                skipComments();
+
+                // Check for end of struct
+                if (peek() == '}') {
+                    advance();
+                    // Optional semicolon after closing brace
+                    skipWhitespaceNotNewline();
+                    if (peek() == ';') advance();
+                    break;
+                }
+
+                // Read field name
+                char fieldName[16];
+                if (!readWord(fieldName, sizeof(fieldName))) {
+                    setError("Expected field name");
+                    return false;
+                }
+
+                // Expect ':'
+                skipWhitespaceNotNewline();
+                if (peek() != ':') {
+                    setError("Expected ':' after field name");
+                    return false;
+                }
+                advance();
+                skipWhitespaceNotNewline();
+
+                // Read field type
+                char fieldType[16];
+                if (!readWord(fieldType, sizeof(fieldType))) {
+                    setError("Expected field type");
+                    return false;
+                }
+
+                // Determine type size
+                u8 typeSize = 0;
+                u8 bitPos = 255;
+                if (strEqI(fieldType, "bool")) {
+                    typeSize = 1;  // bool takes 1 byte in our layout
+                } else if (strEqI(fieldType, "i8") || strEqI(fieldType, "u8")) {
+                    typeSize = 1;
+                } else if (strEqI(fieldType, "i16") || strEqI(fieldType, "u16")) {
+                    typeSize = 2;
+                } else if (strEqI(fieldType, "i32") || strEqI(fieldType, "u32") || strEqI(fieldType, "f32")) {
+                    typeSize = 4;
+                } else if (strEqI(fieldType, "i64") || strEqI(fieldType, "u64") || strEqI(fieldType, "f64")) {
+                    typeSize = 8;
+                } else {
+                    char err[64];
+                    int ei = 0;
+                    const char* msg = "Unknown field type: ";
+                    while (*msg && ei < 40) err[ei++] = *msg++;
+                    int ti = 0;
+                    while (fieldType[ti] && ei < 60) err[ei++] = fieldType[ti++];
+                    err[ei] = '\0';
+                    setError(err);
+                    return false;
+                }
+
+                // Add field to temp struct
+                if (tempStruct.field_count < MAX_STRUCT_PROPERTIES) {
+                    StructProperty& prop = tempStruct.fields[tempStruct.field_count++];
+                    int fi = 0;
+                    while (fieldName[fi] && fi < 15) { prop.name[fi] = fieldName[fi]; fi++; }
+                    prop.name[fi] = '\0';
+                    prop.offset = currentOffset;
+                    prop.type_size = typeSize;
+                    prop.bit_pos = bitPos;
+                    prop.readable = true;
+                    prop.writable = true;
+                    currentOffset += typeSize;
+                }
+
+                // Optional semicolon after field
+                skipWhitespaceNotNewline();
+                if (peek() == ';') advance();
+            }
+
+            tempStruct.total_size = currentOffset;
+
+            // Check for collision with existing type
+            if (existing) {
+                StructCompareResult cmp = compareUserStructTypes(existing, &tempStruct);
+                if (cmp == STRUCT_COMPARE_IDENTICAL) {
+                    // Duplicate but identical - add warning
+                    addProblem(LINT_WARNING, "Duplicate struct type declaration (identical)", line, column, 0, typeName);
+                } else {
+                    // Conflict - add error
+                    char err[128];
+                    int ei = 0;
+                    const char* msg = "Conflicting struct type declaration for '";
+                    while (*msg && ei < 80) err[ei++] = *msg++;
+                    ni = 0;
+                    while (typeName[ni] && ei < 100) err[ei++] = typeName[ni++];
+                    const char* suffix = "' (definitions differ)";
+                    int si = 0;
+                    while (suffix[si] && ei < 126) err[ei++] = suffix[si++];
+                    err[ei] = '\0';
+                    setError(err);
+                    return false;
+                }
+            } else {
+                // New type - register it
+                UserStructType* newType = addUserStructType(typeName);
+                if (!newType) {
+                    setError("Too many user struct types");
+                    return false;
+                }
+                
+                // Copy fields from temp
+                newType->total_size = tempStruct.total_size;
+                newType->field_count = tempStruct.field_count;
+                for (int i = 0; i < tempStruct.field_count; i++) {
+                    newType->fields[i] = tempStruct.fields[i];
+                }
+            }
+        }
+
+        return !has_error;
+    }
+
     bool parseSymbols() {
         skipComments();
 
@@ -1338,6 +1645,38 @@ public:
 
         if (symbol_count >= PROJECT_MAX_SYMBOLS) {
             setError("Too many symbols");
+            return false;
+        }
+        
+        // Check if the symbol name is a reserved word
+        if (isReservedWord(name)) {
+            char err[128];
+            int ei = 0;
+            const char* msg = "Symbol name '";
+            while (*msg && ei < 80) err[ei++] = *msg++;
+            int ni = 0;
+            while (name[ni] && ei < 100) err[ei++] = name[ni++];
+            const char* suffix = "' is a reserved word";
+            int si = 0;
+            while (suffix[si] && ei < 126) err[ei++] = suffix[si++];
+            err[ei] = '\0';
+            setError(err);
+            return false;
+        }
+        
+        // Check if the symbol name conflicts with a custom type name (exact case match)
+        if (findUserStructTypeExact(name)) {
+            char err[128];
+            int ei = 0;
+            const char* msg = "Symbol name '";
+            while (*msg && ei < 80) err[ei++] = *msg++;
+            int ni = 0;
+            while (name[ni] && ei < 100) err[ei++] = name[ni++];
+            const char* suffix = "' conflicts with a type name";
+            int si = 0;
+            while (suffix[si] && ei < 126) err[ei++] = suffix[si++];
+            err[ei] = '\0';
+            setError(err);
             return false;
         }
 
@@ -2619,6 +2958,7 @@ public:
         if (!parseProject()) return false;
         if (!parseMemory()) return false;
         if (!parseFlash()) return false;
+        if (!parseTypes()) return false;
         if (!parseSymbols()) return false;
         
         // Scan source for T/C references before parsing blocks

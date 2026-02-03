@@ -172,6 +172,8 @@ enum PLCScriptTokenType {
     PSTOK_RETURN,       // return
     PSTOK_BREAK,        // break
     PSTOK_CONTINUE,     // continue
+    PSTOK_TYPE,         // type (for struct definitions)
+    PSTOK_STRUCT,       // struct
     
     // Type keywords
     PSTOK_TYPE_BOOL,
@@ -276,6 +278,73 @@ enum PLCScriptVarType {
     PSTYPE_U64,
     PSTYPE_F32,
     PSTYPE_F64,
+    PSTYPE_STRUCT,   // Custom struct type (uses structTypeIndex for lookup)
+};
+
+// ============================================================================
+// Struct Field Definition
+// ============================================================================
+
+#define PLCSCRIPT_MAX_STRUCT_FIELDS 32
+#define PLCSCRIPT_MAX_STRUCT_TYPES 64
+
+struct PLCScriptStructField {
+    char name[PLCSCRIPT_MAX_IDENTIFIER_LEN];
+    PLCScriptVarType type;
+    int structTypeIndex;  // For nested struct types (-1 if primitive)
+    u32 offset;           // Byte offset within the struct
+    u32 size;             // Size in bytes
+    bool isBit;           // True if this is a bit field
+    u8 bitIndex;          // Bit position (0-7) if isBit
+    bool used;
+
+    void reset() {
+        name[0] = '\0';
+        type = PSTYPE_VOID;
+        structTypeIndex = -1;
+        offset = 0;
+        size = 0;
+        isBit = false;
+        bitIndex = 0;
+        used = false;
+    }
+};
+
+// ============================================================================
+// Struct Type Definition
+// ============================================================================
+
+struct PLCScriptStructType {
+    char name[PLCSCRIPT_MAX_IDENTIFIER_LEN];
+    PLCScriptStructField fields[PLCSCRIPT_MAX_STRUCT_FIELDS];
+    int fieldCount;
+    u32 totalSize;        // Total size in bytes
+    bool used;
+
+    void reset() {
+        name[0] = '\0';
+        fieldCount = 0;
+        totalSize = 0;
+        used = false;
+        for (int i = 0; i < PLCSCRIPT_MAX_STRUCT_FIELDS; i++) {
+            fields[i].reset();
+        }
+    }
+
+    // Find a field by name
+    PLCScriptStructField* findField(const char* fieldName) {
+        for (int i = 0; i < fieldCount; i++) {
+            bool match = true;
+            const char* a = fields[i].name;
+            const char* b = fieldName;
+            while (*a && *b) {
+                if (*a != *b) { match = false; break; }
+                a++; b++;
+            }
+            if (match && *a == *b) return &fields[i];
+        }
+        return nullptr;
+    }
 };
 
 // ============================================================================
@@ -285,6 +354,7 @@ enum PLCScriptVarType {
 struct PLCScriptSymbol {
     char name[PLCSCRIPT_MAX_IDENTIFIER_LEN];
     PLCScriptVarType type;
+    int structTypeIndex;  // Index into structTypes array (-1 if primitive type)
     bool isConst;
     bool isBit;           // True if this is a bit address
     bool isLocal;         // True if this is a local stack variable (no PLC address)
@@ -322,6 +392,7 @@ struct PLCScriptSymbol {
 struct PLCScriptFuncParam {
     char name[PLCSCRIPT_MAX_IDENTIFIER_LEN];
     PLCScriptVarType type;
+    int structTypeIndex;  // For struct type parameters (-1 if primitive)
 };
 
 // ============================================================================
@@ -419,6 +490,10 @@ public:
     PLCScriptFunction functions[PLCSCRIPT_MAX_FUNCTIONS];
     int functionCount = 0;
     
+    // Struct type table (for custom datatypes)
+    PLCScriptStructType structTypes[PLCSCRIPT_MAX_STRUCT_TYPES];
+    int structTypeCount = 0;
+    
     // Compilation pass (1 = scan for functions, 2 = generate code)
     int compilationPass = 1;
     
@@ -461,6 +536,11 @@ public:
         functionCount = 0;
         compilationPass = 1;
         currentFunction = nullptr;
+        // Reset struct type table
+        structTypeCount = 0;
+        for (int i = 0; i < PLCSCRIPT_MAX_STRUCT_TYPES; i++) {
+            structTypes[i].reset();
+        }
         memset(&currentToken, 0, sizeof(currentToken));
         memset(&peekToken, 0, sizeof(peekToken));
         memset(symbols, 0, sizeof(symbols));
@@ -735,6 +815,8 @@ public:
         if (strEq(text, "true")) return PSTOK_BOOL_TRUE;
         if (strEq(text, "false")) return PSTOK_BOOL_FALSE;
         if (strEq(text, "auto")) return PSTOK_AUTO;
+        if (strEq(text, "type")) return PSTOK_TYPE;
+        if (strEq(text, "struct")) return PSTOK_STRUCT;
         
         // Type keywords
         if (strEq(text, "bool")) return PSTOK_TYPE_BOOL;
@@ -1249,6 +1331,172 @@ public:
     
     bool isTypeKeyword(PLCScriptTokenType type) {
         return type >= PSTOK_TYPE_BOOL && type <= PSTOK_TYPE_F64;
+    }
+    
+    // ========================================================================
+    // Struct Type helpers
+    // ========================================================================
+    
+    // Find a struct type by name
+    PLCScriptStructType* findStructType(const char* name) {
+        for (int i = 0; i < structTypeCount; i++) {
+            if (strEq(structTypes[i].name, name)) {
+                return &structTypes[i];
+            }
+        }
+        return nullptr;
+    }
+    
+    // Find struct type index by name (-1 if not found)
+    // Also checks global UserStructType registry and imports if found
+    int findStructTypeIndex(const char* name) {
+        // First check local struct types
+        for (int i = 0; i < structTypeCount; i++) {
+            if (strEq(structTypes[i].name, name)) {
+                return i;
+            }
+        }
+        
+        // Check global UserStructType registry (types from TYPES section)
+        UserStructType* globalType = findUserStructType(name);
+        if (globalType) {
+            // Import into local struct types array
+            if (structTypeCount >= PLCSCRIPT_MAX_STRUCT_TYPES) {
+                return -1; // Can't import, array full
+            }
+            
+            PLCScriptStructType* localType = &structTypes[structTypeCount];
+            localType->reset();
+            
+            // Copy name
+            int ni = 0;
+            while (globalType->name[ni] && ni < PLCSCRIPT_MAX_IDENTIFIER_LEN - 1) {
+                localType->name[ni] = globalType->name[ni];
+                ni++;
+            }
+            localType->name[ni] = '\0';
+            
+            // Copy fields
+            for (int f = 0; f < globalType->field_count && f < PLCSCRIPT_MAX_STRUCT_FIELDS; f++) {
+                const StructProperty& srcField = globalType->fields[f];
+                PLCScriptStructField& dstField = localType->fields[f];
+                
+                // Copy field name
+                int fi = 0;
+                while (srcField.name[fi] && fi < PLCSCRIPT_MAX_IDENTIFIER_LEN - 1) {
+                    dstField.name[fi] = srcField.name[fi];
+                    fi++;
+                }
+                dstField.name[fi] = '\0';
+                
+                dstField.offset = srcField.offset;
+                dstField.size = srcField.type_size > 0 ? srcField.type_size : 1;
+                dstField.used = true;
+                dstField.isBit = (srcField.bit_pos != 255);
+                dstField.bitIndex = srcField.bit_pos;
+                
+                // Determine PLCScript type from size
+                if (dstField.isBit || srcField.type_size == 0) {
+                    dstField.type = PSTYPE_BOOL;
+                } else if (srcField.type_size == 1) {
+                    dstField.type = PSTYPE_I8;
+                } else if (srcField.type_size == 2) {
+                    dstField.type = PSTYPE_I16;
+                } else if (srcField.type_size == 4) {
+                    dstField.type = PSTYPE_I32;
+                } else if (srcField.type_size == 8) {
+                    dstField.type = PSTYPE_I64;
+                } else {
+                    dstField.type = PSTYPE_I32; // Default
+                }
+                
+                localType->fieldCount++;
+            }
+            
+            localType->totalSize = globalType->total_size;
+            
+            return structTypeCount++;
+        }
+        
+        return -1;
+    }
+    
+    // Find struct type index by exact name match (case-sensitive, no import)
+    // Used for checking if a variable name conflicts with a type name
+    int findStructTypeIndexExact(const char* name) {
+        for (int i = 0; i < structTypeCount; i++) {
+            if (strEq(structTypes[i].name, name)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+    
+    // Add a new struct type
+    PLCScriptStructType* addStructType(const char* name) {
+        if (structTypeCount >= PLCSCRIPT_MAX_STRUCT_TYPES) {
+            setError("Too many struct types");
+            return nullptr;
+        }
+        
+        // Check for duplicate
+        if (findStructType(name) != nullptr) {
+            setError("Duplicate struct type definition");
+            return nullptr;
+        }
+        
+        PLCScriptStructType* st = &structTypes[structTypeCount++];
+        st->reset();
+        int i = 0;
+        while (name[i] && i < PLCSCRIPT_MAX_IDENTIFIER_LEN - 1) {
+            st->name[i] = name[i];
+            i++;
+        }
+        st->name[i] = '\0';
+        st->used = true;
+        return st;
+    }
+    
+    // Get the size of a type (including struct types)
+    int getTypeSize(PLCScriptVarType type, int structTypeIndex) {
+        if (type == PSTYPE_STRUCT && structTypeIndex >= 0 && structTypeIndex < structTypeCount) {
+            return structTypes[structTypeIndex].totalSize;
+        }
+        return varTypeSize(type);
+    }
+    
+    // Check if token is a type (primitive or struct)
+    bool isType() {
+        if (isTypeKeyword(currentToken.type)) return true;
+        if (currentToken.type == PSTOK_IDENTIFIER) {
+            // Check if it's a struct type name
+            return findStructType(currentToken.text) != nullptr;
+        }
+        return false;
+    }
+    
+    // Parse a type and return the var type and struct index
+    bool parseType(PLCScriptVarType& outType, int& outStructIndex) {
+        outStructIndex = -1;
+        
+        if (isTypeKeyword(currentToken.type)) {
+            outType = tokenTypeToVarType(currentToken.type);
+            nextToken();
+            return true;
+        }
+        
+        if (currentToken.type == PSTOK_IDENTIFIER) {
+            int idx = findStructTypeIndex(currentToken.text);
+            if (idx >= 0) {
+                outType = PSTYPE_STRUCT;
+                outStructIndex = idx;
+                nextToken();
+                return true;
+            }
+        }
+        
+        setError("Expected type name");
+        return false;
     }
     
     // ========================================================================
@@ -2102,6 +2350,200 @@ public:
         return nullptr;
     }
     
+    // ========================================================================
+    // Struct Type Declaration Parsing
+    // ========================================================================
+    // Syntax: type MyStruct = struct { field1: type1; field2: type2; ... }
+    
+    void parseStructDeclaration() {
+        nextToken(); // consume 'type'
+        
+        // Get struct name
+        if (!check(PSTOK_IDENTIFIER)) {
+            setError("Expected struct type name after 'type'");
+            return;
+        }
+        char typeName[PLCSCRIPT_MAX_IDENTIFIER_LEN];
+        int i = 0;
+        while (currentToken.text[i] && i < PLCSCRIPT_MAX_IDENTIFIER_LEN - 1) {
+            typeName[i] = currentToken.text[i];
+            i++;
+        }
+        typeName[i] = '\0';
+        nextToken();
+        
+        // Expect '='
+        if (!match(PSTOK_EQ)) {
+            setError("Expected '=' after struct type name");
+            return;
+        }
+        
+        // Expect 'struct'
+        if (!check(PSTOK_STRUCT)) {
+            setError("Expected 'struct' keyword");
+            return;
+        }
+        nextToken();
+        
+        // Expect '{'
+        if (!match(PSTOK_LBRACE)) {
+            setError("Expected '{' after 'struct'");
+            return;
+        }
+        
+        // Create the struct type
+        PLCScriptStructType* structType = addStructType(typeName);
+        if (!structType) return;
+        
+        u32 currentOffset = 0;
+        
+        // Parse fields
+        while (!check(PSTOK_RBRACE) && !check(PSTOK_EOF) && !hasError) {
+            // Field name
+            if (!check(PSTOK_IDENTIFIER)) {
+                setError("Expected field name");
+                return;
+            }
+            
+            if (structType->fieldCount >= PLCSCRIPT_MAX_STRUCT_FIELDS) {
+                setError("Too many fields in struct");
+                return;
+            }
+            
+            PLCScriptStructField* field = &structType->fields[structType->fieldCount];
+            field->reset();
+            
+            int j = 0;
+            while (currentToken.text[j] && j < PLCSCRIPT_MAX_IDENTIFIER_LEN - 1) {
+                field->name[j] = currentToken.text[j];
+                j++;
+            }
+            field->name[j] = '\0';
+            nextToken();
+            
+            // Expect ':'
+            if (!match(PSTOK_COLON)) {
+                setError("Expected ':' after field name");
+                return;
+            }
+            
+            // Parse field type
+            PLCScriptVarType fieldType;
+            int fieldStructIdx;
+            if (!parseType(fieldType, fieldStructIdx)) {
+                return;
+            }
+            
+            field->type = fieldType;
+            field->structTypeIndex = fieldStructIdx;
+            field->offset = currentOffset;
+            field->size = getTypeSize(fieldType, fieldStructIdx);
+            field->used = true;
+            
+            currentOffset += field->size;
+            structType->fieldCount++;
+            
+            // Semicolon between/after fields
+            match(PSTOK_SEMICOLON);
+        }
+        
+        // Expect '}'
+        if (!match(PSTOK_RBRACE)) {
+            setError("Expected '}' at end of struct definition");
+            return;
+        }
+        
+        structType->totalSize = currentOffset;
+        
+        // Register this struct type in the global UserStructType registry
+        // so PLCASM can also use property access on variables of this type
+        // Check for existing type with same name
+        UserStructType* existing = findUserStructType(typeName);
+        
+        // Build temp UserStructType for comparison
+        UserStructType tempUST;
+        tempUST.reset();
+        int ni = 0;
+        while (typeName[ni] && ni < 31) { tempUST.name[ni] = typeName[ni]; ni++; }
+        tempUST.name[ni] = '\0';
+        tempUST.total_size = structType->totalSize;
+        
+        for (int k = 0; k < structType->fieldCount && k < MAX_STRUCT_PROPERTIES; k++) {
+            PLCScriptStructField* sf = &structType->fields[k];
+            StructProperty* sp = &tempUST.fields[tempUST.field_count++];
+            
+            // Copy field name
+            ni = 0;
+            while (sf->name[ni] && ni < 15) {
+                sp->name[ni] = sf->name[ni];
+                ni++;
+            }
+            sp->name[ni] = '\0';
+            
+            sp->offset = sf->offset;
+            sp->type_size = sf->isBit ? 0 : sf->size;
+            sp->bit_pos = sf->isBit ? sf->bitIndex : 255;
+            sp->readable = true;
+            sp->writable = true;
+        }
+        
+        if (existing) {
+            // Check if definitions match
+            StructCompareResult cmp = compareUserStructTypes(existing, &tempUST);
+            if (cmp == STRUCT_COMPARE_IDENTICAL) {
+                // Duplicate but identical - emit warning comment
+                emit("// WARNING: Duplicate struct type declaration '");
+                emit(typeName);
+                emit("' (identical to previous definition)\n");
+            } else {
+                // Conflict - add error
+                char err[128];
+                int ei = 0;
+                const char* msg = "Conflicting struct type '";
+                while (*msg && ei < 60) err[ei++] = *msg++;
+                ni = 0;
+                while (typeName[ni] && ei < 90) err[ei++] = typeName[ni++];
+                const char* suffix = "' - definitions differ";
+                int si = 0;
+                while (suffix[si] && ei < 126) err[ei++] = suffix[si++];
+                err[ei] = '\0';
+                setError(err);
+                return;
+            }
+        } else {
+            // New type - register it
+            UserStructType* ust = addUserStructType(typeName);
+            if (ust) {
+                ust->total_size = tempUST.total_size;
+                ust->field_count = tempUST.field_count;
+                for (int k = 0; k < tempUST.field_count; k++) {
+                    ust->fields[k] = tempUST.fields[k];
+                }
+            }
+        }
+        
+        // Optional trailing semicolon
+        match(PSTOK_SEMICOLON);
+        
+        // Emit comment about the struct definition
+        emit("// type ");
+        emit(typeName);
+        emit(" = struct { ");
+        for (int k = 0; k < structType->fieldCount; k++) {
+            if (k > 0) emit(", ");
+            emit(structType->fields[k].name);
+            emit(": ");
+            if (structType->fields[k].type == PSTYPE_STRUCT) {
+                emit(structTypes[structType->fields[k].structTypeIndex].name);
+            } else {
+                emit(varTypeToPlcasm(structType->fields[k].type));
+            }
+        }
+        emit(" } // size=");
+        emitInt(structType->totalSize);
+        emit(" bytes\n");
+    }
+    
     // Parse a function declaration
     // Called from parseStatement when 'function' keyword is encountered
     // In pass 2, function declarations at top level are skipped by the main loop
@@ -2122,6 +2564,9 @@ public:
         if (hasError) return;
         
         switch (currentToken.type) {
+            case PSTOK_TYPE:
+                parseStructDeclaration();
+                break;
             case PSTOK_FUNCTION:
                 parseFunctionDeclaration();
                 break;
@@ -2177,17 +2622,41 @@ public:
             i++;
         }
         name[i] = '\0';
+        
+        // Check if variable name conflicts with a struct type (exact case match only)
+        // This prevents 'let Motor: i32' when type 'Motor' exists, but allows 'let motor: Motor'
+        if (findStructTypeIndexExact(name) >= 0 || findUserStructTypeExact(name)) {
+            setError("Variable name conflicts with a type name");
+            return;
+        }
+        
         nextToken();
         
         // Type annotation: ": type"
         PLCScriptVarType varType = PSTYPE_I16; // Default type
+        int structTypeIdx = -1;
         if (match(PSTOK_COLON)) {
-            if (!isTypeKeyword(currentToken.type)) {
+            // Check for struct type first
+            if (currentToken.type == PSTOK_IDENTIFIER) {
+                int idx = findStructTypeIndex(currentToken.text);
+                if (idx >= 0) {
+                    varType = PSTYPE_STRUCT;
+                    structTypeIdx = idx;
+                    nextToken();
+                } else if (!isTypeKeyword(currentToken.type)) {
+                    setError("Unknown type name");
+                    return;
+                } else {
+                    varType = tokenTypeToVarType(currentToken.type);
+                    nextToken();
+                }
+            } else if (isTypeKeyword(currentToken.type)) {
+                varType = tokenTypeToVarType(currentToken.type);
+                nextToken();
+            } else {
                 setError("Expected type name");
                 return;
             }
-            varType = tokenTypeToVarType(currentToken.type);
-            nextToken();
         }
         
         // Address annotation: "@ address" or "@ auto" or none (local variable)
@@ -2224,6 +2693,7 @@ public:
         PLCScriptSymbol* sym = addSymbol(name, varType, isConst);
         if (!sym) return;
         
+        sym->structTypeIndex = structTypeIdx;
         sym->isLocal = isLocal;
         sym->isAutoAddress = isAutoAddress;
         sym->stackSlot = -1;
@@ -2243,6 +2713,12 @@ public:
             address[j] = '\0';
         } else if (hasAddress) {
             if (!parseAddress(sym, address)) return;
+        }
+        
+        // Register struct variables in the shared symbol table so PLCASM can use property access
+        if (hasAddress && varType == PSTYPE_STRUCT && structTypeIdx >= 0) {
+            const char* structTypeName = structTypes[structTypeIdx].name;
+            addSharedSymbol(name, structTypeName, sym->memoryOffset, 0, false, structTypes[structTypeIdx].totalSize);
         }
         
         // Emit comment
@@ -2620,15 +3096,215 @@ public:
             }
             
             // If not found locally and not a direct address, check shared symbol table
+            SharedSymbol* sharedSymForStruct = nullptr;  // Keep track of shared symbol for struct lookup
             if (!sym && !isDirectAddress) {
                 SharedSymbol* sharedSym = sharedSymbols.findSymbol(varName);
                 if (sharedSym) {
                     populateFromSharedSymbol(&tempSym, sharedSym);
                     sym = &tempSym;
+                    sharedSymForStruct = sharedSym;  // May be a struct type
                 }
             }
             
             nextToken();;
+            
+            // Check for struct property assignment (e.g., myStruct.field = value)
+            // Check both local structs AND shared symbol user struct types
+            bool isLocalStruct = (sym && sym->type == PSTYPE_STRUCT && sym->structTypeIndex >= 0);
+            UserStructType* userStructType = nullptr;
+            if (!isLocalStruct && sharedSymForStruct) {
+                userStructType = findUserStructType(sharedSymForStruct->type);
+            }
+            
+            if (check(PSTOK_DOT) && (isLocalStruct || userStructType)) {
+                nextToken(); // consume dot
+                
+                if (!check(PSTOK_IDENTIFIER)) {
+                    setError("Expected field name after '.'");
+                    return PSTYPE_VOID;
+                }
+                
+                char fieldName[32];
+                int fi = 0;
+                while (currentToken.text[fi] && fi < 31) {
+                    fieldName[fi] = currentToken.text[fi];
+                    fi++;
+                }
+                fieldName[fi] = '\0';
+                nextToken();
+                
+                // Find the field - from local struct or user struct type
+                PLCScriptStructField* localField = nullptr;
+                const StructProperty* userField = nullptr;
+                
+                if (isLocalStruct) {
+                    PLCScriptStructType* structType = &structTypes[sym->structTypeIndex];
+                    localField = structType->findField(fieldName);
+                } else if (userStructType) {
+                    userField = userStructType->findField(fieldName);
+                }
+                
+                if (!localField && !userField) {
+                    setError("Unknown struct field");
+                    return PSTYPE_VOID;
+                }
+                
+                // Create a temporary symbol for the field to use with emitStoreToAddress
+                PLCScriptSymbol fieldSym;
+                memset(&fieldSym, 0, sizeof(fieldSym));
+                fieldSym.isConst = false;
+                
+                // Determine field type and offset based on which kind of struct
+                int fieldOffset = 0;
+                bool fieldIsBit = false;
+                int fieldBitIndex = 0;
+                
+                if (localField) {
+                    fieldSym.type = localField->type;
+                    fieldOffset = localField->offset;
+                    fieldIsBit = localField->isBit;
+                    fieldBitIndex = localField->bitIndex;
+                } else if (userField) {
+                    // type_size: 0=bit, 1=byte, 2=word, 4=dword, 8=qword
+                    fieldIsBit = (userField->bit_pos < 8 || userField->type_size == 0);
+                    fieldBitIndex = userField->bit_pos;
+                    fieldOffset = userField->offset;
+                    if (fieldIsBit) {
+                        fieldSym.type = PSTYPE_BOOL;
+                    } else {
+                        switch (userField->type_size) {
+                            case 1: fieldSym.type = PSTYPE_U8; break;
+                            case 2: fieldSym.type = PSTYPE_U16; break;
+                            case 4: fieldSym.type = PSTYPE_U32; break;
+                            case 8: fieldSym.type = PSTYPE_U64; break;
+                            default: fieldSym.type = PSTYPE_U16; break;
+                        }
+                    }
+                }
+                
+                // Calculate field address: base_address + field_offset
+                // NOTE: Don't add type modifiers (D/W) - PLCASM uses instruction type prefix
+                int idx = 0;
+                char area = sym->address[0];
+                int baseNum = 0;
+                int j = 1;
+                // Skip type modifier if present in source address
+                if (sym->address[1] == 'W' || sym->address[1] == 'D' ||
+                    sym->address[1] == 'w' || sym->address[1] == 'd') {
+                    j = 2;
+                }
+                while (sym->address[j] >= '0' && sym->address[j] <= '9') {
+                    baseNum = baseNum * 10 + (sym->address[j] - '0');
+                    j++;
+                }
+                
+                // Build field address (no type modifier)
+                fieldSym.address[idx++] = area;
+                
+                int newAddr = baseNum + fieldOffset;
+                char numBuf[16];
+                int ni = 0;
+                if (newAddr == 0) {
+                    numBuf[ni++] = '0';
+                } else {
+                    int temp = newAddr;
+                    while (temp > 0) {
+                        numBuf[ni++] = '0' + (temp % 10);
+                        temp /= 10;
+                    }
+                }
+                for (int r = ni - 1; r >= 0; r--) {
+                    fieldSym.address[idx++] = numBuf[r];
+                }
+                
+                // Handle bit fields
+                if (fieldIsBit) {
+                    fieldSym.address[idx++] = '.';
+                    fieldSym.address[idx++] = '0' + fieldBitIndex;
+                    fieldSym.type = PSTYPE_BOOL;
+                }
+                fieldSym.address[idx] = '\0';
+                
+                if (check(PSTOK_EQ)) {
+                    // Simple assignment to struct field
+                    nextToken(); // consume '='
+                    
+                    PLCScriptVarType savedTarget = targetType;
+                    targetType = fieldSym.type;
+                    PLCScriptVarType rhsType = parseAssignment();
+                    targetType = savedTarget;
+                    
+                    // Type conversion if needed
+                    if (rhsType != fieldSym.type && rhsType != PSTYPE_VOID) {
+                        emit("cvt ");
+                        emit(varTypeToPlcasm(rhsType));
+                        emit(" ");
+                        emit(varTypeToPlcasm(fieldSym.type));
+                        emit("\n");
+                    }
+                    
+                    emitCopy(fieldSym.type);
+                    emitStoreToAddress(&fieldSym);
+                    return fieldSym.type;
+                }
+                else if (check(PSTOK_PLUS_EQ) || check(PSTOK_MINUS_EQ) || 
+                         check(PSTOK_STAR_EQ) || check(PSTOK_SLASH_EQ)) {
+                    // Compound assignment to struct field
+                    PLCScriptTokenType opType = currentToken.type;
+                    nextToken();
+                    
+                    emitLoadFromAddress(&fieldSym);
+                    
+                    PLCScriptVarType savedTarget = targetType;
+                    targetType = fieldSym.type;
+                    PLCScriptVarType rhsType = parseAssignment();
+                    targetType = savedTarget;
+                    
+                    if (rhsType != fieldSym.type && rhsType != PSTYPE_VOID) {
+                        emit("cvt ");
+                        emit(varTypeToPlcasm(rhsType));
+                        emit(" ");
+                        emit(varTypeToPlcasm(fieldSym.type));
+                        emit("\n");
+                    }
+                    
+                    const char* op = nullptr;
+                    switch (opType) {
+                        case PSTOK_PLUS_EQ: op = "add"; break;
+                        case PSTOK_MINUS_EQ: op = "sub"; break;
+                        case PSTOK_STAR_EQ: op = "mul"; break;
+                        case PSTOK_SLASH_EQ: op = "div"; break;
+                        default: break;
+                    }
+                    if (op) emitBinaryOp(op, fieldSym.type);
+                    
+                    emitCopy(fieldSym.type);
+                    emitStoreToAddress(&fieldSym);
+                    return fieldSym.type;
+                }
+                else if (check(PSTOK_PLUS_PLUS) || check(PSTOK_MINUS_MINUS)) {
+                    // Post-increment/decrement on struct field
+                    bool isIncr = check(PSTOK_PLUS_PLUS);
+                    nextToken();
+                    
+                    emitLoadFromAddress(&fieldSym);
+                    emitCopy(fieldSym.type);
+                    emitLoadConst(fieldSym.type, 1);
+                    emitBinaryOp(isIncr ? "add" : "sub", fieldSym.type);
+                    emitStoreToAddress(&fieldSym);
+                    
+                    return fieldSym.type;
+                }
+                
+                // Not an assignment - restore and let expression parsing handle it
+                pos = savedPos;
+                currentLine = savedLine;
+                currentColumn = savedCol;
+                currentToken = savedToken;
+                hasPeekToken = savedHasPeek;
+                peekToken = savedPeek;
+                return parseTernary();
+            }
             
             if (check(PSTOK_EQ)) {
                 // Simple assignment
@@ -3119,7 +3795,7 @@ public:
                 return parseFunctionCall(name);
             }
             
-            // Check for property access (e.g., my_timer.ET, my_counter.CV)
+            // Check for property access (e.g., my_timer.ET, my_counter.CV, myStruct.field)
             if (check(PSTOK_DOT)) {
                 nextToken(); // consume dot
                 
@@ -3137,6 +3813,174 @@ public:
                 }
                 propName[pi] = '\0';
                 nextToken();
+                
+                // First, check if this is a local struct variable
+                PLCScriptSymbol* localSym = findSymbol(name);
+                if (localSym && localSym->type == PSTYPE_STRUCT && localSym->structTypeIndex >= 0) {
+                    // This is a struct variable - find the field
+                    PLCScriptStructType* structType = &structTypes[localSym->structTypeIndex];
+                    PLCScriptStructField* field = structType->findField(propName);
+                    
+                    if (!field) {
+                        setError("Unknown struct field");
+                        return PSTYPE_VOID;
+                    }
+                    
+                    // Calculate field address: base_address + field_offset
+                    // Build address string by combining symbol address with field offset
+                    // NOTE: In PLCASM, addresses don't have type modifiers (D/W)
+                    // The type is determined by the instruction (i32.load_from vs i16.load_from)
+                    char fieldAddr[64];
+                    int idx = 0;
+                    
+                    // Parse the base address to extract area and numeric part
+                    char area = localSym->address[0];
+                    int baseNum = 0;
+                    int j = 1;
+                    // Skip type modifier (W, D) if present in base address
+                    if (localSym->address[1] == 'W' || localSym->address[1] == 'D' ||
+                        localSym->address[1] == 'w' || localSym->address[1] == 'd') {
+                        j = 2;
+                    }
+                    while (localSym->address[j] >= '0' && localSym->address[j] <= '9') {
+                        baseNum = baseNum * 10 + (localSym->address[j] - '0');
+                        j++;
+                    }
+                    
+                    // Build the field address (no type modifier for PLCASM)
+                    fieldAddr[idx++] = area;
+                    
+                    // Add the computed address (base + offset)
+                    int newAddr = baseNum + field->offset;
+                    char numBuf[16];
+                    int ni = 0;
+                    if (newAddr == 0) {
+                        numBuf[ni++] = '0';
+                    } else {
+                        int temp = newAddr;
+                        while (temp > 0) {
+                            numBuf[ni++] = '0' + (temp % 10);
+                            temp /= 10;
+                        }
+                    }
+                    // Reverse the number
+                    for (int r = ni - 1; r >= 0; r--) {
+                        fieldAddr[idx++] = numBuf[r];
+                    }
+                    
+                    // Handle bit fields
+                    if (field->isBit) {
+                        fieldAddr[idx++] = '.';
+                        fieldAddr[idx++] = '0' + field->bitIndex;
+                    }
+                    fieldAddr[idx] = '\0';
+                    
+                    // Emit load instruction based on field type
+                    if (field->isBit || field->type == PSTYPE_BOOL) {
+                        emit("u8.readBit ");
+                        emit(fieldAddr);
+                        emit("\n");
+                        return PSTYPE_BOOL;
+                    } else {
+                        emit(varTypeToPlcasm(field->type));
+                        emit(".load_from ");
+                        emit(fieldAddr);
+                        emit("\n");
+                        return field->type;
+                    }
+                }
+                
+                // Check if this is a shared symbol with a user-defined struct type
+                SharedSymbol* structSharedSym = sharedSymbols.findSymbol(name);
+                if (structSharedSym) {
+                    UserStructType* userStruct = findUserStructType(structSharedSym->type);
+                    if (userStruct) {
+                        // Found a user-defined struct from shared symbols
+                        const StructProperty* userField = userStruct->findField(propName);
+                        
+                        if (!userField) {
+                            setError("Unknown struct field");
+                            return PSTYPE_VOID;
+                        }
+                        
+                        // Calculate field address: base_address + field_offset
+                        char fieldAddr[64];
+                        int idx = 0;
+                        
+                        // Determine area prefix from absolute address
+                        u32 baseAddr = structSharedSym->address;
+                        char area = 'M';
+                        u32 relativeAddr = baseAddr;
+                        
+                        if (baseAddr >= plcasm_input_offset && baseAddr < plcasm_output_offset) {
+                            area = 'X';
+                            relativeAddr = baseAddr - plcasm_input_offset;
+                        } else if (baseAddr >= plcasm_output_offset && baseAddr < plcasm_marker_offset) {
+                            area = 'Y';
+                            relativeAddr = baseAddr - plcasm_output_offset;
+                        } else if (baseAddr >= plcasm_marker_offset && baseAddr < plcasm_timer_offset) {
+                            area = 'M';
+                            relativeAddr = baseAddr - plcasm_marker_offset;
+                        } else if (baseAddr >= plcasm_timer_offset && baseAddr < plcasm_counter_offset) {
+                            area = 'T';
+                            relativeAddr = baseAddr - plcasm_timer_offset;
+                        } else if (baseAddr >= plcasm_counter_offset) {
+                            area = 'C';
+                            relativeAddr = baseAddr - plcasm_counter_offset;
+                        }
+                        
+                        fieldAddr[idx++] = area;
+                        
+                        // Add the computed address (relative + field offset)
+                        u32 newAddr = relativeAddr + userField->offset;
+                        char numBuf[16];
+                        int ni = 0;
+                        if (newAddr == 0) {
+                            numBuf[ni++] = '0';
+                        } else {
+                            u32 temp = newAddr;
+                            while (temp > 0) {
+                                numBuf[ni++] = '0' + (temp % 10);
+                                temp /= 10;
+                            }
+                        }
+                        // Reverse the number
+                        for (int r = ni - 1; r >= 0; r--) {
+                            fieldAddr[idx++] = numBuf[r];
+                        }
+                        
+                        // Handle bit fields (bit_pos 0-7 means bit type, 255 means non-bit)
+                        bool isBitField = (userField->bit_pos < 8);
+                        if (isBitField) {
+                            fieldAddr[idx++] = '.';
+                            fieldAddr[idx++] = '0' + userField->bit_pos;
+                        }
+                        fieldAddr[idx] = '\0';
+                        
+                        // Emit load instruction based on field type
+                        if (isBitField || userField->type_size == 0) {
+                            emit("u8.readBit ");
+                            emit(fieldAddr);
+                            emit("\n");
+                            return PSTYPE_BOOL;
+                        } else {
+                            // type_size: 1=byte, 2=word, 4=dword, 8=qword
+                            const char* typeStr = "u16";
+                            PLCScriptVarType retType = PSTYPE_U16;
+                            switch (userField->type_size) {
+                                case 1: typeStr = "u8"; retType = PSTYPE_U8; break;
+                                case 2: typeStr = "u16"; retType = PSTYPE_U16; break;
+                                case 4: typeStr = "u32"; retType = PSTYPE_U32; break;
+                                case 8: typeStr = "u64"; retType = PSTYPE_U64; break;
+                            }
+                            emit(typeStr);
+                            emit(".load_from ");
+                            emit(fieldAddr);
+                            emit("\n");
+                            return retType;
+                        }
+                    }
+                }
                 
                 // Look up the symbol to determine if it's a timer or counter
                 SharedSymbol* sharedSym = sharedSymbols.findSymbol(name);

@@ -1108,6 +1108,13 @@ public:
             i++;
         }
         name[i] = '\0';
+        
+        // Check if variable name conflicts with a struct type (exact case match only)
+        if (findUserStructTypeExact(name)) {
+            setError("Variable name conflicts with a type name");
+            return;
+        }
+        
         nextToken();
         
         // Check for AT %address

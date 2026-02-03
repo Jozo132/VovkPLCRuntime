@@ -92,6 +92,52 @@ public:
         return nullptr;
     }
 
+    // Check if a symbol/address is valid (handles struct.property access)
+    bool isValidSymbol(const char* addr) {
+        if (!addr || addr[0] == '\0') return false;
+        if (isRawAddress(addr)) return true;
+
+        // Check local symbol table
+        if (findSymbol(addr)) return true;
+        
+        // Check shared symbol table  
+        if (sharedSymbols.findSymbol(addr)) return true;
+        
+        // Check for struct property access (e.g., "myStruct.field")
+        int dotPos = -1;
+        for (int i = 0; addr[i]; i++) {
+            if (addr[i] == '.') {
+                dotPos = i;
+                break;
+            }
+        }
+        
+        if (dotPos > 0) {
+            // Extract base symbol name
+            char baseName[64];
+            for (int i = 0; i < dotPos && i < 63; i++) {
+                baseName[i] = addr[i];
+            }
+            baseName[dotPos] = '\0';
+            
+            // Check if base symbol exists in shared symbols
+            SharedSymbol* baseSym = sharedSymbols.findSymbol(baseName);
+            if (baseSym) {
+                // Check if it's a user struct type
+                UserStructType* userStruct = findUserStructType(baseSym->type);
+                if (userStruct) {
+                    // Verify the property exists
+                    const char* propName = addr + dotPos + 1;
+                    if (userStruct->findField(propName)) {
+                        return true;  // Valid struct.property
+                    }
+                }
+            }
+        }
+        
+        return false;
+    }
+
     // ============ Problem Reporting ============
 
     // Add a problem using node's x,y position as line,column
@@ -267,7 +313,7 @@ public:
                 addError("Missing address/symbol", nodeIdx);
             } else if (symbol_count > 0 || sharedSymbols.symbol_count > 0) {
                 // Validate symbol exists in symbol table (local or shared)
-                if (!isRawAddress(node.address) && !findSymbol(node.address) && !sharedSymbols.findSymbol(node.address)) {
+                if (!isValidSymbol(node.address)) {
                     char msg[64];
                     int mi = 0;
                     const char* prefix = "Unknown symbol '";
@@ -315,7 +361,7 @@ public:
                 } else {
                     // Validate the symbol that was provided
                     const char* addrToValidate = hasAddress ? node.address : (hasIn1 ? node.in1 : node.out);
-                    if ((symbol_count > 0 || sharedSymbols.symbol_count > 0) && !isRawAddress(addrToValidate) && !findSymbol(addrToValidate) && !sharedSymbols.findSymbol(addrToValidate)) {
+                    if ((symbol_count > 0 || sharedSymbols.symbol_count > 0) && !isValidSymbol(addrToValidate)) {
                         char msg[64];
                         int mi = 0;
                         const char* prefix = "Unknown symbol '";
@@ -335,7 +381,7 @@ public:
 
                 if (needsIn1 && node.in1[0] == '\0') {
                     addError("Operation block missing input 1 (in1)", nodeIdx);
-                } else if (needsIn1 && (symbol_count > 0 || sharedSymbols.symbol_count > 0) && !isRawAddress(node.in1) && !findSymbol(node.in1) && !sharedSymbols.findSymbol(node.in1)) {
+                } else if (needsIn1 && (symbol_count > 0 || sharedSymbols.symbol_count > 0) && !isValidSymbol(node.in1)) {
                     char msg[64];
                     int mi = 0;
                     const char* prefix = "Unknown symbol '";
@@ -349,7 +395,7 @@ public:
 
                 if (needsIn2 && node.in2[0] == '\0') {
                     addError("Operation block missing input 2 (in2)", nodeIdx);
-                } else if (needsIn2 && (symbol_count > 0 || sharedSymbols.symbol_count > 0) && !isRawAddress(node.in2) && !findSymbol(node.in2) && !sharedSymbols.findSymbol(node.in2)) {
+                } else if (needsIn2 && (symbol_count > 0 || sharedSymbols.symbol_count > 0) && !isValidSymbol(node.in2)) {
                     char msg[64];
                     int mi = 0;
                     const char* prefix = "Unknown symbol '";
@@ -363,7 +409,7 @@ public:
 
                 if (needsOut && node.out[0] == '\0') {
                     addError("Operation block missing output (out)", nodeIdx);
-                } else if (needsOut && (symbol_count > 0 || sharedSymbols.symbol_count > 0) && !isRawAddress(node.out) && !findSymbol(node.out) && !sharedSymbols.findSymbol(node.out)) {
+                } else if (needsOut && (symbol_count > 0 || sharedSymbols.symbol_count > 0) && !isValidSymbol(node.out)) {
                     char msg[64];
                     int mi = 0;
                     const char* prefix = "Unknown symbol '";
@@ -380,7 +426,7 @@ public:
         if (isComparator(node.type)) {
             if (node.in1[0] == '\0') {
                 addError("Comparator missing input 1 (in1)", nodeIdx);
-            } else if ((symbol_count > 0 || sharedSymbols.symbol_count > 0) && !isRawAddress(node.in1) && !findSymbol(node.in1) && !sharedSymbols.findSymbol(node.in1)) {
+            } else if ((symbol_count > 0 || sharedSymbols.symbol_count > 0) && !isValidSymbol(node.in1)) {
                 char msg[64];
                 int mi = 0;
                 const char* prefix = "Unknown symbol '";
@@ -394,7 +440,7 @@ public:
 
             if (node.in2[0] == '\0') {
                 addError("Comparator missing input 2 (in2)", nodeIdx);
-            } else if ((symbol_count > 0 || sharedSymbols.symbol_count > 0) && !isRawAddress(node.in2) && !findSymbol(node.in2) && !sharedSymbols.findSymbol(node.in2)) {
+            } else if ((symbol_count > 0 || sharedSymbols.symbol_count > 0) && !isValidSymbol(node.in2)) {
                 char msg[64];
                 int mi = 0;
                 const char* prefix = "Unknown symbol '";

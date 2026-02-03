@@ -215,6 +215,64 @@ public:
 
         // Check shared symbol table (if populated)
         if (sharedSymbols.symbol_count > 0) {
+            // Check for struct property access (e.g., "myStruct.field")
+            int dotPos = -1;
+            for (int i = 0; addr[i]; i++) {
+                if (addr[i] == '.') {
+                    dotPos = i;
+                    break;
+                }
+            }
+            
+            if (dotPos > 0) {
+                // Extract base symbol name
+                char baseName[64];
+                for (int i = 0; i < dotPos && i < 63; i++) {
+                    baseName[i] = addr[i];
+                }
+                baseName[dotPos] = '\0';
+                
+                // Check if base symbol exists
+                SharedSymbol* baseSym = sharedSymbols.findSymbol(baseName);
+                if (baseSym) {
+                    // Check if it's a user struct type
+                    UserStructType* userStruct = findUserStructType(baseSym->type);
+                    if (userStruct) {
+                        // Verify the property exists
+                        const char* propName = addr + dotPos + 1;
+                        if (userStruct->findField(propName)) {
+                            return true;  // Valid struct.property
+                        }
+                        // Property not found in struct
+                        char msg[64];
+                        int mi = 0;
+                        const char* prefix = "Unknown property '";
+                        while (*prefix && mi < 40) msg[mi++] = *prefix++;
+                        int ai = 0;
+                        while (propName[ai] && mi < 55) msg[mi++] = propName[ai++];
+                        msg[mi++] = '\'';
+                        msg[mi] = '\0';
+                        reportNodeError(msg, nodeIdx);
+                        return false;
+                    }
+                    // baseSym exists but is not a struct type - this address has a dot but the base isn't a struct
+                    // Fall through to treat as regular symbol lookup (might be a typo)
+                } else {
+                    // Base symbol not found - report error
+                    char msg[64];
+                    int mi = 0;
+                    const char* prefix = "Unknown symbol '";
+                    while (*prefix && mi < 40) msg[mi++] = *prefix++;
+                    int ai = 0;
+                    while (baseName[ai] && mi < 58) msg[mi++] = baseName[ai++];
+                    msg[mi++] = '\'';
+                    msg[mi] = '\0';
+                    reportNodeError(msg, nodeIdx);
+                    return false;
+                }
+            }
+            
+            // Check direct symbol
             if (!sharedSymbols.findSymbol(addr)) {
                 char msg[64];
                 int mi = 0;

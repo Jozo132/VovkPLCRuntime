@@ -309,6 +309,16 @@ inline UserStructType* findUserStructType(const char* typeName) {
     return nullptr;
 }
 
+// Case-sensitive version for checking exact name matches
+inline UserStructType* findUserStructTypeExact(const char* typeName) {
+    for (int i = 0; i < userStructTypeCount; i++) {
+        if (sharedStrEq(userStructTypes[i].name, typeName)) {
+            return &userStructTypes[i];
+        }
+    }
+    return nullptr;
+}
+
 inline UserStructType* addUserStructType(const char* typeName) {
     if (userStructTypeCount >= MAX_USER_STRUCT_TYPES) return nullptr;
     UserStructType& st = userStructTypes[userStructTypeCount++];
@@ -317,6 +327,61 @@ inline UserStructType* addUserStructType(const char* typeName) {
     while (typeName[i] && i < 31) { st.name[i] = typeName[i]; i++; }
     st.name[i] = '\0';
     return &st;
+}
+
+// Result of comparing two struct type definitions
+enum StructCompareResult {
+    STRUCT_COMPARE_IDENTICAL = 0,    // Definitions are exactly the same
+    STRUCT_COMPARE_DIFFERENT = 1,    // Definitions differ
+    STRUCT_COMPARE_NOT_FOUND = 2     // Existing struct not found
+};
+
+// Compare two UserStructType definitions for equality
+// Returns STRUCT_COMPARE_IDENTICAL if they match, STRUCT_COMPARE_DIFFERENT otherwise
+inline StructCompareResult compareUserStructTypes(const UserStructType* a, const UserStructType* b) {
+    if (!a || !b) return STRUCT_COMPARE_NOT_FOUND;
+    
+    // Compare field count
+    if (a->field_count != b->field_count) return STRUCT_COMPARE_DIFFERENT;
+    
+    // Compare total size
+    if (a->total_size != b->total_size) return STRUCT_COMPARE_DIFFERENT;
+    
+    // Compare each field
+    for (int i = 0; i < a->field_count; i++) {
+        const StructProperty& fa = a->fields[i];
+        const StructProperty& fb = b->fields[i];
+        
+        // Compare field name (case-insensitive)
+        if (!sharedStrEqI(fa.name, fb.name)) return STRUCT_COMPARE_DIFFERENT;
+        
+        // Compare field properties
+        if (fa.offset != fb.offset) return STRUCT_COMPARE_DIFFERENT;
+        if (fa.type_size != fb.type_size) return STRUCT_COMPARE_DIFFERENT;
+        if (fa.bit_pos != fb.bit_pos) return STRUCT_COMPARE_DIFFERENT;
+    }
+    
+    return STRUCT_COMPARE_IDENTICAL;
+}
+
+// Try to add a user struct type, checking for collisions
+// Returns: pointer to the struct type (new or existing identical), nullptr on error
+// Sets isDuplicate to true if an identical definition already exists
+// Sets isConflict to true if a conflicting definition exists
+inline UserStructType* addUserStructTypeWithCheck(const char* typeName, bool* isDuplicate, bool* isConflict) {
+    *isDuplicate = false;
+    *isConflict = false;
+    
+    // Check if a type with this name already exists
+    UserStructType* existing = findUserStructType(typeName);
+    if (existing) {
+        // Will compare after the new type is populated - return existing for now
+        // Caller must populate temp and compare
+        *isDuplicate = true;  // Signal that we found an existing type
+        return existing;
+    }
+    
+    return addUserStructType(typeName);
 }
 
 // ============================================================================
