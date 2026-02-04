@@ -1206,6 +1206,7 @@ public:
             //  - Source upload:    'SU<u32><u8>' (size, checksum) // Only available if PLCRUNTIME_SOURCE_ENABLED is defined
             //  - Symbol list:      'SL<u8>' (checksum) // Only available if PLCRUNTIME_VARIABLE_REGISTRATION_ENABLED is defined
             //  - Transport info:   'TI<u8>' (checksum) // Only available if PLCRUNTIME_TRANSPORT is defined
+            //  - TC config:        'TC<u16><u16><u8>' (timer_offset, counter_offset, checksum) - Set timer/counter memory offsets
             // If the program is downloaded and the checksum is invalid, the runtime will restart
             u8 cmd[2] = { 0, 0 };
             u32 size = 0;
@@ -1239,6 +1240,7 @@ public:
             bool source_upload = cmd[0] == 'S' && cmd[1] == 'U';
             bool symbol_list = cmd[0] == 'S' && cmd[1] == 'L';
             bool transport_info = cmd[0] == 'T' && cmd[1] == 'I';
+            bool tc_config = cmd[0] == 'T' && cmd[1] == 'C';
 
             if (ping) {
                 Serial.println(F("<VovkPLC>"));
@@ -1674,6 +1676,36 @@ public:
                 // Transport system not enabled - return empty
                 Serial.println(F("[TI,0]"));
 #endif // PLCRUNTIME_TRANSPORT
+            } else if (tc_config) {
+                // Read timer_offset (u16, big-endian)
+                u16 t_offset = (u16) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (t_offset & 0xff));
+                t_offset = t_offset << 8 | (u16) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (t_offset & 0xff));
+
+                // Read counter_offset (u16, big-endian)
+                u16 c_offset = (u16) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (c_offset & 0xff));
+                c_offset = c_offset << 8 | (u16) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (c_offset & 0xff));
+
+                // Read the checksum
+                checksum = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+
+                // Verify the checksum
+                if (checksum != checksum_calc) {
+                    Serial.println(F("Invalid checksum"));
+                    return;
+                }
+
+                // Apply the configuration
+                this->timer_offset = t_offset;
+                this->counter_offset = c_offset;
+
+                Serial.print(F("OK TC CONFIG T="));
+                Serial.print(t_offset);
+                Serial.print(F(" C="));
+                Serial.println(c_offset);
             }
         }
 #endif // PLCRUNTIME_SERIAL_ENABLED
