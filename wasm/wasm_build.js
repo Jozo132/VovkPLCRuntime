@@ -17,10 +17,12 @@ console.log('Executing: ' + TARGET_RELATIVE);
 try {
     execSync(`"${TARGET}"`, { stdio: 'inherit', shell: true });
     
-    const msg = `The compiled WASM file is located in: ${BUILD_PATH}VovkPLC.wasm`;
+    const msg = `The compiled WASM files are located in: ${BUILD_PATH}dist/`;
     console.log('-'.repeat(msg.length));
     console.log(msg);
-    console.log(`Along with: ${BUILD_PATH}VovkPLC.js, ${BUILD_PATH}VovkPLC.worker.js`);
+    console.log(`  VovkPLC.wasm        - optimized (no bounds checks)`);
+    console.log(`  VovkPLC-debug.wasm  - debug (with PLCRUNTIME_SAFE_MODE)`);
+    console.log(`Along with: ${BUILD_PATH}dist/VovkPLC.js, ${BUILD_PATH}dist/VovkPLC.worker.js`);
     console.log('-'.repeat(msg.length));
     process.exit(0);
 } catch (error) {

@@ -757,24 +757,35 @@ namespace PLCMethods {
         if (extract_status != STATUS_SUCCESS) return extract_status;
         switch (data_type) {
             case type_pointer: {
+                SAFE_BOUNDS_CHECK(stack.stack.size() < sizeof(MY_PTR_t), STACK_UNDERFLOW);
                 RuntimeError e = STATUS_SUCCESS;
                 MY_PTR_t value = stack.peek_pointer();
                 // Stack uses native endianness, no need to reverse
                 e = stack.push_pointer(value);
                 return e;
             }
-            case type_bool: return stack.push_bool(stack.peek_bool());
+            case type_bool: 
+                SAFE_BOUNDS_CHECK(stack.stack.size() < sizeof(bool), STACK_UNDERFLOW);
+                return stack.push_bool(stack.peek_bool());
             case type_i8:
-            case type_u8: return stack.push_u8(stack.peek_u8());
+            case type_u8: 
+                SAFE_BOUNDS_CHECK(stack.stack.size() < sizeof(u8), STACK_UNDERFLOW);
+                return stack.push_u8(stack.peek_u8());
             case type_i16:
-            case type_u16: return stack.push_u16(stack.peek_u16());
+            case type_u16: 
+                SAFE_BOUNDS_CHECK(stack.stack.size() < sizeof(u16), STACK_UNDERFLOW);
+                return stack.push_u16(stack.peek_u16());
             case type_i32:
             case type_u32:
-            case type_f32: return stack.push_u32(stack.peek_u32());
+            case type_f32: 
+                SAFE_BOUNDS_CHECK(stack.stack.size() < sizeof(u32), STACK_UNDERFLOW);
+                return stack.push_u32(stack.peek_u32());
 #ifdef USE_X64_OPS
             case type_u64:
             case type_i64:
-            case type_f64: return stack.push_u64(stack.peek_u64());
+            case type_f64: 
+                SAFE_BOUNDS_CHECK(stack.stack.size() < sizeof(u64), STACK_UNDERFLOW);
+                return stack.push_u64(stack.peek_u64());
 #endif // USE_X64_OPS
             default: return INVALID_DATA_TYPE;
         }
@@ -1061,19 +1072,19 @@ namespace PLCMethods {
         extract_status = ProgramExtract.type_u8(program, prog_size, index, &data_type);
         if (extract_status != STATUS_SUCCESS) return extract_status;
         switch (data_type) {
-            case type_pointer: stack.pop_pointer(); break;
-            case type_bool: stack.pop_bool(); break;
-            case type_u8: stack.pop_u8(); break;
-            case type_u16: stack.pop_u16(); break;
-            case type_u32: stack.pop_u32(); break;
-            case type_i8: stack.pop_i8(); break;
-            case type_i16: stack.pop_i16(); break;
-            case type_i32: stack.pop_i32(); break;
-            case type_f32: stack.pop_f32(); break;
+            case type_pointer: SAFE_BOUNDS_CHECK(stack.stack.size() < sizeof(MY_PTR_t), STACK_UNDERFLOW); stack.pop_pointer(); break;
+            case type_bool:    SAFE_BOUNDS_CHECK(stack.stack.size() < sizeof(bool), STACK_UNDERFLOW); stack.pop_bool(); break;
+            case type_u8:      SAFE_BOUNDS_CHECK(stack.stack.size() < sizeof(u8), STACK_UNDERFLOW); stack.pop_u8(); break;
+            case type_u16:     SAFE_BOUNDS_CHECK(stack.stack.size() < sizeof(u16), STACK_UNDERFLOW); stack.pop_u16(); break;
+            case type_u32:     SAFE_BOUNDS_CHECK(stack.stack.size() < sizeof(u32), STACK_UNDERFLOW); stack.pop_u32(); break;
+            case type_i8:      SAFE_BOUNDS_CHECK(stack.stack.size() < sizeof(i8), STACK_UNDERFLOW); stack.pop_i8(); break;
+            case type_i16:     SAFE_BOUNDS_CHECK(stack.stack.size() < sizeof(i16), STACK_UNDERFLOW); stack.pop_i16(); break;
+            case type_i32:     SAFE_BOUNDS_CHECK(stack.stack.size() < sizeof(i32), STACK_UNDERFLOW); stack.pop_i32(); break;
+            case type_f32:     SAFE_BOUNDS_CHECK(stack.stack.size() < sizeof(f32), STACK_UNDERFLOW); stack.pop_f32(); break;
 #ifdef USE_X64_OPS
-            case type_u64: stack.pop_u64(); break;
-            case type_i64: stack.pop_i64(); break;
-            case type_f64: stack.pop_f64(); break;
+            case type_u64:     SAFE_BOUNDS_CHECK(stack.stack.size() < sizeof(u64), STACK_UNDERFLOW); stack.pop_u64(); break;
+            case type_i64:     SAFE_BOUNDS_CHECK(stack.stack.size() < sizeof(i64), STACK_UNDERFLOW); stack.pop_i64(); break;
+            case type_f64:     SAFE_BOUNDS_CHECK(stack.stack.size() < sizeof(f64), STACK_UNDERFLOW); stack.pop_f64(); break;
 #endif // USE_X64_OPS
             default: return INVALID_DATA_TYPE;
         }

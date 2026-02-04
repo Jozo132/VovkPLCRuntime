@@ -1,0 +1,416 @@
+#!/usr/bin/env node
+// test_safe_mode.js - Tests for PLCRUNTIME_SAFE_MODE bounds checking
+//
+// This test runs malicious/untrusted bytecode against both WASM variants:
+// - VovkPLC.wasm (optimized, no bounds checks) - may produce undefined behavior
+// - VovkPLC-debug.wasm (safe mode, with bounds checks) - should catch errors gracefully
+//
+// Usage: npm run test:safe
+
+import VovkPLC from '../dist/VovkPLC.js'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+// RuntimeError enum values (from runtime-instructions.h)
+const RuntimeError = {
+    STATUS_SUCCESS: 0,
+    UNKNOWN_INSTRUCTION: 1,
+    INVALID_INSTRUCTION: 2,
+    INVALID_DATA_TYPE: 3,
+    STACK_OVERFLOW: 4,
+    STACK_UNDERFLOW: 5,
+    INVALID_STACK_SIZE: 6,
+    EMPTY_STACK: 7,
+    CALL_STACK_OVERFLOW: 8,
+    CALL_STACK_UNDERFLOW: 9,
+    INVALID_MEMORY_ADDRESS: 10,
+    INVALID_MEMORY_SIZE: 11,
+    UNDEFINED_STATE: 12,
+    INVALID_PROGRAM_INDEX: 13,
+    PROGRAM_SIZE_EXCEEDED: 14,
+    PROGRAM_POINTER_OUT_OF_BOUNDS: 15,
+    PROGRAM_EXITED: 16,
+    EMPTY_PROGRAM: 17,
+    NO_PROGRAM: 18,
+    INVALID_CHECKSUM: 19,
+    EXECUTION_ERROR: 20,
+    EXECUTION_TIMEOUT: 21,
+    MEMORY_ACCESS_ERROR: 22,
+    PROGRAM_CYCLE_LIMIT_EXCEEDED: 23,
+}
+
+const RuntimeErrorName = Object.fromEntries(
+    Object.entries(RuntimeError).map(([k, v]) => [v, k])
+)
+
+// Instruction opcodes (from runtime-instructions.h)
+const Opcode = {
+    NOP: 0x00,
+    type_pointer: 0x01,
+    type_bool: 0x02,
+    type_u8: 0x03,
+    type_u16: 0x04,
+    type_u32: 0x05,
+    type_u64: 0x06,
+    type_i8: 0x07,
+    type_i16: 0x08,
+    type_i32: 0x09,
+    type_i64: 0x0A,
+    type_f32: 0x0B,
+    type_f64: 0x0C,
+    CVT: 0x10,
+    LOAD: 0x11,
+    MOVE: 0x12,
+    MOVE_COPY: 0x13,
+    COPY: 0x14,
+    SWAP: 0x15,
+    DROP: 0x16,
+    CLEAR: 0x17,
+    LOAD_FROM: 0x18,
+    MOVE_TO: 0x19,
+    INC_MEM: 0x1A,
+    DEC_MEM: 0x1B,
+    PICK: 0x1C,
+    POKE: 0x1D,
+    ADD: 0x20,
+    SUB: 0x21,
+    MUL: 0x22,
+    DIV: 0x23,
+    MOD: 0x24,
+    POW: 0x25,
+    SQRT: 0x26,
+    NEG: 0x27,
+    ABS: 0x28,
+    SIN: 0x29,
+    COS: 0x2A,
+    JMP: 0x40,
+    JMP_IF: 0x41,
+    JMP_IF_NOT: 0x42,
+    CALL: 0x43,
+    CALL_IF: 0x44,
+    CALL_IF_NOT: 0x45,
+    RET: 0x46,
+    EXIT: 0xFF,
+}
+
+// CRC8 checksum (polynomial 0x31)
+function crc8(data) {
+    let crc = 0
+    for (const byte of data) {
+        crc ^= byte
+        for (let i = 0; i < 8; i++) {
+            if (crc & 0x80) {
+                crc = ((crc << 1) ^ 0x31) & 0xFF
+            } else {
+                crc = (crc << 1) & 0xFF
+            }
+        }
+    }
+    return crc
+}
+
+// Test cases: malicious bytecode that should fail with bounds checking
+const testCases = [
+    // ===== PROGRAM BOUNDS TESTS (covered by SAFE_MODE) =====
+    {
+        name: 'Program size exceeded - truncated ADD instruction',
+        description: 'ADD instruction without type operand',
+        bytecode: [Opcode.ADD],
+        expectedSafe: RuntimeError.PROGRAM_POINTER_OUT_OF_BOUNDS,
+        expectCrashUnsafe: true,
+    },
+    {
+        name: 'Program size exceeded - truncated PUSH u32',
+        description: 'PUSH u32 but only 2 bytes of data provided',
+        bytecode: [Opcode.type_u32, 0x12, 0x34],
+        expectedSafe: RuntimeError.PROGRAM_SIZE_EXCEEDED,
+        expectCrashUnsafe: true,
+    },
+    {
+        name: 'Program size exceeded - truncated PUSH u16',
+        description: 'PUSH u16 but only 1 byte of data provided',
+        bytecode: [Opcode.type_u16, 0x12],
+        expectedSafe: RuntimeError.PROGRAM_SIZE_EXCEEDED,
+        expectCrashUnsafe: true,
+    },
+    {
+        name: 'Program size exceeded - truncated SUB instruction',
+        description: 'SUB instruction without type operand',
+        bytecode: [Opcode.type_u8, 0x05, Opcode.type_u8, 0x03, Opcode.SUB],
+        expectedSafe: RuntimeError.PROGRAM_POINTER_OUT_OF_BOUNDS,
+        expectCrashUnsafe: true,
+    },
+    {
+        name: 'Program size exceeded - truncated CVT instruction',
+        description: 'CVT with only source type, missing dest type',
+        bytecode: [Opcode.type_u8, 0x05, Opcode.CVT, Opcode.type_u8],
+        expectedSafe: RuntimeError.PROGRAM_POINTER_OUT_OF_BOUNDS,
+        expectCrashUnsafe: true,
+    },
+    {
+        name: 'Program size exceeded - truncated LOAD_FROM instruction',
+        description: 'LOAD_FROM with incomplete address (needs 4 bytes: type + 2-byte addr, only has 3)',
+        // LOAD_FROM format: [opcode, type, addr_hi, addr_lo] - we provide only 3 bytes
+        bytecode: [Opcode.LOAD_FROM, Opcode.type_u8, 0x00, 0x10],
+        expectedSafe: RuntimeError.PROGRAM_POINTER_OUT_OF_BOUNDS,
+        expectCrashUnsafe: true,
+    },
+    {
+        name: 'Program size exceeded - truncated MOVE_TO instruction',
+        description: 'MOVE_TO with incomplete address',
+        // MOVE_TO format: [opcode, type, addr_hi, addr_lo] after pushing value
+        bytecode: [Opcode.type_u8, 0x42, Opcode.MOVE_TO, Opcode.type_u8, 0x00, 0x10],
+        expectedSafe: RuntimeError.PROGRAM_POINTER_OUT_OF_BOUNDS,
+        expectCrashUnsafe: true,
+    },
+    {
+        name: 'Program size exceeded - truncated DROP instruction',
+        description: 'DROP without type operand',
+        bytecode: [Opcode.type_u8, 0x05, Opcode.DROP],
+        expectedSafe: RuntimeError.PROGRAM_POINTER_OUT_OF_BOUNDS,
+        expectCrashUnsafe: true,
+    },
+    {
+        name: 'Program size exceeded - truncated COPY instruction',
+        description: 'COPY without type operand',
+        bytecode: [Opcode.type_u8, 0x05, Opcode.COPY],
+        expectedSafe: RuntimeError.PROGRAM_POINTER_OUT_OF_BOUNDS,
+        expectCrashUnsafe: true,
+    },
+    {
+        name: 'Program size exceeded - truncated SWAP instruction',
+        description: 'SWAP with only one type operand',
+        bytecode: [Opcode.type_u8, 0x05, Opcode.type_u8, 0x03, Opcode.SWAP, Opcode.type_u8],
+        expectedSafe: RuntimeError.PROGRAM_POINTER_OUT_OF_BOUNDS,
+        expectCrashUnsafe: true,
+    },
+    
+    // ===== INVALID DATA TYPE TESTS =====
+    {
+        name: 'Invalid data type - CVT with invalid source type',
+        description: 'Conversion with invalid type specifier 0xFF',
+        bytecode: [Opcode.type_u8, 0x05, Opcode.CVT, 0xFF, Opcode.type_u8, Opcode.EXIT],
+        expectedSafe: RuntimeError.INVALID_DATA_TYPE,
+        expectCrashUnsafe: false,
+    },
+    {
+        name: 'Invalid data type - CVT with invalid dest type',
+        description: 'Conversion to invalid type specifier 0xFF',
+        bytecode: [Opcode.type_u8, 0x05, Opcode.CVT, Opcode.type_u8, 0xFF, Opcode.EXIT],
+        expectedSafe: RuntimeError.INVALID_DATA_TYPE,
+        expectCrashUnsafe: false,
+    },
+    {
+        name: 'Invalid data type - ADD with invalid type',
+        description: 'ADD with type 0x7F which is not defined',
+        bytecode: [Opcode.type_u8, 0x05, Opcode.type_u8, 0x03, Opcode.ADD, 0x7F, Opcode.EXIT],
+        expectedSafe: RuntimeError.INVALID_DATA_TYPE,
+        expectCrashUnsafe: false,
+    },
+    
+    // ===== STACK SAFETY TESTS =====
+    {
+        name: 'Stack Underflow - DROP from empty stack',
+        description: 'DROP (u8) on empty stack',
+        bytecode: [Opcode.DROP, Opcode.type_u8, Opcode.EXIT],
+        expectedSafe: RuntimeError.STACK_UNDERFLOW,
+        expectCrashUnsafe: false,
+    },
+    {
+        name: 'Stack Underflow - COPY from empty stack',
+        description: 'COPY (u8) on empty stack',
+        bytecode: [Opcode.COPY, Opcode.type_u8, Opcode.EXIT],
+        expectedSafe: RuntimeError.STACK_UNDERFLOW,
+        expectCrashUnsafe: false,
+    },
+
+    // ===== VALID EXECUTION TESTS (should succeed on both) =====
+    {
+        name: 'Valid program - simple add',
+        description: 'Push two values, add them',
+        bytecode: [Opcode.type_u8, 0x05, Opcode.type_u8, 0x03, Opcode.ADD, Opcode.type_u8, Opcode.EXIT],
+        expectedSafe: RuntimeError.STATUS_SUCCESS,
+        expectCrashUnsafe: false,
+    },
+    {
+        name: 'Valid program - NOP and EXIT',
+        description: 'Just NOP and EXIT',
+        bytecode: [Opcode.NOP, Opcode.EXIT],
+        expectedSafe: RuntimeError.STATUS_SUCCESS,
+        expectCrashUnsafe: false,
+    },
+]
+
+async function loadBytecodeToRuntime(runtime, bytecode) {
+    // Clear stream
+    runtime.wasm_exports.streamClear()
+    
+    // Stream bytes
+    for (const byte of bytecode) {
+        runtime.wasm_exports.streamIn(byte)
+    }
+    
+    // Calculate checksum
+    const checksum = crc8(bytecode)
+    
+    // Download program
+    const loadError = runtime.wasm_exports.downloadProgram(bytecode.length, checksum)
+    return loadError
+}
+
+async function runTest(testCase, runtime, variant) {
+    const { name, bytecode, expectedSafe, expectCrashUnsafe } = testCase
+    
+    // Reset runtime
+    runtime.wasm_exports.initialize()
+    runtime.wasm_exports.clearStack()
+    
+    // Load bytecode
+    const loadError = await loadBytecodeToRuntime(runtime, bytecode)
+    if (loadError) {
+        return {
+            name,
+            variant,
+            loaded: false,
+            loadError,
+            status: null,
+            expected: expectedSafe,
+        }
+    }
+    
+    // Run program
+    let status
+    try {
+        status = runtime.wasm_exports.run()
+    } catch (e) {
+        return {
+            name,
+            variant,
+            loaded: true,
+            crashed: true,
+            error: e.message,
+            expected: expectedSafe,
+        }
+    }
+    
+    return {
+        name,
+        variant,
+        loaded: true,
+        status,
+        statusName: RuntimeErrorName[status] || `UNKNOWN(${status})`,
+        expected: expectedSafe,
+        expectedName: RuntimeErrorName[expectedSafe],
+        expectCrashUnsafe,
+    }
+}
+
+async function main() {
+    const wasmOptimized = path.resolve(__dirname, '../dist/VovkPLC.wasm')
+    const wasmDebug = path.resolve(__dirname, '../dist/VovkPLC-debug.wasm')
+    
+    console.log()
+    console.log('╔══════════════════════════════════════════════════════════════════╗')
+    console.log('║       PLCRUNTIME_SAFE_MODE Bounds Checking Tests                 ║')
+    console.log('╚══════════════════════════════════════════════════════════════════╝')
+    console.log()
+    
+    // Create runtimes
+    const runtimeOptimized = new VovkPLC(wasmOptimized)
+    await runtimeOptimized.initialize(wasmOptimized, false, true)
+    
+    const runtimeDebug = new VovkPLC(wasmDebug)
+    await runtimeDebug.initialize(wasmDebug, false, true)
+    
+    console.log('Testing malicious bytecode against both WASM variants:')
+    console.log('  • VovkPLC.wasm       - optimized (no bounds checks)')
+    console.log('  • VovkPLC-debug.wasm - safe mode (with bounds checks)')
+    console.log()
+    
+    const results = {
+        passed: 0,
+        failed: 0,
+        total: testCases.length,
+    }
+    
+    console.log('─'.repeat(70))
+    
+    for (const testCase of testCases) {
+        console.log()
+        console.log(`┌─ ${testCase.name}`)
+        console.log(`│  ${testCase.description}`)
+        console.log(`│  Bytecode: [${testCase.bytecode.map(b => '0x' + b.toString(16).toUpperCase().padStart(2, '0')).join(', ')}]`)
+        
+        // Run on debug (safe mode) first
+        const resultDebug = await runTest(testCase, runtimeDebug, 'debug')
+        
+        // Run on optimized (unsafe)
+        const resultOptimized = await runTest(testCase, runtimeOptimized, 'optimized')
+        
+        // Check if debug caught the expected error
+        const debugCaughtError = resultDebug.status === testCase.expectedSafe
+        
+        // Display results
+        console.log(`│`)
+        console.log(`│  Debug (safe mode):`)
+        if (resultDebug.crashed) {
+            console.log(`│    Status: CRASHED - ${resultDebug.error}`)
+        } else if (!resultDebug.loaded) {
+            console.log(`│    Status: Load failed (error ${resultDebug.loadError})`)
+        } else {
+            console.log(`│    Status: ${resultDebug.statusName} (${resultDebug.status})`)
+            console.log(`│    Expected: ${resultDebug.expectedName} (${resultDebug.expected})`)
+        }
+        
+        console.log(`│`)
+        console.log(`│  Optimized (no bounds checks):`)
+        if (resultOptimized.crashed) {
+            console.log(`│    Status: CRASHED - ${resultOptimized.error}`)
+        } else if (!resultOptimized.loaded) {
+            console.log(`│    Status: Load failed (error ${resultOptimized.loadError})`)
+        } else {
+            console.log(`│    Status: ${resultOptimized.statusName} (${resultOptimized.status})`)
+            if (resultOptimized.status === RuntimeError.STATUS_SUCCESS && testCase.expectedSafe !== RuntimeError.STATUS_SUCCESS) {
+                console.log(`│    ⚠ Unsafe: returned SUCCESS despite invalid bytecode!`)
+            }
+        }
+        
+        // Determine pass/fail based on debug catching the error
+        if (debugCaughtError) {
+            console.log(`│`)
+            console.log(`└─ ✓ PASS: Safe mode correctly caught the error`)
+            results.passed++
+        } else {
+            console.log(`│`)
+            console.log(`└─ ✗ FAIL: Safe mode did not catch expected error`)
+            results.failed++
+        }
+    }
+    
+    console.log()
+    console.log('─'.repeat(70))
+    console.log()
+    
+    // Summary
+    console.log('Summary:')
+    console.log(`  Total tests: ${results.total}`)
+    console.log(`  Passed: ${results.passed}`)
+    console.log(`  Failed: ${results.failed}`)
+    console.log()
+    
+    if (results.failed > 0) {
+        console.log('⚠ Some tests failed - safe mode may not be catching all bounds errors')
+        process.exit(1)
+    } else {
+        console.log('✓ All tests passed - safe mode correctly catches bounds errors')
+        process.exit(0)
+    }
+}
+
+main().catch(err => {
+    console.error('Error:', err)
+    process.exit(1)
+})
