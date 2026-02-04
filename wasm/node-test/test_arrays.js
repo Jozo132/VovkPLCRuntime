@@ -234,7 +234,7 @@ BLOCK LANG=PLCSCRIPT main
     let arr: i32[0] @ M0;
 END_BLOCK
 END_PROGRAM
-`, { expectError: true, errorContains: '1' })
+`, { expectError: true, errorContains: 'out of range' })
 
 addTest('PLCScript multiple arrays', `
 VOVKPLCPROJECT TestProject

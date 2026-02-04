@@ -40,7 +40,7 @@ struct STLSymbol {
     int line;
     int column;
     u8 type_size;
-    u16 array_size;     // Number of elements (0 = not an array, 1+ = array)
+    MY_PTR_t array_size;     // Number of elements (0 = not an array, 1+ = array)
     
     // Check if this is an array type
     bool isArray() const { return array_size > 0; }

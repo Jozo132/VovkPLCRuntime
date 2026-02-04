@@ -178,7 +178,7 @@ struct ProjectSymbol {
     u8 bit;                 // Bit position (0-7) or 255 if not a bit type
     bool is_bit;            // True if this is a bit address
     u8 type_size;           // Size in bytes (element size for arrays)
-    u16 array_size;         // Number of elements (0 = not an array, 1+ = array)
+    MY_PTR_t array_size;         // Number of elements (0 = not an array, 1+ = array)
     char default_value[32]; // Optional default value (e.g. "0", "1", "123.45")
     bool has_default;
     bool used;
@@ -1615,7 +1615,7 @@ public:
             }
             
             // Check for array syntax: type[size]
-            u16 array_size = 0;
+            MY_PTR_t array_size = 0;
             skipWhitespaceNotNewline();
             if (peek() == '[') {
                 advance(); // consume '['
@@ -1689,7 +1689,7 @@ public:
         return !has_error;
     }
 
-    bool addSymbolToCompiler(const char* name, const char* type, const char* address, u16 array_size = 0) {
+    bool addSymbolToCompiler(const char* name, const char* type, const char* address, MY_PTR_t array_size = 0) {
         // Store symbol in project's own storage (with owned strings)
         // Then copy to PLCASM compiler before each compilation
 

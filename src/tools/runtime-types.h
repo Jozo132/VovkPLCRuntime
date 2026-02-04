@@ -60,6 +60,7 @@
 typedef uint16_t  MY_PTR_t;
 #define MY_PTR_SIZE 16
 #define MY_PTR_SIZE_BYTES 2
+#define MY_PTR_MAX ((MY_PTR_t)-1)  // Maximum value for MY_PTR_t (65535 for 16-bit, etc.)
 
 typedef uint8_t    u8;
 #ifndef __AVR__

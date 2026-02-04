@@ -362,7 +362,7 @@ struct PLCScriptSymbol {
     bool isParam;         // True if this is a function parameter
     
     // Array support
-    u16 array_size;       // Number of elements (0 = not an array, 1+ = array)
+    MY_PTR_t array_size;       // Number of elements (0 = not an array, 1+ = array)
     
     // Memory location (PLC address)
     char address[32];     // Original address string (e.g., "X0.0", "MW10")
@@ -1834,7 +1834,7 @@ public:
         char addr[32];
         
         // Calculate how many elements to reserve (1 for scalar, array_size for arrays)
-        u16 count = sym->array_size > 0 ? sym->array_size : 1;
+        MY_PTR_t count = sym->array_size > 0 ? sym->array_size : 1;
         
         if (sym->type == PSTYPE_BOOL) {
             // Bit address: M<byte>.<bit> - no conversion needed for PLCASM
@@ -2677,7 +2677,7 @@ public:
         // Type annotation: ": type" or ": type[size]"
         PLCScriptVarType varType = PSTYPE_I16; // Default type
         int structTypeIdx = -1;
-        u16 array_size = 0;  // 0 = not an array
+        MY_PTR_t array_size = 0;  // 0 = not an array
         
         if (match(PSTOK_COLON)) {
             // Check for struct type first
@@ -2718,11 +2718,11 @@ public:
                 
                 // Parse array size from token
                 int64_t size = currentToken.intValue;
-                if (size < 1 || size > 65535) {
-                    setError("Array size must be between 1 and 65535");
+                if (size < 1 || size > MY_PTR_MAX) {
+                    setError("Array size out of range");
                     return;
                 }
-                array_size = (u16)size;
+                array_size = (MY_PTR_t)size;
                 nextToken();
                 
                 if (!match(PSTOK_RBRACKET)) {
@@ -2810,7 +2810,7 @@ public:
             emit("[");
             char sizeBuf[16];
             int si = 0;
-            u16 s = array_size;
+            MY_PTR_t s = array_size;
             if (s == 0) sizeBuf[si++] = '0';
             else {
                 char temp[16];
