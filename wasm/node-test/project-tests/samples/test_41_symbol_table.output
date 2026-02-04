@@ -1,19 +1,19 @@
 {
   "success": 1,
   "project": { "name": "SymbolTableTest", "version": "3.0" },
-  "bytecode": "FD 01 58 00 40 59 00 40 C0 60 00 C0 58 00 C0 60 00 80 18 08 00 CA 08 00 01 20 08 19 08 00 CA 5A 00 40 5B 00 40 C3 C0 61 00 C0 18 09 00 DE 09 00 00 00 0A 20 09 19 09 00 DE 18 0B 00 E8 0B 3F C0 00 00 20 0B 19 0B 00 E8 FD 02 58 00 40 59 00 40 C1 61 00 80 5A 00 40 C3 5B 00 40 C0 62 00 C0 18 03 00 CC 08 00 64 20 08 10 08 03 19 03 00 CC 18 03 00 CE 18 03 00 CC 21 08 10 08 03 19 03 00 D0 58 00 C0 63 00 80 FD 03 5C 00 40 C3 EB 00 03 6B 00 C0 58 00 40 59 00 40 C0 62 00 80 FD 08 08 00 00 19 08 00 D2 08 00 00 19 08 00 D4 18 08 00 D2 08 00 05 20 08 14 08 19 08 00 D2 16 08 58 00 40 E2 00 D1 08 00 64 14 08 19 08 00 D4 16 08 E0 00 DC 08 00 00 14 08 19 08 00 D4 16 08 59 00 40 5A 00 40 C0 E2 00 F7 18 08 00 D2 08 00 0A 20 08 14 08 19 08 00 D2 16 08 08 00 00 19 08 00 D6 08 00 00 14 08 19 08 00 D6 16 08 18 08 00 D6 08 00 03 D3 08 E2 01 41 E0 01 2C 18 08 00 D6 08 00 01 20 08 14 08 19 08 00 D6 16 08 E0 01 09 18 08 00 D4 18 08 00 D6 20 08 14 08 19 08 00 D4 16 08 E0 01 18 03 01 14 02 62 00 C0 16 02 FF FD 03 18 03 00 CA 08 00 0A D2 08 61 00 C0 FD 03 58 00 40 E2 01 71 18 03 00 D2 08 00 05 20 08 10 08 03 19 03 00 D4 FF",
-  "bytecodeLength": 370,
-  "checksum": 212,
+  "bytecode": "FD 01 58 00 40 59 00 40 C0 60 00 C0 58 00 C0 60 00 80 18 08 00 CA 08 00 01 20 08 19 08 00 CA 5A 00 40 5B 00 40 C3 C0 61 00 C0 18 09 00 DE 09 00 00 00 0A 20 09 19 09 00 DE 18 0B 00 E8 0B 3F C0 00 00 20 0B 19 0B 00 E8 FD 02 58 00 40 59 00 40 C1 61 00 80 5A 00 40 C3 5B 00 40 C0 62 00 C0 18 08 00 CC 08 00 64 20 08 19 08 00 CC 18 08 00 CE 18 08 00 CC 21 08 19 08 00 D0 58 00 C0 63 00 80 FD 03 5C 00 40 C3 EB 00 03 6B 00 C0 58 00 40 59 00 40 C0 62 00 80 FD 08 08 00 00 19 08 00 D2 08 00 00 19 08 00 D4 18 08 00 D2 08 00 05 20 08 14 08 19 08 00 D2 16 08 58 00 40 E2 00 CB 08 00 64 14 08 19 08 00 D4 16 08 E0 00 D6 08 00 00 14 08 19 08 00 D4 16 08 59 00 40 5A 00 40 C0 E2 00 F1 18 08 00 D2 08 00 0A 20 08 14 08 19 08 00 D2 16 08 08 00 00 19 08 00 D6 08 00 00 14 08 19 08 00 D6 16 08 18 08 00 D6 08 00 03 D3 08 E2 01 3B E0 01 26 18 08 00 D6 08 00 01 20 08 14 08 19 08 00 D6 16 08 E0 01 03 18 08 00 D4 18 08 00 D6 20 08 14 08 19 08 00 D4 16 08 E0 01 12 03 01 14 02 62 00 C0 16 02 FF FD 03 18 08 00 CA 08 00 0A D2 08 61 00 C0 FD 03 58 00 40 E2 01 68 18 08 00 D2 08 00 05 20 08 19 08 00 D4 FF",
+  "bytecodeLength": 361,
+  "checksum": 143,
   "files": [
     { "path": "main", "firstBlockIndex": 0, "blockCount": 6, "executionOrder": 0 }
   ],
   "blocks": [
     { "file": "main", "name": "Network_1_PLCASM_Symbols", "language": "PLCASM", "offset": 0, "size": 72 },
-    { "file": "main", "name": "Network_2_STL_Symbols", "language": "STL", "offset": 72, "size": 62 },
-    { "file": "main", "name": "Network_3_Ladder_Symbols", "language": "LADDER", "offset": 134, "size": 22 },
-    { "file": "main", "name": "Network_4_PLCScript_Symbols", "language": "UNKNOWN", "offset": 156, "size": 175 },
-    { "file": "main", "name": "Network_5_Ladder_Comparator", "language": "LADDER", "offset": 331, "size": 14 },
-    { "file": "main", "name": "Network_6_Ladder_Math", "language": "LADDER", "offset": 345, "size": 24 }
+    { "file": "main", "name": "Network_2_STL_Symbols", "language": "STL", "offset": 72, "size": 56 },
+    { "file": "main", "name": "Network_3_Ladder_Symbols", "language": "LADDER", "offset": 128, "size": 22 },
+    { "file": "main", "name": "Network_4_PLCScript_Symbols", "language": "UNKNOWN", "offset": 150, "size": 175 },
+    { "file": "main", "name": "Network_5_Ladder_Comparator", "language": "LADDER", "offset": 325, "size": 14 },
+    { "file": "main", "name": "Network_6_Ladder_Math", "language": "LADDER", "offset": 339, "size": 21 }
   ],
   "symbols": [
     { "name": "input_a", "type": "bit", "address": "64.0" },
@@ -49,7 +49,7 @@
     { "name": "M", "start": 96, "end": 351 }
   ],
   "memory": { "available": 1024, "used": 240 },
-  "flash": { "size": 32768, "used": 370 },
-  "execution": { "steps": 148, "stackSize": 0 },
+  "flash": { "size": 32768, "used": 361 },
+  "execution": { "steps": 146, "stackSize": 0 },
   "problems": []
 }

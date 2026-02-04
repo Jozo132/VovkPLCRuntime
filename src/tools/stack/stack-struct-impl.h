@@ -138,7 +138,28 @@ template <typename T> bool Stack<T>::writeArea(u32 offset, u8* value, u32 size) 
     return false;
 }
 
+// Direct memory push using memcpy - much faster for multi-byte values
+template <typename T> bool Stack<T>::pushRaw(const void* src, u32 bytes) {
+    if (_size + bytes > MAX_STACK_SIZE) return true;
+    memcpy(_data + _size, src, bytes);
+    _size += bytes;
+    return false;
+}
 
+// Direct memory pop using memcpy - much faster for multi-byte values
+template <typename T> bool Stack<T>::popRaw(void* dest, u32 bytes) {
+    if (bytes > _size) return true;
+    _size -= bytes;
+    memcpy(dest, _data + _size, bytes);
+    return false;
+}
+
+// Direct memory peek using memcpy - much faster for multi-byte values
+template <typename T> bool Stack<T>::peekRaw(void* dest, u32 bytes) const {
+    if (bytes > _size) return true;
+    memcpy(dest, _data + _size - bytes, bytes);
+    return false;
+}
 
 
 template <typename T> void LinkedList<T>::push(T value) {

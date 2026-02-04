@@ -54,60 +54,40 @@ void RuntimeStack::pop(int size) { stack.pop(size); }
 // Peek the top u8 value from the stack
 u8 RuntimeStack::peek(int depth) { return stack.peek(depth); }
 
+// Optimized push/pop using direct memory copy (matching endianness)
 template <typename T> bool RuntimeStack::push_custom(T value) {
-    if (stack.size() + sizeof(T) > PLCRUNTIME_MAX_STACK_SIZE) return true;
-    // Push LSB first, MSB last (on top) - native little-endian order
-    for (u32 i = 0; i < sizeof(T); i++) {
-        stack.push((value >> (8 * i)) & 0xFF);
-    }
-    return false;
+    return stack.pushRaw(&value, sizeof(T));
 }
 
 template <typename T> T RuntimeStack::pop_custom() {
     T value = 0;
-    // Pop MSB first (from top), then LSB - reconstruct native little-endian
-    for (int i = sizeof(T) - 1; i >= 0; i--) {
-        value |= ((T)stack.pop() << (8 * i));
-    }
+    stack.popRaw(&value, sizeof(T));
     return value;
 }
 
 template <typename T> T RuntimeStack::peek_custom() {
     T value = 0;
-    // Peek MSB from top (depth 0), LSB from deeper
-    for (int i = sizeof(T) - 1; i >= 0; i--) {
-        value |= ((T)stack.peek(sizeof(T) - 1 - i) << (8 * i));
-    }
+    stack.peekRaw(&value, sizeof(T));
     return value;
 }
 
-// Push a pointer to the stack (native/little-endian, LSB first)
+// Push a pointer to the stack using direct memory copy
 RuntimeError RuntimeStack::push_pointer(MY_PTR_t value) {
-    if (stack.size() + sizeof(MY_PTR_t) > PLCRUNTIME_MAX_STACK_SIZE) return STACK_OVERFLOW;
-    // Push LSB first (native/little-endian on stack)
-    for (u32 i = 0; i < sizeof(MY_PTR_t); i++) {
-        stack.push((value >> (8 * i)) & 0xFF);
-    }
+    if (stack.pushRaw(&value, sizeof(MY_PTR_t))) return STACK_OVERFLOW;
     return STATUS_SUCCESS;
 }
 
-// Pop a pointer from the stack (native/little-endian, LSB popped first)
+// Pop a pointer from the stack using direct memory copy
 MY_PTR_t RuntimeStack::pop_pointer() {
     MY_PTR_t value = 0;
-    // Pop in reverse order (MSB first from top), reconstruct value
-    for (int i = sizeof(MY_PTR_t) - 1; i >= 0; i--) {
-        value |= ((MY_PTR_t)stack.pop() << (8 * i));
-    }
+    stack.popRaw(&value, sizeof(MY_PTR_t));
     return value;
 }
 
-// Peek the top pointer from the stack (native/little-endian, MSB on top)
+// Peek the top pointer from the stack using direct memory copy
 MY_PTR_t RuntimeStack::peek_pointer() {
     MY_PTR_t value = 0;
-    // Peek MSB from top (depth 0), LSB from deeper
-    for (int i = sizeof(MY_PTR_t) - 1; i >= 0; i--) {
-        value |= ((MY_PTR_t)stack.peek(sizeof(MY_PTR_t) - 1 - i) << (8 * i));
-    }
+    stack.peekRaw(&value, sizeof(MY_PTR_t));
     return value;
 }
 
@@ -136,89 +116,59 @@ u8 RuntimeStack::pop_u8() { return stack.pop(); }
 // Peek the top u8 value from the stack
 u8 RuntimeStack::peek_u8() { return stack.peek(); }
 
-// Push an u16 value to the stack (native/little-endian, LSB first)
+// Push an u16 value to the stack using direct memory copy
 RuntimeError RuntimeStack::push_u16(u16 value) {
-    if (stack.size() + 2 > PLCRUNTIME_MAX_STACK_SIZE) return STACK_OVERFLOW;
-    stack.push(value & 0xFF);        // LSB first
-    stack.push(value >> 8);          // MSB last (on top)
+    if (stack.pushRaw(&value, sizeof(u16))) return STACK_OVERFLOW;
     return STATUS_SUCCESS;
 }
-// Pop an u16 value from the stack (native/little-endian, MSB popped first)
+// Pop an u16 value from the stack using direct memory copy
 u16 RuntimeStack::pop_u16() {
-    u16 a = stack.pop();             // MSB from top
-    u16 b = stack.pop();             // LSB
-    return (a << 8) | b;
+    u16 value = 0;
+    stack.popRaw(&value, sizeof(u16));
+    return value;
 }
-// Peek the top u16 value from the stack (native/little-endian, MSB on top)
+// Peek the top u16 value from the stack using direct memory copy
 u16 RuntimeStack::peek_u16() {
-    u16 a = stack.peek(0);           // MSB on top
-    u16 b = stack.peek(1);           // LSB deeper
-    return (a << 8) | b;
+    u16 value = 0;
+    stack.peekRaw(&value, sizeof(u16));
+    return value;
 }
 
-// Push an u32 value to the stack (native/little-endian, LSB first)
+// Push an u32 value to the stack using direct memory copy
 RuntimeError RuntimeStack::push_u32(u32 value) {
-    if (stack.size() + 4 > PLCRUNTIME_MAX_STACK_SIZE) return STACK_OVERFLOW;
-    stack.push(value & 0xFF);              // LSB first (byte 0)
-    stack.push((value >> 8) & 0xFF);       // byte 1
-    stack.push((value >> 16) & 0xFF);      // byte 2
-    stack.push(value >> 24);               // MSB last (byte 3, on top)
+    if (stack.pushRaw(&value, sizeof(u32))) return STACK_OVERFLOW;
     return STATUS_SUCCESS;
 }
-// Pop an u32 value from the stack (native/little-endian, MSB popped first)
+// Pop an u32 value from the stack using direct memory copy
 u32 RuntimeStack::pop_u32() {
-    u32 a = stack.pop();                   // MSB from top (byte 3)
-    u32 b = stack.pop();                   // byte 2
-    u32 c = stack.pop();                   // byte 1
-    u32 d = stack.pop();                   // LSB (byte 0)
-    return (a << 24) | (b << 16) | (c << 8) | d;
+    u32 value = 0;
+    stack.popRaw(&value, sizeof(u32));
+    return value;
 }
-// Peek the top u32 value from the stack (native/little-endian, MSB on top)
+// Peek the top u32 value from the stack using direct memory copy
 u32 RuntimeStack::peek_u32() {
-    u32 a = stack.peek(0);                 // MSB on top (byte 3)
-    u32 b = stack.peek(1);                 // byte 2
-    u32 c = stack.peek(2);                 // byte 1
-    u32 d = stack.peek(3);                 // LSB (byte 0)
-    return (a << 24) | (b << 16) | (c << 8) | d;
+    u32 value = 0;
+    stack.peekRaw(&value, sizeof(u32));
+    return value;
 }
 
 #ifdef USE_X64_OPS
-// Push an u64 value to the stack (native/little-endian, LSB first)
+// Push an u64 value to the stack using direct memory copy
 RuntimeError RuntimeStack::push_u64(u64 value) {
-    if (stack.size() + 8 > PLCRUNTIME_MAX_STACK_SIZE) return STACK_OVERFLOW;
-    stack.push(value & 0xFF);              // LSB first (byte 0)
-    stack.push((value >> 8) & 0xFF);       // byte 1
-    stack.push((value >> 16) & 0xFF);      // byte 2
-    stack.push((value >> 24) & 0xFF);      // byte 3
-    stack.push((value >> 32) & 0xFF);      // byte 4
-    stack.push((value >> 40) & 0xFF);      // byte 5
-    stack.push((value >> 48) & 0xFF);      // byte 6
-    stack.push(value >> 56);               // MSB last (byte 7, on top)
+    if (stack.pushRaw(&value, sizeof(u64))) return STACK_OVERFLOW;
     return STATUS_SUCCESS;
 }
-// Pop an u64 value from the stack (native/little-endian, MSB popped first)
+// Pop an u64 value from the stack using direct memory copy
 u64 RuntimeStack::pop_u64() {
-    u64 a = stack.pop();                   // MSB from top (byte 7)
-    u64 b = stack.pop();                   // byte 6
-    u64 c = stack.pop();                   // byte 5
-    u64 d = stack.pop();                   // byte 4
-    u64 e = stack.pop();                   // byte 3
-    u64 f = stack.pop();                   // byte 2
-    u64 g = stack.pop();                   // byte 1
-    u64 h = stack.pop();                   // LSB (byte 0)
-    return (a << 56) | (b << 48) | (c << 40) | (d << 32) | (e << 24) | (f << 16) | (g << 8) | h;
+    u64 value = 0;
+    stack.popRaw(&value, sizeof(u64));
+    return value;
 }
-// Peek the top u64 value from the stack (native/little-endian, MSB on top)
+// Peek the top u64 value from the stack using direct memory copy
 u64 RuntimeStack::peek_u64() {
-    u64 a = stack.peek(0);                 // MSB on top (byte 7)
-    u64 b = stack.peek(1);                 // byte 6
-    u64 c = stack.peek(2);                 // byte 5
-    u64 d = stack.peek(3);                 // byte 4
-    u64 e = stack.peek(4);                 // byte 3
-    u64 f = stack.peek(5);                 // byte 2
-    u64 g = stack.peek(6);                 // byte 1
-    u64 h = stack.peek(7);                 // LSB (byte 0)
-    return (a << 56) | (b << 48) | (c << 40) | (d << 32) | (e << 24) | (f << 16) | (g << 8) | h;
+    u64 value = 0;
+    stack.peekRaw(&value, sizeof(u64));
+    return value;
 }
 #endif // USE_X64_OPS
 

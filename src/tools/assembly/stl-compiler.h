@@ -839,6 +839,26 @@ public:
             }
         }
         
+        // Check if this is a symbol name (not a direct address)
+        if (!isDirectAddress(stlAddr)) {
+            SharedSymbol* sym = findSharedSymbol(stlAddr);
+            if (sym) {
+                // Found a symbol - set the type from symbol definition
+                if (outType) {
+                    if (sym->is_bit) {
+                        *outType = "u8";
+                    } else {
+                        // Use the symbol's declared type
+                        *outType = sym->type;
+                    }
+                }
+                // Copy address as-is for PLCASM to resolve
+                while (stlAddr[i]) plcasmAddr[j++] = stlAddr[i++];
+                plcasmAddr[j] = '\0';
+                return;
+            }
+        }
+        
         char first = stlAddr[0];
         if (first >= 'a' && first <= 'z') first -= 32; // Uppercase
         

@@ -1,18 +1,18 @@
 {
   "success": 1,
   "project": { "name": "all_languages_with_st", "version": "1.0.0" },
-  "bytecode": "FD 01 04 00 64 19 04 00 C0 FD 02 03 C8 19 03 00 C2 FD 03 58 00 40 60 00 A4 FD 08 09 00 00 00 00 19 09 01 68 18 09 01 68 09 00 00 00 01 20 09 14 09 19 09 01 68 16 09 FF FD 06 08 00 2A 14 08 19 08 01 7C 16 08 18 08 01 7C 08 00 08 20 08 14 08 19 08 04 80 16 08 18 08 04 80 14 08 19 08 01 7C 16 08 FF",
-  "bytecodeLength": 99,
-  "checksum": 228,
+  "bytecode": "FD 01 04 00 64 19 04 00 C0 FD 02 03 C8 10 03 04 19 04 00 C2 FD 03 58 00 40 60 00 A4 FD 08 09 00 00 00 00 19 09 01 68 18 09 01 68 09 00 00 00 01 20 09 14 09 19 09 01 68 16 09 FF FD 06 08 00 2A 14 08 19 08 01 7C 16 08 18 08 01 7C 08 00 08 20 08 14 08 19 08 04 80 16 08 18 08 04 80 14 08 19 08 01 7C 16 08 FF",
+  "bytecodeLength": 102,
+  "checksum": 4,
   "files": [
     { "path": "main", "firstBlockIndex": 0, "blockCount": 5, "executionOrder": 0 }
   ],
   "blocks": [
     { "file": "main", "name": "init", "language": "PLCASM", "offset": 0, "size": 9 },
-    { "file": "main", "name": "process_stl", "language": "STL", "offset": 9, "size": 8 },
-    { "file": "main", "name": "ladder_logic", "language": "LADDER", "offset": 17, "size": 8 },
-    { "file": "main", "name": "script_block", "language": "UNKNOWN", "offset": 25, "size": 31 },
-    { "file": "main", "name": "st_block", "language": "ST", "offset": 56, "size": 42 }
+    { "file": "main", "name": "process_stl", "language": "STL", "offset": 9, "size": 11 },
+    { "file": "main", "name": "ladder_logic", "language": "LADDER", "offset": 20, "size": 8 },
+    { "file": "main", "name": "script_block", "language": "UNKNOWN", "offset": 28, "size": 31 },
+    { "file": "main", "name": "st_block", "language": "ST", "offset": 59, "size": 42 }
   ],
   "symbols": [
     { "name": "plcasm_var", "type": "u16", "address": "192" },
@@ -28,7 +28,7 @@
     { "name": "M", "start": 32, "end": 159 }
   ],
   "memory": { "available": 2048, "used": 32 },
-  "flash": { "size": 65536, "used": 99 },
-  "execution": { "steps": 19, "stackSize": 0 },
+  "flash": { "size": 65536, "used": 102 },
+  "execution": { "steps": 20, "stackSize": 0 },
   "problems": []
 }

@@ -56,6 +56,19 @@ template <typename T> struct Stack {
     bool readArea(u32 offset, u8* value, u32 size = 1);
 
     bool writeArea(u32 offset, u8* value, u32 size = 1);
+
+    // Direct memory access for efficient operations (matching endianness)
+    // Returns pointer to stack data at given offset from bottom
+    T* data() { return _data; }
+    const T* data() const { return _data; }
+    // Returns pointer to top of stack minus offset (for peek operations)
+    T* topPtr(u32 bytesFromTop = 0) { return _data + _size - bytesFromTop; }
+    // Push raw bytes directly using memcpy (assumes little-endian match)
+    bool pushRaw(const void* src, u32 bytes);
+    // Pop raw bytes directly using memcpy (assumes little-endian match)
+    bool popRaw(void* dest, u32 bytes);
+    // Peek raw bytes from top of stack using memcpy
+    bool peekRaw(void* dest, u32 bytes) const;
 };
 
 

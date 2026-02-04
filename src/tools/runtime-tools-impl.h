@@ -235,19 +235,17 @@ bool set_u8(u8* memory, u32 offset, u8 value) {
 }
 
 
+// Optimized memory read using direct memcpy (matching endianness)
 bool readArea_u8(u8* memory, u32 offset, u8* value, u32 size) {
     if (offset + size > PLCRUNTIME_MAX_MEMORY_SIZE) return true;
-    for (u32 i = 0; i < size; i++) {
-        value[i] = memory[offset + i];
-    }
+    memcpy(value, memory + offset, size);
     return false;
 }
 
+// Optimized memory write using direct memcpy (matching endianness)
 bool writeArea_u8(u8* memory, u32 offset, u8* value, u32 size) {
     if (offset + size > PLCRUNTIME_MAX_MEMORY_SIZE) return true;
-    for (u32 i = 0; i < size; i++) {
-        memory[offset + i] = value[i];
-    }
+    memcpy(memory + offset, value, size);
     return false;
 }
 
