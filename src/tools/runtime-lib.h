@@ -1149,6 +1149,17 @@ public:
         STDOUT_PRINT.print(counter_offset); STDOUT_PRINT.print(F(","));
         STDOUT_PRINT.print(PLCRUNTIME_NUM_OF_COUNTERS); STDOUT_PRINT.print(F(","));
         STDOUT_PRINT.print(PLCRUNTIME_COUNTER_STRUCT_SIZE); STDOUT_PRINT.print(F(","));
+        // Runtime flags (u16 as %04X)
+        // Bit 0: Endianness (0 = big-endian, 1 = little-endian)
+        // Bits 1-15: Reserved for future use
+        u16 runtime_flags = PLCRUNTIME_LITTLE_ENDIAN; // Use compile-time endianness
+        // Print as 4-digit hex
+        char hex_chars[] = "0123456789ABCDEF";
+        STDOUT_PRINT.print(hex_chars[(runtime_flags >> 12) & 0x0F]);
+        STDOUT_PRINT.print(hex_chars[(runtime_flags >> 8) & 0x0F]);
+        STDOUT_PRINT.print(hex_chars[(runtime_flags >> 4) & 0x0F]);
+        STDOUT_PRINT.print(hex_chars[runtime_flags & 0x0F]);
+        STDOUT_PRINT.print(F(","));
         // Device name
         STDOUT_PRINT.print(F(VOVKPLC_DEVICE_NAME));
 
