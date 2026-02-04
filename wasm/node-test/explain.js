@@ -536,7 +536,7 @@ const run = async () => {
         // Step 2: If PLCScript, transpile to PLCASM
         if (language === 'plcscript') {
             console.log('┌─────────────────────────────────────────────────────────────────┐')
-            console.log('│ STEP 2: PLCScript → PLCASM Transpilation                       │')
+            console.log('│ STEP 2: PLCScript → PLCASM Transpilation                        │')
             console.log('└─────────────────────────────────────────────────────────────────┘')
             console.log()
             

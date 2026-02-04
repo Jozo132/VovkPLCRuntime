@@ -86,10 +86,8 @@ struct Extract_t {
     static RuntimeError type_pointer(u8* bytecode, u32 bytecode_size, u32& index, MY_PTR_t* value) {
         u32 size = sizeof(MY_PTR_t);
         if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;
-        // *value = bytecode[index];
-        for (u8 i = 0; i < size; i++) {
-            ((u8*) value)[i] = bytecode[index + i];
-        }
+        // Extract big-endian bytes and convert to native (same as EXTRACT_TYPE_16)
+        *value = ((MY_PTR_t) bytecode[index] << 8) | bytecode[index + 1];
         index += size;
         return STATUS_SUCCESS;
     }

@@ -406,7 +406,7 @@ namespace PLCMethods {
     }
 
     // Load value from memory to stack using immediate address
-    // Memory is little-endian, stack is big-endian
+    // Both memory and stack use native endianness
     RuntimeError LOAD_FROM(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
         u32 size = 1 + sizeof(MY_PTR_t);
         if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
@@ -416,9 +416,9 @@ namespace PLCMethods {
         MY_PTR_t address = 0;
         extract_status = ProgramExtract.type_pointer(program, prog_size, index, &address);
         if (extract_status != STATUS_SUCCESS) return extract_status;
-        address = reverse_byte_order(address);
+        // ProgramExtract already converts from big-endian bytecode to native, no need to reverse
         
-        // Read little-endian from memory, push big-endian to stack
+        // Read native-endian from memory, push native-endian to stack
         switch (data_type) {
             case type_pointer: {
                 if (address + sizeof(MY_PTR_t) > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
@@ -471,7 +471,7 @@ namespace PLCMethods {
     }
 
     // Move value from stack to memory using immediate address
-    // Stack is big-endian, memory is little-endian
+    // Both stack and memory use native endianness
     RuntimeError MOVE_TO(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
         u32 size = 1 + sizeof(MY_PTR_t);
         if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
@@ -481,9 +481,9 @@ namespace PLCMethods {
         MY_PTR_t address = 0;
         extract_status = ProgramExtract.type_pointer(program, prog_size, index, &address);
         if (extract_status != STATUS_SUCCESS) return extract_status;
-        address = reverse_byte_order(address);
+        // ProgramExtract already converts from big-endian bytecode to native, no need to reverse
         
-        // Pop big-endian from stack, write little-endian to memory
+        // Pop native-endian from stack, write native-endian to memory
         switch (data_type) {
             case type_pointer: {
                 if (stack.size() < sizeof(MY_PTR_t)) return STACK_UNDERFLOW;
@@ -549,7 +549,7 @@ namespace PLCMethods {
     }
 
     // Increment value in memory by 1
-    // Memory is little-endian
+    // Memory uses native endianness
     RuntimeError INC_MEM(u8* memory, u8* program, u32 prog_size, u32& index) {
         u32 size = 1 + sizeof(MY_PTR_t);
         if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
@@ -559,7 +559,7 @@ namespace PLCMethods {
         MY_PTR_t address = 0;
         extract_status = ProgramExtract.type_pointer(program, prog_size, index, &address);
         if (extract_status != STATUS_SUCCESS) return extract_status;
-        address = reverse_byte_order(address);
+        // ProgramExtract already converts from big-endian bytecode to native, no need to reverse
         
         switch (data_type) {
             case type_bool:
@@ -653,7 +653,7 @@ namespace PLCMethods {
     }
 
     // Decrement value in memory by 1
-    // Memory is little-endian
+    // Memory uses native endianness
     RuntimeError DEC_MEM(u8* memory, u8* program, u32 prog_size, u32& index) {
         u32 size = 1 + sizeof(MY_PTR_t);
         if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
@@ -663,7 +663,7 @@ namespace PLCMethods {
         MY_PTR_t address = 0;
         extract_status = ProgramExtract.type_pointer(program, prog_size, index, &address);
         if (extract_status != STATUS_SUCCESS) return extract_status;
-        address = reverse_byte_order(address);
+        // ProgramExtract already converts from big-endian bytecode to native, no need to reverse
         
         switch (data_type) {
             case type_bool:
@@ -768,7 +768,7 @@ namespace PLCMethods {
             case type_pointer: {
                 RuntimeError e = STATUS_SUCCESS;
                 MY_PTR_t value = stack.peek_pointer();
-                value = reverse_byte_order(value);
+                // Stack uses native endianness, no need to reverse
                 e = stack.push_pointer(value);
                 return e;
             }
@@ -971,8 +971,7 @@ namespace PLCMethods {
         if (sizeof(A) + sizeof(B) > stack.size()) return STACK_UNDERFLOW;
         B b = stack.pop_custom<B>();
         A a = stack.pop_custom<A>();
-        a = reverse_byte_order(a);
-        b = reverse_byte_order(b);
+        // Stack now uses native endianness, no need to reverse
         stack.push_custom<B>(b);
         stack.push_custom<A>(a);
         return STATUS_SUCCESS;

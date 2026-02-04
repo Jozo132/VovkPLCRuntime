@@ -40,6 +40,16 @@ struct STLSymbol {
     int line;
     int column;
     u8 type_size;
+    u16 array_size;     // Number of elements (0 = not an array, 1+ = array)
+    
+    // Check if this is an array type
+    bool isArray() const { return array_size > 0; }
+    
+    // Get total size in bytes (element size * count for arrays)
+    u32 totalSize() const {
+        if (array_size == 0) return type_size;
+        return (u32)type_size * (u32)array_size;
+    }
 };
 
 // ### STL Linter Class Definition ###

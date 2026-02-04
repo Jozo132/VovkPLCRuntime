@@ -687,12 +687,25 @@ struct Symbol {
     int line;           // Line number where symbol is defined
     int column;         // Column number where symbol is defined
     u8 type_size;       // Size in bytes (1 for u8/i8, 2 for u16/i16, 4 for u32/i32/f32, etc.)
+    u16 array_size;     // Number of elements (0 = not an array, 1+ = array)
+    
+    // Check if this is an array type
+    bool isArray() const { return array_size > 0; }
+    
+    // Get total size in bytes (element size * count for arrays)
+    u32 totalSize() const {
+        if (array_size == 0) return type_size;
+        return (u32)type_size * (u32)array_size;
+    }
 
     void print() const {
         printf("Symbol: '");
         name.print();
         printf("' type=");
         type.print();
+        if (array_size > 0) {
+            printf("[%u]", array_size);
+        }
         if (address_str[0] != '\0') {
              printf(" addr=%s", address_str);
         } else if (is_bit) {

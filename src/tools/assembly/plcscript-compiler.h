@@ -361,6 +361,9 @@ struct PLCScriptSymbol {
     bool isAutoAddress;   // True if address was auto-assigned
     bool isParam;         // True if this is a function parameter
     
+    // Array support
+    u16 array_size;       // Number of elements (0 = not an array, 1+ = array)
+    
     // Memory location (PLC address)
     char address[32];     // Original address string (e.g., "X0.0", "MW10")
     u32 memoryOffset;     // Computed memory offset
@@ -383,6 +386,31 @@ struct PLCScriptSymbol {
     
     // Scope level (for local variables)
     int scopeLevel;
+    
+    // Check if this is an array type
+    bool isArray() const { return array_size > 0; }
+    
+    // Get element size in bytes - requires getTypeSize from compiler
+    // Note: This returns 0 for struct types (needs compiler context)
+    u8 elementSize() const {
+        if (structTypeIndex >= 0) return 0; // Struct size determined at runtime
+        // Simple type size lookup (doesn't require compiler context)
+        switch(type) {
+            case PSTYPE_BOOL: return 1;
+            case PSTYPE_U8: case PSTYPE_I8: return 1;
+            case PSTYPE_U16: case PSTYPE_I16: return 2;
+            case PSTYPE_U32: case PSTYPE_I32: case PSTYPE_F32: return 4;
+            case PSTYPE_U64: case PSTYPE_I64: case PSTYPE_F64: return 8;
+            default: return 4;
+        }
+    }
+    
+    // Get total size in bytes (element size * count for arrays)
+    u32 totalSize() const {
+        u8 elem_size = elementSize();
+        if (array_size == 0) return elem_size;
+        return (u32)elem_size * (u32)array_size;
+    }
 };
 
 // ============================================================================
@@ -1744,6 +1772,8 @@ public:
         sym->isParam = false;
         sym->stackSlot = -1;
         sym->hasInitializer = false;
+        sym->array_size = shared->array_size;
+        sym->structTypeIndex = -1;
         
         return true;
     }
@@ -1803,10 +1833,16 @@ public:
     void generateAutoAddress(PLCScriptSymbol* sym) {
         char addr[32];
         
+        // Calculate how many elements to reserve (1 for scalar, array_size for arrays)
+        u16 count = sym->array_size > 0 ? sym->array_size : 1;
+        
         if (sym->type == PSTYPE_BOOL) {
             // Bit address: M<byte>.<bit> - no conversion needed for PLCASM
+            // Arrays of bits not supported (rejected earlier)
             int byteNum = autoAddrBit / 8;
             int bitNum = autoAddrBit % 8;
+            // Set memoryOffset to absolute byte address for array element calculations
+            sym->memoryOffset = plcasm_marker_offset + byteNum;
             // Format: M<byte>.<bit>
             int len = 0;
             addr[len++] = 'M';
@@ -1838,6 +1874,8 @@ public:
             sym->address[j] = '\0';
         } else if (sym->type == PSTYPE_I8 || sym->type == PSTYPE_U8) {
             // Byte address: M<n> - direct PLCASM format
+            // Set memoryOffset to absolute byte address for array element calculations
+            sym->memoryOffset = plcasm_marker_offset + autoAddrByte;
             int len = 0;
             addr[len++] = 'M';
             char numBuf[16];
@@ -1853,7 +1891,7 @@ public:
             }
             for (int i = numLen - 1; i >= 0; i--) addr[len++] = numBuf[i];
             addr[len] = '\0';
-            autoAddrByte++;
+            autoAddrByte += count;  // Reserve space for all elements
             // Copy directly - already in PLCASM format
             int j = 0;
             while (addr[j] && j < 31) {
@@ -1863,6 +1901,8 @@ public:
             sym->address[j] = '\0';
         } else if (sym->type == PSTYPE_I16 || sym->type == PSTYPE_U16) {
             // Word address: M<n> (PLCASM format, not MW<n>)
+            // Set memoryOffset to absolute byte address for array element calculations
+            sym->memoryOffset = plcasm_marker_offset + autoAddrWord;
             int len = 0;
             addr[len++] = 'M';
             char numBuf[16];
@@ -1878,7 +1918,7 @@ public:
             }
             for (int i = numLen - 1; i >= 0; i--) addr[len++] = numBuf[i];
             addr[len] = '\0';
-            autoAddrWord += 2;  // Words are 2 bytes apart
+            autoAddrWord += 2 * count;  // Words are 2 bytes apart, reserve for all elements
             // Copy directly - already in PLCASM format
             int j = 0;
             while (addr[j] && j < 31) {
@@ -1887,7 +1927,9 @@ public:
             }
             sym->address[j] = '\0';
         } else {
-            // Dword address: M<n> (PLCASM format, for i32, u32, f32, i64, u64, f64)
+            // Dword address: M<n> (PLCASM format, for i32, u32, f32, i64, u64, f64, struct)
+            // Set memoryOffset to absolute byte address for array element calculations
+            sym->memoryOffset = plcasm_marker_offset + autoAddrDword;
             int len = 0;
             addr[len++] = 'M';
             char numBuf[16];
@@ -1903,7 +1945,7 @@ public:
             }
             for (int i = numLen - 1; i >= 0; i--) addr[len++] = numBuf[i];
             addr[len] = '\0';
-            autoAddrDword += getTypeSize(sym->type);
+            autoAddrDword += getTypeSize(sym->type) * count;  // Reserve space for all elements
             // Copy directly - already in PLCASM format
             int j = 0;
             while (addr[j] && j < 31) {
@@ -2632,9 +2674,11 @@ public:
         
         nextToken();
         
-        // Type annotation: ": type"
+        // Type annotation: ": type" or ": type[size]"
         PLCScriptVarType varType = PSTYPE_I16; // Default type
         int structTypeIdx = -1;
+        u16 array_size = 0;  // 0 = not an array
+        
         if (match(PSTOK_COLON)) {
             // Check for struct type first
             if (currentToken.type == PSTOK_IDENTIFIER) {
@@ -2656,6 +2700,35 @@ public:
             } else {
                 setError("Expected type name");
                 return;
+            }
+            
+            // Check for array syntax: type[size]
+            if (match(PSTOK_LBRACKET)) {
+                // Arrays of bit types not supported
+                if (varType == PSTYPE_BOOL) {
+                    setError("Arrays of bool types not supported");
+                    return;
+                }
+                
+                // Expect a numeric literal for array size
+                if (!check(PSTOK_INTEGER)) {
+                    setError("Expected array size (numeric literal)");
+                    return;
+                }
+                
+                // Parse array size from token
+                int64_t size = currentToken.intValue;
+                if (size < 1 || size > 65535) {
+                    setError("Array size must be between 1 and 65535");
+                    return;
+                }
+                array_size = (u16)size;
+                nextToken();
+                
+                if (!match(PSTOK_RBRACKET)) {
+                    setError("Expected ']' after array size");
+                    return;
+                }
             }
         }
         
@@ -2697,9 +2770,11 @@ public:
         sym->isLocal = isLocal;
         sym->isAutoAddress = isAutoAddress;
         sym->stackSlot = -1;
+        sym->array_size = array_size;
         
         if (isAutoAddress || isLocal) {
             // Generate auto address for both explicit "@ auto" and local variables
+            // For arrays, generateAutoAddress needs to account for array size
             generateAutoAddress(sym);
             hasAddress = true;
             isAutoAddress = true;
@@ -2718,7 +2793,11 @@ public:
         // Register struct variables in the shared symbol table so PLCASM can use property access
         if (hasAddress && varType == PSTYPE_STRUCT && structTypeIdx >= 0) {
             const char* structTypeName = structTypes[structTypeIdx].name;
-            addSharedSymbol(name, structTypeName, sym->memoryOffset, 0, false, structTypes[structTypeIdx].totalSize);
+            addSharedSymbol(name, structTypeName, sym->memoryOffset, 0, false, structTypes[structTypeIdx].totalSize, array_size);
+        } else if (hasAddress && array_size > 0) {
+            // Register array in shared symbol table
+            u8 elem_size = (u8)getTypeSize(varType);
+            addSharedSymbol(name, varTypeToPlcasm(varType), sym->memoryOffset, 0, false, elem_size, array_size);
         }
         
         // Emit comment
@@ -2727,6 +2806,22 @@ public:
         emit(name);
         emit(": ");
         emit(varTypeToPlcasm(varType));
+        if (array_size > 0) {
+            emit("[");
+            char sizeBuf[16];
+            int si = 0;
+            u16 s = array_size;
+            if (s == 0) sizeBuf[si++] = '0';
+            else {
+                char temp[16];
+                int ti = 0;
+                while (s > 0) { temp[ti++] = '0' + (s % 10); s /= 10; }
+                while (ti > 0) sizeBuf[si++] = temp[--ti];
+            }
+            sizeBuf[si] = '\0';
+            emit(sizeBuf);
+            emit("]");
+        }
         if (hasAddress) {
             emit(" @ ");
             emit(address);
@@ -3303,6 +3398,193 @@ public:
                 currentToken = savedToken;
                 hasPeekToken = savedHasPeek;
                 peekToken = savedPeek;
+                return parseTernary();
+            }
+            
+            // Check for array element assignment (e.g., arr[0] = value, arr[i] = value)
+            if (check(PSTOK_LBRACKET)) {
+                nextToken(); // consume '['
+                
+                // Find the array symbol
+                PLCScriptSymbol* arrSym = sym;
+                PLCScriptSymbol tempArrSym;
+                
+                if (!arrSym) {
+                    SharedSymbol* sharedSym = sharedSymbols.findSymbol(varName);
+                    if (sharedSym) {
+                        memset(&tempArrSym, 0, sizeof(tempArrSym));
+                        populateFromSharedSymbol(&tempArrSym, sharedSym);
+                        arrSym = &tempArrSym;
+                    }
+                }
+                
+                if (!arrSym) {
+                    setError("Undefined array variable");
+                    return PSTYPE_VOID;
+                }
+                
+                if (!arrSym->isArray()) {
+                    setError("Variable is not an array");
+                    return PSTYPE_VOID;
+                }
+                
+                // Parse index expression
+                // Save output position in case we need to restore (for array reads, not writes)
+                int savedOutputLen = outputLength;
+                bool isStaticIndex = check(PSTOK_INTEGER);
+                int64_t staticIndex = 0;
+                
+                if (isStaticIndex) {
+                    staticIndex = currentToken.intValue;
+                    nextToken();
+                    
+                    if (staticIndex < 0 || staticIndex >= arrSym->array_size) {
+                        setError("Array index out of bounds");
+                        return PSTYPE_VOID;
+                    }
+                } else {
+                    // Dynamic index - need to save index for later use
+                    PLCScriptVarType indexType = parseExpression();
+                    
+                    if (indexType != PSTYPE_U32 && indexType != PSTYPE_I32) {
+                        emit("cvt ");
+                        emit(varTypeToPlcasm(indexType));
+                        emit(" u32\n");
+                    }
+                }
+                
+                if (!match(PSTOK_RBRACKET)) {
+                    setError("Expected ']' after array index");
+                    return PSTYPE_VOID;
+                }
+                
+                PLCScriptVarType elemType = arrSym->type;
+                u8 elemSize = (u8)getTypeSize(elemType);
+                
+                // Check for assignment operators
+                if (check(PSTOK_EQ)) {
+                    // This is an array element write - check const now
+                    if (arrSym->isConst) {
+                        setError("Cannot assign to const array");
+                        return PSTYPE_VOID;
+                    }
+                    
+                    nextToken(); // consume '='
+                    
+                    if (isStaticIndex) {
+                        // Static index: compute address at compile time
+                        u32 offset = (u32)staticIndex * elemSize;
+                        
+                        PLCScriptVarType savedTarget = targetType;
+                        targetType = elemType;
+                        PLCScriptVarType rhsType = parseAssignment();
+                        targetType = savedTarget;
+                        
+                        if (rhsType != elemType && rhsType != PSTYPE_VOID) {
+                            emit("cvt ");
+                            emit(varTypeToPlcasm(rhsType));
+                            emit(" ");
+                            emit(varTypeToPlcasm(elemType));
+                            emit("\n");
+                        }
+                        
+                        emitCopy(elemType);
+                        
+                        // Build address and store using raw address prefix '#'
+                        // memoryOffset contains absolute byte address, so we use # prefix
+                        // to prevent PLCASM from adding area offset again
+                        char addr[64];
+                        int idx = 0;
+                        addr[idx++] = '#';
+                        u32 newAddr = arrSym->memoryOffset + offset;
+                        char numBuf[16];
+                        int ni = 0;
+                        if (newAddr == 0) numBuf[ni++] = '0';
+                        else {
+                            u32 temp = newAddr;
+                            while (temp > 0) { numBuf[ni++] = '0' + (temp % 10); temp /= 10; }
+                        }
+                        for (int r = ni - 1; r >= 0; r--) addr[idx++] = numBuf[r];
+                        addr[idx] = '\0';
+                        
+                        emit(varTypeToPlcasm(elemType));
+                        emit(".move_to ");
+                        emit(addr);
+                        emit("\n");
+                    } else {
+                        // Dynamic index: stack has index
+                        // Need to: compute address, then parse RHS, then store using pointer
+                        
+                        // Convert index to ptr for pointer arithmetic
+                        emit("cvt u32 ptr\n");
+                        
+                        // Multiply index by element size
+                        if (elemSize > 1) {
+                            emit("ptr.const ");
+                            char sizeBuf[16];
+                            int si = 0;
+                            u8 s = elemSize;
+                            if (s == 0) sizeBuf[si++] = '0';
+                            else {
+                                char temp[16];
+                                int ti = 0;
+                                while (s > 0) { temp[ti++] = '0' + (s % 10); s /= 10; }
+                                while (ti > 0) sizeBuf[si++] = temp[--ti];
+                            }
+                            sizeBuf[si] = '\0';
+                            emit(sizeBuf);
+                            emit("\nptr.mul\n");
+                        }
+                        
+                        // Add base address - now we have pointer on stack
+                        emit("ptr.const ");
+                        char baseBuf[16];
+                        int bi = 0;
+                        u32 base = arrSym->memoryOffset;
+                        if (base == 0) baseBuf[bi++] = '0';
+                        else {
+                            char temp[16];
+                            int ti = 0;
+                            while (base > 0) { temp[ti++] = '0' + (base % 10); base /= 10; }
+                            while (ti > 0) baseBuf[bi++] = temp[--ti];
+                        }
+                        baseBuf[bi] = '\0';
+                        emit(baseBuf);
+                        emit("\nptr.add\n");
+                        
+                        // Stack: [address (ptr)]
+                        // Parse RHS expression
+                        PLCScriptVarType savedTarget = targetType;
+                        targetType = elemType;
+                        PLCScriptVarType rhsType = parseAssignment();
+                        targetType = savedTarget;
+                        
+                        if (rhsType != elemType && rhsType != PSTYPE_VOID) {
+                            emit("cvt ");
+                            emit(varTypeToPlcasm(rhsType));
+                            emit(" ");
+                            emit(varTypeToPlcasm(elemType));
+                            emit("\n");
+                        }
+                        
+                        // Stack: [address] [value]
+                        // Store using pointer and keep value on stack
+                        emit(varTypeToPlcasm(elemType));
+                        emit(".move_copy\n");
+                    }
+                    
+                    return elemType;
+                }
+                
+                // Not an assignment - restore state AND output position, let expression parsing handle read
+                pos = savedPos;
+                currentLine = savedLine;
+                currentColumn = savedCol;
+                currentToken = savedToken;
+                hasPeekToken = savedHasPeek;
+                peekToken = savedPeek;
+                outputLength = savedOutputLen;  // Restore emitted code too
+                output[outputLength] = '\0';
                 return parseTernary();
             }
             
@@ -4074,6 +4356,143 @@ public:
                 }
                 
                 return resultType;
+            }
+            
+            // Check for array element access (e.g., arr[0], arr[i])
+            if (check(PSTOK_LBRACKET)) {
+                nextToken(); // consume '['
+                
+                // Find the array symbol
+                PLCScriptSymbol* arrSym = findSymbol(name);
+                PLCScriptSymbol tempArrSym;
+                
+                if (!arrSym) {
+                    SharedSymbol* sharedSym = sharedSymbols.findSymbol(name);
+                    if (sharedSym) {
+                        memset(&tempArrSym, 0, sizeof(tempArrSym));
+                        populateFromSharedSymbol(&tempArrSym, sharedSym);
+                        arrSym = &tempArrSym;
+                    }
+                }
+                
+                if (!arrSym) {
+                    setError("Undefined array variable");
+                    return PSTYPE_VOID;
+                }
+                
+                if (!arrSym->isArray()) {
+                    setError("Variable is not an array");
+                    return PSTYPE_VOID;
+                }
+                
+                // Parse index expression
+                // Check if it's a constant index (static access) or variable (dynamic access)
+                bool isStaticIndex = check(PSTOK_INTEGER);
+                int64_t staticIndex = 0;
+                
+                if (isStaticIndex) {
+                    staticIndex = currentToken.intValue;
+                    nextToken();
+                    
+                    // Bounds checking for static index
+                    if (staticIndex < 0 || staticIndex >= arrSym->array_size) {
+                        setError("Array index out of bounds");
+                        return PSTYPE_VOID;
+                    }
+                } else {
+                    // Dynamic index - parse expression and use it for address calculation
+                    PLCScriptVarType indexType = parseExpression();
+                    
+                    // Convert to u32 for address calculation if needed
+                    if (indexType != PSTYPE_U32 && indexType != PSTYPE_I32) {
+                        emit("cvt ");
+                        emit(varTypeToPlcasm(indexType));
+                        emit(" u32\n");
+                    }
+                }
+                
+                if (!match(PSTOK_RBRACKET)) {
+                    setError("Expected ']' after array index");
+                    return PSTYPE_VOID;
+                }
+                
+                // Get element type and size
+                PLCScriptVarType elemType = arrSym->type;
+                u8 elemSize = (u8)getTypeSize(elemType);
+                
+                if (isStaticIndex) {
+                    // Static index: compute address at compile time
+                    u32 offset = (u32)staticIndex * elemSize;
+                    char addr[64];
+                    int idx = 0;
+                    
+                    // Use raw address prefix '#' since memoryOffset is absolute byte address
+                    // This prevents PLCASM from adding area offset again
+                    addr[idx++] = '#';
+                    u32 newAddr = arrSym->memoryOffset + offset;
+                    char numBuf[16];
+                    int ni = 0;
+                    if (newAddr == 0) numBuf[ni++] = '0';
+                    else {
+                        u32 temp = newAddr;
+                        while (temp > 0) { numBuf[ni++] = '0' + (temp % 10); temp /= 10; }
+                    }
+                    for (int r = ni - 1; r >= 0; r--) addr[idx++] = numBuf[r];
+                    addr[idx] = '\0';
+                    
+                    // Emit load instruction
+                    emit(varTypeToPlcasm(elemType));
+                    emit(".load_from ");
+                    emit(addr);
+                    emit("\n");
+                } else {
+                    // Dynamic index: emit instructions to compute address at runtime
+                    // Stack now has: index (u32)
+                    // Need to: base_address + (index * elem_size)
+                    
+                    // Convert index to ptr for pointer arithmetic
+                    emit("cvt u32 ptr\n");
+                    
+                    // Multiply index by element size
+                    if (elemSize > 1) {
+                        emit("ptr.const ");
+                        char sizeBuf[16];
+                        int si = 0;
+                        u8 s = elemSize;
+                        if (s == 0) sizeBuf[si++] = '0';
+                        else {
+                            char temp[16];
+                            int ti = 0;
+                            while (s > 0) { temp[ti++] = '0' + (s % 10); s /= 10; }
+                            while (ti > 0) sizeBuf[si++] = temp[--ti];
+                        }
+                        sizeBuf[si] = '\0';
+                        emit(sizeBuf);
+                        emit("\nptr.mul\n");
+                    }
+                    
+                    // Add base address
+                    emit("ptr.const ");
+                    char baseBuf[16];
+                    int bi = 0;
+                    u32 base = arrSym->memoryOffset;
+                    if (base == 0) baseBuf[bi++] = '0';
+                    else {
+                        char temp[16];
+                        int ti = 0;
+                        while (base > 0) { temp[ti++] = '0' + (base % 10); base /= 10; }
+                        while (ti > 0) baseBuf[bi++] = temp[--ti];
+                    }
+                    baseBuf[bi] = '\0';
+                    emit(baseBuf);
+                    emit("\nptr.add\n");
+                    
+                    // Use dynamic load instruction with ptr address on stack
+                    emit(varTypeToPlcasm(elemType));
+                    emit(".load\n");
+                }
+                
+                return elemType;
             }
             
             // Variable reference - first check local symbol table

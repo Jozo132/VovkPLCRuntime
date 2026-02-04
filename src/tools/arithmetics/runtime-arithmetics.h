@@ -44,6 +44,18 @@
 
 namespace PLCMethods {
 
+    RuntimeError ADD_pointer(RuntimeStack& stack) {
+        MY_PTR_t b = stack.pop_pointer();
+        MY_PTR_t a = stack.pop_pointer();
+        return stack.push_pointer(a + b);
+    }
+
+    RuntimeError MUL_pointer(RuntimeStack& stack) {
+        MY_PTR_t b = stack.pop_pointer();
+        MY_PTR_t a = stack.pop_pointer();
+        return stack.push_pointer(a * b);
+    }
+
     RuntimeError handle_ADD(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
         u32 size = 1;
         if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
@@ -51,6 +63,7 @@ namespace PLCMethods {
         switch (data_type) {
             case type_bool:
             case type_u8: return ADD_uint8_t(stack);
+            case type_pointer: return ADD_pointer(stack);
             case type_u16: return ADD_uint16_t(stack);
             case type_u32: return ADD_uint32_t(stack);
             case type_i8: return ADD_int8_t(stack);
@@ -95,6 +108,7 @@ namespace PLCMethods {
         switch (data_type) {
             case type_bool:
             case type_u8: return MUL_uint8_t(stack);
+            case type_pointer: return MUL_pointer(stack);
             case type_u16: return MUL_uint16_t(stack);
             case type_u32: return MUL_uint32_t(stack);
             case type_i8: return MUL_int8_t(stack);

@@ -177,7 +177,8 @@ struct ProjectSymbol {
     u32 address;            // Memory address or byte offset
     u8 bit;                 // Bit position (0-7) or 255 if not a bit type
     bool is_bit;            // True if this is a bit address
-    u8 type_size;           // Size in bytes
+    u8 type_size;           // Size in bytes (element size for arrays)
+    u16 array_size;         // Number of elements (0 = not an array, 1+ = array)
     char default_value[32]; // Optional default value (e.g. "0", "1", "123.45")
     bool has_default;
     bool used;
@@ -190,9 +191,19 @@ struct ProjectSymbol {
         bit = 255;
         is_bit = false;
         type_size = 0;
+        array_size = 0;
         default_value[0] = '\0';
         has_default = false;
         used = false;
+    }
+    
+    // Check if this is an array type
+    bool isArray() const { return array_size > 0; }
+    
+    // Get total size in bytes (element size * count for arrays)
+    u32 totalSize() const {
+        if (array_size == 0) return type_size;
+        return (u32)type_size * (u32)array_size;
     }
 };
 
@@ -1597,10 +1608,49 @@ public:
             }
             advance();
 
-            // Read type
+            // Read type (may include array size like i32[10])
             if (!readWord(type, sizeof(type))) {
                 setError("Expected type after ':'");
                 return false;
+            }
+            
+            // Check for array syntax: type[size]
+            u16 array_size = 0;
+            skipWhitespaceNotNewline();
+            if (peek() == '[') {
+                advance(); // consume '['
+                skipWhitespace();
+                
+                // Read array size
+                char size_str[16];
+                int si = 0;
+                while (isDigit(peek()) && si < 15) {
+                    size_str[si++] = advance();
+                }
+                size_str[si] = '\0';
+                
+                if (si == 0) {
+                    setError("Expected array size in []");
+                    return false;
+                }
+                
+                // Parse size
+                array_size = 0;
+                for (int j = 0; j < si; j++) {
+                    array_size = array_size * 10 + (size_str[j] - '0');
+                }
+                
+                if (array_size == 0) {
+                    setError("Array size must be at least 1");
+                    return false;
+                }
+                
+                skipWhitespace();
+                if (peek() != ']') {
+                    setError("Expected ']' after array size");
+                    return false;
+                }
+                advance(); // consume ']'
             }
 
             // Expect ':'
@@ -1629,7 +1679,7 @@ public:
 
             // Add symbol to PLCASM compiler's symbol table
             // Convert to the internal format
-            if (!addSymbolToCompiler(name, type, address)) {
+            if (!addSymbolToCompiler(name, type, address, array_size)) {
                 return false;
             }
 
@@ -1639,7 +1689,7 @@ public:
         return !has_error;
     }
 
-    bool addSymbolToCompiler(const char* name, const char* type, const char* address) {
+    bool addSymbolToCompiler(const char* name, const char* type, const char* address, u16 array_size = 0) {
         // Store symbol in project's own storage (with owned strings)
         // Then copy to PLCASM compiler before each compilation
 
@@ -1788,9 +1838,10 @@ public:
         }
 
         psym.used = true;
+        psym.array_size = array_size;
 
         // Also add to shared symbol table for cross-compiler access
-        int result = addSharedSymbol(psym.name, psym.type, psym.address, psym.bit, psym.is_bit, psym.type_size);
+        int result = addSharedSymbol(psym.name, psym.type, psym.address, psym.bit, psym.is_bit, psym.type_size, psym.array_size);
         if (result == -2) {
             // Duplicate symbol with different definition
             char msg[128];
@@ -1841,6 +1892,7 @@ public:
             sym.bit = psym.bit;
             sym.is_bit = psym.is_bit;
             sym.type_size = psym.type_size;
+            sym.array_size = psym.array_size;
             sym.line = line;
             sym.column = column;
         }
@@ -1877,6 +1929,7 @@ public:
             ssym.bit = psym.bit;
             ssym.is_bit = psym.is_bit;
             ssym.type_size = psym.type_size;
+            ssym.array_size = psym.array_size;
             ssym.line = line;
             ssym.column = column;
         }
@@ -1913,6 +1966,7 @@ public:
             ssym.bit = psym.bit;
             ssym.is_bit = psym.is_bit;
             ssym.type_size = psym.type_size;
+            ssym.array_size = psym.array_size;
         }
 
         stSymbols.symbol_count = symbol_count < SHARED_MAX_SYMBOLS ? symbol_count : SHARED_MAX_SYMBOLS;

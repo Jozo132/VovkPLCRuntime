@@ -66,7 +66,10 @@ struct SharedSymbol {
     u32 address;            // Memory address or byte offset
     u8 bit;                 // Bit position (0-7) or 255 if not a bit type
     bool is_bit;            // True if this is a bit address
-    u8 type_size;           // Size in bytes (0 for bit type)
+    u8 type_size;           // Size in bytes (0 for bit type, or element size for arrays)
+    
+    // Array support
+    u16 array_size;         // Number of elements (0 = not an array, 1+ = array)
 
     void reset() {
         name[0] = '\0';
@@ -75,6 +78,16 @@ struct SharedSymbol {
         bit = 255;
         is_bit = false;
         type_size = 0;
+        array_size = 0;
+    }
+    
+    // Check if this is an array type
+    bool isArray() const { return array_size > 0; }
+    
+    // Get total size in bytes (element size * count for arrays)
+    u32 totalSize() const {
+        if (array_size == 0) return type_size;
+        return (u32)type_size * (u32)array_size;
     }
 
     // Check if this symbol matches another exactly (for duplicate detection)
@@ -85,6 +98,7 @@ struct SharedSymbol {
         if (bit != other.bit) return false;
         if (is_bit != other.is_bit) return false;
         if (type_size != other.type_size) return false;
+        if (array_size != other.array_size) return false;
         return true;
     }
 };
@@ -124,7 +138,7 @@ public:
 
     // Add a symbol to the table
     // Returns: 0 = success, 1 = duplicate exact match (silently ignored), -1 = table full, -2 = duplicate with different definition
-    int addSymbol(const char* name, const char* type, u32 address, u8 bit, bool is_bit, u8 type_size) {
+    int addSymbol(const char* name, const char* type, u32 address, u8 bit, bool is_bit, u8 type_size, u16 array_size = 0) {
         if (symbol_count >= SHARED_MAX_SYMBOLS) return -1;
 
         // Check for existing symbol with same name
@@ -142,6 +156,7 @@ public:
             temp.bit = bit;
             temp.is_bit = is_bit;
             temp.type_size = type_size;
+            temp.array_size = array_size;
 
             // If exact match, silently ignore (return 1 for success-duplicate)
             if (existing->exactMatch(temp)) {
@@ -163,6 +178,7 @@ public:
         sym.bit = bit;
         sym.is_bit = is_bit;
         sym.type_size = type_size;
+        sym.array_size = array_size;
 
         symbol_count++;
         return 0;
@@ -170,7 +186,7 @@ public:
 
     // Convenience method to add symbol with full parameters
     int addSymbol(const SharedSymbol& sym) {
-        return addSymbol(sym.name, sym.type, sym.address, sym.bit, sym.is_bit, sym.type_size);
+        return addSymbol(sym.name, sym.type, sym.address, sym.bit, sym.is_bit, sym.type_size, sym.array_size);
     }
 
     // Check if a name is a known symbol
@@ -500,8 +516,8 @@ inline SharedSymbol* findSharedSymbol(const char* name) {
     return sharedSymbols.findSymbol(name);
 }
 
-inline int addSharedSymbol(const char* name, const char* type, u32 address, u8 bit, bool is_bit, u8 type_size) {
-    return sharedSymbols.addSymbol(name, type, address, bit, is_bit, type_size);
+inline int addSharedSymbol(const char* name, const char* type, u32 address, u8 bit, bool is_bit, u8 type_size, u16 array_size = 0) {
+    return sharedSymbols.addSymbol(name, type, address, bit, is_bit, type_size, array_size);
 }
 
 inline bool hasSharedSymbol(const char* name) {

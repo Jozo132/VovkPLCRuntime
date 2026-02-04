@@ -21,6 +21,40 @@
 
 #pragma once
 
+// ============================================================================
+// Endianness detection - detect at compile time
+// ============================================================================
+// Runtime uses native endianness for both stack and memory operations.
+// The endianness is stored in system memory byte 0 (S0) so external tools
+// can correctly interpret multi-byte values.
+// 
+// PLCRUNTIME_LITTLE_ENDIAN = 1 for little-endian (x86, ARM, WASM)
+// PLCRUNTIME_LITTLE_ENDIAN = 0 for big-endian (some PowerPC, network byte order)
+// ============================================================================
+
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    #define PLCRUNTIME_LITTLE_ENDIAN 1
+#elif defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    #define PLCRUNTIME_LITTLE_ENDIAN 0
+#elif defined(__LITTLE_ENDIAN__) || defined(__ARMEL__) || defined(__THUMBEL__) || \
+      defined(__AARCH64EL__) || defined(_MIPSEL) || defined(__MIPSEL) || defined(__MIPSEL__) || \
+      defined(_M_IX86) || defined(_M_X64) || defined(_M_IA64) || defined(_M_ARM) || \
+      defined(__i386__) || defined(__x86_64__) || defined(__amd64__) || \
+      defined(__WASM__) || defined(__wasm__) || defined(__EMSCRIPTEN__)
+    #define PLCRUNTIME_LITTLE_ENDIAN 1
+#elif defined(__BIG_ENDIAN__) || defined(__ARMEB__) || defined(__THUMBEB__) || \
+      defined(__AARCH64EB__) || defined(_MIPSEB) || defined(__MIPSEB) || defined(__MIPSEB__)
+    #define PLCRUNTIME_LITTLE_ENDIAN 0
+#else
+    // Default to little-endian (most common)
+    #define PLCRUNTIME_LITTLE_ENDIAN 1
+#endif
+
+// System memory byte 0 (S0) stores endianness flag
+// Bit 0: 1 = little-endian, 0 = big-endian
+#define PLCRUNTIME_SYSTEM_ENDIAN_BYTE 0
+#define PLCRUNTIME_SYSTEM_ENDIAN_BIT  0
+
 
 // Pointer type for the runtime memory
 typedef uint16_t  MY_PTR_t;

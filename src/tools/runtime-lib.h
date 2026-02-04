@@ -408,6 +408,9 @@ public:
 
     void formatMemory() {
         for (u32 i = 0; i < PLCRUNTIME_MAX_MEMORY_SIZE; i++) memory[i] = 0;
+        // Set endianness flag in system memory byte 0 (S0)
+        // Bit 0: 1 = little-endian, 0 = big-endian
+        memory[PLCRUNTIME_SYSTEM_ENDIAN_BYTE] = PLCRUNTIME_LITTLE_ENDIAN;
         is_first_cycle = true;
     }
 

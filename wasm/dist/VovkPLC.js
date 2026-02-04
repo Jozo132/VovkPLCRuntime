@@ -344,6 +344,14 @@ class VovkPLC_class {
     stdout_callback = console.log
     stderr_callback = console.error
 
+    /**
+     * Runtime endianness flag - read from S memory byte 0 after initialization.
+     * true = little-endian (most modern systems), false = big-endian.
+     * This matches the WASM runtime's native byte order for multi-byte values.
+     * @type { boolean }
+     */
+    isLittleEndian = true
+
     constructor(wasm_path = '') {
         this.wasm_path = wasm_path
     }
@@ -414,6 +422,13 @@ class VovkPLC_class {
             const method = required_methods[i] // @ts-ignore
             if (!this.wasm_exports[method]) throw new Error(`${method} function not found`)
         }
+
+        // Read the endianness flag from system memory byte 0 (S0)
+        // The runtime sets this during memory initialization
+        // Bit 0: 1 = little-endian, 0 = big-endian
+        const memArea = this.readMemoryArea(0, 1)
+        this.isLittleEndian = (memArea[0] & 0x01) === 1
+
         return this
     }
 

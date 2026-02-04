@@ -21,6 +21,7 @@ import { runTests as runPLCScriptTests } from './node-test/stl-tests/test_plcscr
 import { runTests as runStructTests } from './node-test/plcscript-tests/test_structs.js'
 import { runTests as runSTTests } from './node-test/st-tests/test_st.js'
 import { runTests as runReservedWordTests } from './node-test/project-tests/test_reserved_words.js'
+import { runTests as runArrayTests } from './node-test/test_arrays.js'
 import { runTests as runMemoryLeakTests } from './memory_leak_test.js'
 
 // ANSI colors
@@ -63,11 +64,6 @@ const testSuites = [
         run: runPLCScriptTests
     },
     {
-        name: 'Typed Structs Integration',
-        shortName: 'structs',
-        run: runStructTests
-    },
-    {
         name: 'Structured Text (ST) Compiler',
         shortName: 'st',
         run: runSTTests
@@ -76,6 +72,16 @@ const testSuites = [
         name: 'Reserved Word Validation',
         shortName: 'reserved',
         run: runReservedWordTests
+    },
+    {
+        name: 'Typed Structs Integration',
+        shortName: 'structs',
+        run: runStructTests
+    },
+    {
+        name: 'Array Integration Tests',
+        shortName: 'arrays',
+        run: runArrayTests
     },
     {
         name: 'Memory Leak Detection',
