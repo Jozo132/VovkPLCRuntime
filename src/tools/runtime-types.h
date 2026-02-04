@@ -22,6 +22,31 @@
 #pragma once
 
 // ============================================================================
+// Safe Mode - Enable runtime bounds checking
+// ============================================================================
+// By default, bounds checking is DISABLED for maximum performance.
+// Define PLCRUNTIME_SAFE_MODE to enable all safety checks.
+// Use safe mode during development/debugging, disable for production.
+//
+// When DISABLED: Assumes bytecode is valid and trusted (faster execution)
+// When ENABLED:  Full bounds checking on stack, memory, and program access
+// ============================================================================
+// #define PLCRUNTIME_SAFE_MODE  // Uncomment to enable safe mode
+
+// Conditional bounds check macros
+#ifdef PLCRUNTIME_SAFE_MODE
+    #define SAFE_BOUNDS_CHECK(condition, error_return) if (condition) return error_return
+    #define SAFE_BOUNDS_CHECK_VOID(condition) if (condition) return
+    #define SAFE_BOUNDS_CHECK_BOOL(condition) if (condition) return true
+    #define SAFE_BOUNDS_CHECK_ZERO(condition) if (condition) return 0
+#else
+    #define SAFE_BOUNDS_CHECK(condition, error_return) ((void)0)
+    #define SAFE_BOUNDS_CHECK_VOID(condition) ((void)0)
+    #define SAFE_BOUNDS_CHECK_BOOL(condition) ((void)0)
+    #define SAFE_BOUNDS_CHECK_ZERO(condition) ((void)0)
+#endif
+
+// ============================================================================
 // Endianness detection - detect at compile time
 // ============================================================================
 // Runtime uses native endianness for both stack and memory operations.

@@ -30,54 +30,58 @@ template <typename T> void Stack<T>::format(u32 fill_size) {
     for (u32 i = 0; i < _size; i++) _data[i] = 0;
 }
 template <typename T> bool Stack<T>::push(T value) {
+#ifdef PLCRUNTIME_SAFE_MODE
     if (_size >= MAX_STACK_SIZE) {
         Serial.println(F("Stack overflow!"));
         Serial.print(F("Trying to push ")); Serial.print(value, HEX); Serial.print(F(" to stack at index ")); Serial.println(_size);
         Serial.print(F("MAX_STACK_SIZE = ")); Serial.println(MAX_STACK_SIZE);
         return true;
     }
+#endif
     _data[_size] = value;
     _size++;
     return false;
 }
 template <typename T> T Stack<T>::pop() {
-    if (_size == 0) return T();
+    SAFE_BOUNDS_CHECK_ZERO(_size == 0);
     _size--;
     return _data[_size];
 }
 template <typename T> void Stack<T>::pop(u32 size) {
+#ifdef PLCRUNTIME_SAFE_MODE
     if (size > _size) size = _size;
+#endif
     _size -= size;
 }
 template <typename T> T Stack<T>::peek(u32 depth) {
-    if (_size == 0) return T();
-    if (depth >= _size) return T();
+    SAFE_BOUNDS_CHECK_ZERO(_size == 0);
+    SAFE_BOUNDS_CHECK_ZERO(depth >= _size);
     return _data[_size - depth - 1];
 }
 template <typename T> T Stack<T>::operator [](u32 index) {
-    if (index >= _size) return T();
+    SAFE_BOUNDS_CHECK_ZERO(index >= _size);
     return _data[index];
 }
 template <typename T> bool Stack<T>::set(u32 index, T value) {
-    if (index >= _size) return true;
+    SAFE_BOUNDS_CHECK_BOOL(index >= _size);
     _data[index] = value;
     return false;
 }
 template <typename T> bool Stack<T>::get(u32 index, T& value) {
-    if (index >= _size) return true;
+    SAFE_BOUNDS_CHECK_BOOL(index >= _size);
     value = _data[index];
     return false;
 }
 template <typename T> bool Stack<T>::setBit(u32 index, uint8_t bit, bool value) {
-    if (index >= _size) return true;
-    if (bit >= 8) return true;
+    SAFE_BOUNDS_CHECK_BOOL(index >= _size);
+    SAFE_BOUNDS_CHECK_BOOL(bit >= 8);
     if (value) _data[index] |= 1 << bit;
     else _data[index] &= ~(1 << bit);
     return false;
 }
 template <typename T> bool Stack<T>::getBit(u32 index, uint8_t bit, bool& value) {
-    if (index >= _size) return true;
-    if (bit >= 8) return true;
+    SAFE_BOUNDS_CHECK_BOOL(index >= _size);
+    SAFE_BOUNDS_CHECK_BOOL(bit >= 8);
     value = _data[index] & (1 << bit);
     return false;
 }
@@ -140,7 +144,7 @@ template <typename T> bool Stack<T>::writeArea(u32 offset, u8* value, u32 size) 
 
 // Direct memory push using memcpy - much faster for multi-byte values
 template <typename T> bool Stack<T>::pushRaw(const void* src, u32 bytes) {
-    if (_size + bytes > MAX_STACK_SIZE) return true;
+    SAFE_BOUNDS_CHECK_BOOL(_size + bytes > MAX_STACK_SIZE);
     memcpy(_data + _size, src, bytes);
     _size += bytes;
     return false;
@@ -148,7 +152,7 @@ template <typename T> bool Stack<T>::pushRaw(const void* src, u32 bytes) {
 
 // Direct memory pop using memcpy - much faster for multi-byte values
 template <typename T> bool Stack<T>::popRaw(void* dest, u32 bytes) {
-    if (bytes > _size) return true;
+    SAFE_BOUNDS_CHECK_BOOL(bytes > _size);
     _size -= bytes;
     memcpy(dest, _data + _size, bytes);
     return false;
@@ -156,7 +160,7 @@ template <typename T> bool Stack<T>::popRaw(void* dest, u32 bytes) {
 
 // Direct memory peek using memcpy - much faster for multi-byte values
 template <typename T> bool Stack<T>::peekRaw(void* dest, u32 bytes) const {
-    if (bytes > _size) return true;
+    SAFE_BOUNDS_CHECK_BOOL(bytes > _size);
     memcpy(dest, _data + _size - bytes, bytes);
     return false;
 }

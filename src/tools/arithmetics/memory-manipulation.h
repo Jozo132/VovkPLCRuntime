@@ -125,8 +125,7 @@ namespace PLCMethods {
 
     // Convert value from one type to another ()
     RuntimeError CVT(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
-        u32 size = 2;
-        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        SAFE_BOUNDS_CHECK(index + 2 > prog_size, PROGRAM_POINTER_OUT_OF_BOUNDS);
         u8 from_type = 0;
         u8 to_type = 0;
         extract_status = ProgramExtract.type_u8(program, prog_size, index, &from_type);
@@ -357,8 +356,7 @@ namespace PLCMethods {
 
     // Pop the pointer from the stack and push the value from the memory to the stack
     RuntimeError LOAD(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
-        u32 size = 1;
-        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        SAFE_BOUNDS_CHECK(index + 1 > prog_size, PROGRAM_POINTER_OUT_OF_BOUNDS);
         u8 data_type = 0;
         extract_status = ProgramExtract.type_u8(program, prog_size, index, &data_type);
         if (extract_status != STATUS_SUCCESS) return extract_status;
@@ -368,8 +366,7 @@ namespace PLCMethods {
 
     // (1.) Pop the value from the stack, (2.) pop the pointer from the stack, (3.) put the value to the memory
     RuntimeError MOVE(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
-        u32 size = 1;
-        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        SAFE_BOUNDS_CHECK(index + 1 > prog_size, PROGRAM_POINTER_OUT_OF_BOUNDS);
         u8 data_type = 0;
         extract_status = ProgramExtract.type_u8(program, prog_size, index, &data_type);
         if (extract_status != STATUS_SUCCESS) return extract_status;
@@ -379,8 +376,7 @@ namespace PLCMethods {
 
     // (1.) Pop the value from the stack, (2.) pop the pointer from the stack, (3.) put the value to the memory, (4.) push the value back to the stack
     RuntimeError MOVE_COPY(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
-        u32 size = 1;
-        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        SAFE_BOUNDS_CHECK(index + 1 > prog_size, PROGRAM_POINTER_OUT_OF_BOUNDS);
         u8 data_type = 0;
         extract_status = ProgramExtract.type_u8(program, prog_size, index, &data_type);
         if (extract_status != STATUS_SUCCESS) return extract_status;
@@ -408,8 +404,7 @@ namespace PLCMethods {
     // Load value from memory to stack using immediate address
     // Both memory and stack use native endianness
     RuntimeError LOAD_FROM(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
-        u32 size = 1 + sizeof(MY_PTR_t);
-        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        SAFE_BOUNDS_CHECK(index + 1 + sizeof(MY_PTR_t) > prog_size, PROGRAM_POINTER_OUT_OF_BOUNDS);
         u8 data_type = 0;
         extract_status = ProgramExtract.type_u8(program, prog_size, index, &data_type);
         if (extract_status != STATUS_SUCCESS) return extract_status;
@@ -473,8 +468,7 @@ namespace PLCMethods {
     // Move value from stack to memory using immediate address
     // Both stack and memory use native endianness
     RuntimeError MOVE_TO(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
-        u32 size = 1 + sizeof(MY_PTR_t);
-        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        SAFE_BOUNDS_CHECK(index + 1 + sizeof(MY_PTR_t) > prog_size, PROGRAM_POINTER_OUT_OF_BOUNDS);
         u8 data_type = 0;
         extract_status = ProgramExtract.type_u8(program, prog_size, index, &data_type);
         if (extract_status != STATUS_SUCCESS) return extract_status;
@@ -551,8 +545,7 @@ namespace PLCMethods {
     // Increment value in memory by 1
     // Memory uses native endianness
     RuntimeError INC_MEM(u8* memory, u8* program, u32 prog_size, u32& index) {
-        u32 size = 1 + sizeof(MY_PTR_t);
-        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        SAFE_BOUNDS_CHECK(index + 1 + sizeof(MY_PTR_t) > prog_size, PROGRAM_POINTER_OUT_OF_BOUNDS);
         u8 data_type = 0;
         extract_status = ProgramExtract.type_u8(program, prog_size, index, &data_type);
         if (extract_status != STATUS_SUCCESS) return extract_status;
@@ -655,8 +648,7 @@ namespace PLCMethods {
     // Decrement value in memory by 1
     // Memory uses native endianness
     RuntimeError DEC_MEM(u8* memory, u8* program, u32 prog_size, u32& index) {
-        u32 size = 1 + sizeof(MY_PTR_t);
-        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        SAFE_BOUNDS_CHECK(index + 1 + sizeof(MY_PTR_t) > prog_size, PROGRAM_POINTER_OUT_OF_BOUNDS);
         u8 data_type = 0;
         extract_status = ProgramExtract.type_u8(program, prog_size, index, &data_type);
         if (extract_status != STATUS_SUCCESS) return extract_status;
@@ -759,8 +751,7 @@ namespace PLCMethods {
 
     // Duplicate the value on top of the stack
     RuntimeError COPY(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
-        u32 size = 1;
-        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        SAFE_BOUNDS_CHECK(index + 1 > prog_size, PROGRAM_POINTER_OUT_OF_BOUNDS);
         u8 data_type = 0;
         extract_status = ProgramExtract.type_u8(program, prog_size, index, &data_type);
         if (extract_status != STATUS_SUCCESS) return extract_status;
@@ -794,8 +785,7 @@ namespace PLCMethods {
     // Format: [ PICK, type, depth (MY_PTR_t) ]
     // Depth is in bytes from top of stack (0 = top)
     RuntimeError PICK(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
-        u32 size = 1 + MY_PTR_SIZE_BYTES;
-        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        SAFE_BOUNDS_CHECK(index + 1 + MY_PTR_SIZE_BYTES > prog_size, PROGRAM_POINTER_OUT_OF_BOUNDS);
         u8 data_type = 0;
         MY_PTR_t depth = 0;
         extract_status = ProgramExtract.type_u8(program, prog_size, index, &data_type);
@@ -881,8 +871,7 @@ namespace PLCMethods {
     // Format: [ POKE, type, depth (MY_PTR_t) ]
     // Depth is in bytes from top of stack (after accounting for source value)
     RuntimeError POKE(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
-        u32 size = 1 + MY_PTR_SIZE_BYTES;
-        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        SAFE_BOUNDS_CHECK(index + 1 + MY_PTR_SIZE_BYTES > prog_size, PROGRAM_POINTER_OUT_OF_BOUNDS);
         u8 data_type = 0;
         MY_PTR_t depth = 0;
         extract_status = ProgramExtract.type_u8(program, prog_size, index, &data_type);
@@ -979,8 +968,7 @@ namespace PLCMethods {
 
     // Swap the two values on top of the stack
     RuntimeError SWAP(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
-        u32 size = 2;
-        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        SAFE_BOUNDS_CHECK(index + 2 > prog_size, PROGRAM_POINTER_OUT_OF_BOUNDS);
         u8 type_A = 0, type_B = 0;
         RuntimeError status;
         status = ProgramExtract.type_u8(program, prog_size, index, &type_A); if (status != STATUS_SUCCESS) return status;
@@ -1068,8 +1056,7 @@ namespace PLCMethods {
 
     // Drop the value on top of the stack
     RuntimeError DROP(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
-        u32 size = 1;
-        if (index + size > prog_size) return PROGRAM_POINTER_OUT_OF_BOUNDS;
+        SAFE_BOUNDS_CHECK(index + 1 > prog_size, PROGRAM_POINTER_OUT_OF_BOUNDS);
         u8 data_type = 0;
         extract_status = ProgramExtract.type_u8(program, prog_size, index, &data_type);
         if (extract_status != STATUS_SUCCESS) return extract_status;

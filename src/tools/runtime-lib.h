@@ -1918,8 +1918,8 @@ RuntimeError VovkPLCRuntime::step(RuntimeProgram& program) { return step(program
 
 // Execute one PLC instruction at index, returns an error code (0 on success)
 RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
-    if (prog_size == 0) return EMPTY_PROGRAM;
-    if (index >= prog_size) return PROGRAM_SIZE_EXCEEDED;
+    SAFE_BOUNDS_CHECK(prog_size == 0, EMPTY_PROGRAM);
+    SAFE_BOUNDS_CHECK(index >= prog_size, PROGRAM_SIZE_EXCEEDED);
     u8 opcode = program[index];
     index++;
     switch (opcode) {

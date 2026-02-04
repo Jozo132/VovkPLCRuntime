@@ -24,7 +24,7 @@
 #define EXTRACT_TYPE_8(type)                                                                                    \
     static RuntimeError type_##type(u8* bytecode, u32 bytecode_size, u32& index, type* value) {                 \
         u32 size = sizeof(type);                                                                                \
-        if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;                                         \
+        SAFE_BOUNDS_CHECK(index + size > bytecode_size, PROGRAM_SIZE_EXCEEDED);                                 \
         *value = bytecode[index];                                                                               \
         index += size;                                                                                          \
         return STATUS_SUCCESS;                                                                                  \
@@ -33,7 +33,7 @@
 #define EXTRACT_TYPE_16(type)                                                                                   \
     static RuntimeError type_##type(u8* bytecode, u32 bytecode_size, u32& index, type* value) {                 \
         u32 size = sizeof(type);                                                                                \
-        if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;                                         \
+        SAFE_BOUNDS_CHECK(index + size > bytecode_size, PROGRAM_SIZE_EXCEEDED);                                 \
         *value = ((u16) bytecode[index] << 8) | bytecode[index + 1];                                            \
         index += size;                                                                                          \
         return STATUS_SUCCESS;                                                                                  \
@@ -42,7 +42,7 @@
 #define EXTRACT_TYPE_32(type)                                                                                                                               \
     static RuntimeError type_##type(u8* bytecode, u32 bytecode_size, u32& index, type* value) {                                                             \
         u32 size = sizeof(type);                                                                                                                            \
-        if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;                                                                                     \
+        SAFE_BOUNDS_CHECK(index + size > bytecode_size, PROGRAM_SIZE_EXCEEDED);                                                                             \
         *value = ((type) bytecode[index] << 24) | ((type) bytecode[index + 1] << 16) | ((type) bytecode[index + 2] << 8) | ((type) bytecode[index + 3]);    \
         index += size;                                                                                                                                      \
         return STATUS_SUCCESS;                                                                                                                              \
@@ -51,7 +51,7 @@
 #define EXTRACT_TYPE_32_CVT(type)                                                                                                                                 \
     static RuntimeError type_##type(u8* bytecode, u32 bytecode_size, u32& index, type* value) {                                                                   \
         u32 size = sizeof(type);                                                                                                                                  \
-        if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;                                                                                           \
+        SAFE_BOUNDS_CHECK(index + size > bytecode_size, PROGRAM_SIZE_EXCEEDED);                                                                                   \
         CVT_32(type) cvt;                                                                                                                                         \
         cvt.type_u32 = ((u32) bytecode[index] << 24) | ((u32) bytecode[index + 1] << 16) | ((u32) bytecode[index + 2] << 8) | ((u32) bytecode[index + 3]);   \
         *value = cvt.type_##type;                                                                                                                                 \
@@ -62,7 +62,7 @@
 #define EXTRACT_TYPE_64(type)                                                                                                                                     \
     static RuntimeError type_##type(u8* bytecode, u32 bytecode_size, u32& index, type* value) {                                                                   \
         u32 size = sizeof(type);                                                                                                                                  \
-        if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;                                                                                           \
+        SAFE_BOUNDS_CHECK(index + size > bytecode_size, PROGRAM_SIZE_EXCEEDED);                                                                                   \
         *value = ((type) bytecode[index] << 56) | ((type) bytecode[index + 1] << 48) | ((type) bytecode[index + 2] << 40) | ((type) bytecode[index + 3] << 32) |  \
                 ((type) bytecode[index + 4] << 24) | ((type) bytecode[index + 5] << 16) | ((type) bytecode[index + 6] << 8) | ((type) bytecode[index + 7]);       \
         index += size;                                                                                                                                            \
@@ -72,7 +72,7 @@
 #define EXTRACT_TYPE_64_CVT(type)                                                                                                                                        \
     static RuntimeError type_##type(u8* bytecode, u32 bytecode_size, u32& index, type* value) {                                                                          \
         u32 size = sizeof(type);                                                                                                                                         \
-        if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;                                                                                                  \
+        SAFE_BOUNDS_CHECK(index + size > bytecode_size, PROGRAM_SIZE_EXCEEDED);                                                                                          \
         CVT_64(type) cvt;                                                                                                                                                \
         cvt.type_u64 = ((u64) bytecode[index] << 56) | ((u64) bytecode[index + 1] << 48) | ((u64) bytecode[index + 2] << 40) | ((u64) bytecode[index + 3] << 32) |  \
                             ((u64) bytecode[index + 4] << 24) | ((u64) bytecode[index + 5] << 16) | ((u64) bytecode[index + 6] << 8) | ((u64) bytecode[index + 7]);      \
@@ -85,7 +85,7 @@ struct Extract_t {
 
     static RuntimeError type_pointer(u8* bytecode, u32 bytecode_size, u32& index, MY_PTR_t* value) {
         u32 size = sizeof(MY_PTR_t);
-        if (index + size > bytecode_size) return PROGRAM_SIZE_EXCEEDED;
+        SAFE_BOUNDS_CHECK(index + size > bytecode_size, PROGRAM_SIZE_EXCEEDED);
         // Extract big-endian bytes and convert to native (same as EXTRACT_TYPE_16)
         *value = ((MY_PTR_t) bytecode[index] << 8) | bytecode[index + 1];
         index += size;
