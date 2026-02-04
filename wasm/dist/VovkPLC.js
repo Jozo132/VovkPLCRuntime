@@ -161,6 +161,10 @@ const SUPPORT = checkSupport()
  *     project_getMemoryUsed: () => number, // Returns the used memory in bytes.
  *     project_getFlashSize: () => number, // Returns the flash size limit in bytes.
  *     project_getFlashUsed: () => number, // Returns the used flash (bytecode size) in bytes.
+ *     project_getTimerOffset: () => number, // Returns the timer area start offset in memory.
+ *     project_getTimerCount: () => number, // Returns the number of timers allocated.
+ *     project_getCounterOffset: () => number, // Returns the counter area start offset in memory.
+ *     project_getCounterCount: () => number, // Returns the number of counters allocated.
  *     project_getMemoryAreaName: (index: number) => number, // Returns a pointer to the memory area name string.
  *     project_getMemoryAreaStart: (index: number) => number, // Returns the start address of the memory area.
  *     project_getMemoryAreaEnd: (index: number) => number, // Returns the end address of the memory area.
@@ -1446,6 +1450,7 @@ class VovkPLC_class {
     /**
      * @typedef {{
      *     memory: { used: number, available: number },
+     *     memory_map: { [area: string]: [number, number] },
      *     flash: { used: number, size: number },
      *     execution: { steps: number, stackSize: number }
      * }} ProjectCompileOutput
@@ -1696,6 +1701,35 @@ class VovkPLC_class {
         const flashUsed = this.wasm_exports.project_getFlashUsed ? this.wasm_exports.project_getFlashUsed() : bytecodeLen
         const flashSize = this.wasm_exports.project_getFlashSize ? this.wasm_exports.project_getFlashSize() : 32768
 
+        // Get timer and counter configuration
+        const timerOffset = this.wasm_exports.project_getTimerOffset ? this.wasm_exports.project_getTimerOffset() : 0
+        const timerCount = this.wasm_exports.project_getTimerCount ? this.wasm_exports.project_getTimerCount() : 0
+        const counterOffset = this.wasm_exports.project_getCounterOffset ? this.wasm_exports.project_getCounterOffset() : 0
+        const counterCount = this.wasm_exports.project_getCounterCount ? this.wasm_exports.project_getCounterCount() : 0
+
+        // Build complete memory map: { [area: string]: [offset: number, size: number] }
+        /** @type {{ [area: string]: [number, number] }} */
+        const memoryMap = {}
+        const areaCount = this.wasm_exports.project_getMemoryAreaCount ? this.wasm_exports.project_getMemoryAreaCount() : 0
+        for (let i = 0; i < areaCount; i++) {
+            const namePtr = this.wasm_exports.project_getMemoryAreaName(i)
+            const start = this.wasm_exports.project_getMemoryAreaStart(i)
+            const end = this.wasm_exports.project_getMemoryAreaEnd(i)
+            const name = this.readCString(namePtr)
+            if (name) {
+                memoryMap[name] = [start, end - start + 1]
+            }
+        }
+        // Add timer and counter areas if they exist
+        if (timerCount > 0) {
+            const timerStructSize = 9 // Timer struct: 1 byte state + 4 byte preset + 4 byte elapsed
+            memoryMap['T'] = [timerOffset, timerCount * timerStructSize]
+        }
+        if (counterCount > 0) {
+            const counterStructSize = 5 // Counter struct: 1 byte state + 2 byte preset + 2 byte count
+            memoryMap['C'] = [counterOffset, counterCount * counterStructSize]
+        }
+
         // Load and run the program to get execution stats
         let steps = 0
         let stackSize = 0
@@ -1713,6 +1747,7 @@ class VovkPLC_class {
             problem: null,
             output: {
                 memory: { used: memUsed, available: memAvailable },
+                memory_map: memoryMap,
                 flash: { used: flashUsed, size: flashSize },
                 execution: { steps, stackSize },
             },

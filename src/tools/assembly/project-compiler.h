@@ -2288,8 +2288,16 @@ public:
         appendToCombinedPLCASM("|\n");
         appendToCombinedPLCASM("// +====================================================================+\n\n");
 
-        // Generate runtime configuration directive for T/C offsets
+        // Remember position after the main banner, before startup content
+        int initial_length = combined_plcasm_length;
+
+        appendToCombinedPLCASM("// |                          Initial setup                             |\n");
+        appendToCombinedPLCASM("// +--------------------------------------------------------------------+\n");
+        appendToCombinedPLCASM("u8.readBit S20.0\njmp_if_not ____SKIP_STARTUP\n\n");
+
+        // Generate runtime configuration directive for T/C offsets (inside first-cycle block)
         // Format: .runtime_config T <offset> <count> C <offset> <count>
+        // This ensures CONFIG_TC is retained on device restart
         if (timer_count > 0 || counter_count > 0) {
             appendToCombinedPLCASM("// Timer/Counter runtime configuration\n");
             appendToCombinedPLCASM(".runtime_config T ");
@@ -2303,12 +2311,6 @@ public:
             appendToCombinedPLCASM("\n\n");
         }
 
-        // Remember position after the main banner, before startup content
-        int initial_length = combined_plcasm_length;
-
-        appendToCombinedPLCASM("// |                          Initial setup                             |\n");
-        appendToCombinedPLCASM("// +--------------------------------------------------------------------+\n");
-        appendToCombinedPLCASM("u8.readBit S20.0\njmp_if_not ____SKIP_STARTUP\n\n");
         appendToCombinedPLCASM("// Write default values\n");
 
         bool has_content = false;
@@ -3556,6 +3558,23 @@ extern "C" {
 
     WASM_EXPORT u32 project_getFlashUsed() {
         return project_compiler.output_length;
+    }
+
+    // Timer and counter configuration accessors
+    WASM_EXPORT u32 project_getTimerOffset() {
+        return project_compiler.timer_offset;
+    }
+
+    WASM_EXPORT int project_getTimerCount() {
+        return project_compiler.timer_count;
+    }
+
+    WASM_EXPORT u32 project_getCounterOffset() {
+        return project_compiler.counter_offset;
+    }
+
+    WASM_EXPORT int project_getCounterCount() {
+        return project_compiler.counter_count;
     }
 
     // Get memory area info by index

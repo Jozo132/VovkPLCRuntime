@@ -43,12 +43,10 @@
     { "name": "coefficient", "type": "f32", "address": "236" }
   ],
   "memoryAreas": [
-    { "name": "K", "start": 0, "end": 31 },
+    { "name": "S", "start": 0, "end": 31 },
     { "name": "X", "start": 32, "end": 63 },
     { "name": "Y", "start": 64, "end": 95 },
-    { "name": "M", "start": 96, "end": 351 },
-    { "name": "T", "start": 352, "end": 415 },
-    { "name": "C", "start": 416, "end": 447 }
+    { "name": "M", "start": 96, "end": 351 }
   ],
   "memory": { "available": 1024, "used": 240 },
   "flash": { "size": 32768, "used": 370 },
