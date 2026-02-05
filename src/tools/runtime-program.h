@@ -508,6 +508,35 @@ public:
         return offset;
     }
 
+    // String instruction with single address (STR_LEN, STR_CAP, STR_GET, STR_SET, STR_CLEAR, STR_CHAR)
+    // Format: [opcode][str_type:u8][addr:u16 little-endian]
+    static u8 push_str_single(u8* location, PLCRuntimeInstructionSet instruction, u8 str_type, MY_PTR_t str_addr) {
+        location[0] = instruction;
+        location[1] = str_type;
+        location[2] = str_addr & 0xFF;
+        location[3] = (str_addr >> 8) & 0xFF;
+        return 4;
+    }
+
+    // String instruction with two addresses (STR_CMP, STR_EQ, STR_CONCAT, STR_COPY, STR_SUBSTR, STR_FIND)
+    // Format: [opcode][dest_type:u8][src_type:u8][addr1:u16 little-endian][addr2:u16 little-endian]
+    // Supports cross-type operations (e.g., str8 dest with str16 src)
+    static u8 push_str_dual(u8* location, PLCRuntimeInstructionSet instruction, u8 dest_type, u8 src_type, MY_PTR_t addr1, MY_PTR_t addr2) {
+        location[0] = instruction;
+        location[1] = dest_type;
+        location[2] = src_type;
+        location[3] = addr1 & 0xFF;
+        location[4] = (addr1 >> 8) & 0xFF;
+        location[5] = addr2 & 0xFF;
+        location[6] = (addr2 >> 8) & 0xFF;
+        return 7;
+    }
+
+    // Convenience overload for same-type operations
+    static u8 push_str_dual(u8* location, PLCRuntimeInstructionSet instruction, u8 str_type, MY_PTR_t addr1, MY_PTR_t addr2) {
+        return push_str_dual(location, instruction, str_type, str_type, addr1, addr2);
+    }
+
     // Push FFI_CALL instruction with index, param count, addresses
     // Format: [FFI_CALL][index:u8][param_count:u8][addr1:u16]...[addrN:u16][ret_addr:u16]
     // param_addrs array should have param_count + 1 elements (params + return address)

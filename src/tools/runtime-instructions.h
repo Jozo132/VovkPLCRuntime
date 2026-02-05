@@ -149,6 +149,9 @@ enum PLCRuntimeInstructionSet {
     type_i64,           // Constant i64 integer value
     type_f32,           // Constant f32 value
     type_f64,           // Constant f64 value
+    type_char,          // Character type (u8 ASCII value)
+    type_str8,          // String8: [ u8 capacity, u8 length, char[capacity] ] - max 254 chars
+    type_str16,         // String16: [ u16 capacity, u16 length, char[capacity] ] - max 65534 chars
 
     CVT = 0x10,         // Convert value from one type to another. Example: [ u8 CVT, u8 source_type, u8 destination_type ]
     LOAD,               // Load value from memory to stack using pointer from the stack. Example: [ u8 LOAD, u8 type ]
@@ -306,6 +309,24 @@ enum PLCRuntimeInstructionSet {
     BR_READ,            // Read top of branch stack to RLO: push_u8((BR & 1) ? 1 : 0)
     BR_DROP,            // Drop top of branch stack: BR >>= 1
     BR_CLR,             // Clear branch stack: BR = 0
+
+    // String operations
+    // String memory layout:
+    //   str8:  [ u8 capacity, u8 length, char[capacity] ] - header 2 bytes, max 254 chars
+    //   str16: [ u16 capacity, u16 length, char[capacity] ] - header 4 bytes, max 65534 chars
+    // All string ops take: [ opcode, u8 str_type (type_str8 or type_str16), u16 str_addr, ... ]
+    STR_LEN = 0x94,     // Get string length -> push u16. [ STR_LEN, type, addr ]
+    STR_CAP,            // Get string capacity -> push u16. [ STR_CAP, type, addr ]
+    STR_GET,            // Get char at index (pop u16 index) -> push u8 char. [ STR_GET, type, addr ]
+    STR_SET,            // Set char at index (pop u8 char, pop u16 index). [ STR_SET, type, addr ]
+    STR_CLEAR,          // Clear string (set length to 0). [ STR_CLEAR, type, addr ]
+    STR_CMP,            // Compare two strings -> push i8 (-1, 0, 1). [ STR_CMP, type, addr1, addr2 ]
+    STR_EQ,             // Check string equality -> push bool. [ STR_EQ, type, addr1, addr2 ]
+    STR_CONCAT,         // Concat src to dest (dest = dest + src). [ STR_CONCAT, type, dest_addr, src_addr ]
+    STR_COPY,           // Copy src to dest (dest = src). [ STR_COPY, type, dest_addr, src_addr ]
+    STR_SUBSTR,         // Extract substring (pop u16 len, pop u16 start) to dest. [ STR_SUBSTR, type, dest_addr, src_addr ]
+    STR_FIND,           // Find substring -> push i16 index (-1 if not found). [ STR_FIND, type, haystack_addr, needle_addr ]
+    STR_CHAR,           // Append char (pop u8 char). [ STR_CHAR, type, addr ]
 
     // Bitwise operations
     BW_AND_X8 = 0xA0,   // Bitwise AND for 1 byte size values (x, y)

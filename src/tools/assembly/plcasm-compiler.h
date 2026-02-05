@@ -187,9 +187,13 @@ struct StringView {
     bool equals(const char* b);
     bool endsWith(const char* b);
     bool startsWith(const char* b);
+    // Case-insensitive methods
+    bool equalsNoCase(const char* b);
+    bool endsWithNoCase(const char* b);
+    bool startsWithNoCase(const char* b);
 
-    // Equality operator
-    bool operator==(const char* b) { return equals(b); }
+    // Equality operator (case-insensitive for opcodes)
+    bool operator==(const char* b) { return equalsNoCase(b); }
 };
 
 enum TokenType {
@@ -282,14 +286,42 @@ struct Token {
     bool endsWith(const char* b);
     bool startsWith(const char* b);
     bool includes(const char* b);
-    // Equality operator
-    bool operator==(const char* b) { return equals(b); }
+    // Case-insensitive methods
+    bool equalsNoCase(const char* b);
+    bool endsWithNoCase(const char* b);
+    bool startsWithNoCase(const char* b);
+    // Equality operator (case-insensitive for opcodes)
+    bool operator==(const char* b) { return equalsNoCase(b); }
 };
+
+// Helper for case-insensitive comparison
+inline char toLowerChar(char c) {
+    return (c >= 'A' && c <= 'Z') ? (c + 32) : c;
+}
 
 bool str_cmp(StringView a, StringView b) {
     if (a.length != b.length) return false;
     for (int i = 0; i < a.length; i++) {
         if (a[i] != b[i]) return false;
+    }
+    return true;
+}
+
+// Case-insensitive string comparison
+bool str_cmp_nocase(StringView a, const char* b) {
+    int b_length = string_len(b);
+    if (a.length != b_length) return false;
+    for (int i = 0; i < a.length; i++) {
+        if (toLowerChar(a[i]) != toLowerChar(b[i])) return false;
+    }
+    return true;
+}
+
+bool str_cmp_nocase(Token a, const char* b) {
+    int b_length = string_len(b);
+    if (a.length != b_length) return false;
+    for (int i = 0; i < a.length; i++) {
+        if (toLowerChar(a[i]) != toLowerChar(b[i])) return false;
     }
     return true;
 }
@@ -419,6 +451,41 @@ bool _startsWith(Token a, const char* b) {
     return true;
 }
 
+bool _endsWith_nocase(StringView a, const char* b) {
+    int b_length = string_len(b);
+    if (a.length < b_length) return false;
+    for (int i = 0; i < b_length; i++) {
+        if (toLowerChar(a[a.length - b_length + i]) != toLowerChar(b[i])) return false;
+    }
+    return true;
+}
+
+bool _endsWith_nocase(Token a, const char* b) {
+    int b_length = string_len(b);
+    if (a.length < b_length) return false;
+    for (int i = 0; i < b_length; i++) {
+        if (toLowerChar(a[a.length - b_length + i]) != toLowerChar(b[i])) return false;
+    }
+    return true;
+}
+
+bool _startsWith_nocase(StringView a, const char* b) {
+    int b_length = string_len(b);
+    if (a.length < b_length) return false;
+    for (int i = 0; i < b_length; i++) {
+        if (toLowerChar(a[i]) != toLowerChar(b[i])) return false;
+    }
+    return true;
+}
+
+bool _startsWith_nocase(Token a, const char* b) {
+    int b_length = string_len(b);
+    if (a.length < b_length) return false;
+    for (int i = 0; i < b_length; i++) {
+        if (toLowerChar(a[i]) != toLowerChar(b[i])) return false;
+    }
+    return true;
+}
 
 
 bool StringView::equals(const char* b) { return str_cmp(*this, b); }
@@ -429,6 +496,15 @@ bool Token::equals(const char* b) { return str_cmp(*this, b); }
 bool Token::endsWith(const char* b) { return _endsWith(*this, b); }
 bool Token::startsWith(const char* b) { return _startsWith(*this, b); }
 bool Token::includes(const char* b) { return str_includes(*this, b); }
+
+// Case-insensitive methods
+bool StringView::equalsNoCase(const char* b) { return str_cmp_nocase(*this, b); }
+bool StringView::endsWithNoCase(const char* b) { return _endsWith_nocase(*this, b); }
+bool StringView::startsWithNoCase(const char* b) { return _startsWith_nocase(*this, b); }
+
+bool Token::equalsNoCase(const char* b) { return str_cmp_nocase(*this, b); }
+bool Token::endsWithNoCase(const char* b) { return _endsWith_nocase(*this, b); }
+bool Token::startsWithNoCase(const char* b) { return _startsWith_nocase(*this, b); }
 
 
 bool isDigit(char c) {
@@ -674,8 +750,19 @@ const int illegal_keywords_count = sizeof(illegal_keywords) / sizeof(illegal_key
 const char lex_ignored [] = { ' ', ';', ',', '\t', '\r', '\n', '\0' };
 const char lex_dividers [] = { '(', ')', '=', '+', '-', '*', '/', '%', '&', '|', '^', '~', '!', '<', '>', '?', ':', ';', '[', ']', '{', '}', '\'', '"', '`', '\\', '\0' };
 
-const char* data_type_keywords [] = { "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "string", "bit", "byte", "ptr", "pointer", "*" };
+const char* data_type_keywords [] = { "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "string", "bit", "byte", "ptr", "pointer", "*", "char", "str8", "str16" };
 const int data_type_keywords_count = sizeof(data_type_keywords) / sizeof(data_type_keywords[0]);
+
+// Check if token is exactly a data type keyword (case-insensitive), or ends with .const/.push
+bool isPushTypedValue(Token& token) {
+    // Check for .const or .push suffix
+    if (token.endsWithNoCase(".const") || token.endsWithNoCase(".push")) return true;
+    // Check for exact match with type keyword
+    for (int i = 0; i < data_type_keywords_count; i++) {
+        if (token.equalsNoCase(data_type_keywords[i])) return true;
+    }
+    return false;
+}
 
 struct Symbol {
     StringView name;
@@ -1586,9 +1673,9 @@ public:
 
     bool typeFromToken(Token& token, u8& type) {
         if (token.type == TOKEN_KEYWORD) {
-            // "u8" = type_u8
+            // "u8" = type_u8 (case-insensitive)
             for (int i = 0; i < data_type_keywords_count; i++) {
-                if (token.startsWith(data_type_keywords[i])) {
+                if (token.startsWithNoCase(data_type_keywords[i])) {
                     switch (i) {
                         case 0:  type = type_i8; break;
                         case 1:  type = type_i16; break;
@@ -2579,6 +2666,87 @@ public:
                     if (token == "br.clr") { line.size = InstructionCompiler::push_br_clr(bytecode); _line_push; }
                 }
 
+                { // String operations: str.<op> for str8, str16.<op> for str16
+                    // Syntax: str.<op> <addr> [<addr2>]  or  str16.<op> <addr> [<addr2>]
+                    // Single-address ops: len, cap, get, set, clear, char
+                    // Dual-address ops: cmp, eq, concat, copy, substr, find
+                    // Cross-type ops: str.concat16, str.copy16, str16.concat8, str16.copy8, etc.
+                    
+                    PLCRuntimeInstructionSet str_op = (PLCRuntimeInstructionSet)0;
+                    u8 dest_type = 0;
+                    u8 src_type = 0;
+                    bool is_str_single = false;
+                    bool is_str_dual = false;
+                    
+                    // str8 operations (str.*)
+                    if (token == "str.len") { str_op = STR_LEN; dest_type = type_str8; is_str_single = true; }
+                    else if (token == "str.cap") { str_op = STR_CAP; dest_type = type_str8; is_str_single = true; }
+                    else if (token == "str.get") { str_op = STR_GET; dest_type = type_str8; is_str_single = true; }
+                    else if (token == "str.set") { str_op = STR_SET; dest_type = type_str8; is_str_single = true; }
+                    else if (token == "str.clear") { str_op = STR_CLEAR; dest_type = type_str8; is_str_single = true; }
+                    else if (token == "str.char") { str_op = STR_CHAR; dest_type = type_str8; is_str_single = true; }
+                    // str8 same-type dual ops
+                    else if (token == "str.cmp") { str_op = STR_CMP; dest_type = type_str8; src_type = type_str8; is_str_dual = true; }
+                    else if (token == "str.eq") { str_op = STR_EQ; dest_type = type_str8; src_type = type_str8; is_str_dual = true; }
+                    else if (token == "str.concat") { str_op = STR_CONCAT; dest_type = type_str8; src_type = type_str8; is_str_dual = true; }
+                    else if (token == "str.copy") { str_op = STR_COPY; dest_type = type_str8; src_type = type_str8; is_str_dual = true; }
+                    else if (token == "str.substr") { str_op = STR_SUBSTR; dest_type = type_str8; src_type = type_str8; is_str_dual = true; }
+                    else if (token == "str.find") { str_op = STR_FIND; dest_type = type_str8; src_type = type_str8; is_str_dual = true; }
+                    // str8 cross-type ops (str8 dest, str16 src)
+                    else if (token == "str.cmp16") { str_op = STR_CMP; dest_type = type_str8; src_type = type_str16; is_str_dual = true; }
+                    else if (token == "str.eq16") { str_op = STR_EQ; dest_type = type_str8; src_type = type_str16; is_str_dual = true; }
+                    else if (token == "str.concat16") { str_op = STR_CONCAT; dest_type = type_str8; src_type = type_str16; is_str_dual = true; }
+                    else if (token == "str.copy16") { str_op = STR_COPY; dest_type = type_str8; src_type = type_str16; is_str_dual = true; }
+                    else if (token == "str.substr16") { str_op = STR_SUBSTR; dest_type = type_str8; src_type = type_str16; is_str_dual = true; }
+                    else if (token == "str.find16") { str_op = STR_FIND; dest_type = type_str8; src_type = type_str16; is_str_dual = true; }
+                    // str16 operations (str16.*)
+                    else if (token == "str16.len") { str_op = STR_LEN; dest_type = type_str16; is_str_single = true; }
+                    else if (token == "str16.cap") { str_op = STR_CAP; dest_type = type_str16; is_str_single = true; }
+                    else if (token == "str16.get") { str_op = STR_GET; dest_type = type_str16; is_str_single = true; }
+                    else if (token == "str16.set") { str_op = STR_SET; dest_type = type_str16; is_str_single = true; }
+                    else if (token == "str16.clear") { str_op = STR_CLEAR; dest_type = type_str16; is_str_single = true; }
+                    else if (token == "str16.char") { str_op = STR_CHAR; dest_type = type_str16; is_str_single = true; }
+                    // str16 same-type dual ops
+                    else if (token == "str16.cmp") { str_op = STR_CMP; dest_type = type_str16; src_type = type_str16; is_str_dual = true; }
+                    else if (token == "str16.eq") { str_op = STR_EQ; dest_type = type_str16; src_type = type_str16; is_str_dual = true; }
+                    else if (token == "str16.concat") { str_op = STR_CONCAT; dest_type = type_str16; src_type = type_str16; is_str_dual = true; }
+                    else if (token == "str16.copy") { str_op = STR_COPY; dest_type = type_str16; src_type = type_str16; is_str_dual = true; }
+                    else if (token == "str16.substr") { str_op = STR_SUBSTR; dest_type = type_str16; src_type = type_str16; is_str_dual = true; }
+                    else if (token == "str16.find") { str_op = STR_FIND; dest_type = type_str16; src_type = type_str16; is_str_dual = true; }
+                    // str16 cross-type ops (str16 dest, str8 src)
+                    else if (token == "str16.cmp8") { str_op = STR_CMP; dest_type = type_str16; src_type = type_str8; is_str_dual = true; }
+                    else if (token == "str16.eq8") { str_op = STR_EQ; dest_type = type_str16; src_type = type_str8; is_str_dual = true; }
+                    else if (token == "str16.concat8") { str_op = STR_CONCAT; dest_type = type_str16; src_type = type_str8; is_str_dual = true; }
+                    else if (token == "str16.copy8") { str_op = STR_COPY; dest_type = type_str16; src_type = type_str8; is_str_dual = true; }
+                    else if (token == "str16.substr8") { str_op = STR_SUBSTR; dest_type = type_str16; src_type = type_str8; is_str_dual = true; }
+                    else if (token == "str16.find8") { str_op = STR_FIND; dest_type = type_str16; src_type = type_str8; is_str_dual = true; }
+                    
+                    if (is_str_single || is_str_dual) {
+                        // Parse first address
+                        if (!hasNext) { if (buildError(token, "string operation requires address")) return true; }
+                        Token& addr1_tok = tokens[++i];
+                        int addr1 = 0;
+                        if (addressFromToken(addr1_tok, addr1)) {
+                            if (buildError(addr1_tok, "invalid address")) return true;
+                        }
+                        
+                        if (is_str_single) {
+                            line.size = InstructionCompiler::push_str_single(bytecode, str_op, dest_type, (MY_PTR_t)addr1);
+                            _line_push;
+                        } else {
+                            // Parse second address for dual-address operations
+                            if (i + 1 >= token_count) { if (buildError(addr1_tok, "string operation requires second address")) return true; }
+                            Token& addr2_tok = tokens[++i];
+                            int addr2 = 0;
+                            if (addressFromToken(addr2_tok, addr2)) {
+                                if (buildError(addr2_tok, "invalid second address")) return true;
+                            }
+                            line.size = InstructionCompiler::push_str_dual(bytecode, str_op, dest_type, src_type, (MY_PTR_t)addr1, (MY_PTR_t)addr2);
+                            _line_push;
+                        }
+                    }
+                }
+
                 { // Bitwise operations (bw.and.x8, bw.or.x16, bw.xor.x32, bw.not.x64, bw.shl.x8, bw.shr.x16, etc.)
                     if (token == "bw.and.x8") { line.size = InstructionCompiler::push(bytecode, BW_AND_X8); _line_push; }
                     if (token == "bw.and.x16") { line.size = InstructionCompiler::push(bytecode, BW_AND_X16); _line_push; }
@@ -2614,9 +2782,9 @@ public:
 
                             // Stack operations
                             PLCRuntimeInstructionSet stack_bit_task = (PLCRuntimeInstructionSet) 0;
-                            if (!stack_bit_task && token.endsWith(".get")) stack_bit_task = GET_X8_B0; // READ BIT FROM BYTE
-                            if (!stack_bit_task && token.endsWith(".set")) stack_bit_task = SET_X8_B0; // SET BIT IN BYTE
-                            if (!stack_bit_task && token.endsWith(".rset")) stack_bit_task = RSET_X8_B0; // RESET BIT IN BYTE
+                            if (!stack_bit_task && token.endsWithNoCase(".get")) stack_bit_task = GET_X8_B0; // READ BIT FROM BYTE
+                            if (!stack_bit_task && token.endsWithNoCase(".set")) stack_bit_task = SET_X8_B0; // SET BIT IN BYTE
+                            if (!stack_bit_task && token.endsWithNoCase(".rset")) stack_bit_task = RSET_X8_B0; // RESET BIT IN BYTE
                             if (stack_bit_task) {
                                 if (e_int) {
                                     bool rewind = false;
@@ -2636,18 +2804,18 @@ public:
 
                             // Edge detection
                             PLCRuntimeInstructionSet edge_task = (PLCRuntimeInstructionSet) 0;
-                            if (token.endsWith(".readBitDU")) edge_task = READ_BIT_DU;
-                            else if (token.endsWith(".readBitDD")) edge_task = READ_BIT_DD;
-                            else if (token.endsWith(".readBitInvDU")) edge_task = READ_BIT_INV_DU;
-                            else if (token.endsWith(".readBitInvDD")) edge_task = READ_BIT_INV_DD;
-                            else if (token.endsWith(".writeBitDU")) edge_task = WRITE_BIT_DU;
-                            else if (token.endsWith(".writeBitDD")) edge_task = WRITE_BIT_DD;
-                            else if (token.endsWith(".writeBitInvDU")) edge_task = WRITE_BIT_INV_DU;
-                            else if (token.endsWith(".writeBitInvDD")) edge_task = WRITE_BIT_INV_DD;
-                            else if (token.endsWith(".writeBitOnDU")) edge_task = WRITE_SET_DU;
-                            else if (token.endsWith(".writeBitOnDD")) edge_task = WRITE_SET_DD;
-                            else if (token.endsWith(".writeBitOffDU")) edge_task = WRITE_RSET_DU;
-                            else if (token.endsWith(".writeBitOffDD")) edge_task = WRITE_RSET_DD;
+                            if (token.endsWithNoCase(".readBitDU")) edge_task = READ_BIT_DU;
+                            else if (token.endsWithNoCase(".readBitDD")) edge_task = READ_BIT_DD;
+                            else if (token.endsWithNoCase(".readBitInvDU")) edge_task = READ_BIT_INV_DU;
+                            else if (token.endsWithNoCase(".readBitInvDD")) edge_task = READ_BIT_INV_DD;
+                            else if (token.endsWithNoCase(".writeBitDU")) edge_task = WRITE_BIT_DU;
+                            else if (token.endsWithNoCase(".writeBitDD")) edge_task = WRITE_BIT_DD;
+                            else if (token.endsWithNoCase(".writeBitInvDU")) edge_task = WRITE_BIT_INV_DU;
+                            else if (token.endsWithNoCase(".writeBitInvDD")) edge_task = WRITE_BIT_INV_DD;
+                            else if (token.endsWithNoCase(".writeBitOnDU")) edge_task = WRITE_SET_DU;
+                            else if (token.endsWithNoCase(".writeBitOnDD")) edge_task = WRITE_SET_DD;
+                            else if (token.endsWithNoCase(".writeBitOffDU")) edge_task = WRITE_RSET_DU;
+                            else if (token.endsWithNoCase(".writeBitOffDD")) edge_task = WRITE_RSET_DD;
 
                             if (edge_task) {
                                 int addr1 = 0, bit1 = 0;
@@ -2672,8 +2840,8 @@ public:
 
                                 line.size = InstructionCompiler::push_InstructionWithTwoPointers(bytecode, edge_task, addr1, bit1, addr2, bit2);
                                 _line_push;
-                            } else if (token.endsWith(".du") || token.endsWith(".dd") || token.endsWith(".dc")) {
-                                PLCRuntimeInstructionSet stack_edge_task = token.endsWith(".du") ? STACK_DU : (token.endsWith(".dd") ? STACK_DD : STACK_DC);
+                            } else if (token.endsWithNoCase(".du") || token.endsWithNoCase(".dd") || token.endsWithNoCase(".dc")) {
+                                PLCRuntimeInstructionSet stack_edge_task = token.endsWithNoCase(".du") ? STACK_DU : (token.endsWithNoCase(".dd") ? STACK_DD : STACK_DC);
                                 int addr_state = 0, bit_state = 0;
                                 // Expect [State] for static linking
                                 bool has_state_addr = false;
@@ -2725,7 +2893,8 @@ public:
                 { // Handle data type operations
                     if (data_type) {
                         PLCRuntimeInstructionSet type = (PLCRuntimeInstructionSet) data_type;
-                        if (hasNext && token.endsWith(".const")) {
+                        // Support: u8.const 5, u8.push 5, u8 5 (all case-insensitive)
+                        if (hasNext && isPushTypedValue(token)) {
                             if (type == type_pointer) {
                                 int address_value = 0;
                                 bool e_addr = addressFromToken(token_p1, address_value);
@@ -2832,7 +3001,7 @@ public:
                             Serial.print(F("Error: unknown data type ")); token.print(); Serial.print(F(" at ")); Serial.print(token.line); Serial.print(F(":")); Serial.println(token.column);
                             if (buildErrorUnknownToken(token)) return true; continue;
                         }
-                        if (hasNext && token.endsWith(".load_from")) {
+                        if (hasNext && token.endsWithNoCase(".load_from")) {
                             int address_value = 0;
                             bool e_addr = addressFromToken(token_p1, address_value);
                             if (e_addr) {
@@ -2842,7 +3011,7 @@ public:
                             }
                             i++; line.size = InstructionCompiler::push_load_from(bytecode, type, address_value); _line_push;
                         }
-                        if (hasNext && token.endsWith(".move_to")) {
+                        if (hasNext && token.endsWithNoCase(".move_to")) {
                             int address_value = 0;
                             bool e_addr = addressFromToken(token_p1, address_value);
                             if (e_addr) {
@@ -2852,7 +3021,7 @@ public:
                             }
                             i++; line.size = InstructionCompiler::push_move_to(bytecode, type, address_value); _line_push;
                         }
-                        if (hasNext && token.endsWith(".inc")) {
+                        if (hasNext && token.endsWithNoCase(".inc")) {
                             int address_value = 0;
                             bool e_addr = addressFromToken(token_p1, address_value);
                             if (e_addr) {
@@ -2862,7 +3031,7 @@ public:
                             }
                             i++; line.size = InstructionCompiler::push_inc(bytecode, type, address_value); _line_push;
                         }
-                        if (hasNext && token.endsWith(".dec")) {
+                        if (hasNext && token.endsWithNoCase(".dec")) {
                             int address_value = 0;
                             bool e_addr = addressFromToken(token_p1, address_value);
                             if (e_addr) {
@@ -2872,16 +3041,16 @@ public:
                             }
                             i++; line.size = InstructionCompiler::push_dec(bytecode, type, address_value); _line_push;
                         }
-                        // if (hasNext && token.endsWith(".load")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::pushGET(bytecode, value_int, type); _line_push; }
-                        // if (hasNext && token.endsWith(".store")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::pushPUT(bytecode, value_int, type); _line_push; }
-                        if (hasNext && token.endsWith(".load")) { line.size = InstructionCompiler::push_load(bytecode, type); _line_push; }
-                        if (hasNext && token.endsWith(".move")) { line.size = InstructionCompiler::push_move(bytecode, type); _line_push; }
-                        if (hasNext && token.endsWith(".move_copy")) { line.size = InstructionCompiler::push_move_copy(bytecode, type); _line_push; }
-                        if (hasNext && token.endsWith(".copy")) { line.size = InstructionCompiler::push_copy(bytecode, type); _line_push; }
-                        // if (hasNext && token.endsWith(".swap")) { line.size = InstructionCompiler::push_swap(bytecode, type); _line_push; }
-                        if (hasNext && token.endsWith(".drop")) { line.size = InstructionCompiler::push_drop(bytecode, type); _line_push; }
+                        // if (hasNext && token.endsWithNoCase(".load")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::pushGET(bytecode, value_int, type); _line_push; }
+                        // if (hasNext && token.endsWithNoCase(".store")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::pushPUT(bytecode, value_int, type); _line_push; }
+                        if (hasNext && token.endsWithNoCase(".load")) { line.size = InstructionCompiler::push_load(bytecode, type); _line_push; }
+                        if (hasNext && token.endsWithNoCase(".move")) { line.size = InstructionCompiler::push_move(bytecode, type); _line_push; }
+                        if (hasNext && token.endsWithNoCase(".move_copy")) { line.size = InstructionCompiler::push_move_copy(bytecode, type); _line_push; }
+                        if (hasNext && token.endsWithNoCase(".copy")) { line.size = InstructionCompiler::push_copy(bytecode, type); _line_push; }
+                        // if (hasNext && token.endsWithNoCase(".swap")) { line.size = InstructionCompiler::push_swap(bytecode, type); _line_push; }
+                        if (hasNext && token.endsWithNoCase(".drop")) { line.size = InstructionCompiler::push_drop(bytecode, type); _line_push; }
                         // Pick value from stack at byte depth
-                        if (hasNext && token.endsWith(".pick")) {
+                        if (hasNext && token.endsWithNoCase(".pick")) {
                             int depth_value = 0;
                             bool e_int = intFromToken(token_p1, depth_value);
                             if (e_int) {
@@ -2892,7 +3061,7 @@ public:
                             i++; line.size = InstructionCompiler::push_pick(bytecode, type, (MY_PTR_t)depth_value); _line_push;
                         }
                         // Poke (write) top value to stack at byte depth
-                        if (hasNext && token.endsWith(".poke")) {
+                        if (hasNext && token.endsWithNoCase(".poke")) {
                             int depth_value = 0;
                             bool e_int = intFromToken(token_p1, depth_value);
                             if (e_int) {
@@ -2902,24 +3071,24 @@ public:
                             }
                             i++; line.size = InstructionCompiler::push_poke(bytecode, type, (MY_PTR_t)depth_value); _line_push;
                         }
-                        if (token.endsWith(".cmp_lt")) { line.size = InstructionCompiler::push(bytecode, CMP_LT, type); _line_push; }
-                        if (token.endsWith(".cmp_gt")) { line.size = InstructionCompiler::push(bytecode, CMP_GT, type); _line_push; }
-                        if (token.endsWith(".cmp_eq")) { line.size = InstructionCompiler::push(bytecode, CMP_EQ, type); _line_push; }
-                        if (token.endsWith(".cmp_neq")) { line.size = InstructionCompiler::push(bytecode, CMP_NEQ, type); _line_push; }
-                        if (token.endsWith(".cmp_gte")) { line.size = InstructionCompiler::push(bytecode, CMP_GTE, type); _line_push; }
-                        if (token.endsWith(".cmp_lte")) { line.size = InstructionCompiler::push(bytecode, CMP_LTE, type); _line_push; }
+                        if (token.endsWithNoCase(".cmp_lt")) { line.size = InstructionCompiler::push(bytecode, CMP_LT, type); _line_push; }
+                        if (token.endsWithNoCase(".cmp_gt")) { line.size = InstructionCompiler::push(bytecode, CMP_GT, type); _line_push; }
+                        if (token.endsWithNoCase(".cmp_eq")) { line.size = InstructionCompiler::push(bytecode, CMP_EQ, type); _line_push; }
+                        if (token.endsWithNoCase(".cmp_neq")) { line.size = InstructionCompiler::push(bytecode, CMP_NEQ, type); _line_push; }
+                        if (token.endsWithNoCase(".cmp_gte")) { line.size = InstructionCompiler::push(bytecode, CMP_GTE, type); _line_push; }
+                        if (token.endsWithNoCase(".cmp_lte")) { line.size = InstructionCompiler::push(bytecode, CMP_LTE, type); _line_push; }
 
-                        if (token.endsWith(".add")) { line.size = InstructionCompiler::push(bytecode, ADD, type); _line_push; }
-                        if (token.endsWith(".sub")) { line.size = InstructionCompiler::push(bytecode, SUB, type); _line_push; }
-                        if (token.endsWith(".mul")) { line.size = InstructionCompiler::push(bytecode, MUL, type); _line_push; }
-                        if (token.endsWith(".div")) { line.size = InstructionCompiler::push(bytecode, DIV, type); _line_push; }
-                        if (token.endsWith(".mod")) { line.size = InstructionCompiler::push(bytecode, MOD, type); _line_push; }
-                        if (token.endsWith(".pow")) { line.size = InstructionCompiler::push(bytecode, POW, type); _line_push; }
-                        if (token.endsWith(".sqrt")) { line.size = InstructionCompiler::push(bytecode, SQRT, type); _line_push; }
-                        if (token.endsWith(".neg")) { line.size = InstructionCompiler::push(bytecode, NEG, type); _line_push; }
-                        if (token.endsWith(".abs")) { line.size = InstructionCompiler::push(bytecode, ABS, type); _line_push; }
-                        if (token.endsWith(".sin")) { line.size = InstructionCompiler::push(bytecode, SIN, type); _line_push; }
-                        if (token.endsWith(".cos")) { line.size = InstructionCompiler::push(bytecode, COS, type); _line_push; }
+                        if (token.endsWithNoCase(".add")) { line.size = InstructionCompiler::push(bytecode, ADD, type); _line_push; }
+                        if (token.endsWithNoCase(".sub")) { line.size = InstructionCompiler::push(bytecode, SUB, type); _line_push; }
+                        if (token.endsWithNoCase(".mul")) { line.size = InstructionCompiler::push(bytecode, MUL, type); _line_push; }
+                        if (token.endsWithNoCase(".div")) { line.size = InstructionCompiler::push(bytecode, DIV, type); _line_push; }
+                        if (token.endsWithNoCase(".mod")) { line.size = InstructionCompiler::push(bytecode, MOD, type); _line_push; }
+                        if (token.endsWithNoCase(".pow")) { line.size = InstructionCompiler::push(bytecode, POW, type); _line_push; }
+                        if (token.endsWithNoCase(".sqrt")) { line.size = InstructionCompiler::push(bytecode, SQRT, type); _line_push; }
+                        if (token.endsWithNoCase(".neg")) { line.size = InstructionCompiler::push(bytecode, NEG, type); _line_push; }
+                        if (token.endsWithNoCase(".abs")) { line.size = InstructionCompiler::push(bytecode, ABS, type); _line_push; }
+                        if (token.endsWithNoCase(".sin")) { line.size = InstructionCompiler::push(bytecode, SIN, type); _line_push; }
+                        if (token.endsWithNoCase(".cos")) { line.size = InstructionCompiler::push(bytecode, COS, type); _line_push; }
                     }
                 }
             }

@@ -98,6 +98,9 @@ bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
         case type_i64:
         case type_f64:
 #endif
+        case type_char:
+        case type_str8:
+        case type_str16:
         case CVT:
         case LOAD:
         case MOVE:
@@ -262,6 +265,18 @@ bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
         case BW_LSHIFT_X64:
         case BW_RSHIFT_X64:
 #endif
+        case STR_LEN:
+        case STR_CAP:
+        case STR_GET:
+        case STR_SET:
+        case STR_CLEAR:
+        case STR_CMP:
+        case STR_EQ:
+        case STR_CONCAT:
+        case STR_COPY:
+        case STR_SUBSTR:
+        case STR_FIND:
+        case STR_CHAR:
         case LOGIC_AND:
         case LOGIC_OR:
         case LOGIC_XOR:
@@ -324,6 +339,9 @@ const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
         case type_i64: return F("PUSH i64");
         case type_f64: return F("PUSH f64");
 #endif
+        case type_char: return F("PUSH char");
+        case type_str8: return F("PUSH str8");
+        case type_str16: return F("PUSH str16");
         case CVT: return F("CVT");
         case LOAD: return F("LOAD");
         case MOVE: return F("MOVE");
@@ -486,6 +504,18 @@ const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
         case BW_LSHIFT_X64: return F("BW_LSHIFT_X64");
         case BW_RSHIFT_X64: return F("BW_RSHIFT_X64");
 #endif
+        case STR_LEN: return F("STR_LEN");
+        case STR_CAP: return F("STR_CAP");
+        case STR_GET: return F("STR_GET");
+        case STR_SET: return F("STR_SET");
+        case STR_CLEAR: return F("STR_CLEAR");
+        case STR_CMP: return F("STR_CMP");
+        case STR_EQ: return F("STR_EQ");
+        case STR_CONCAT: return F("STR_CONCAT");
+        case STR_COPY: return F("STR_COPY");
+        case STR_SUBSTR: return F("STR_SUBSTR");
+        case STR_FIND: return F("STR_FIND");
+        case STR_CHAR: return F("STR_CHAR");
         case LOGIC_AND: return F("LOGIC_AND");
         case LOGIC_OR: return F("LOGIC_OR");
         case LOGIC_XOR: return F("LOGIC_XOR");
@@ -559,6 +589,9 @@ u8 OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
         case type_i64: return 9;
         case type_f64: return 9;
 #endif
+        case type_char: return 2;                    // opcode + char value
+        case type_str8: return 0;                    // Dynamic: string literal embedding (handled specially)
+        case type_str16: return 0;                   // Dynamic: string literal embedding (handled specially)
         case CVT: return 3;
         case LOAD: return 2;
         case MOVE: return 2;
@@ -726,6 +759,23 @@ u8 OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
         case BW_LSHIFT_X64:
         case BW_RSHIFT_X64: return 1;
 #endif
+
+        // String operations: [ opcode, u8 str_type, u16 str_addr, ... ]
+        case STR_LEN:       // [ STR_LEN, type, addr ] -> push u16
+        case STR_CAP:       // [ STR_CAP, type, addr ] -> push u16
+        case STR_GET:       // [ STR_GET, type, addr ] - pop index, push char
+        case STR_SET:       // [ STR_SET, type, addr ] - pop char, pop index
+        case STR_CLEAR:     // [ STR_CLEAR, type, addr ]
+        case STR_CHAR:      // [ STR_CHAR, type, addr ] - pop char, append
+            return 1 + 1 + MY_PTR_SIZE_BYTES;  // opcode + type + addr = 4 bytes
+        case STR_CMP:       // [ STR_CMP, type, addr1, addr2 ] -> push i8
+        case STR_EQ:        // [ STR_EQ, type, addr1, addr2 ] -> push bool
+        case STR_CONCAT:    // [ STR_CONCAT, type, dest, src ]
+        case STR_COPY:      // [ STR_COPY, type, dest, src ]
+        case STR_FIND:      // [ STR_FIND, type, haystack, needle ] -> push i16
+        case STR_SUBSTR:    // [ STR_SUBSTR, type, dest, src ] - pop len, pop start
+            return 1 + 1 + MY_PTR_SIZE_BYTES + MY_PTR_SIZE_BYTES;  // opcode + type + addr1 + addr2 = 6 bytes
+
         case LOGIC_AND:
         case LOGIC_OR:
         case LOGIC_XOR:

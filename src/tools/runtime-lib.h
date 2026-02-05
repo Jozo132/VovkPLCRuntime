@@ -2240,6 +2240,20 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
             return STATUS_SUCCESS;
         }
 
+        // String instructions (0x94-0x9F)
+        case STR_LEN: return PLCMethods::handle_STR_LEN(this->stack, this->memory, program, prog_size, index);
+        case STR_CAP: return PLCMethods::handle_STR_CAP(this->stack, this->memory, program, prog_size, index);
+        case STR_GET: return PLCMethods::handle_STR_GET(this->stack, this->memory, program, prog_size, index);
+        case STR_SET: return PLCMethods::handle_STR_SET(this->stack, this->memory, program, prog_size, index);
+        case STR_CLEAR: return PLCMethods::handle_STR_CLEAR(this->stack, this->memory, program, prog_size, index);
+        case STR_CMP: return PLCMethods::handle_STR_CMP(this->stack, this->memory, program, prog_size, index);
+        case STR_EQ: return PLCMethods::handle_STR_EQ(this->stack, this->memory, program, prog_size, index);
+        case STR_CONCAT: return PLCMethods::handle_STR_CONCAT(this->stack, this->memory, program, prog_size, index);
+        case STR_COPY: return PLCMethods::handle_STR_COPY(this->stack, this->memory, program, prog_size, index);
+        case STR_SUBSTR: return PLCMethods::handle_STR_SUBSTR(this->stack, this->memory, program, prog_size, index);
+        case STR_FIND: return PLCMethods::handle_STR_FIND(this->stack, this->memory, program, prog_size, index);
+        case STR_CHAR: return PLCMethods::handle_STR_CHAR(this->stack, this->memory, program, prog_size, index);
+
         case BW_AND_X8: return PLCMethods::handle_BW_AND_X8(this->stack);
         case BW_AND_X16: return PLCMethods::handle_BW_AND_X16(this->stack);
         case BW_AND_X32: return PLCMethods::handle_BW_AND_X32(this->stack);

@@ -459,6 +459,11 @@ class VovkPLC_class {
         return this
     }
 
+    /** @type { typeof this.initialize } */
+    init = (...args) => this.initialize(...args)
+    /** @type { typeof this.initialize } */
+    create = (...args) => this.initialize(...args)
+
     /**
      * @typedef {{
      *     type: 'error' | 'warning' | 'info',

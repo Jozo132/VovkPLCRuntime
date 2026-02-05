@@ -41,6 +41,7 @@
 #include "methods-flow.h"
 #include "methods-timer.h"
 #include "methods-counter.h"
+#include "methods-string.h"
 
 namespace PLCMethods {
 
