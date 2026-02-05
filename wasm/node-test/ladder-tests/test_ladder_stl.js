@@ -152,10 +152,11 @@ function compareSTL(expected, actual) {
  * @param {Object} [options] - Options
  * @param {boolean} [options.silent] - If true, suppress console output
  * @param {boolean} [options.verbose] - If true, show verbose output
+ * @param {VovkPLC} [options.runtime] - Shared runtime instance (creates one if not provided)
  * @returns {Promise<SuiteResult>}
  */
 export async function runTests(options = {}) {
-    const { silent = false, verbose = false } = options
+    const { silent = false, verbose = false, runtime: sharedRuntime = null } = options
     const log = silent ? () => {} : console.log.bind(console)
     const wasmPath = path.resolve(__dirname, '../../dist/VovkPLC.wasm')
     
@@ -180,13 +181,14 @@ export async function runTests(options = {}) {
         }
     }
 
-    // Initialize runtime
-    const runtime = new VovkPLC(wasmPath)
-    
-    // Suppress stdout during initialization
-    runtime.stdout_callback = () => {}
-    await runtime.initialize(wasmPath, false, false)
-    runtime.readStream()
+    // Use shared runtime if provided, otherwise create one (for standalone execution)
+    let runtime = sharedRuntime
+    if (!runtime) {
+        runtime = new VovkPLC(wasmPath)
+        runtime.stdout_callback = () => {}
+        await runtime.initialize(wasmPath, false, false)
+        runtime.readStream()
+    }
     
     // Find all test files
     const testDir = __dirname

@@ -355,5 +355,9 @@ WASM_EXPORT int project_loadToRuntime() {
 }
 
 WASM_EXPORT void memoryReset() {
+    runtime.formatMemory();
+}
+
+WASM_EXPORT void resetFirstCycle() {
     runtime.resetFirstCycle();
 }

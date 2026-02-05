@@ -510,15 +510,20 @@ END_PROGRAM
  * Run all array tests
  * @param {Object} [options]
  * @param {boolean} [options.silent]
+ * @param {VovkPLC} [options.runtime] - Shared runtime instance (creates one if not provided)
  * @returns {Promise<SuiteResult>}
  */
 export async function runTests(options = {}) {
-    const { silent = false } = options
+    const { silent = false, runtime: sharedRuntime = null } = options
     const log = silent ? () => {} : console.log.bind(console)
     
-    const plc = new VovkPLC()
-    plc.stdout_callback = () => {}
-    await plc.initialize(wasmPath, false, true)
+    // Use shared runtime if provided, otherwise create one (for standalone execution)
+    let plc = sharedRuntime
+    if (!plc) {
+        plc = new VovkPLC()
+        plc.stdout_callback = () => {}
+        await plc.initialize(wasmPath, false, true)
+    }
     
     // Memory reader helper - read bytes and interpret as type
     const readMemory = (address, type) => {

@@ -267,10 +267,11 @@ const formatTestName = (filename) => {
  * @param {Object} [options] - Options
  * @param {boolean} [options.silent] - If true, suppress console output
  * @param {boolean} [options.verbose] - If true, show verbose output
+ * @param {VovkPLC} [options.runtime] - Shared runtime instance (creates one if not provided)
  * @returns {Promise<SuiteResult>}
  */
 export async function runTests(options = {}) {
-    const { silent = false, verbose: optVerbose = false } = options
+    const { silent = false, verbose: optVerbose = false, runtime: sharedRuntime = null } = options
     const log = silent ? () => {} : console.log.bind(console)
     
     /** @type {TestResult[]} */
@@ -300,8 +301,12 @@ export async function runTests(options = {}) {
         }
     }
 
-    const runtime = new VovkPLC(wasmPath)
-    await runtime.initialize(wasmPath, false, true) // silent mode
+    // Use shared runtime if provided, otherwise create one (for standalone execution)
+    let runtime = sharedRuntime
+    if (!runtime) {
+        runtime = new VovkPLC(wasmPath)
+        await runtime.initialize(wasmPath, false, true) // silent mode
+    }
 
     const samplesDir = path.join(__dirname, 'plcscript-samples')
     

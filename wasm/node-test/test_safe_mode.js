@@ -413,16 +413,21 @@ let sharedRuntimeDebug = null
  * Initialize or return shared WASM runtime instances.
  * This ensures all tests in the suite share the same instances,
  * catching any state leakage between test runs.
+ * @param {VovkPLC|null} externalRuntime - Optional external runtime for the optimized build
  */
-async function getSharedRuntimes() {
+async function getSharedRuntimes(externalRuntime = null) {
     const wasmOptimized = path.resolve(__dirname, '../dist/VovkPLC.wasm')
     const wasmDebug = path.resolve(__dirname, '../dist/VovkPLC-debug.wasm')
     
-    if (!sharedRuntimeOptimized) {
+    // Use external runtime if provided (from unit test runner), otherwise create one
+    if (externalRuntime) {
+        sharedRuntimeOptimized = externalRuntime
+    } else if (!sharedRuntimeOptimized) {
         sharedRuntimeOptimized = new VovkPLC(wasmOptimized)
         await sharedRuntimeOptimized.initialize(wasmOptimized, false, true)
     }
     
+    // Debug runtime is always created separately (different WASM)
     if (!sharedRuntimeDebug) {
         sharedRuntimeDebug = new VovkPLC(wasmDebug)
         await sharedRuntimeDebug.initialize(wasmDebug, false, true)
@@ -436,10 +441,11 @@ async function getSharedRuntimes() {
  * @param {object} options - Test options
  * @param {boolean} options.verbose - Whether to show detailed output
  * @param {boolean} options.debug - Whether to show debug output
+ * @param {VovkPLC} [options.runtime] - Shared runtime instance for optimized build
  * @returns {Promise<{name: string, passed: number, failed: number, total: number, tests: Array}>}
  */
 export async function runTests(options = {}) {
-    const { verbose = false, debug = false } = options
+    const { verbose = false, debug = false, runtime: sharedRuntime = null } = options
     
     // Check if debug WASM exists
     if (!debugWasmExists()) {
@@ -456,8 +462,8 @@ export async function runTests(options = {}) {
         }
     }
     
-    // Get shared runtime instances (ensures state persistence across all test runs)
-    const { runtimeOptimized, runtimeDebug } = await getSharedRuntimes()
+    // Get shared runtime instances (use external runtime for optimized if provided)
+    const { runtimeOptimized, runtimeDebug } = await getSharedRuntimes(sharedRuntime)
     
     const tests = []
     let passed = 0

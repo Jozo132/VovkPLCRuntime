@@ -264,6 +264,11 @@ function runProgram(runtime) {
         return {success: false, error: 'Failed to load program', stackSize: 0}
     }
 
+    // Reset memory to ensure clean state for deterministic execution
+    if (wasm.memoryReset) {
+        wasm.memoryReset()
+    }
+
     // Clear stack before running
     if (wasm.clearStack) {
         wasm.clearStack()
@@ -576,10 +581,11 @@ function compareOutputs(expected, actual) {
  * @param {Object} [options] - Options
  * @param {boolean} [options.silent] - If true, suppress console output
  * @param {boolean} [options.verbose] - If true, show verbose output
+ * @param {VovkPLC} [options.runtime] - Shared runtime instance (creates one if not provided)
  * @returns {Promise<SuiteResult>}
  */
 export async function runTests(options = {}) {
-    const { silent = false, verbose: optVerbose = false } = options
+    const { silent = false, verbose: optVerbose = false, runtime: sharedRuntime = null } = options
     const log = silent ? () => {} : console.log.bind(console)
     
     /** @type {TestResult[]} */
@@ -617,15 +623,16 @@ export async function runTests(options = {}) {
         }
     }
 
-    // Initialize runtime
-    const runtime = new VovkPLC(wasmPath)
-
-    // Suppress stdout during initialization (unless verbose)
-    if (!verboseMode) {
-        runtime.stdout_callback = () => {}
+    // Use shared runtime if provided, otherwise create one (for standalone execution)
+    let runtime = sharedRuntime
+    if (!runtime) {
+        runtime = new VovkPLC(wasmPath)
+        if (!verboseMode) {
+            runtime.stdout_callback = () => {}
+        }
+        await runtime.initialize(wasmPath, false, false)
+        runtime.readStream()
     }
-    await runtime.initialize(wasmPath, false, false)
-    runtime.readStream()
 
     // Find all test files in samples directory
     const samplesDir = path.join(__dirname, 'samples')

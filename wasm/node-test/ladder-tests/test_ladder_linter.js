@@ -200,10 +200,13 @@ const testCases = [
  * @param {Object} [options] - Options
  * @param {boolean} [options.silent] - If true, suppress console output
  * @param {boolean} [options.verbose] - If true, show verbose output
+ * @param {VovkPLC} [options.runtime] - Shared runtime instance (unused - linter requires worker)
  * @returns {Promise<SuiteResult>}
  */
 export async function runTests(options = {}) {
     const { silent = false, verbose = false } = options
+    // Note: Linter tests require a worker for async linting operations
+    // The shared runtime is not used here, but the option is accepted for consistency
     const log = silent ? () => {} : console.log.bind(console)
     
     /** @type {TestResult[]} */

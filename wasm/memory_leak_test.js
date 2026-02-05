@@ -254,17 +254,21 @@ function runMemoryTest(name, wasm, testFn) {
  * @param {Object} options
  * @param {boolean} [options.silent] - Suppress output
  * @param {boolean} [options.verbose] - Show detailed memory snapshots
+ * @param {VovkPLC} [options.runtime] - Shared runtime instance (creates one if not provided)
  * @returns {Promise<{name: string, passed: number, failed: number, total: number, tests: Array, failures: Array}>}
  */
 export async function runTests(options = {}) {
-    const { silent = false, verbose = false } = options
+    const { silent = false, verbose = false, runtime: sharedRuntime = null } = options
     silentMode = silent
     verboseMode = verbose
     log = silent ? () => {} : console.log.bind(console)
 
-    // Load WASM once and reuse - use direct instantiation for memory access
-    const runtime = new VovkPLC(wasmPath)
-    await runtime.initialize(wasmPath, false, true) // silent mode
+    // Use shared runtime if provided, otherwise create one (for standalone execution)
+    let runtime = sharedRuntime
+    if (!runtime) {
+        runtime = new VovkPLC(wasmPath)
+        await runtime.initialize(wasmPath, false, true) // silent mode
+    }
     const wasm = runtime.wasm_exports
 
     if (!wasm.get_free_memory || !wasm.get_used_memory || !wasm.get_total_memory) {

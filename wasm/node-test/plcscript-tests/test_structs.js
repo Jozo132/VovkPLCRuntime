@@ -29,15 +29,20 @@ const wasmPath = path.resolve(__dirname, '../../dist/VovkPLC.wasm');
  * Run PLCScript Struct unit tests
  * @param {Object} [options] - Options
  * @param {boolean} [options.silent] - If true, suppress console output
+ * @param {VovkPLC} [options.runtime] - Shared runtime instance (creates one if not provided)
  * @returns {Promise<SuiteResult>}
  */
 export async function runTests(options = {}) {
-    const { silent = false } = options;
+    const { silent = false, runtime: sharedRuntime = null } = options;
     const log = silent ? () => {} : console.log.bind(console);
     
-    const plc = new VovkPLC();
-    plc.stdout_callback = () => {}; // Suppress output
-    await plc.initialize(wasmPath, false, true);
+    // Use shared runtime if provided, otherwise create one (for standalone execution)
+    let plc = sharedRuntime;
+    if (!plc) {
+        plc = new VovkPLC();
+        plc.stdout_callback = () => {}; // Suppress output
+        await plc.initialize(wasmPath, false, true);
+    }
 
     /** @type {TestResult[]} */
     const testResults = [];

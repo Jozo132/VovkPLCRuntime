@@ -2,6 +2,8 @@
 // unit_test.js - Unified test runner for all VovkPLC unit tests
 //
 // This script runs all sub-tests and displays results as a tree structure.
+// All test suites share the same WASM instance for efficiency and to catch
+// any state leakage between tests.
 //
 // Usage:
 //   node wasm/unit_test.js [--short] [--debug] [--filter=<pattern>]
@@ -14,6 +16,10 @@
 //   --debug      Show full compiler debug output (implies verbose)
 //   --filter=X   Only run test suites matching pattern X (e.g., --filter=ladder)
 
+import VovkPLC from './dist/VovkPLC.js'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
 import { runTests as runLadderSTLTests } from './node-test/ladder-tests/test_ladder_stl.js'
 import { runTests as runLadderLinterTests } from './node-test/ladder-tests/test_ladder_linter.js'
 import { runTests as runProjectTests } from './node-test/project-tests/unit_test.js'
@@ -24,6 +30,9 @@ import { runTests as runReservedWordTests } from './node-test/project-tests/test
 import { runTests as runArrayTests } from './node-test/test_arrays.js'
 import { runTests as runSafeModeTests } from './node-test/test_safe_mode.js'
 import { runTests as runMemoryLeakTests } from './memory_leak_test.js'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 // ANSI colors
 const RED = '\x1b[31m'
@@ -41,6 +50,32 @@ const shortMode = args.includes('--short') || args.includes('-s')
 const verboseMode = !shortMode // verbose is default, --short disables it
 const filterArg = args.find(a => a.startsWith('--filter='))
 const filter = filterArg ? filterArg.split('=')[1].toLowerCase() : null
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Shared WASM Runtime Instance
+// ═══════════════════════════════════════════════════════════════════════════
+// All test suites share the same WASM instance to:
+// 1. Improve performance by avoiding repeated WASM compilation
+// 2. Catch any state leakage between tests (memory corruption, etc.)
+// 3. Simulate real-world usage where a single runtime handles many programs
+
+let sharedRuntime = null
+
+/**
+ * Get or create the shared VovkPLC runtime instance.
+ * This is passed to all test suites so they share the same WASM instance.
+ * When tests run standalone, they create their own instance as fallback.
+ * @returns {Promise<VovkPLC>}
+ */
+async function getSharedRuntime() {
+    if (sharedRuntime) return sharedRuntime
+    
+    const wasmPath = path.resolve(__dirname, 'dist/VovkPLC.wasm')
+    sharedRuntime = new VovkPLC(wasmPath)
+    sharedRuntime.stdout_callback = () => {} // Suppress output
+    await sharedRuntime.initialize(wasmPath, false, true)
+    return sharedRuntime
+}
 
 // Test suite definitions
 const testSuites = [
@@ -238,6 +273,9 @@ async function main() {
     console.log(`${BOLD}${CYAN}╚══════════════════════════════════════════════════════════════════╝${RESET}`)
     console.log()
     
+    // Initialize shared runtime once for all test suites
+    const runtime = await getSharedRuntime()
+    
     // Filter test suites if requested
     const suitesToRun = filter 
         ? testSuites.filter(s => s.shortName.includes(filter) || s.name.toLowerCase().includes(filter))
@@ -259,13 +297,14 @@ async function main() {
     let totalFailed = 0
     let totalTests = 0
     
-    // Run each test suite
+    // Run each test suite with the shared runtime
     for (const suite of suitesToRun) {
         process.stdout.write(`${DIM}Running ${suite.name}...${RESET}\r`)
         
         try {
+            // Pass the shared runtime to each test suite
             // verbose=true shows compiler debug output, only enabled with --debug
-            const result = await suite.run({ silent: true, verbose: debugMode })
+            const result = await suite.run({ silent: true, verbose: debugMode, runtime })
             results.push(result)
             totalPassed += result.passed
             totalFailed += result.failed
