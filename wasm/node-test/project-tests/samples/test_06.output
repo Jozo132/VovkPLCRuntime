@@ -1,9 +1,9 @@
 {
   "success": 1,
   "project": { "name": "LadderSimple", "version": "1.0" },
-  "bytecode": "FD 03 58 00 40 60 00 80 FF",
+  "bytecode": "FD 03 58 40 00 60 80 00 FF",
   "bytecodeLength": 9,
-  "checksum": 5,
+  "checksum": 68,
   "files": [
     { "path": "main", "firstBlockIndex": 0, "blockCount": 1, "executionOrder": 0 }
   ],

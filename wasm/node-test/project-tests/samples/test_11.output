@@ -1,9 +1,9 @@
 {
   "success": 1,
   "project": { "name": "MultiProgram", "version": "2.0" },
-  "bytecode": "FD 01 03 01 16 03 FF FD 02 58 00 40 60 00 80 FF",
+  "bytecode": "FD 01 03 01 16 03 FF FD 02 58 40 00 60 80 00 FF",
   "bytecodeLength": 16,
-  "checksum": 218,
+  "checksum": 155,
   "files": [
     { "path": "main", "firstBlockIndex": 0, "blockCount": 1, "executionOrder": 0 },
     { "path": "test_program_2", "firstBlockIndex": 1, "blockCount": 1, "executionOrder": 1 }

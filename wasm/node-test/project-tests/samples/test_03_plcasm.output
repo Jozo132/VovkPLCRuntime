@@ -1,9 +1,9 @@
 {
   "success": 1,
   "project": { "name": "SimpleTest", "version": "1.0" },
-  "bytecode": "FD 01 03 01 03 02 20 03 19 03 00 C0 FF",
+  "bytecode": "FD 01 03 01 03 02 20 03 19 03 C0 00 FF",
   "bytecodeLength": 13,
-  "checksum": 130,
+  "checksum": 15,
   "files": [
     { "path": "main", "firstBlockIndex": 0, "blockCount": 1, "executionOrder": 0 }
   ],

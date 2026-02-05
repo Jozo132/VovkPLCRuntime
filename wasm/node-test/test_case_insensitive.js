@@ -22,9 +22,9 @@ const testCases = [
     ['u8 shorthand', 'u8 15', '030FFF'],
     ['U8 shorthand uppercase', 'U8 15', '030FFF'],
     
-    // Different types - verify bytecode
-    ['u16 shorthand', 'u16 256', '040100FF'], // u16 256 = 0x0100
-    ['U16.CONST uppercase', 'U16.CONST 256', '040100FF'],
+    // Different types - verify bytecode (little-endian: 256 = 0x00 0x01)
+    ['u16 shorthand', 'u16 256', '040001FF'], // u16 256 = 0x0001 (little-endian)
+    ['U16.CONST uppercase', 'U16.CONST 256', '040001FF'],
     
     // Case-insensitive opcodes - NOP = 0x00
     ['NOP uppercase', 'NOP', '00FF'],

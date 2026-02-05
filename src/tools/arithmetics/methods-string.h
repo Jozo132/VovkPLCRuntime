@@ -34,7 +34,7 @@ namespace PLCMethods {
         if (str_type == type_str8) {
             return memory[addr];
         } else { // type_str16
-            return (u16)memory[addr] | ((u16)memory[addr + 1] << 8);
+            return read_u16(memory + addr);
         }
     }
 
@@ -43,7 +43,7 @@ namespace PLCMethods {
         if (str_type == type_str8) {
             return memory[addr + 1];
         } else { // type_str16
-            return (u16)memory[addr + 2] | ((u16)memory[addr + 3] << 8);
+            return read_u16(memory + addr + 2);
         }
     }
 
@@ -52,8 +52,7 @@ namespace PLCMethods {
         if (str_type == type_str8) {
             memory[addr + 1] = (u8)len;
         } else { // type_str16
-            memory[addr + 2] = (u8)(len & 0xFF);
-            memory[addr + 3] = (u8)((len >> 8) & 0xFF);
+            write_u16(memory + addr + 2, len);
         }
     }
 
@@ -79,9 +78,9 @@ namespace PLCMethods {
 
     // STR_LEN: Get string length -> push u16
     RuntimeError handle_STR_LEN(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
-        SAFE_BOUNDS_CHECK(index + 3 > prog_size, PROGRAM_SIZE_EXCEEDED);
+        SAFE_BOUNDS_CHECK(index + 1 + MY_PTR_SIZE_BYTES > prog_size, PROGRAM_SIZE_EXCEEDED);
         u8 str_type = program[index++];
-        MY_PTR_t addr = (MY_PTR_t)program[index] | ((MY_PTR_t)program[index + 1] << 8);
+        MY_PTR_t addr = read_ptr(program + index);
         index += MY_PTR_SIZE_BYTES;
         u16 len = str_get_length(memory, addr, str_type);
         return stack.push_u16(len);
@@ -89,9 +88,9 @@ namespace PLCMethods {
 
     // STR_CAP: Get string capacity -> push u16
     RuntimeError handle_STR_CAP(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
-        SAFE_BOUNDS_CHECK(index + 3 > prog_size, PROGRAM_SIZE_EXCEEDED);
+        SAFE_BOUNDS_CHECK(index + 1 + MY_PTR_SIZE_BYTES > prog_size, PROGRAM_SIZE_EXCEEDED);
         u8 str_type = program[index++];
-        MY_PTR_t addr = (MY_PTR_t)program[index] | ((MY_PTR_t)program[index + 1] << 8);
+        MY_PTR_t addr = read_ptr(program + index);
         index += MY_PTR_SIZE_BYTES;
         u16 cap = str_get_capacity(memory, addr, str_type);
         return stack.push_u16(cap);
@@ -99,9 +98,9 @@ namespace PLCMethods {
 
     // STR_GET: Get char at index (pop u16 index) -> push u8 char
     RuntimeError handle_STR_GET(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
-        SAFE_BOUNDS_CHECK(index + 3 > prog_size, PROGRAM_SIZE_EXCEEDED);
+        SAFE_BOUNDS_CHECK(index + 1 + MY_PTR_SIZE_BYTES > prog_size, PROGRAM_SIZE_EXCEEDED);
         u8 str_type = program[index++];
-        MY_PTR_t addr = (MY_PTR_t)program[index] | ((MY_PTR_t)program[index + 1] << 8);
+        MY_PTR_t addr = read_ptr(program + index);
         index += MY_PTR_SIZE_BYTES;
         u16 char_index = stack.pop_u16();
         u16 len = str_get_length(memory, addr, str_type);
@@ -114,9 +113,9 @@ namespace PLCMethods {
 
     // STR_SET: Set char at index (pop u8 char, pop u16 index)
     RuntimeError handle_STR_SET(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
-        SAFE_BOUNDS_CHECK(index + 3 > prog_size, PROGRAM_SIZE_EXCEEDED);
+        SAFE_BOUNDS_CHECK(index + 1 + MY_PTR_SIZE_BYTES > prog_size, PROGRAM_SIZE_EXCEEDED);
         u8 str_type = program[index++];
-        MY_PTR_t addr = (MY_PTR_t)program[index] | ((MY_PTR_t)program[index + 1] << 8);
+        MY_PTR_t addr = read_ptr(program + index);
         index += MY_PTR_SIZE_BYTES;
         u8 ch = stack.pop_u8();
         u16 char_index = stack.pop_u16();
@@ -130,23 +129,23 @@ namespace PLCMethods {
     // STR_CLEAR: Clear string (set length to 0)
     RuntimeError handle_STR_CLEAR(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
         (void)stack; // unused
-        SAFE_BOUNDS_CHECK(index + 3 > prog_size, PROGRAM_SIZE_EXCEEDED);
+        SAFE_BOUNDS_CHECK(index + 1 + MY_PTR_SIZE_BYTES > prog_size, PROGRAM_SIZE_EXCEEDED);
         u8 str_type = program[index++];
-        MY_PTR_t addr = (MY_PTR_t)program[index] | ((MY_PTR_t)program[index + 1] << 8);
+        MY_PTR_t addr = read_ptr(program + index);
         index += MY_PTR_SIZE_BYTES;
         str_set_length(memory, addr, str_type, 0);
         return STATUS_SUCCESS;
     }
 
     // STR_CMP: Compare two strings -> push i8 (-1, 0, 1)
-    // Format: [dest_type][src_type][addr1:u16][addr2:u16]
+    // Format: [dest_type][src_type][addr1:MY_PTR_t][addr2:MY_PTR_t]
     RuntimeError handle_STR_CMP(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
-        SAFE_BOUNDS_CHECK(index + 6 > prog_size, PROGRAM_SIZE_EXCEEDED);
+        SAFE_BOUNDS_CHECK(index + 2 + 2 * MY_PTR_SIZE_BYTES > prog_size, PROGRAM_SIZE_EXCEEDED);
         u8 type1 = program[index++];
         u8 type2 = program[index++];
-        MY_PTR_t addr1 = (MY_PTR_t)program[index] | ((MY_PTR_t)program[index + 1] << 8);
+        MY_PTR_t addr1 = read_ptr(program + index);
         index += MY_PTR_SIZE_BYTES;
-        MY_PTR_t addr2 = (MY_PTR_t)program[index] | ((MY_PTR_t)program[index + 1] << 8);
+        MY_PTR_t addr2 = read_ptr(program + index);
         index += MY_PTR_SIZE_BYTES;
         
         u16 len1 = str_get_length(memory, addr1, type1);
@@ -167,14 +166,14 @@ namespace PLCMethods {
     }
 
     // STR_EQ: Check string equality -> push bool
-    // Format: [dest_type][src_type][addr1:u16][addr2:u16]
+    // Format: [dest_type][src_type][addr1:MY_PTR_t][addr2:MY_PTR_t]
     RuntimeError handle_STR_EQ(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
-        SAFE_BOUNDS_CHECK(index + 6 > prog_size, PROGRAM_SIZE_EXCEEDED);
+        SAFE_BOUNDS_CHECK(index + 2 + 2 * MY_PTR_SIZE_BYTES > prog_size, PROGRAM_SIZE_EXCEEDED);
         u8 type1 = program[index++];
         u8 type2 = program[index++];
-        MY_PTR_t addr1 = (MY_PTR_t)program[index] | ((MY_PTR_t)program[index + 1] << 8);
+        MY_PTR_t addr1 = read_ptr(program + index);
         index += MY_PTR_SIZE_BYTES;
-        MY_PTR_t addr2 = (MY_PTR_t)program[index] | ((MY_PTR_t)program[index + 1] << 8);
+        MY_PTR_t addr2 = read_ptr(program + index);
         index += MY_PTR_SIZE_BYTES;
         
         u16 len1 = str_get_length(memory, addr1, type1);
@@ -192,16 +191,16 @@ namespace PLCMethods {
     }
 
     // STR_CONCAT: Concat src to dest (dest = dest + src)
-    // Format: [dest_type][src_type][dest_addr:u16][src_addr:u16]
+    // Format: [dest_type][src_type][dest_addr:MY_PTR_t][src_addr:MY_PTR_t]
     // Supports cross-type: str8 dest + str16 src, or str16 dest + str8 src
     RuntimeError handle_STR_CONCAT(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
         (void)stack;
-        SAFE_BOUNDS_CHECK(index + 6 > prog_size, PROGRAM_SIZE_EXCEEDED);
+        SAFE_BOUNDS_CHECK(index + 2 + 2 * MY_PTR_SIZE_BYTES > prog_size, PROGRAM_SIZE_EXCEEDED);
         u8 dest_type = program[index++];
         u8 src_type = program[index++];
-        MY_PTR_t dest_addr = (MY_PTR_t)program[index] | ((MY_PTR_t)program[index + 1] << 8);
+        MY_PTR_t dest_addr = read_ptr(program + index);
         index += MY_PTR_SIZE_BYTES;
-        MY_PTR_t src_addr = (MY_PTR_t)program[index] | ((MY_PTR_t)program[index + 1] << 8);
+        MY_PTR_t src_addr = read_ptr(program + index);
         index += MY_PTR_SIZE_BYTES;
         
         u16 dest_cap = str_get_capacity(memory, dest_addr, dest_type);
@@ -224,16 +223,16 @@ namespace PLCMethods {
     }
 
     // STR_COPY: Copy src to dest (dest = src)
-    // Format: [dest_type][src_type][dest_addr:u16][src_addr:u16]
+    // Format: [dest_type][src_type][dest_addr:MY_PTR_t][src_addr:MY_PTR_t]
     // Supports cross-type operations
     RuntimeError handle_STR_COPY(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
         (void)stack;
-        SAFE_BOUNDS_CHECK(index + 6 > prog_size, PROGRAM_SIZE_EXCEEDED);
+        SAFE_BOUNDS_CHECK(index + 2 + 2 * MY_PTR_SIZE_BYTES > prog_size, PROGRAM_SIZE_EXCEEDED);
         u8 dest_type = program[index++];
         u8 src_type = program[index++];
-        MY_PTR_t dest_addr = (MY_PTR_t)program[index] | ((MY_PTR_t)program[index + 1] << 8);
+        MY_PTR_t dest_addr = read_ptr(program + index);
         index += MY_PTR_SIZE_BYTES;
-        MY_PTR_t src_addr = (MY_PTR_t)program[index] | ((MY_PTR_t)program[index + 1] << 8);
+        MY_PTR_t src_addr = read_ptr(program + index);
         index += MY_PTR_SIZE_BYTES;
         
         u16 dest_cap = str_get_capacity(memory, dest_addr, dest_type);
@@ -252,15 +251,15 @@ namespace PLCMethods {
     }
 
     // STR_SUBSTR: Extract substring (pop u16 len, pop u16 start) to dest
-    // Format: [dest_type][src_type][dest_addr:u16][src_addr:u16]
+    // Format: [dest_type][src_type][dest_addr:MY_PTR_t][src_addr:MY_PTR_t]
     // Supports cross-type operations
     RuntimeError handle_STR_SUBSTR(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
-        SAFE_BOUNDS_CHECK(index + 6 > prog_size, PROGRAM_SIZE_EXCEEDED);
+        SAFE_BOUNDS_CHECK(index + 2 + 2 * MY_PTR_SIZE_BYTES > prog_size, PROGRAM_SIZE_EXCEEDED);
         u8 dest_type = program[index++];
         u8 src_type = program[index++];
-        MY_PTR_t dest_addr = (MY_PTR_t)program[index] | ((MY_PTR_t)program[index + 1] << 8);
+        MY_PTR_t dest_addr = read_ptr(program + index);
         index += MY_PTR_SIZE_BYTES;
-        MY_PTR_t src_addr = (MY_PTR_t)program[index] | ((MY_PTR_t)program[index + 1] << 8);
+        MY_PTR_t src_addr = read_ptr(program + index);
         index += MY_PTR_SIZE_BYTES;
         
         u16 sub_len = stack.pop_u16();
@@ -291,15 +290,15 @@ namespace PLCMethods {
     }
 
     // STR_FIND: Find substring -> push i16 index (-1 if not found)
-    // Format: [haystack_type][needle_type][haystack_addr:u16][needle_addr:u16]
+    // Format: [haystack_type][needle_type][haystack_addr:MY_PTR_t][needle_addr:MY_PTR_t]
     // Supports cross-type operations
     RuntimeError handle_STR_FIND(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
-        SAFE_BOUNDS_CHECK(index + 6 > prog_size, PROGRAM_SIZE_EXCEEDED);
+        SAFE_BOUNDS_CHECK(index + 2 + 2 * MY_PTR_SIZE_BYTES > prog_size, PROGRAM_SIZE_EXCEEDED);
         u8 haystack_type = program[index++];
         u8 needle_type = program[index++];
-        MY_PTR_t haystack_addr = (MY_PTR_t)program[index] | ((MY_PTR_t)program[index + 1] << 8);
+        MY_PTR_t haystack_addr = read_ptr(program + index);
         index += MY_PTR_SIZE_BYTES;
-        MY_PTR_t needle_addr = (MY_PTR_t)program[index] | ((MY_PTR_t)program[index + 1] << 8);
+        MY_PTR_t needle_addr = read_ptr(program + index);
         index += MY_PTR_SIZE_BYTES;
         
         u16 haystack_len = str_get_length(memory, haystack_addr, haystack_type);
@@ -327,9 +326,9 @@ namespace PLCMethods {
 
     // STR_CHAR: Append char (pop u8 char)
     RuntimeError handle_STR_CHAR(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
-        SAFE_BOUNDS_CHECK(index + 3 > prog_size, PROGRAM_SIZE_EXCEEDED);
+        SAFE_BOUNDS_CHECK(index + 1 + MY_PTR_SIZE_BYTES > prog_size, PROGRAM_SIZE_EXCEEDED);
         u8 str_type = program[index++];
-        MY_PTR_t addr = (MY_PTR_t)program[index] | ((MY_PTR_t)program[index + 1] << 8);
+        MY_PTR_t addr = read_ptr(program + index);
         index += MY_PTR_SIZE_BYTES;
         
         u8 ch = stack.pop_u8();

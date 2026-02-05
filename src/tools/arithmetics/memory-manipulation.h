@@ -501,9 +501,8 @@ namespace PLCMethods {
                 if (stack.size() < 2) return STACK_UNDERFLOW;
                 if (address + 2 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
                 u16 value = stack.pop_u16();
-                // Write little-endian to memory
-                memory[address] = value & 0xFF;
-                memory[address + 1] = (value >> 8) & 0xFF;
+                // Write native endianness to memory
+                write_u16(memory + address, value);
                 return STATUS_SUCCESS;
             }
             case type_u32:
@@ -512,11 +511,8 @@ namespace PLCMethods {
                 if (stack.size() < 4) return STACK_UNDERFLOW;
                 if (address + 4 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
                 u32 value = stack.pop_u32();
-                // Write little-endian to memory
-                memory[address] = value & 0xFF;
-                memory[address + 1] = (value >> 8) & 0xFF;
-                memory[address + 2] = (value >> 16) & 0xFF;
-                memory[address + 3] = (value >> 24) & 0xFF;
+                // Write native endianness to memory
+                write_u32(memory + address, value);
                 return STATUS_SUCCESS;
             }
 #ifdef USE_X64_OPS
@@ -526,15 +522,8 @@ namespace PLCMethods {
                 if (stack.size() < 8) return STACK_UNDERFLOW;
                 if (address + 8 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
                 u64 value = stack.pop_u64();
-                // Write little-endian to memory
-                memory[address] = value & 0xFF;
-                memory[address + 1] = (value >> 8) & 0xFF;
-                memory[address + 2] = (value >> 16) & 0xFF;
-                memory[address + 3] = (value >> 24) & 0xFF;
-                memory[address + 4] = (value >> 32) & 0xFF;
-                memory[address + 5] = (value >> 40) & 0xFF;
-                memory[address + 6] = (value >> 48) & 0xFF;
-                memory[address + 7] = (value >> 56) & 0xFF;
+                // Write native endianness to memory
+                write_u64(memory + address, value);
                 return STATUS_SUCCESS;
             }
 #endif // USE_X64_OPS
@@ -571,73 +560,40 @@ namespace PLCMethods {
             case type_u16:
             case type_i16: {
                 if (address + 2 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
-                u16 value = memory[address] | ((u16)memory[address + 1] << 8);
+                u16 value = read_u16(memory + address);
                 value++;
-                memory[address] = value & 0xFF;
-                memory[address + 1] = (value >> 8) & 0xFF;
+                write_u16(memory + address, value);
                 return STATUS_SUCCESS;
             }
             case type_u32:
             case type_i32: {
                 if (address + 4 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
-                u32 value = memory[address] | ((u32)memory[address + 1] << 8) |
-                            ((u32)memory[address + 2] << 16) | ((u32)memory[address + 3] << 24);
+                u32 value = read_u32(memory + address);
                 value++;
-                memory[address] = value & 0xFF;
-                memory[address + 1] = (value >> 8) & 0xFF;
-                memory[address + 2] = (value >> 16) & 0xFF;
-                memory[address + 3] = (value >> 24) & 0xFF;
+                write_u32(memory + address, value);
                 return STATUS_SUCCESS;
             }
             case type_f32: {
                 if (address + 4 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
-                u32 bits = memory[address] | ((u32)memory[address + 1] << 8) |
-                           ((u32)memory[address + 2] << 16) | ((u32)memory[address + 3] << 24);
-                float value; memcpy(&value, &bits, 4);
+                f32 value = read_f32(memory + address);
                 value += 1.0f;
-                memcpy(&bits, &value, 4);
-                memory[address] = bits & 0xFF;
-                memory[address + 1] = (bits >> 8) & 0xFF;
-                memory[address + 2] = (bits >> 16) & 0xFF;
-                memory[address + 3] = (bits >> 24) & 0xFF;
+                write_f32(memory + address, value);
                 return STATUS_SUCCESS;
             }
 #ifdef USE_X64_OPS
             case type_u64:
             case type_i64: {
                 if (address + 8 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
-                u64 value = memory[address] | ((u64)memory[address + 1] << 8) |
-                            ((u64)memory[address + 2] << 16) | ((u64)memory[address + 3] << 24) |
-                            ((u64)memory[address + 4] << 32) | ((u64)memory[address + 5] << 40) |
-                            ((u64)memory[address + 6] << 48) | ((u64)memory[address + 7] << 56);
+                u64 value = read_u64(memory + address);
                 value++;
-                memory[address] = value & 0xFF;
-                memory[address + 1] = (value >> 8) & 0xFF;
-                memory[address + 2] = (value >> 16) & 0xFF;
-                memory[address + 3] = (value >> 24) & 0xFF;
-                memory[address + 4] = (value >> 32) & 0xFF;
-                memory[address + 5] = (value >> 40) & 0xFF;
-                memory[address + 6] = (value >> 48) & 0xFF;
-                memory[address + 7] = (value >> 56) & 0xFF;
+                write_u64(memory + address, value);
                 return STATUS_SUCCESS;
             }
             case type_f64: {
                 if (address + 8 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
-                u64 bits = memory[address] | ((u64)memory[address + 1] << 8) |
-                           ((u64)memory[address + 2] << 16) | ((u64)memory[address + 3] << 24) |
-                           ((u64)memory[address + 4] << 32) | ((u64)memory[address + 5] << 40) |
-                           ((u64)memory[address + 6] << 48) | ((u64)memory[address + 7] << 56);
-                double value; memcpy(&value, &bits, 8);
+                f64 value = read_f64(memory + address);
                 value += 1.0;
-                memcpy(&bits, &value, 8);
-                memory[address] = bits & 0xFF;
-                memory[address + 1] = (bits >> 8) & 0xFF;
-                memory[address + 2] = (bits >> 16) & 0xFF;
-                memory[address + 3] = (bits >> 24) & 0xFF;
-                memory[address + 4] = (bits >> 32) & 0xFF;
-                memory[address + 5] = (bits >> 40) & 0xFF;
-                memory[address + 6] = (bits >> 48) & 0xFF;
-                memory[address + 7] = (bits >> 56) & 0xFF;
+                write_f64(memory + address, value);
                 return STATUS_SUCCESS;
             }
 #endif // USE_X64_OPS
@@ -674,73 +630,40 @@ namespace PLCMethods {
             case type_u16:
             case type_i16: {
                 if (address + 2 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
-                u16 value = memory[address] | ((u16)memory[address + 1] << 8);
+                u16 value = read_u16(memory + address);
                 value--;
-                memory[address] = value & 0xFF;
-                memory[address + 1] = (value >> 8) & 0xFF;
+                write_u16(memory + address, value);
                 return STATUS_SUCCESS;
             }
             case type_u32:
             case type_i32: {
                 if (address + 4 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
-                u32 value = memory[address] | ((u32)memory[address + 1] << 8) |
-                            ((u32)memory[address + 2] << 16) | ((u32)memory[address + 3] << 24);
+                u32 value = read_u32(memory + address);
                 value--;
-                memory[address] = value & 0xFF;
-                memory[address + 1] = (value >> 8) & 0xFF;
-                memory[address + 2] = (value >> 16) & 0xFF;
-                memory[address + 3] = (value >> 24) & 0xFF;
+                write_u32(memory + address, value);
                 return STATUS_SUCCESS;
             }
             case type_f32: {
                 if (address + 4 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
-                u32 bits = memory[address] | ((u32)memory[address + 1] << 8) |
-                           ((u32)memory[address + 2] << 16) | ((u32)memory[address + 3] << 24);
-                float value; memcpy(&value, &bits, 4);
+                f32 value = read_f32(memory + address);
                 value -= 1.0f;
-                memcpy(&bits, &value, 4);
-                memory[address] = bits & 0xFF;
-                memory[address + 1] = (bits >> 8) & 0xFF;
-                memory[address + 2] = (bits >> 16) & 0xFF;
-                memory[address + 3] = (bits >> 24) & 0xFF;
+                write_f32(memory + address, value);
                 return STATUS_SUCCESS;
             }
 #ifdef USE_X64_OPS
             case type_u64:
             case type_i64: {
                 if (address + 8 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
-                u64 value = memory[address] | ((u64)memory[address + 1] << 8) |
-                            ((u64)memory[address + 2] << 16) | ((u64)memory[address + 3] << 24) |
-                            ((u64)memory[address + 4] << 32) | ((u64)memory[address + 5] << 40) |
-                            ((u64)memory[address + 6] << 48) | ((u64)memory[address + 7] << 56);
+                u64 value = read_u64(memory + address);
                 value--;
-                memory[address] = value & 0xFF;
-                memory[address + 1] = (value >> 8) & 0xFF;
-                memory[address + 2] = (value >> 16) & 0xFF;
-                memory[address + 3] = (value >> 24) & 0xFF;
-                memory[address + 4] = (value >> 32) & 0xFF;
-                memory[address + 5] = (value >> 40) & 0xFF;
-                memory[address + 6] = (value >> 48) & 0xFF;
-                memory[address + 7] = (value >> 56) & 0xFF;
+                write_u64(memory + address, value);
                 return STATUS_SUCCESS;
             }
             case type_f64: {
                 if (address + 8 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
-                u64 bits = memory[address] | ((u64)memory[address + 1] << 8) |
-                           ((u64)memory[address + 2] << 16) | ((u64)memory[address + 3] << 24) |
-                           ((u64)memory[address + 4] << 32) | ((u64)memory[address + 5] << 40) |
-                           ((u64)memory[address + 6] << 48) | ((u64)memory[address + 7] << 56);
-                double value; memcpy(&value, &bits, 8);
+                f64 value = read_f64(memory + address);
                 value -= 1.0;
-                memcpy(&bits, &value, 8);
-                memory[address] = bits & 0xFF;
-                memory[address + 1] = (bits >> 8) & 0xFF;
-                memory[address + 2] = (bits >> 16) & 0xFF;
-                memory[address + 3] = (bits >> 24) & 0xFF;
-                memory[address + 4] = (bits >> 32) & 0xFF;
-                memory[address + 5] = (bits >> 40) & 0xFF;
-                memory[address + 6] = (bits >> 48) & 0xFF;
-                memory[address + 7] = (bits >> 56) & 0xFF;
+                write_f64(memory + address, value);
                 return STATUS_SUCCESS;
             }
 #endif // USE_X64_OPS

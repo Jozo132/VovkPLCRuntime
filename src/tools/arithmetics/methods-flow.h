@@ -26,10 +26,7 @@ namespace PLCMethods {
         IGNORE_UNUSED u32 index_start = index;
         u32 size = 2;
         if (index + size > prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
-        u8A_to_u16 cvt;
-        cvt.u8A[1] = program[index];
-        cvt.u8A[0] = program[index + 1];
-        index = cvt._u16;
+        index = read_u16(program + index);
         if (index >= prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
         return STATUS_SUCCESS;
     }
@@ -38,10 +35,7 @@ namespace PLCMethods {
         u32 size = 2;
         if (index + size > prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
         if (stack.pop_bool()) {
-            u8A_to_u16 cvt;
-            cvt.u8A[1] = program[index];
-            cvt.u8A[0] = program[index + 1];
-            index = cvt._u16;
+            index = read_u16(program + index);
             if (index >= prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
         } else index += size;
         return STATUS_SUCCESS;
@@ -51,10 +45,7 @@ namespace PLCMethods {
         u32 size = 2;
         if (index + size > prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
         if (!stack.pop_bool()) {
-            u8A_to_u16 cvt;
-            cvt.u8A[1] = program[index];
-            cvt.u8A[0] = program[index + 1];
-            index = cvt._u16;
+            index = read_u16(program + index);
             if (index >= prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
         } else index += size;
         return STATUS_SUCCESS;
@@ -64,11 +55,8 @@ namespace PLCMethods {
         IGNORE_UNUSED u32 index_start = index;
         u32 size = 2;
         if (index + size > prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
-        u8A_to_u16 cvt;
-        cvt.u8A[1] = program[index];
-        cvt.u8A[0] = program[index + 1];
         RuntimeError call_store_status = stack.pushCall(index + size);
-        index = cvt._u16;
+        index = read_u16(program + index);
         if (index >= prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
         if (call_store_status != STATUS_SUCCESS) return call_store_status;
         if (index >= prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
@@ -79,11 +67,8 @@ namespace PLCMethods {
         u32 size = 2;
         if (index + size > prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
         if (stack.pop_bool()) {
-            u8A_to_u16 cvt;
-            cvt.u8A[1] = program[index];
-            cvt.u8A[0] = program[index + 1];
             RuntimeError call_store_status = stack.pushCall(index + size);
-            index = cvt._u16;
+            index = read_u16(program + index);
             if (index == 0 || index >= prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
             if (call_store_status != STATUS_SUCCESS) return call_store_status;
             if (index >= prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
@@ -95,11 +80,8 @@ namespace PLCMethods {
         u32 size = 2;
         if (index + size > prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
         if (!stack.pop_bool()) {
-            u8A_to_u16 cvt;
-            cvt.u8A[1] = program[index];
-            cvt.u8A[0] = program[index + 1];
             RuntimeError call_store_status = stack.pushCall(index + size);
-            index = cvt._u16;
+            index = read_u16(program + index);
             if (index == 0 || index >= prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
             if (call_store_status != STATUS_SUCCESS) return call_store_status;
             if (index >= prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
@@ -139,7 +121,7 @@ namespace PLCMethods {
         IGNORE_UNUSED u32 index_start = index;
         u32 size = 2;
         if (index + size > prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
-        i16 offset = (i16)((program[index] << 8) | program[index + 1]);
+        i16 offset = read_i16(program + index);
         i32 new_index = (i32)index + size + offset;
         if (new_index < 0 || new_index >= (i32)prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
         index = (u32)new_index;
@@ -151,7 +133,7 @@ namespace PLCMethods {
         u32 size = 2;
         if (index + size > prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
         if (stack.pop_bool()) {
-            i16 offset = (i16)((program[index] << 8) | program[index + 1]);
+            i16 offset = read_i16(program + index);
             i32 new_index = (i32)index + size + offset;
             if (new_index < 0 || new_index >= (i32)prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
             index = (u32)new_index;
@@ -164,7 +146,7 @@ namespace PLCMethods {
         u32 size = 2;
         if (index + size > prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
         if (!stack.pop_bool()) {
-            i16 offset = (i16)((program[index] << 8) | program[index + 1]);
+            i16 offset = read_i16(program + index);
             i32 new_index = (i32)index + size + offset;
             if (new_index < 0 || new_index >= (i32)prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
             index = (u32)new_index;
@@ -178,7 +160,7 @@ namespace PLCMethods {
         if (index + size > prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
         RuntimeError call_store_status = stack.pushCall(index + size);
         if (call_store_status != STATUS_SUCCESS) return call_store_status;
-        i16 offset = (i16)((program[index] << 8) | program[index + 1]);
+        i16 offset = read_i16(program + index);
         i32 new_index = (i32)index + size + offset;
         if (new_index < 0 || new_index >= (i32)prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
         index = (u32)new_index;
@@ -192,7 +174,7 @@ namespace PLCMethods {
         if (stack.pop_bool()) {
             RuntimeError call_store_status = stack.pushCall(index + size);
             if (call_store_status != STATUS_SUCCESS) return call_store_status;
-            i16 offset = (i16)((program[index] << 8) | program[index + 1]);
+            i16 offset = read_i16(program + index);
             i32 new_index = (i32)index + size + offset;
             if (new_index < 0 || new_index >= (i32)prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
             index = (u32)new_index;
@@ -207,7 +189,7 @@ namespace PLCMethods {
         if (!stack.pop_bool()) {
             RuntimeError call_store_status = stack.pushCall(index + size);
             if (call_store_status != STATUS_SUCCESS) return call_store_status;
-            i16 offset = (i16)((program[index] << 8) | program[index + 1]);
+            i16 offset = read_i16(program + index);
             i32 new_index = (i32)index + size + offset;
             if (new_index < 0 || new_index >= (i32)prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start);
             index = (u32)new_index;

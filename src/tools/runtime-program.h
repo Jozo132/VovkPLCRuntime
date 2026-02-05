@@ -44,8 +44,7 @@ public:
 
     static u8 push_pointer(u8* location, MY_PTR_t pointer) {
         location[0] = type_pointer;
-        // memcpy(location + 1, &pointer, sizeof(MY_PTR_t)); // Wrong endianess
-        for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[i + 1] = (pointer >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
+        write_ptr(location + 1, pointer);
         return 1 + sizeof(MY_PTR_t);
     }
 
@@ -71,36 +70,28 @@ public:
     // Push an u16 value to the PLC Program
     static u8 push_u16(u8* location, u32 value) {
         location[0] = type_u16;
-        location[1] = value >> 8;
-        location[2] = value & 0xFF;
+        write_u16(location + 1, (u16)value);
         return 3;
     }
 
     // Push an i16 value to the PLC Program
     static u8 push_i16(u8* location, i16 value) {
         location[0] = type_i16;
-        location[1] = value >> 8;
-        location[2] = value & 0xFF;
+        write_i16(location + 1, value);
         return 3;
     }
 
     // Push an u32 value to the PLC Program
     static u8 push_u32(u8* location, u32 value) {
         location[0] = type_u32;
-        location[1] = value >> 24;
-        location[2] = (value >> 16) & 0xFF;
-        location[3] = (value >> 8) & 0xFF;
-        location[4] = value & 0xFF;
+        write_u32(location + 1, value);
         return 5;
     }
 
     // Push an i32 value to the PLC Program
     static u8 push_i32(u8* location, i32 value) {
         location[0] = type_i32;
-        location[1] = value >> 24;
-        location[2] = (value >> 16) & 0xFF;
-        location[3] = (value >> 8) & 0xFF;
-        location[4] = value & 0xFF;
+        write_i32(location + 1, value);
         return 5;
     }
 
@@ -108,28 +99,14 @@ public:
     // Push an u64 value to the PLC Program
     static u8 push_u64(u8* location, u64 value) {
         location[0] = type_u64;
-        location[1] = value >> (u64) 56;
-        location[2] = (value >> (u64) 48) & 0xFF;
-        location[3] = (value >> (u64) 40) & 0xFF;
-        location[4] = (value >> (u64) 32) & 0xFF;
-        location[5] = (value >> (u64) 24) & 0xFF;
-        location[6] = (value >> (u64) 16) & 0xFF;
-        location[7] = (value >> (u64) 8) & 0xFF;
-        location[8] = value & 0xFF;
+        write_u64(location + 1, value);
         return 9;
     }
 
     // Push an i64 value to the PLC Program
     static u8 push_i64(u8* location, i64 value) {
         location[0] = type_i64;
-        location[1] = value >> (i64) 56;
-        location[2] = (value >> (i64) 48) & 0xFF;
-        location[3] = (value >> (i64) 40) & 0xFF;
-        location[4] = (value >> (i64) 32) & 0xFF;
-        location[5] = (value >> (i64) 24) & 0xFF;
-        location[6] = (value >> (i64) 16) & 0xFF;
-        location[7] = (value >> (i64) 8) & 0xFF;
-        location[8] = value & 0xFF;
+        write_i64(location + 1, value);
         return 9;
     }
 #endif // USE_X64_OPS
@@ -137,11 +114,7 @@ public:
     // Push a float value to the PLC Program
     static u8 push_f32(u8* location, float value) {
         location[0] = type_f32;
-        u32* value_ptr = (u32*) &value;
-        location[1] = *value_ptr >> 24;
-        location[2] = (*value_ptr >> 16) & 0xFF;
-        location[3] = (*value_ptr >> 8) & 0xFF;
-        location[4] = *value_ptr & 0xFF;
+        write_f32(location + 1, value);
         return 5;
     }
 
@@ -149,15 +122,7 @@ public:
     // Push a double value to the PLC Program
     static u8 push_f64(u8* location, double value) {
         location[0] = type_f64;
-        u64* value_ptr = (u64*) &value;
-        location[1] = *value_ptr >> 56;
-        location[2] = (*value_ptr >> 48) & 0xFF;
-        location[3] = (*value_ptr >> 40) & 0xFF;
-        location[4] = (*value_ptr >> 32) & 0xFF;
-        location[5] = (*value_ptr >> 24) & 0xFF;
-        location[6] = (*value_ptr >> 16) & 0xFF;
-        location[7] = (*value_ptr >> 8) & 0xFF;
-        location[8] = *value_ptr & 0xFF;
+        write_f64(location + 1, value);
         return 9;
     }
 #endif // USE_X64_OPS
@@ -171,17 +136,13 @@ public:
     // Push instruction + u16 value to the PLC Program
     static u8 push_InstructionWithU16(u8* location, PLCRuntimeInstructionSet instruction, u16 value) {
         location[0] = instruction;
-        location[1] = value >> 8;
-        location[2] = value & 0xFF;
+        write_u16(location + 1, value);
         return 3;
     }
     // Push instruction + u32 value to the PLC Program
     static u8 push_InstructionWithU32(u8* location, PLCRuntimeInstructionSet instruction, u32 value) {
         location[0] = instruction;
-        location[1] = value >> 24;
-        location[2] = (value >> 16) & 0xFF;
-        location[3] = (value >> 8) & 0xFF;
-        location[4] = value & 0xFF;
+        write_u32(location + 1, value);
         return 5;
     }
 
@@ -214,11 +175,13 @@ public:
         location[0] = instruction;
         u8 offset = 1;
         // Addr1
-        for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[offset++] = (addr1 >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
+        write_ptr(location + offset, addr1);
+        offset += sizeof(MY_PTR_t);
         // Bit1
         location[offset++] = bit1;
         // Addr2
-        for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[offset++] = (addr2 >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
+        write_ptr(location + offset, addr2);
+        offset += sizeof(MY_PTR_t);
         // Bit2
         location[offset++] = bit2;
         return offset;
@@ -230,83 +193,65 @@ public:
     // Push flow control instructions to the PLC Program
     static u8 push_jmp(u8* location, u32 location_address) {
         location[0] = JMP;
-        location[1] = location_address >> 8;
-        location[2] = location_address & 0xFF;
+        write_u16(location + 1, (u16)location_address);
         return 3;
     }
     static u8 push_jmp_if(u8* location, u32 location_address) {
         location[0] = JMP_IF;
-        location[1] = location_address >> 8;
-        location[2] = location_address & 0xFF;
+        write_u16(location + 1, (u16)location_address);
         return 3;
     }
     static u8 push_jmp_if_not(u8* location, u32 location_address) {
         location[0] = JMP_IF_NOT;
-        location[1] = location_address >> 8;
-        location[2] = location_address & 0xFF;
+        write_u16(location + 1, (u16)location_address);
         return 3;
     }
 
     static u8 pushCALL(u8* location, u32 location_address) {
         location[0] = CALL;
-        location[1] = location_address >> 8;
-        location[2] = location_address & 0xFF;
+        write_u16(location + 1, (u16)location_address);
         return 3;
     }
     static u8 pushCALL_IF(u8* location, u32 location_address) {
         location[0] = CALL_IF;
-        location[1] = location_address >> 8;
-        location[2] = location_address & 0xFF;
+        write_u16(location + 1, (u16)location_address);
         return 3;
     }
     static u8 pushCALL_IF_NOT(u8* location, u32 location_address) {
         location[0] = CALL_IF_NOT;
-        location[1] = location_address >> 8;
-        location[2] = location_address & 0xFF;
+        write_u16(location + 1, (u16)location_address);
         return 3;
     }
 
     static u8 push_jmp_rel(u8* location, i16 offset) {
         location[0] = JMP_REL;
-        u16 u_offset = (u16)offset;
-        location[1] = u_offset >> 8;
-        location[2] = u_offset & 0xFF;
+        write_i16(location + 1, offset);
         return 3;
     }
     static u8 push_jmp_if_rel(u8* location, i16 offset) {
         location[0] = JMP_IF_REL;
-        u16 u_offset = (u16)offset;
-        location[1] = u_offset >> 8;
-        location[2] = u_offset & 0xFF;
+        write_i16(location + 1, offset);
         return 3;
     }
     static u8 push_jmp_if_not_rel(u8* location, i16 offset) {
         location[0] = JMP_IF_NOT_REL;
-        u16 u_offset = (u16)offset;
-        location[1] = u_offset >> 8;
-        location[2] = u_offset & 0xFF;
+        write_i16(location + 1, offset);
         return 3;
     }
 
     static u8 pushCALL_REL(u8* location, i16 offset) {
         location[0] = CALL_REL;
-        u16 u_offset = (u16)offset;
-        location[1] = u_offset >> 8;
-        location[2] = u_offset & 0xFF;
+        write_i16(location + 1, offset);
         return 3;
     }
     static u8 pushCALL_IF_REL(u8* location, i16 offset) {
         location[0] = CALL_IF_REL;
-        u16 u_offset = (u16)offset;
-        location[1] = u_offset >> 8;
-        location[2] = u_offset & 0xFF;
+        write_i16(location + 1, offset);
         return 3;
     }
     static u8 pushCALL_IF_NOT_REL(u8* location, i16 offset) {
         location[0] = CALL_IF_NOT_REL;
-        u16 u_offset = (u16)offset;
-        location[1] = u_offset >> 8;
-        location[2] = u_offset & 0xFF;
+        write_i16(location + 1, offset);
         return 3;
     }
 
@@ -390,7 +335,7 @@ public:
     static u8 push_load_from(u8* location, PLCRuntimeInstructionSet type, MY_PTR_t address) {
         location[0] = LOAD_FROM;
         location[1] = type;
-        for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[i + 2] = (address >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
+        write_ptr(location + 2, address);
         return 2 + sizeof(MY_PTR_t);
     }
 
@@ -398,7 +343,7 @@ public:
     static u8 push_move_to(u8* location, PLCRuntimeInstructionSet type, MY_PTR_t address) {
         location[0] = MOVE_TO;
         location[1] = type;
-        for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[i + 2] = (address >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
+        write_ptr(location + 2, address);
         return 2 + sizeof(MY_PTR_t);
     }
 
@@ -406,7 +351,7 @@ public:
     static u8 push_inc(u8* location, PLCRuntimeInstructionSet type, MY_PTR_t address) {
         location[0] = INC_MEM;
         location[1] = type;
-        for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[i + 2] = (address >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
+        write_ptr(location + 2, address);
         return 2 + sizeof(MY_PTR_t);
     }
 
@@ -414,7 +359,7 @@ public:
     static u8 push_dec(u8* location, PLCRuntimeInstructionSet type, MY_PTR_t address) {
         location[0] = DEC_MEM;
         location[1] = type;
-        for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[i + 2] = (address >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
+        write_ptr(location + 2, address);
         return 2 + sizeof(MY_PTR_t);
     }
 
@@ -442,7 +387,7 @@ public:
     static u8 push_pick(u8* location, PLCRuntimeInstructionSet type, MY_PTR_t depth) {
         location[0] = PICK;
         location[1] = type;
-        for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[i + 2] = (depth >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
+        write_ptr(location + 2, depth);
         return 2 + sizeof(MY_PTR_t);
     }
     // Poke (write) top value to stack at byte depth
@@ -450,7 +395,7 @@ public:
     static u8 push_poke(u8* location, PLCRuntimeInstructionSet type, MY_PTR_t depth) {
         location[0] = POKE;
         location[1] = type;
-        for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[i + 2] = (depth >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
+        write_ptr(location + 2, depth);
         return 2 + sizeof(MY_PTR_t);
     }
 
@@ -460,12 +405,11 @@ public:
         location[0] = instruction;
         u8 offset = 1;
         // Timer address (uses MY_PTR_t for portability)
-        for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[offset++] = (timer_addr >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
-        // Preset time value (u32 big endian)
-        location[offset++] = (pt_value >> 24) & 0xFF;
-        location[offset++] = (pt_value >> 16) & 0xFF;
-        location[offset++] = (pt_value >> 8) & 0xFF;
-        location[offset++] = pt_value & 0xFF;
+        write_ptr(location + offset, timer_addr);
+        offset += sizeof(MY_PTR_t);
+        // Preset time value (u32 native endian)
+        write_u32(location + offset, pt_value);
+        offset += sizeof(u32);
         return offset;
     }
 
@@ -475,9 +419,11 @@ public:
         location[0] = instruction;
         u8 offset = 1;
         // Timer address
-        for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[offset++] = (timer_addr >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
+        write_ptr(location + offset, timer_addr);
+        offset += sizeof(MY_PTR_t);
         // Preset time address
-        for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[offset++] = (pt_addr >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
+        write_ptr(location + offset, pt_addr);
+        offset += sizeof(MY_PTR_t);
         return offset;
     }
 
@@ -487,12 +433,11 @@ public:
         location[0] = instruction;
         u8 offset = 1;
         // Counter address (uses MY_PTR_t for portability)
-        for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[offset++] = (counter_addr >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
-        // Preset value (u32 big endian)
-        location[offset++] = (pv_value >> 24) & 0xFF;
-        location[offset++] = (pv_value >> 16) & 0xFF;
-        location[offset++] = (pv_value >> 8) & 0xFF;
-        location[offset++] = pv_value & 0xFF;
+        write_ptr(location + offset, counter_addr);
+        offset += sizeof(MY_PTR_t);
+        // Preset value (u32 native endian)
+        write_u32(location + offset, pv_value);
+        offset += sizeof(u32);
         return offset;
     }
 
@@ -502,34 +447,33 @@ public:
         location[0] = instruction;
         u8 offset = 1;
         // Counter address
-        for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[offset++] = (counter_addr >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
+        write_ptr(location + offset, counter_addr);
+        offset += sizeof(MY_PTR_t);
         // Preset value address
-        for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[offset++] = (pv_addr >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
+        write_ptr(location + offset, pv_addr);
+        offset += sizeof(MY_PTR_t);
         return offset;
     }
 
     // String instruction with single address (STR_LEN, STR_CAP, STR_GET, STR_SET, STR_CLEAR, STR_CHAR)
-    // Format: [opcode][str_type:u8][addr:u16 little-endian]
+    // Format: [opcode][str_type:u8][addr:MY_PTR_t native-endian]
     static u8 push_str_single(u8* location, PLCRuntimeInstructionSet instruction, u8 str_type, MY_PTR_t str_addr) {
         location[0] = instruction;
         location[1] = str_type;
-        location[2] = str_addr & 0xFF;
-        location[3] = (str_addr >> 8) & 0xFF;
-        return 4;
+        write_ptr(location + 2, str_addr);
+        return 2 + sizeof(MY_PTR_t);
     }
 
     // String instruction with two addresses (STR_CMP, STR_EQ, STR_CONCAT, STR_COPY, STR_SUBSTR, STR_FIND)
-    // Format: [opcode][dest_type:u8][src_type:u8][addr1:u16 little-endian][addr2:u16 little-endian]
+    // Format: [opcode][dest_type:u8][src_type:u8][addr1:MY_PTR_t native-endian][addr2:MY_PTR_t native-endian]
     // Supports cross-type operations (e.g., str8 dest with str16 src)
     static u8 push_str_dual(u8* location, PLCRuntimeInstructionSet instruction, u8 dest_type, u8 src_type, MY_PTR_t addr1, MY_PTR_t addr2) {
         location[0] = instruction;
         location[1] = dest_type;
         location[2] = src_type;
-        location[3] = addr1 & 0xFF;
-        location[4] = (addr1 >> 8) & 0xFF;
-        location[5] = addr2 & 0xFF;
-        location[6] = (addr2 >> 8) & 0xFF;
-        return 7;
+        write_ptr(location + 3, addr1);
+        write_ptr(location + 3 + sizeof(MY_PTR_t), addr2);
+        return 3 + 2 * sizeof(MY_PTR_t);
     }
 
     // Convenience overload for same-type operations
@@ -547,8 +491,8 @@ public:
         u8 offset = 3;
         // Write parameter addresses (param_count params + 1 return address)
         for (u8 i = 0; i <= param_count; i++) {
-            location[offset++] = (param_addrs[i] >> 8) & 0xFF;
-            location[offset++] = param_addrs[i] & 0xFF;
+            write_u16(location + offset, param_addrs[i]);
+            offset += sizeof(u16);
         }
         return offset; // 3 + 2 * (param_count + 1)
     }

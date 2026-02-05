@@ -129,3 +129,37 @@ union Converter {
     double double_value;
 #endif // USE_X64_OPS
 };
+
+// ============================================================================
+// Native Endianness Read/Write Helpers
+// ============================================================================
+// These functions read/write multi-byte values using native pointer operations,
+// ensuring the compile target's endianness is used consistently throughout
+// the library. This replaces manual bitshift+mask operations.
+// ============================================================================
+
+// Write multi-byte values to buffer using native endianness
+inline void write_u16(u8* buf, u16 value) { *(u16*)buf = value; }
+inline void write_i16(u8* buf, i16 value) { *(i16*)buf = value; }
+inline void write_u32(u8* buf, u32 value) { *(u32*)buf = value; }
+inline void write_i32(u8* buf, i32 value) { *(i32*)buf = value; }
+inline void write_f32(u8* buf, f32 value) { *(f32*)buf = value; }
+inline void write_ptr(u8* buf, MY_PTR_t value) { *(MY_PTR_t*)buf = value; }
+#ifdef USE_X64_OPS
+inline void write_u64(u8* buf, u64 value) { *(u64*)buf = value; }
+inline void write_i64(u8* buf, i64 value) { *(i64*)buf = value; }
+inline void write_f64(u8* buf, f64 value) { *(f64*)buf = value; }
+#endif // USE_X64_OPS
+
+// Read multi-byte values from buffer using native endianness
+inline u16 read_u16(const u8* buf) { return *(const u16*)buf; }
+inline i16 read_i16(const u8* buf) { return *(const i16*)buf; }
+inline u32 read_u32(const u8* buf) { return *(const u32*)buf; }
+inline i32 read_i32(const u8* buf) { return *(const i32*)buf; }
+inline f32 read_f32(const u8* buf) { return *(const f32*)buf; }
+inline MY_PTR_t read_ptr(const u8* buf) { return *(const MY_PTR_t*)buf; }
+#ifdef USE_X64_OPS
+inline u64 read_u64(const u8* buf) { return *(const u64*)buf; }
+inline i64 read_i64(const u8* buf) { return *(const i64*)buf; }
+inline f64 read_f64(const u8* buf) { return *(const f64*)buf; }
+#endif // USE_X64_OPS

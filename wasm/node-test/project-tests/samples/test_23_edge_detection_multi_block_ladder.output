@@ -1,9 +1,9 @@
 {
   "success": 1,
   "project": { "name": "EdgeDetectionMultiBlock", "version": "1.0" },
-  "bytecode": "FD 03 58 00 40 8C 01 24 00 60 00 80 FD 03 59 00 40 8D 01 24 01 61 00 80 FD 03 5A 00 40 8C 01 24 02 62 00 80 FD 03 58 00 40 8C 01 24 03 63 00 80 FD 03 59 00 40 8D 01 24 04 64 00 80 FD 03 5A 00 40 8C 01 24 05 65 00 80 FF",
+  "bytecode": "FD 03 58 40 00 8C 24 01 00 60 80 00 FD 03 59 40 00 8D 24 01 01 61 80 00 FD 03 5A 40 00 8C 24 01 02 62 80 00 FD 03 58 40 00 8C 24 01 03 63 80 00 FD 03 59 40 00 8D 24 01 04 64 80 00 FD 03 5A 40 00 8C 24 01 05 65 80 00 FF",
   "bytecodeLength": 73,
-  "checksum": 166,
+  "checksum": 165,
   "files": [
     { "path": "main", "firstBlockIndex": 0, "blockCount": 3, "executionOrder": 0 },
     { "path": "secondary", "firstBlockIndex": 3, "blockCount": 3, "executionOrder": 1 }

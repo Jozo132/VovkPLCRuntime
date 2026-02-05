@@ -2296,17 +2296,17 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
             u8 param_count = program[index++];
             if (param_count > PLCRUNTIME_FFI_MAX_PARAMS) return FFI_INVALID_PARAMS;
             
-            // Read parameter addresses
+            // Read parameter addresses (native endianness)
             u16 param_addrs[PLCRUNTIME_FFI_MAX_PARAMS];
             for (u8 i = 0; i < param_count; i++) {
                 if (index + 2 > prog_size) return PROGRAM_SIZE_EXCEEDED;
-                param_addrs[i] = (program[index] << 8) | program[index + 1];
+                param_addrs[i] = read_u16(program + index);
                 index += 2;
             }
             
-            // Read return address
+            // Read return address (native endianness)
             if (index + 2 > prog_size) return PROGRAM_SIZE_EXCEEDED;
-            u16 ret_addr = (program[index] << 8) | program[index + 1];
+            u16 ret_addr = read_u16(program + index);
             index += 2;
             
             // Call the FFI function
@@ -2383,9 +2383,9 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
         case CONFIG_TC: {
             // Format: CONFIG_TC <timer_offset:u16> <timer_count:u8> <counter_offset:u16> <counter_count:u8>
             if (index + 6 > prog_size) return PROGRAM_SIZE_EXCEEDED;
-            u16 t_offset = (program[index] << 8) | program[index + 1];
+            u16 t_offset = read_u16(program + index);
             u8 t_count = program[index + 2];
-            u16 c_offset = (program[index + 3] << 8) | program[index + 4];
+            u16 c_offset = read_u16(program + index + 3);
             u8 c_count = program[index + 5];
             index += 6;
             // Configure runtime offsets

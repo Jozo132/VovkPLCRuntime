@@ -1,9 +1,9 @@
 {
   "success": 1,
   "project": { "name": "WithSymbols", "version": "2.0" },
-  "bytecode": "FD 02 58 00 40 59 00 40 C0 60 00 80 FF",
+  "bytecode": "FD 02 58 40 00 59 40 00 C0 60 80 00 FF",
   "bytecodeLength": 13,
-  "checksum": 9,
+  "checksum": 252,
   "files": [
     { "path": "main", "firstBlockIndex": 0, "blockCount": 1, "executionOrder": 0 }
   ],

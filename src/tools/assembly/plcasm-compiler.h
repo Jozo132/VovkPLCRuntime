@@ -2314,12 +2314,12 @@ public:
                             u8* bytecode = line.code;
                             u8 offset = 0;
                             bytecode[offset++] = CONFIG_TC;
-                            bytecode[offset++] = (timer_offset_val >> 8) & 0xFF;   // timer_offset high byte
-                            bytecode[offset++] = timer_offset_val & 0xFF;          // timer_offset low byte
-                            bytecode[offset++] = timer_count_val & 0xFF;           // timer_count
-                            bytecode[offset++] = (counter_offset_val >> 8) & 0xFF; // counter_offset high byte
-                            bytecode[offset++] = counter_offset_val & 0xFF;        // counter_offset low byte
-                            bytecode[offset++] = counter_count_val & 0xFF;         // counter_count
+                            write_u16(bytecode + offset, timer_offset_val);          // timer_offset (native endianness)
+                            offset += 2;
+                            bytecode[offset++] = timer_count_val & 0xFF;             // timer_count
+                            write_u16(bytecode + offset, counter_offset_val);        // counter_offset (native endianness)
+                            offset += 2;
+                            bytecode[offset++] = counter_count_val & 0xFF;           // counter_count
                             line.size = offset;
                             i += 6; // Skip all the tokens we consumed (MUST be before _line_push which has continue)
                             _line_push;

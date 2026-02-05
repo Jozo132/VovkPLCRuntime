@@ -3190,7 +3190,7 @@ public:
             }
             
             if (is_memory_op && i + addr_size < output_length) {
-                u32 addr = output[i + 1] | (output[i + 2] << 8);
+                u32 addr = read_u16(output + i + 1);
                 
                 // Determine which area this address belongs to
                 if (addr >= M_start && addr <= M_end) {

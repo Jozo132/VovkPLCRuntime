@@ -205,7 +205,8 @@ ${blocksStr}END_FILE
                     for (let i = 0; i < bytes.length - 3; i++) {
                         if ((bytes[i] === 0x18 || bytes[i] === 0x19) && 
                             (bytes[i+1] >= 0x06 && bytes[i+1] <= 0x0B)) {
-                            const addr = bytes[i+2] * 256 + bytes[i+3];
+                            // Native endianness (little-endian): low byte first
+                            const addr = bytes[i+2] + bytes[i+3] * 256;
                             foundAddresses.push(addr);
                         }
                     }

@@ -1,9 +1,9 @@
 {
   "success": 1,
   "project": { "name": "STLTimer", "version": "1.0" },
-  "bytecode": "FD 02 58 00 40 30 01 C0 00 00 13 88 60 00 80 FF",
+  "bytecode": "FD 02 58 40 00 30 C0 01 88 13 00 00 60 80 00 FF",
   "bytecodeLength": 16,
-  "checksum": 81,
+  "checksum": 88,
   "files": [
     { "path": "main", "firstBlockIndex": 0, "blockCount": 1, "executionOrder": 0 }
   ],

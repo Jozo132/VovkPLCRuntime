@@ -1,9 +1,9 @@
 {
   "success": 1,
   "project": { "name": "NestedSymbols", "version": "1.0" },
-  "bytecode": "FD 02 58 00 40 59 00 40 C1 5A 00 40 C1 60 00 80 5A 00 40 C3 61 00 80 FF",
+  "bytecode": "FD 02 58 40 00 59 40 00 C1 5A 40 00 C1 60 80 00 5A 40 00 C3 61 80 00 FF",
   "bytecodeLength": 24,
-  "checksum": 249,
+  "checksum": 154,
   "files": [
     { "path": "main", "firstBlockIndex": 0, "blockCount": 1, "executionOrder": 0 }
   ],

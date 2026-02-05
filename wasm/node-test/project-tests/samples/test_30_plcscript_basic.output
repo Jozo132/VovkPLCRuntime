@@ -1,9 +1,9 @@
 {
   "success": 1,
   "project": { "name": "PLCScriptBasicTest", "version": "1.0" },
-  "bytecode": "FD 08 08 00 64 19 08 00 CA 03 01 14 02 60 00 80 16 02 FF",
+  "bytecode": "FD 08 08 64 00 19 08 CA 00 03 01 14 02 60 80 00 16 02 FF",
   "bytecodeLength": 19,
-  "checksum": 145,
+  "checksum": 218,
   "files": [
     { "path": "main", "firstBlockIndex": 0, "blockCount": 1, "executionOrder": 0 }
   ],
