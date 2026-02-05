@@ -507,6 +507,22 @@ public:
         for (u8 i = 0; i < sizeof(MY_PTR_t); i++) location[offset++] = (pv_addr >> ((sizeof(MY_PTR_t) - i - 1) * 8)) & 0xFF;
         return offset;
     }
+
+    // Push FFI_CALL instruction with index, param count, addresses
+    // Format: [FFI_CALL][index:u8][param_count:u8][addr1:u16]...[addrN:u16][ret_addr:u16]
+    // param_addrs array should have param_count + 1 elements (params + return address)
+    static u8 push_ffi_call(u8* location, u8 ffi_index, u8 param_count, const u16* param_addrs) {
+        location[0] = FFI_CALL;
+        location[1] = ffi_index;
+        location[2] = param_count;
+        u8 offset = 3;
+        // Write parameter addresses (param_count params + 1 return address)
+        for (u8 i = 0; i <= param_count; i++) {
+            location[offset++] = (param_addrs[i] >> 8) & 0xFF;
+            location[offset++] = param_addrs[i] & 0xFF;
+        }
+        return offset; // 3 + 2 * (param_count + 1)
+    }
 };
 
 // ==================== EEPROM/Flash Program Storage Support ====================

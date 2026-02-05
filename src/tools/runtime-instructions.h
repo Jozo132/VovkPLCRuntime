@@ -48,6 +48,9 @@ enum RuntimeError {
     EXECUTION_TIMEOUT,
     MEMORY_ACCESS_ERROR,
     PROGRAM_CYCLE_LIMIT_EXCEEDED,
+    FFI_NOT_FOUND,
+    FFI_INVALID_PARAMS,
+    FFI_EXECUTION_ERROR,
 };
 
 #ifdef __RUNTIME_DEBUG__
@@ -76,6 +79,9 @@ const char* const RuntimeErrorNames [] PROGMEM = {
     STRINGIFY(EXECUTION_TIMEOUT),
     STRINGIFY(MEMORY_ACCESS_ERROR),
     STRINGIFY(PROGRAM_CYCLE_LIMIT_EXCEEDED),
+    STRINGIFY(FFI_NOT_FOUND),
+    STRINGIFY(FFI_INVALID_PARAMS),
+    STRINGIFY(FFI_EXECUTION_ERROR),
 };
 
 const char* RUNTIME_ERROR_NAME(RuntimeError error);
@@ -363,6 +369,10 @@ enum PLCRuntimeInstructionSet {
     CALL_REL,           // Call a function relative to the next instruction address (i16)
     CALL_IF_REL,        // Call a function relative to the next instruction address if the top of the stack is true (i16)
     CALL_IF_NOT_REL,    // Call a function relative to the next instruction address if the top of the stack is false (i16)
+
+    // FFI (Foreign Function Interface) operations
+    FFI_CALL = 0xF0,        // Call FFI by index with memory addresses: [ FFI_CALL, u8 index, u8 param_count, u16 addr1, ..., u16 ret_addr ]
+    FFI_CALL_STACK,         // Call FFI by index with params from stack: [ FFI_CALL_STACK, u8 index, u8 param_count ] - pops params, pushes result
 
     // Runtime configuration instruction
     CONFIG_TC = 0xFC,   // Configure Timer/Counter offsets: [ CONFIG_TC, u16 timer_offset, u8 timer_count, u16 counter_offset, u8 counter_count ] - 7 bytes

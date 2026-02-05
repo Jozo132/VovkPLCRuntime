@@ -29,6 +29,7 @@ import { runTests as runSTTests } from './node-test/st-tests/test_st.js'
 import { runTests as runReservedWordTests } from './node-test/project-tests/test_reserved_words.js'
 import { runTests as runArrayTests } from './node-test/test_arrays.js'
 import { runTests as runSafeModeTests } from './node-test/test_safe_mode.js'
+import { runTests as runFFITests } from './node-test/test_ffi.js'
 import { runTests as runMemoryLeakTests } from './memory_leak_test.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -123,6 +124,11 @@ const testSuites = [
         name: 'Safe Mode Bounds Checking',
         shortName: 'safe-mode',
         run: runSafeModeTests
+    },
+    {
+        name: 'FFI & Memory Protection',
+        shortName: 'ffi',
+        run: runFFITests
     },
     {
         name: 'Memory Leak Detection',

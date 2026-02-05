@@ -24,6 +24,7 @@
 #define __RUNTIME_DEBUG__
 #define __RUNTIME_FULL_UNIT_TEST___
 #define USE_X64_OPS
+#define PLCRUNTIME_FFI_ENABLED
 
 #define VOVKPLC_DEVICE_NAME "Simulator"
 
@@ -154,6 +155,34 @@ WASM_EXPORT void doSomething() {
     custom_test();
 }
 
+// ============================================================================
+// Static String Buffers for JS Interop (no dynamic allocation)
+// ============================================================================
+// These are reusable static buffers for passing strings from JS to WASM.
+// JS writes to these buffers, then calls functions that read from them.
+// This avoids memory leaks from dynamic string allocation.
+
+#define FFI_STRING_BUFFER_SIZE 128
+#define FFI_STRING_BUFFER_COUNT 4
+
+static char ffi_string_buffers[FFI_STRING_BUFFER_COUNT][FFI_STRING_BUFFER_SIZE] = {0};
+
+// Get pointer to a string buffer (0-3)
+WASM_EXPORT u32 ffi_getStringBuffer(u8 index) {
+    if (index >= FFI_STRING_BUFFER_COUNT) return 0;
+    return (u32)ffi_string_buffers[index];
+}
+
+// Get string buffer size
+WASM_EXPORT u32 ffi_getStringBufferSize() {
+    return FFI_STRING_BUFFER_SIZE;
+}
+
+// Clear a string buffer
+WASM_EXPORT void ffi_clearStringBuffer(u8 index) {
+    if (index >= FFI_STRING_BUFFER_COUNT) return;
+    memset(ffi_string_buffers[index], 0, FFI_STRING_BUFFER_SIZE);
+}
 
 WASM_EXPORT u32 getMemoryLocation() {
     return (u32) runtime.memory;
@@ -361,3 +390,302 @@ WASM_EXPORT void memoryReset() {
 WASM_EXPORT void resetFirstCycle() {
     runtime.resetFirstCycle();
 }
+
+// ============================================================================
+// FFI (Foreign Function Interface) WASM Exports
+// ============================================================================
+
+// ============================================================================
+// JS FFI Import - Called FROM WASM to invoke a JS-registered function
+// ============================================================================
+// This function is IMPORTED from JavaScript and called when the runtime
+// needs to execute a JS-registered FFI function.
+//
+// Parameters:
+//   ffi_index: Index of the FFI entry in the registry
+//   param_types_ptr: Pointer to array of parameter type codes
+//   param_addrs_ptr: Pointer to array of parameter memory addresses
+//   param_count: Number of parameters
+//   ret_addr: Memory address to write return value
+//   ret_type: Type code for return value
+//
+// Returns: 0 on success, non-zero on error
+// ============================================================================
+extern "C" {
+    // WASM import - implemented in JavaScript
+    __attribute__((import_module("env"), import_name("js_ffi_invoke")))
+    RuntimeError js_ffi_invoke(u8 ffi_index, u8* param_types, u16* param_addrs, 
+                                u8 param_count, u16 ret_addr, u8 ret_type);
+}
+
+// Flag to track which FFI entries are JS-backed (bit field, max 64 entries)
+static u64 js_ffi_flags = 0;
+
+// Internal handler that routes FFI calls to JavaScript via the import
+RuntimeError js_ffi_router(u8* memory, u16* param_addrs, u8 param_count, u16 ret_addr, void* user_data) {
+    (void)memory; // Memory is accessed via runtime's global memory in JS
+    
+    u8 ffi_index = (u8)(uintptr_t)user_data;
+    const PLCFFIEntry* entry = runtime.getFFI(ffi_index);
+    if (!entry) return FFI_NOT_FOUND;
+    
+    // Parse signature to get parameter types and return type
+    const char* sig = entry->signature;
+    u8 param_types[8] = {0};
+    u8 ret_type = 0;
+    u8 p_idx = 0;
+    
+    // Helper lambda-like function to match type prefix
+    auto matchType = [](const char* s, const char* t, int len) -> bool {
+        for (int i = 0; i < len; i++) {
+            if (s[i] != t[i]) return false;
+        }
+        return true;
+    };
+    
+    // Parse parameter types (before "->")
+    const char* ptr = sig;
+    while (*ptr && !(ptr[0] == '-' && ptr[1] == '>')) {
+        if (*ptr == ',') { ptr++; continue; }
+        
+        // Match type names
+        if (matchType(ptr, "void", 4)) { param_types[p_idx++] = 0; ptr += 4; }
+        else if (matchType(ptr, "bool", 4)) { param_types[p_idx++] = 1; ptr += 4; }
+        else if (matchType(ptr, "u8", 2) && ptr[2] != '6') { param_types[p_idx++] = 2; ptr += 2; }
+        else if (matchType(ptr, "i8", 2)) { param_types[p_idx++] = 3; ptr += 2; }
+        else if (matchType(ptr, "u16", 3)) { param_types[p_idx++] = 4; ptr += 3; }
+        else if (matchType(ptr, "i16", 3)) { param_types[p_idx++] = 5; ptr += 3; }
+        else if (matchType(ptr, "u32", 3)) { param_types[p_idx++] = 6; ptr += 3; }
+        else if (matchType(ptr, "i32", 3)) { param_types[p_idx++] = 7; ptr += 3; }
+        else if (matchType(ptr, "u64", 3)) { param_types[p_idx++] = 8; ptr += 3; }
+        else if (matchType(ptr, "i64", 3)) { param_types[p_idx++] = 9; ptr += 3; }
+        else if (matchType(ptr, "f32", 3)) { param_types[p_idx++] = 10; ptr += 3; }
+        else if (matchType(ptr, "f64", 3)) { param_types[p_idx++] = 11; ptr += 3; }
+        else ptr++;
+    }
+    
+    // Skip "->"
+    if (ptr[0] == '-' && ptr[1] == '>') ptr += 2;
+    
+    // Parse return type
+    if (matchType(ptr, "void", 4)) ret_type = 0;
+    else if (matchType(ptr, "bool", 4)) ret_type = 1;
+    else if (matchType(ptr, "u8", 2) && ptr[2] != '6') ret_type = 2;
+    else if (matchType(ptr, "i8", 2)) ret_type = 3;
+    else if (matchType(ptr, "u16", 3)) ret_type = 4;
+    else if (matchType(ptr, "i16", 3)) ret_type = 5;
+    else if (matchType(ptr, "u32", 3)) ret_type = 6;
+    else if (matchType(ptr, "i32", 3)) ret_type = 7;
+    else if (matchType(ptr, "u64", 3)) ret_type = 8;
+    else if (matchType(ptr, "i64", 3)) ret_type = 9;
+    else if (matchType(ptr, "f32", 3)) ret_type = 10;
+    else if (matchType(ptr, "f64", 3)) ret_type = 11;
+    
+    // Call the JS import
+    return js_ffi_invoke(ffi_index, param_types, param_addrs, param_count, ret_addr, ret_type);
+}
+
+// Register a JS-backed FFI function
+// This creates an entry that routes through js_ffi_router -> js_ffi_invoke (JS import)
+WASM_EXPORT i32 ffi_registerJS(u32 name_ptr, u32 signature_ptr, u32 description_ptr) {
+    const char* name = (const char*)name_ptr;
+    const char* signature = (const char*)signature_ptr;
+    const char* description = (const char*)description_ptr;
+    
+    // Get the index this entry will have
+    u8 next_index = runtime.getFFICount();
+    
+    // Register with js_ffi_router as the handler, index stored in user_data
+    i8 result = runtime.registerFFI(name, signature, description, 
+                                     js_ffi_router, (void*)(uintptr_t)next_index);
+    
+    if (result >= 0 && result < 64) {
+        // Mark this index as JS-backed
+        js_ffi_flags |= (1ULL << result);
+    }
+    
+    return result;
+}
+
+// Check if an FFI entry is JS-backed
+WASM_EXPORT u8 ffi_isJSBacked(u8 index) {
+    if (index >= 64) return 0;
+    return (js_ffi_flags & (1ULL << index)) ? 1 : 0;
+}
+
+// ============================================================================
+// Legacy JS Callback System (for backward compatibility)
+// ============================================================================
+
+// JS callback function pointer - set by JS to receive FFI calls
+typedef RuntimeError (*JSFFICallback)(u8 ffi_index, u8* memory, u16* param_addrs, u8 param_count, u16 ret_addr);
+static JSFFICallback js_ffi_callback = nullptr;
+
+// FFI handler that routes to JavaScript
+RuntimeError js_ffi_handler(u8* memory, u16* param_addrs, u8 param_count, u16 ret_addr, void* user_data) {
+    if (!js_ffi_callback) return FFI_EXECUTION_ERROR;
+    u8 ffi_index = (u8)(uintptr_t)user_data;
+    return js_ffi_callback(ffi_index, memory, param_addrs, param_count, ret_addr);
+}
+
+// Set the JS callback function
+WASM_EXPORT void ffi_setJSCallback(JSFFICallback callback) {
+    js_ffi_callback = callback;
+}
+
+// Register an FFI function (returns index or -1 on failure)
+// For JS-backed FFI, handler will route through js_ffi_callback
+WASM_EXPORT i32 ffi_register(u32 name_ptr, u32 signature_ptr, u32 description_ptr, u8 use_js_callback) {
+    const char* name = (const char*)name_ptr;
+    const char* signature = (const char*)signature_ptr;
+    const char* description = (const char*)description_ptr;
+    
+    PLCFFIHandler handler = nullptr;
+    void* user_data = nullptr;
+    
+    if (use_js_callback) {
+        handler = js_ffi_handler;
+        // Store the current count as the index for this handler
+        user_data = (void*)(uintptr_t)g_ffiRegistry.getCount();
+    }
+    
+    return runtime.registerFFI(name, signature, description, handler, user_data);
+}
+
+// Unregister an FFI function by index
+WASM_EXPORT u8 ffi_unregister(u8 index) {
+    return runtime.unregisterFFI(index) ? 1 : 0;
+}
+
+// Get FFI count
+WASM_EXPORT u8 ffi_getCount() {
+    return runtime.getFFICount();
+}
+
+// Get FFI capacity
+WASM_EXPORT u8 ffi_getCapacity() {
+    return runtime.getFFICapacity();
+}
+
+// Get FFI entry name (returns pointer to string)
+WASM_EXPORT u32 ffi_getName(u8 index) {
+    const PLCFFIEntry* entry = runtime.getFFI(index);
+    if (!entry) return 0;
+    return (u32)entry->name;
+}
+
+// Get FFI entry signature (returns pointer to string)
+WASM_EXPORT u32 ffi_getSignature(u8 index) {
+    const PLCFFIEntry* entry = runtime.getFFI(index);
+    if (!entry) return 0;
+    return (u32)entry->signature;
+}
+
+// Get FFI entry description (returns pointer to string)
+WASM_EXPORT u32 ffi_getDescription(u8 index) {
+    const PLCFFIEntry* entry = runtime.getFFI(index);
+    if (!entry) return 0;
+    return (u32)entry->description;
+}
+
+// Clear all FFI registrations
+WASM_EXPORT void ffi_clear() {
+    runtime.clearFFI();
+}
+
+// Find FFI by name (returns index or -1)
+WASM_EXPORT i32 ffi_findByName(u32 name_ptr) {
+    const char* name = (const char*)name_ptr;
+    return runtime.findFFI(name);
+}
+
+// ============================================================================
+// Demo FFI Functions for Testing
+// ============================================================================
+// These demos showcase the SIMPLE FFI API - just write normal C++ functions
+// and register them. The runtime handles all memory marshalling automatically.
+// ============================================================================
+
+// Demo: Add two i32 values - simple function signature!
+i32 demo_add_i32(i32 a, i32 b) {
+    return a + b;
+}
+
+// Demo: Multiply two f32 values
+f32 demo_mul_f32(f32 a, f32 b) {
+    return a * b;
+}
+
+// Demo: Motor-like function - clamp position within bounds
+// This shows a 3-parameter function
+i32 demo_motor_clamp(i32 pos, i32 min_val, i32 max_val) {
+    i32 result = pos;
+    if (result < min_val) result = min_val;
+    if (result > max_val) result = max_val;
+    return result;
+}
+
+// Demo: Increment counter - takes and returns u16
+u16 demo_increment(u16 value) {
+    return value + 1;
+}
+
+// Demo: Boolean function - check if in range
+bool demo_in_range(i32 value, i32 min_val, i32 max_val) {
+    return value >= min_val && value <= max_val;
+}
+
+// Demo: Void function - doesn't return anything (but still can take params)
+// This shows void return type handling
+static i32 demo_counter = 0;
+void demo_void_increment() {
+    demo_counter++;
+}
+
+// Demo: Get the counter value (no parameters, returns i32)
+i32 demo_get_counter() {
+    return demo_counter;
+}
+
+// Register demo FFI functions using the SIMPLE API
+// Note how we just pass the function pointer - no wrapper needed!
+WASM_EXPORT void ffi_registerDemos() {
+    // 2-parameter functions
+    runtime.registerFFI("F_add_i32", "i32,i32->i32", "Add two i32 values", demo_add_i32);
+    runtime.registerFFI("F_mul_f32", "f32,f32->f32", "Multiply two f32 values", demo_mul_f32);
+    
+    // 3-parameter function
+    runtime.registerFFI("F_motor_clamp", "i32,i32,i32->i32", "Clamp position within bounds", demo_motor_clamp);
+    
+    // 1-parameter function
+    runtime.registerFFI("F_increment", "u16->u16", "Increment a u16 value", demo_increment);
+    
+    // Boolean return type
+    runtime.registerFFI("F_in_range", "i32,i32,i32->bool", "Check if value is in range", demo_in_range);
+    
+    // Void return type (0 parameters)
+    runtime.registerFFI("F_void_inc", "void->void", "Increment internal counter", demo_void_increment);
+    
+    // No parameters, returns value
+    runtime.registerFFI("F_get_counter", "void->i32", "Get internal counter value", demo_get_counter);
+}
+
+// ============================================================================
+// Legacy Demo: Raw Handler API
+// ============================================================================
+// This shows the RAW handler API for advanced users who need direct memory access.
+// Most users should use the simple API above instead.
+// ============================================================================
+
+RuntimeError demo_raw_handler(u8* memory, u16* param_addrs, u8 param_count, u16 ret_addr, void* user_data) {
+    (void)user_data;
+    if (param_count != 2) return FFI_INVALID_PARAMS;
+    i32 a = *(i32*)&memory[param_addrs[0]];
+    i32 b = *(i32*)&memory[param_addrs[1]];
+    *(i32*)&memory[ret_addr] = a + b;
+    return STATUS_SUCCESS;
+}
+
+// Register a raw handler for testing
+WASM_EXPORT void ffi_registerRawDemo() {
+    runtime.registerFFI("F_raw_add", "i32,i32->i32", "Raw handler demo", demo_raw_handler);}

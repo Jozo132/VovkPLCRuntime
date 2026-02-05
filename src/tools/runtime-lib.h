@@ -99,6 +99,7 @@
 #include "arithmetics/runtime-arithmetics.h"
 #include "runtime-program.h"
 #include "runtime-thread.h"
+#include "runtime-ffi.h"
 
 // Transport system (optional - define PLCRUNTIME_TRANSPORT to enable)
 #include "transport/plc-transport.h"
@@ -588,6 +589,143 @@ public:
         Serial.println(F("=============================\n"));
     }
 #endif // PLCRUNTIME_TRANSPORT
+
+    // ========================================================================
+    // FFI (Foreign Function Interface) API
+    // ========================================================================
+#ifdef PLCRUNTIME_FFI_ENABLED
+    /**
+     * @brief Register an FFI function (raw handler with memory access)
+     * @param name Function name (e.g., "F_motor_goto")
+     * @param signature Function signature (e.g., "i32->bool")
+     * @param description Human-readable description
+     * @param handler Function pointer
+     * @param user_data Optional user context passed to handler
+     * @return Function index on success, -1 on failure
+     */
+    i8 registerFFI(const char* name, const char* signature, const char* description,
+                   PLCFFIHandler handler, void* user_data = nullptr) {
+        return g_ffiRegistry.registerFunction(name, signature, description, handler, user_data);
+    }
+
+    // ========================================================================
+    // Simple FFI Registration (template-based auto-marshalling)
+    // ========================================================================
+    // These overloads allow registering normal C++ functions directly:
+    //   bool motor_goto(i32 position) { return true; }
+    //   runtime.registerFFI("F_motor_goto", "i32->bool", "Move motor", motor_goto);
+    // The templates automatically generate marshalling code at compile time.
+    // ========================================================================
+
+    // 0 parameters: Ret fn()
+    template<typename Ret>
+    i8 registerFFI(const char* name, const char* sig, const char* desc, Ret (*fn)()) {
+        return g_ffiRegistry.add(name, sig, desc, fn);
+    }
+
+    // 1 parameter: Ret fn(A1)
+    template<typename Ret, typename A1>
+    i8 registerFFI(const char* name, const char* sig, const char* desc, Ret (*fn)(A1)) {
+        return g_ffiRegistry.add(name, sig, desc, fn);
+    }
+
+    // 2 parameters: Ret fn(A1, A2)
+    template<typename Ret, typename A1, typename A2>
+    i8 registerFFI(const char* name, const char* sig, const char* desc, Ret (*fn)(A1, A2)) {
+        return g_ffiRegistry.add(name, sig, desc, fn);
+    }
+
+    // 3 parameters: Ret fn(A1, A2, A3)
+    template<typename Ret, typename A1, typename A2, typename A3>
+    i8 registerFFI(const char* name, const char* sig, const char* desc, Ret (*fn)(A1, A2, A3)) {
+        return g_ffiRegistry.add(name, sig, desc, fn);
+    }
+
+    // 4 parameters: Ret fn(A1, A2, A3, A4)
+    template<typename Ret, typename A1, typename A2, typename A3, typename A4>
+    i8 registerFFI(const char* name, const char* sig, const char* desc, Ret (*fn)(A1, A2, A3, A4)) {
+        return g_ffiRegistry.add(name, sig, desc, fn);
+    }
+
+    // 5 parameters: Ret fn(A1, A2, A3, A4, A5)
+    template<typename Ret, typename A1, typename A2, typename A3, typename A4, typename A5>
+    i8 registerFFI(const char* name, const char* sig, const char* desc, Ret (*fn)(A1, A2, A3, A4, A5)) {
+        return g_ffiRegistry.add(name, sig, desc, fn);
+    }
+
+    // 6 parameters: Ret fn(A1, A2, A3, A4, A5, A6)
+    template<typename Ret, typename A1, typename A2, typename A3, typename A4, typename A5, typename A6>
+    i8 registerFFI(const char* name, const char* sig, const char* desc, Ret (*fn)(A1, A2, A3, A4, A5, A6)) {
+        return g_ffiRegistry.add(name, sig, desc, fn);
+    }
+
+    /**
+     * @brief Unregister an FFI function by index
+     * @param index Function index
+     * @return true on success
+     */
+    bool unregisterFFI(u8 index) {
+        return g_ffiRegistry.unregisterByIndex(index);
+    }
+
+    /**
+     * @brief Unregister an FFI function by name
+     * @param name Function name
+     * @return true on success
+     */
+    bool unregisterFFI(const char* name) {
+        return g_ffiRegistry.unregisterByName(name);
+    }
+
+    /**
+     * @brief Get FFI entry by index
+     * @param index Function index
+     * @return Pointer to entry, or nullptr if not found
+     */
+    const PLCFFIEntry* getFFI(u8 index) const {
+        return g_ffiRegistry.getEntry(index);
+    }
+
+    /**
+     * @brief Find FFI function by name
+     * @param name Function name
+     * @return Function index, or -1 if not found
+     */
+    i8 findFFI(const char* name) const {
+        return g_ffiRegistry.findByName(name);
+    }
+
+    /**
+     * @brief Get number of registered FFI functions
+     * @return Count of active FFI entries
+     */
+    u8 getFFICount() const {
+        return g_ffiRegistry.getCount();
+    }
+
+    /**
+     * @brief Get FFI registry capacity
+     * @return Maximum number of FFI functions
+     */
+    u8 getFFICapacity() const {
+        return g_ffiRegistry.getCapacity();
+    }
+
+    /**
+     * @brief Clear all FFI registrations
+     */
+    void clearFFI() {
+        g_ffiRegistry.clear();
+    }
+
+    /**
+     * @brief Get pointer to FFI registry (for advanced use)
+     * @return Pointer to global FFI registry
+     */
+    PLCFFIRegistry* getFFIRegistry() {
+        return &g_ffiRegistry;
+    }
+#endif // PLCRUNTIME_FFI_ENABLED
 
     void loadProgramUnsafe(const u8* program, u32 prog_size) {
         this->program.loadUnsafe(program, prog_size);
@@ -2134,6 +2272,98 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
         case CMP_GTE: return PLCMethods::handle_CMP_GTE(this->stack, program, prog_size, index);
         case CMP_LT: return PLCMethods::handle_CMP_LT(this->stack, program, prog_size, index);
         case CMP_LTE: return PLCMethods::handle_CMP_LTE(this->stack, program, prog_size, index);
+
+        // FFI (Foreign Function Interface) instructions
+#ifdef PLCRUNTIME_FFI_ENABLED
+        case FFI_CALL: {
+            // Format: FFI_CALL <index:u8> <param_count:u8> <addr1:u16> ... <addrN:u16> <ret_addr:u16>
+            if (index + 2 > prog_size) return PROGRAM_SIZE_EXCEEDED;
+            u8 ffi_index = program[index++];
+            u8 param_count = program[index++];
+            if (param_count > PLCRUNTIME_FFI_MAX_PARAMS) return FFI_INVALID_PARAMS;
+            
+            // Read parameter addresses
+            u16 param_addrs[PLCRUNTIME_FFI_MAX_PARAMS];
+            for (u8 i = 0; i < param_count; i++) {
+                if (index + 2 > prog_size) return PROGRAM_SIZE_EXCEEDED;
+                param_addrs[i] = (program[index] << 8) | program[index + 1];
+                index += 2;
+            }
+            
+            // Read return address
+            if (index + 2 > prog_size) return PROGRAM_SIZE_EXCEEDED;
+            u16 ret_addr = (program[index] << 8) | program[index + 1];
+            index += 2;
+            
+            // Call the FFI function
+            return g_ffiRegistry.call(ffi_index, memory, param_addrs, param_count, ret_addr);
+        }
+        case FFI_CALL_STACK: {
+            // Format: FFI_CALL_STACK <index:u8> <param_count:u8>
+            // Pops param_count values from stack, pushes result
+            if (index + 2 > prog_size) return PROGRAM_SIZE_EXCEEDED;
+            u8 ffi_index = program[index++];
+            u8 param_count = program[index++];
+            if (param_count > PLCRUNTIME_FFI_MAX_PARAMS) return FFI_INVALID_PARAMS;
+            
+            // Get FFI entry to parse signature
+            const PLCFFIEntry* entry = g_ffiRegistry.getEntry(ffi_index);
+            if (!entry) return FFI_NOT_FOUND;
+            
+            // Parse parameter types from signature
+            u8 param_types[PLCRUNTIME_FFI_MAX_PARAMS];
+            u8 sig_param_count = ffi_parseSignatureParams(entry->signature, param_types, PLCRUNTIME_FFI_MAX_PARAMS);
+            if (sig_param_count != param_count) return FFI_INVALID_PARAMS;
+            
+            // Calculate total bytes to pop from stack
+            u32 total_param_bytes = 0;
+            for (u8 i = 0; i < param_count; i++) {
+                total_param_bytes += ffi_getTypeSize(param_types[i]);
+            }
+            
+            // Allocate temp buffer for params (on stack memory in a reserved area)
+            // We use a temporary area at the end of memory
+            u16 temp_base = PLCRUNTIME_MAX_MEMORY_SIZE - 256; // Reserved FFI scratch area
+            u16 param_addrs[PLCRUNTIME_FFI_MAX_PARAMS];
+            u16 offset = 0;
+            
+            // Pop parameters from stack (reverse order) and store in temp memory
+            for (i8 i = param_count - 1; i >= 0; i--) {
+                u8 size = ffi_getTypeSize(param_types[i]);
+                param_addrs[i] = temp_base + offset;
+                
+                // Pop bytes from stack and write to temp memory
+                for (u8 j = 0; j < size; j++) {
+                    if (stack.size() == 0) return STACK_UNDERFLOW;
+                    memory[temp_base + offset + (size - 1 - j)] = stack.pop();
+                }
+                offset += size;
+            }
+            
+            // Get return type and allocate return address
+            u8 ret_type = ffi_parseSignatureReturn(entry->signature);
+            u8 ret_size = ffi_getTypeSize(ret_type);
+            u16 ret_addr = temp_base + offset;
+            
+            // Call the FFI function
+            RuntimeError err = g_ffiRegistry.call(ffi_index, memory, param_addrs, param_count, ret_addr);
+            if (err != STATUS_SUCCESS) return err;
+            
+            // Push return value to stack if not void
+            if (ret_size > 0) {
+                for (u8 j = 0; j < ret_size; j++) {
+                    if (!stack.push(memory[ret_addr + j])) return STACK_OVERFLOW;
+                }
+            }
+            
+            return STATUS_SUCCESS;
+        }
+#else
+        case FFI_CALL:
+        case FFI_CALL_STACK:
+            // FFI not enabled, skip instruction
+            return UNKNOWN_INSTRUCTION;
+#endif // PLCRUNTIME_FFI_ENABLED
 
         // Runtime configuration instruction
         case CONFIG_TC: {

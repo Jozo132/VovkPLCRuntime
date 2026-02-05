@@ -2514,6 +2514,60 @@ public:
                     }
                 }
 
+                { // FFI (Foreign Function Interface) call
+                    // Syntax: ffi <function_name> <addr1> ... <addrN> <ret_addr>
+                    // The function_name is looked up in the FFI registry to get index and param count
+                    if (hasNext && token == "ffi") {
+#ifdef PLCRUNTIME_FFI_ENABLED
+                        // Get function name from next token
+                        char ffi_name[PLCRUNTIME_FFI_MAX_NAME_LEN];
+                        u8 name_len = token_p1.string.length < PLCRUNTIME_FFI_MAX_NAME_LEN - 1 ? 
+                                      token_p1.string.length : PLCRUNTIME_FFI_MAX_NAME_LEN - 1;
+                        for (u8 j = 0; j < name_len; j++) ffi_name[j] = token_p1.string.data[j];
+                        ffi_name[name_len] = '\0';
+                        
+                        // Look up FFI function by name
+                        i8 ffi_index = g_ffiRegistry.findByName(ffi_name);
+                        if (ffi_index < 0) {
+                            if (buildError(token_p1, "FFI function not found")) return true;
+                        }
+                        
+                        // Get signature to determine param count
+                        const PLCFFIEntry* entry = g_ffiRegistry.getEntry((u8) ffi_index);
+                        if (!entry) {
+                            if (buildError(token_p1, "FFI entry not found")) return true;
+                        }
+                        
+                        // Parse signature to count parameters
+                        u8 param_types[PLCRUNTIME_FFI_MAX_PARAMS];
+                        u8 param_count = ffi_parseSignatureParams(entry->signature, param_types, PLCRUNTIME_FFI_MAX_PARAMS);
+                        
+                        // Collect addresses (param_count params + 1 return address)
+                        u16 addrs[PLCRUNTIME_FFI_MAX_PARAMS + 1];
+                        u8 addr_idx = 0;
+                        i++; // Skip function name token
+                        
+                        // Parse addresses
+                        for (u8 j = 0; j <= param_count; j++) {
+                            if (i + 1 >= token_count) {
+                                if (buildError(tokens[i], "missing FFI address arguments")) return true;
+                            }
+                            Token& addr_tok = tokens[++i];
+                            int addr_val = 0;
+                            if (addressFromToken(addr_tok, addr_val)) {
+                                if (buildError(addr_tok, "invalid FFI address")) return true;
+                            }
+                            addrs[addr_idx++] = (u16) addr_val;
+                        }
+                        
+                        line.size = InstructionCompiler::push_ffi_call(bytecode, (u8) ffi_index, param_count, addrs);
+                        _line_push;
+#else
+                        if (buildError(token, "FFI not enabled (define PLCRUNTIME_FFI_ENABLED)")) return true;
+#endif // PLCRUNTIME_FFI_ENABLED
+                    }
+                }
+
                 { // Stack operations
                     if (token == "clear") { line.size = InstructionCompiler::push(bytecode, CLEAR); _line_push; }
                 }

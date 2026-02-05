@@ -319,6 +319,44 @@ const processRequest = async (post, id, type, payload) => {
             }, 50)
         }
         return true
+    } else if (type === 'ffi_register') {
+        // Register a JS function for FFI - function is passed as string and recreated
+        const { instanceId, name, signature, description, fnString } = payload
+        const instance = instanceId == null ? defaultInstance : instances.get(instanceId)
+        if (!instance) throw new Error('WebAssembly module not initialized')
+        
+        // Recreate the function from string
+        // The fnString should be an arrow function or function expression
+        // e.g., "(a, b) => a + b" or "function(a, b) { return a + b; }"
+        let fn
+        try {
+            // Wrap in parentheses to make it an expression
+            fn = eval(`(${fnString})`)
+        } catch (e) {
+            throw new Error(`Failed to parse FFI function: ${e.message}`)
+        }
+        
+        if (typeof fn !== 'function') {
+            throw new Error('FFI function string did not evaluate to a function')
+        }
+        
+        return instance.registerJSFunction(name, signature, description, fn)
+    } else if (type === 'ffi_unregister') {
+        const { instanceId, index } = payload
+        const instance = instanceId == null ? defaultInstance : instances.get(instanceId)
+        if (!instance) throw new Error('WebAssembly module not initialized')
+        return instance.unregisterJSFunction(index)
+    } else if (type === 'ffi_count') {
+        const { instanceId } = payload
+        const instance = instanceId == null ? defaultInstance : instances.get(instanceId)
+        if (!instance) throw new Error('WebAssembly module not initialized')
+        return instance.getFFICount()
+    } else if (type === 'ffi_clear') {
+        const { instanceId } = payload
+        const instance = instanceId == null ? defaultInstance : instances.get(instanceId)
+        if (!instance) throw new Error('WebAssembly module not initialized')
+        instance.clearFFI()
+        return true
     } else {
         throw new Error(`Unknown worker request: ${type}`)
     }

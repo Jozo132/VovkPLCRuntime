@@ -49,6 +49,18 @@ const checkSupport = () => {
 const SUPPORT = checkSupport()
 
 /**
+ * Memory layout constants - matches runtime-lib.h
+ * System partition is read-only from JS side to prevent accidental corruption.
+ */
+const MEMORY_LAYOUT = {
+    SYSTEM_SIZE: 64,    // S: 0-63 (reserved for runtime)
+    INPUT_SIZE: 64,     // X: 64-127
+    OUTPUT_SIZE: 64,    // Y: 128-191
+    MARKER_SIZE: 256,   // M: 192-447
+    // T and C follow after markers
+}
+
+/**
  * @typedef {{
  *     initialize: () => void, // Initializes the runtime environment and resets internal state.
  *     printInfo: () => void, // Prints runtime configuration and version info to stdout.
@@ -401,6 +413,11 @@ class VovkPLC_class {
                 wasmBuffer = fs.readFileSync(path.resolve(resolvedPath))
             }
         }
+
+        // FFI callback storage - JS functions registered for FFI calls from WASM
+        /** @type {Map<number, {name: string, signature: string, fn: Function}>} */
+        this.ffiCallbacks = new Map()
+
         this.wasmImports = {
             env: {
                 stdout: this.console_print,
@@ -409,6 +426,12 @@ class VovkPLC_class {
                 millis: () => Math.round(this.perf.now()), // @ts-ignore
                 micros: () => Math.round(this.perf.now() * 1000),
                 // memory: new WebAssembly.Memory({ initial: 256, maximum: 512 }),
+
+                // FFI import - called from WASM when runtime executes a JS-registered FFI
+                // @ts-ignore
+                js_ffi_invoke: (ffi_index, param_types_ptr, param_addrs_ptr, param_count, ret_addr, ret_type) => {
+                    return this._ffiInvoke(ffi_index, param_types_ptr, param_addrs_ptr, param_count, ret_addr, ret_type)
+                },
             },
         }
         const wasmModule = await WebAssembly.compile(wasmBuffer)
@@ -2613,6 +2636,9 @@ class VovkPLC_class {
     writeMemoryByte = (address, byte) => {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         if (!this.wasm_exports.writeMemoryByte) throw new Error("'writeMemoryByte' function not found")
+        if (address < MEMORY_LAYOUT.SYSTEM_SIZE) {
+            throw new Error(`Cannot write to System partition (address ${address} < ${MEMORY_LAYOUT.SYSTEM_SIZE}). Use X/Y/M addresses instead.`)
+        }
         return this.wasm_exports.writeMemoryByte(address, byte)
     }
 
@@ -2627,6 +2653,12 @@ class VovkPLC_class {
     writeMemoryArea = (address, data) => {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         if (!this.wasm_exports.writeMemoryByte) throw new Error("'writeMemoryByte' function not found")
+        if (address < MEMORY_LAYOUT.SYSTEM_SIZE) {
+            throw new Error(`Cannot write to System partition (address ${address} < ${MEMORY_LAYOUT.SYSTEM_SIZE}). Use X/Y/M addresses instead.`)
+        }
+        if (address + data.length <= MEMORY_LAYOUT.SYSTEM_SIZE) {
+            throw new Error(`Cannot write to System partition (range ${address}-${address + data.length - 1} overlaps system memory). Use X/Y/M addresses instead.`)
+        }
         for (let i = 0; i < data.length; i++) {
             const byte = data[i] & 0xff
             const success = this.wasm_exports.writeMemoryByte(address + i, byte)
@@ -2649,6 +2681,12 @@ class VovkPLC_class {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         if (!this.wasm_exports.writeMemoryByteMasked) throw new Error("'writeMemoryByteMasked' function not found")
         if (data.length !== mask.length) throw new Error('Mask length must match data length')
+        if (address < MEMORY_LAYOUT.SYSTEM_SIZE) {
+            throw new Error(`Cannot write to System partition (address ${address} < ${MEMORY_LAYOUT.SYSTEM_SIZE}). Use X/Y/M addresses instead.`)
+        }
+        if (address + data.length <= MEMORY_LAYOUT.SYSTEM_SIZE) {
+            throw new Error(`Cannot write to System partition (range ${address}-${address + data.length - 1} overlaps system memory). Use X/Y/M addresses instead.`)
+        }
         for (let i = 0; i < data.length; i++) {
             const byte = data[i] & 0xff
             const maskByte = mask[i] & 0xff
@@ -2669,6 +2707,210 @@ class VovkPLC_class {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         return this.wasm_exports
     }
+
+    // ========================================================================
+    // FFI (Foreign Function Interface) Methods
+    // ========================================================================
+
+    /** Type sizes for FFI parameter marshalling */
+    static FFI_TYPE_SIZES = [0, 1, 1, 1, 2, 2, 4, 4, 8, 8, 4, 8]
+
+    /**
+     * Internal handler for FFI calls from WASM to JS.
+     * Called via the js_ffi_invoke import when runtime executes a JS-registered FFI.
+     * @private
+     */
+    _ffiInvoke = (ffi_index, param_types_ptr, param_addrs_ptr, param_count, ret_addr, ret_type) => {
+        const callback = this.ffiCallbacks.get(ffi_index)
+        if (!callback) {
+            console.error(`FFI callback not found for index ${ffi_index}`)
+            return 1 // Error
+        }
+
+        if (!this.wasm_exports || !this.wasm_exports.memory) {
+            console.error('WASM not initialized for FFI call')
+            return 1
+        }
+
+        const memory = this.wasm_exports.memory
+        const memOffset = this.wasm_exports.getMemoryLocation ? this.wasm_exports.getMemoryLocation() : 0
+        const view = new DataView(memory.buffer)
+
+        // Read parameter types from WASM memory
+        const paramTypes = new Uint8Array(memory.buffer, param_types_ptr, param_count)
+        
+        // Read parameter addresses manually using DataView to avoid alignment issues
+        const paramAddrs = []
+        for (let i = 0; i < param_count; i++) {
+            paramAddrs.push(view.getUint16(param_addrs_ptr + i * 2, true)) // little endian
+        }
+
+        // Read parameter values from PLC memory
+        const params = []
+        for (let i = 0; i < param_count; i++) {
+            const typeCode = paramTypes[i]
+            const addr = memOffset + paramAddrs[i]
+            const val = this._ffiReadValue(view, addr, typeCode)
+            params.push(val)
+        }
+
+        // Call the JS function
+        try {
+            const result = callback.fn(...params)
+
+            // Write return value if not void
+            if (ret_type !== 0 && result !== undefined) {
+                const absRetAddr = memOffset + ret_addr
+                this._ffiWriteValue(view, absRetAddr, ret_type, result)
+            }
+            return 0 // Success
+        } catch (e) {
+            console.error(`FFI callback error: ${e.message}`)
+            return 1 // Error
+        }
+    }
+
+    /**
+     * Read a value from WASM memory based on type code.
+     * @private
+     */
+    _ffiReadValue = (view, addr, typeCode) => {
+        const le = this.isLittleEndian
+        switch (typeCode) {
+            case 0: return undefined // void
+            case 1: return view.getUint8(addr) !== 0 // bool
+            case 2: return view.getUint8(addr) // u8
+            case 3: return view.getInt8(addr) // i8
+            case 4: return view.getUint16(addr, le) // u16
+            case 5: return view.getInt16(addr, le) // i16
+            case 6: return view.getUint32(addr, le) // u32
+            case 7: return view.getInt32(addr, le) // i32
+            case 8: return view.getBigUint64(addr, le) // u64
+            case 9: return view.getBigInt64(addr, le) // i64
+            case 10: return view.getFloat32(addr, le) // f32
+            case 11: return view.getFloat64(addr, le) // f64
+            default: return 0
+        }
+    }
+
+    /**
+     * Write a value to WASM memory based on type code.
+     * @private
+     */
+    _ffiWriteValue = (view, addr, typeCode, value) => {
+        if (addr < MEMORY_LAYOUT.SYSTEM_SIZE && typeCode !== 0) {
+            throw new Error(`FFI cannot write to System partition (address ${addr} < ${MEMORY_LAYOUT.SYSTEM_SIZE}). Use X/Y/M addresses instead.`)
+        }
+        const le = this.isLittleEndian
+        switch (typeCode) {
+            case 0: break // void
+            case 1: view.setUint8(addr, value ? 1 : 0); break // bool
+            case 2: view.setUint8(addr, value); break // u8
+            case 3: view.setInt8(addr, value); break // i8
+            case 4: view.setUint16(addr, value, le); break // u16
+            case 5: view.setInt16(addr, value, le); break // i16
+            case 6: view.setUint32(addr, value, le); break // u32
+            case 7: view.setInt32(addr, value, le); break // i32
+            case 8: view.setBigUint64(addr, BigInt(value), le); break // u64
+            case 9: view.setBigInt64(addr, BigInt(value), le); break // i64
+            case 10: view.setFloat32(addr, value, le); break // f32
+            case 11: view.setFloat64(addr, value, le); break // f64
+        }
+    }
+
+    /**
+     * Register a JavaScript function as an FFI handler.
+     * The function will be callable from PLC programs via the FFI instruction.
+     *
+     * @param {string} name - The FFI function name (e.g., "F_my_function")
+     * @param {string} signature - Type signature (e.g., "i32,i32->i32")
+     * @param {string} description - Human-readable description
+     * @param {Function} fn - The JavaScript function to call
+     * @returns {number} - The FFI index on success, -1 on failure
+     */
+    registerJSFunction = (name, signature, description, fn) => {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        if (!this.wasm_exports.ffi_registerJS) throw new Error("'ffi_registerJS' export not found")
+        if (!this.wasm_exports.ffi_getStringBuffer) throw new Error("'ffi_getStringBuffer' export not found")
+
+        // Write strings to static buffers (no allocation needed)
+        const namePtr = this._writeToStringBuffer(0, name)
+        const sigPtr = this._writeToStringBuffer(1, signature)
+        const descPtr = this._writeToStringBuffer(2, description)
+
+        // Register with WASM
+        const index = this.wasm_exports.ffi_registerJS(namePtr, sigPtr, descPtr)
+
+        if (index >= 0) {
+            this.ffiCallbacks.set(index, { name, signature, fn })
+        }
+
+        return index
+    }
+
+    /**
+     * Unregister a JS FFI function by index.
+     * @param {number} index - The FFI index
+     * @returns {boolean} - True if unregistered successfully
+     */
+    unregisterJSFunction = (index) => {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        if (!this.wasm_exports.ffi_unregister) throw new Error("'ffi_unregister' export not found")
+
+        const result = this.wasm_exports.ffi_unregister(index)
+        if (result) {
+            this.ffiCallbacks.delete(index)
+        }
+        return result !== 0
+    }
+
+    /**
+     * Get the number of registered FFI functions.
+     * @returns {number}
+     */
+    getFFICount = () => {
+        if (!this.wasm_exports || !this.wasm_exports.ffi_getCount) return 0
+        return this.wasm_exports.ffi_getCount()
+    }
+
+    /**
+     * Clear all FFI registrations (both C++ and JS).
+     */
+    clearFFI = () => {
+        if (!this.wasm_exports) return
+        if (this.wasm_exports.ffi_clear) this.wasm_exports.ffi_clear()
+        this.ffiCallbacks.clear()
+    }
+
+    /**
+     * Write a string to a static WASM buffer (no allocation).
+     * @private
+     * @param {number} bufferIndex - Buffer index (0-3)
+     * @param {string} str - String to write
+     * @returns {number} - Pointer to the buffer
+     */
+    _writeToStringBuffer = (bufferIndex, str) => {
+        if (!this.wasm_exports || !this.wasm_exports.ffi_getStringBuffer) {
+            throw new Error('ffi_getStringBuffer export not found')
+        }
+        const ptr = this.wasm_exports.ffi_getStringBuffer(bufferIndex)
+        if (ptr === 0) throw new Error(`Invalid string buffer index ${bufferIndex}`)
+        
+        const maxLen = this.wasm_exports.ffi_getStringBufferSize ? 
+            this.wasm_exports.ffi_getStringBufferSize() : 128
+        const writeLen = Math.min(str.length, maxLen - 1)
+        
+        const view = new Uint8Array(this.wasm_exports.memory.buffer, ptr, maxLen)
+        for (let i = 0; i < writeLen; i++) {
+            view[i] = str.charCodeAt(i)
+        }
+        view[writeLen] = 0 // Null terminator
+        return ptr
+    }
+
+    // ========================================================================
+    // Console/Stream Methods
+    // ========================================================================
 
     /**
      * Calls a specific WebAssembly export by name with arguments.
@@ -3680,6 +3922,51 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
     getMicros = () => this.call('getMicros')
     /** @type { () => Promise<number> } */
     getTotalRam = () => this.call('getTotalRam')
+
+    // FFI (Foreign Function Interface) methods
+    /**
+     * Register a JavaScript function as an FFI handler in the worker.
+     * The function will be callable from PLC programs via the FFI instruction.
+     * 
+     * NOTE: The function is serialized as a string and recreated in the worker,
+     * so it cannot close over any variables from the main thread scope.
+     * Use simple, self-contained functions only.
+     *
+     * @param {string} name - The FFI function name (e.g., "F_my_function")
+     * @param {string} signature - Type signature (e.g., "i32,i32->i32")
+     * @param {string} description - Human-readable description
+     * @param {Function} fn - The JavaScript function to call (must be serializable)
+     * @returns {Promise<number>} - The FFI index on success, -1 on failure
+     */
+    registerJSFunction = (name, signature, description, fn) => {
+        const fnString = fn.toString()
+        return this._send('ffi_register', { name, signature, description, fnString })
+    }
+
+    /**
+     * Unregister a JS FFI function by index.
+     * @param {number} index - The FFI index
+     * @returns {Promise<boolean>} - True if unregistered successfully
+     */
+    unregisterJSFunction = (index) => {
+        return this._send('ffi_unregister', { index })
+    }
+
+    /**
+     * Get the number of registered FFI functions.
+     * @returns {Promise<number>}
+     */
+    getFFICount = () => {
+        return this._send('ffi_count', {})
+    }
+
+    /**
+     * Clear all FFI registrations (both C++ and JS).
+     * @returns {Promise<boolean>}
+     */
+    clearFFI = () => {
+        return this._send('ffi_clear', {})
+    }
 
     // IR (Intermediate Representation) accessors
     /** @type { () => Promise<import('./VovkPLC.js').IR_Entry[]> } */
