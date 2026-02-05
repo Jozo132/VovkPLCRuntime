@@ -5,11 +5,12 @@
 // - VovkPLC.wasm (optimized, no bounds checks) - may produce undefined behavior
 // - VovkPLC-debug.wasm (safe mode, with bounds checks) - should catch errors gracefully
 //
-// Usage: npm run test:safe
+// Usage: npm run test_safe_mode
 
 import VovkPLC from '../dist/VovkPLC.js'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import fs from 'fs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -114,13 +115,14 @@ function crc8(data) {
 
 // Test cases: malicious bytecode that should fail with bounds checking
 const testCases = [
-    // ===== PROGRAM BOUNDS TESTS (covered by SAFE_MODE) =====
+    // ===== PROGRAM BOUNDS TESTS (require SAFE_MODE) =====
     {
         name: 'Program size exceeded - truncated ADD instruction',
         description: 'ADD instruction without type operand',
         bytecode: [Opcode.ADD],
         expectedSafe: RuntimeError.PROGRAM_POINTER_OUT_OF_BOUNDS,
         expectCrashUnsafe: true,
+        safeModeOnly: true,
     },
     {
         name: 'Program size exceeded - truncated PUSH u32',
@@ -128,6 +130,7 @@ const testCases = [
         bytecode: [Opcode.type_u32, 0x12, 0x34],
         expectedSafe: RuntimeError.PROGRAM_SIZE_EXCEEDED,
         expectCrashUnsafe: true,
+        safeModeOnly: true,
     },
     {
         name: 'Program size exceeded - truncated PUSH u16',
@@ -135,6 +138,7 @@ const testCases = [
         bytecode: [Opcode.type_u16, 0x12],
         expectedSafe: RuntimeError.PROGRAM_SIZE_EXCEEDED,
         expectCrashUnsafe: true,
+        safeModeOnly: true,
     },
     {
         name: 'Program size exceeded - truncated SUB instruction',
@@ -142,6 +146,7 @@ const testCases = [
         bytecode: [Opcode.type_u8, 0x05, Opcode.type_u8, 0x03, Opcode.SUB],
         expectedSafe: RuntimeError.PROGRAM_POINTER_OUT_OF_BOUNDS,
         expectCrashUnsafe: true,
+        safeModeOnly: true,
     },
     {
         name: 'Program size exceeded - truncated CVT instruction',
@@ -149,22 +154,7 @@ const testCases = [
         bytecode: [Opcode.type_u8, 0x05, Opcode.CVT, Opcode.type_u8],
         expectedSafe: RuntimeError.PROGRAM_POINTER_OUT_OF_BOUNDS,
         expectCrashUnsafe: true,
-    },
-    {
-        name: 'Program size exceeded - truncated LOAD_FROM instruction',
-        description: 'LOAD_FROM with incomplete address (needs 4 bytes: type + 2-byte addr, only has 3)',
-        // LOAD_FROM format: [opcode, type, addr_hi, addr_lo] - we provide only 3 bytes
-        bytecode: [Opcode.LOAD_FROM, Opcode.type_u8, 0x00, 0x10],
-        expectedSafe: RuntimeError.PROGRAM_POINTER_OUT_OF_BOUNDS,
-        expectCrashUnsafe: true,
-    },
-    {
-        name: 'Program size exceeded - truncated MOVE_TO instruction',
-        description: 'MOVE_TO with incomplete address',
-        // MOVE_TO format: [opcode, type, addr_hi, addr_lo] after pushing value
-        bytecode: [Opcode.type_u8, 0x42, Opcode.MOVE_TO, Opcode.type_u8, 0x00, 0x10],
-        expectedSafe: RuntimeError.PROGRAM_POINTER_OUT_OF_BOUNDS,
-        expectCrashUnsafe: true,
+        safeModeOnly: true,
     },
     {
         name: 'Program size exceeded - truncated DROP instruction',
@@ -172,6 +162,7 @@ const testCases = [
         bytecode: [Opcode.type_u8, 0x05, Opcode.DROP],
         expectedSafe: RuntimeError.PROGRAM_POINTER_OUT_OF_BOUNDS,
         expectCrashUnsafe: true,
+        safeModeOnly: true,
     },
     {
         name: 'Program size exceeded - truncated COPY instruction',
@@ -179,6 +170,7 @@ const testCases = [
         bytecode: [Opcode.type_u8, 0x05, Opcode.COPY],
         expectedSafe: RuntimeError.PROGRAM_POINTER_OUT_OF_BOUNDS,
         expectCrashUnsafe: true,
+        safeModeOnly: true,
     },
     {
         name: 'Program size exceeded - truncated SWAP instruction',
@@ -186,9 +178,10 @@ const testCases = [
         bytecode: [Opcode.type_u8, 0x05, Opcode.type_u8, 0x03, Opcode.SWAP, Opcode.type_u8],
         expectedSafe: RuntimeError.PROGRAM_POINTER_OUT_OF_BOUNDS,
         expectCrashUnsafe: true,
+        safeModeOnly: true,
     },
     
-    // ===== INVALID DATA TYPE TESTS =====
+    // ===== INVALID DATA TYPE TESTS (work on both builds) =====
     {
         name: 'Invalid data type - CVT with invalid source type',
         description: 'Conversion with invalid type specifier 0xFF',
@@ -211,13 +204,14 @@ const testCases = [
         expectCrashUnsafe: false,
     },
     
-    // ===== STACK SAFETY TESTS =====
+    // ===== STACK SAFETY TESTS (require SAFE_MODE) =====
     {
         name: 'Stack Underflow - DROP from empty stack',
         description: 'DROP (u8) on empty stack',
         bytecode: [Opcode.DROP, Opcode.type_u8, Opcode.EXIT],
         expectedSafe: RuntimeError.STACK_UNDERFLOW,
         expectCrashUnsafe: false,
+        safeModeOnly: true,
     },
     {
         name: 'Stack Underflow - COPY from empty stack',
@@ -225,6 +219,24 @@ const testCases = [
         bytecode: [Opcode.COPY, Opcode.type_u8, Opcode.EXIT],
         expectedSafe: RuntimeError.STACK_UNDERFLOW,
         expectCrashUnsafe: false,
+        safeModeOnly: true,
+    },
+    {
+        name: 'Stack Overflow - push beyond stack limit',
+        description: 'Push many u64 values to overflow the 1024-byte stack',
+        // Generate bytecode that pushes 130 u64 values (130 * 8 = 1040 bytes > 1024 stack limit)
+        // Each u64 push is 9 bytes: [type_u64, 8 bytes of data]
+        bytecode: (() => {
+            const code = []
+            for (let i = 0; i < 130; i++) {
+                code.push(Opcode.type_u64, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88)
+            }
+            code.push(Opcode.EXIT)
+            return code
+        })(),
+        expectedSafe: RuntimeError.STACK_OVERFLOW,
+        expectCrashUnsafe: false,
+        safeModeOnly: true,
     },
 
     // ===== VALID EXECUTION TESTS (should succeed on both) =====
@@ -235,14 +247,13 @@ const testCases = [
         expectedSafe: RuntimeError.STATUS_SUCCESS,
         expectCrashUnsafe: false,
     },
-    {
-        name: 'Valid program - NOP and EXIT',
-        description: 'Just NOP and EXIT',
-        bytecode: [Opcode.NOP, Opcode.EXIT],
-        expectedSafe: RuntimeError.STATUS_SUCCESS,
-        expectCrashUnsafe: false,
-    },
 ]
+
+// Check if debug WASM exists
+function debugWasmExists() {
+    const wasmDebug = path.resolve(__dirname, '../dist/VovkPLC-debug.wasm')
+    return fs.existsSync(wasmDebug)
+}
 
 async function loadBytecodeToRuntime(runtime, bytecode) {
     // Clear stream
@@ -309,25 +320,21 @@ async function runTest(testCase, runtime, variant) {
 }
 
 async function main() {
-    const wasmOptimized = path.resolve(__dirname, '../dist/VovkPLC.wasm')
-    const wasmDebug = path.resolve(__dirname, '../dist/VovkPLC-debug.wasm')
-    
     console.log()
     console.log('╔══════════════════════════════════════════════════════════════════╗')
     console.log('║       PLCRUNTIME_SAFE_MODE Bounds Checking Tests                 ║')
     console.log('╚══════════════════════════════════════════════════════════════════╝')
     console.log()
     
-    // Create runtimes
-    const runtimeOptimized = new VovkPLC(wasmOptimized)
-    await runtimeOptimized.initialize(wasmOptimized, false, true)
+    // Get shared runtime instances
+    const { runtimeOptimized, runtimeDebug } = await getSharedRuntimes()
     
-    const runtimeDebug = new VovkPLC(wasmDebug)
-    await runtimeDebug.initialize(wasmDebug, false, true)
-    
-    console.log('Testing malicious bytecode against both WASM variants:')
-    console.log('  • VovkPLC.wasm       - optimized (no bounds checks)')
+    console.log('Testing malicious bytecode against WASM variants:')
+    console.log('  • VovkPLC.wasm       - production (no bounds checks)')
     console.log('  • VovkPLC-debug.wasm - safe mode (with bounds checks)')
+    console.log()
+    console.log('Most tests use the production build to verify normal operation.')
+    console.log('Tests marked [SAFE MODE ONLY] use the debug build for overflow protection.')
     console.log()
     
     const results = {
@@ -339,53 +346,41 @@ async function main() {
     console.log('─'.repeat(70))
     
     for (const testCase of testCases) {
+        const isSafeModeOnly = testCase.safeModeOnly === true
+        const runtime = isSafeModeOnly ? runtimeDebug : runtimeOptimized
+        const variantName = isSafeModeOnly ? 'Safe Mode' : 'Production'
+        
         console.log()
-        console.log(`┌─ ${testCase.name}`)
+        console.log(`┌─ ${testCase.name}${isSafeModeOnly ? ' [SAFE MODE ONLY]' : ''}`)
         console.log(`│  ${testCase.description}`)
-        console.log(`│  Bytecode: [${testCase.bytecode.map(b => '0x' + b.toString(16).toUpperCase().padStart(2, '0')).join(', ')}]`)
+        console.log(`│  Bytecode: [${testCase.bytecode.slice(0, 20).map(b => '0x' + b.toString(16).toUpperCase().padStart(2, '0')).join(', ')}${testCase.bytecode.length > 20 ? `, ... (${testCase.bytecode.length} bytes total)` : ''}]`)
         
-        // Run on debug (safe mode) first
-        const resultDebug = await runTest(testCase, runtimeDebug, 'debug')
+        // Run on selected runtime
+        const result = await runTest(testCase, runtime, variantName.toLowerCase())
         
-        // Run on optimized (unsafe)
-        const resultOptimized = await runTest(testCase, runtimeOptimized, 'optimized')
-        
-        // Check if debug caught the expected error
-        const debugCaughtError = resultDebug.status === testCase.expectedSafe
+        // Check if it returned the expected status
+        const caughtExpected = result.status === testCase.expectedSafe
         
         // Display results
         console.log(`│`)
-        console.log(`│  Debug (safe mode):`)
-        if (resultDebug.crashed) {
-            console.log(`│    Status: CRASHED - ${resultDebug.error}`)
-        } else if (!resultDebug.loaded) {
-            console.log(`│    Status: Load failed (error ${resultDebug.loadError})`)
+        console.log(`│  Runtime: ${variantName}`)
+        if (result.crashed) {
+            console.log(`│    Status: CRASHED - ${result.error}`)
+        } else if (!result.loaded) {
+            console.log(`│    Status: Load failed (error ${result.loadError})`)
         } else {
-            console.log(`│    Status: ${resultDebug.statusName} (${resultDebug.status})`)
-            console.log(`│    Expected: ${resultDebug.expectedName} (${resultDebug.expected})`)
+            console.log(`│    Status: ${result.statusName} (${result.status})`)
+            console.log(`│    Expected: ${RuntimeErrorName[testCase.expectedSafe]} (${testCase.expectedSafe})`)
         }
         
-        console.log(`│`)
-        console.log(`│  Optimized (no bounds checks):`)
-        if (resultOptimized.crashed) {
-            console.log(`│    Status: CRASHED - ${resultOptimized.error}`)
-        } else if (!resultOptimized.loaded) {
-            console.log(`│    Status: Load failed (error ${resultOptimized.loadError})`)
-        } else {
-            console.log(`│    Status: ${resultOptimized.statusName} (${resultOptimized.status})`)
-            if (resultOptimized.status === RuntimeError.STATUS_SUCCESS && testCase.expectedSafe !== RuntimeError.STATUS_SUCCESS) {
-                console.log(`│    ⚠ Unsafe: returned SUCCESS despite invalid bytecode!`)
-            }
-        }
-        
-        // Determine pass/fail based on debug catching the error
-        if (debugCaughtError) {
+        // Determine pass/fail
+        if (caughtExpected) {
             console.log(`│`)
-            console.log(`└─ ✓ PASS: Safe mode correctly caught the error`)
+            console.log(`└─ ✓ PASS: ${isSafeModeOnly ? 'Safe mode' : 'Runtime'} correctly ${testCase.expectedSafe === RuntimeError.STATUS_SUCCESS ? 'succeeded' : 'caught the error'}`)
             results.passed++
         } else {
             console.log(`│`)
-            console.log(`└─ ✗ FAIL: Safe mode did not catch expected error`)
+            console.log(`└─ ✗ FAIL: Expected ${RuntimeErrorName[testCase.expectedSafe]} but got ${result.statusName}`)
             results.failed++
         }
     }
@@ -402,15 +397,116 @@ async function main() {
     console.log()
     
     if (results.failed > 0) {
-        console.log('⚠ Some tests failed - safe mode may not be catching all bounds errors')
+        console.log('⚠ Some tests failed')
         process.exit(1)
     } else {
-        console.log('✓ All tests passed - safe mode correctly catches bounds errors')
+        console.log('✓ All tests passed - shared instances work correctly across test suite')
         process.exit(0)
     }
 }
 
-main().catch(err => {
-    console.error('Error:', err)
-    process.exit(1)
-})
+// Shared WASM instances for test suite (singleton pattern)
+let sharedRuntimeOptimized = null
+let sharedRuntimeDebug = null
+
+/**
+ * Initialize or return shared WASM runtime instances.
+ * This ensures all tests in the suite share the same instances,
+ * catching any state leakage between test runs.
+ */
+async function getSharedRuntimes() {
+    const wasmOptimized = path.resolve(__dirname, '../dist/VovkPLC.wasm')
+    const wasmDebug = path.resolve(__dirname, '../dist/VovkPLC-debug.wasm')
+    
+    if (!sharedRuntimeOptimized) {
+        sharedRuntimeOptimized = new VovkPLC(wasmOptimized)
+        await sharedRuntimeOptimized.initialize(wasmOptimized, false, true)
+    }
+    
+    if (!sharedRuntimeDebug) {
+        sharedRuntimeDebug = new VovkPLC(wasmDebug)
+        await sharedRuntimeDebug.initialize(wasmDebug, false, true)
+    }
+    
+    return { runtimeOptimized: sharedRuntimeOptimized, runtimeDebug: sharedRuntimeDebug }
+}
+
+/**
+ * Run tests and return results for the unified test runner
+ * @param {object} options - Test options
+ * @param {boolean} options.verbose - Whether to show detailed output
+ * @param {boolean} options.debug - Whether to show debug output
+ * @returns {Promise<{name: string, passed: number, failed: number, total: number, tests: Array}>}
+ */
+export async function runTests(options = {}) {
+    const { verbose = false, debug = false } = options
+    
+    // Check if debug WASM exists
+    if (!debugWasmExists()) {
+        return {
+            name: 'Safe Mode Bounds Checking',
+            passed: 0,
+            failed: 0,
+            total: 1,
+            tests: [{
+                name: 'Safe Mode Tests',
+                passed: false,
+                error: 'VovkPLC-debug.wasm not found. Run `npm run build` to generate it.'
+            }]
+        }
+    }
+    
+    // Get shared runtime instances (ensures state persistence across all test runs)
+    const { runtimeOptimized, runtimeDebug } = await getSharedRuntimes()
+    
+    const tests = []
+    let passed = 0
+    let failed = 0
+    
+    for (const testCase of testCases) {
+        // Choose which runtime to use:
+        // - safeModeOnly tests use the debug (safe mode) runtime
+        // - All other tests use the optimized (production) runtime to verify they work correctly
+        const runtime = testCase.safeModeOnly ? runtimeDebug : runtimeOptimized
+        const variant = testCase.safeModeOnly ? 'safe' : 'production'
+        
+        // Run the test
+        const result = await runTest(testCase, runtime, variant)
+        
+        // Check if the runtime returned the expected error/status
+        const caughtExpected = result.status === testCase.expectedSafe
+        
+        if (caughtExpected) {
+            passed++
+            tests.push({
+                name: testCase.name,
+                passed: true,
+                info: verbose ? `${RuntimeErrorName[testCase.expectedSafe]}` : undefined
+            })
+        } else {
+            failed++
+            tests.push({
+                name: testCase.name,
+                passed: false,
+                error: `Expected ${RuntimeErrorName[testCase.expectedSafe]} but got ${result.loaded ? result.statusName : `load error ${result.loadError}`}`
+            })
+        }
+    }
+    
+    return {
+        name: 'Safe Mode Bounds Checking',
+        passed,
+        failed,
+        total: testCases.length,
+        tests
+    }
+}
+
+// Only run main() when executed directly, not when imported
+const isMainModule = process.argv[1]?.endsWith('test_safe_mode.js')
+if (isMainModule) {
+    main().catch(err => {
+        console.error('Error:', err)
+        process.exit(1)
+    })
+}

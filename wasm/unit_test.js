@@ -22,6 +22,7 @@ import { runTests as runStructTests } from './node-test/plcscript-tests/test_str
 import { runTests as runSTTests } from './node-test/st-tests/test_st.js'
 import { runTests as runReservedWordTests } from './node-test/project-tests/test_reserved_words.js'
 import { runTests as runArrayTests } from './node-test/test_arrays.js'
+import { runTests as runSafeModeTests } from './node-test/test_safe_mode.js'
 import { runTests as runMemoryLeakTests } from './memory_leak_test.js'
 
 // ANSI colors
@@ -82,6 +83,11 @@ const testSuites = [
         name: 'Array Integration Tests',
         shortName: 'arrays',
         run: runArrayTests
+    },
+    {
+        name: 'Safe Mode Bounds Checking',
+        shortName: 'safe-mode',
+        run: runSafeModeTests
     },
     {
         name: 'Memory Leak Detection',
