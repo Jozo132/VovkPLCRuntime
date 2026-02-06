@@ -131,35 +131,87 @@ union Converter {
 };
 
 // ============================================================================
-// Native Endianness Read/Write Helpers
+// Unaligned Memory Access Helpers (Little-Endian)
 // ============================================================================
-// These functions read/write multi-byte values using native pointer operations,
-// ensuring the compile target's endianness is used consistently throughout
-// the library. This replaces manual bitshift+mask operations.
+// These functions read/write multi-byte values byte-by-byte to avoid
+// unaligned memory access issues on platforms like ESP32-C3 (RISC-V)
+// and some ARM cores. All values are stored in little-endian format.
 // ============================================================================
 
-// Write multi-byte values to buffer using native endianness
-inline void write_u16(u8* buf, u16 value) { *(u16*)buf = value; }
-inline void write_i16(u8* buf, i16 value) { *(i16*)buf = value; }
-inline void write_u32(u8* buf, u32 value) { *(u32*)buf = value; }
-inline void write_i32(u8* buf, i32 value) { *(i32*)buf = value; }
-inline void write_f32(u8* buf, f32 value) { *(f32*)buf = value; }
-inline void write_ptr(u8* buf, MY_PTR_t value) { *(MY_PTR_t*)buf = value; }
+// Write multi-byte values to buffer (little-endian, unaligned-safe)
+inline void write_u16(u8* buf, u16 value) {
+    buf[0] = (u8)(value & 0xFF);
+    buf[1] = (u8)((value >> 8) & 0xFF);
+}
+inline void write_i16(u8* buf, i16 value) { write_u16(buf, (u16)value); }
+inline void write_u32(u8* buf, u32 value) {
+    buf[0] = (u8)(value & 0xFF);
+    buf[1] = (u8)((value >> 8) & 0xFF);
+    buf[2] = (u8)((value >> 16) & 0xFF);
+    buf[3] = (u8)((value >> 24) & 0xFF);
+}
+inline void write_i32(u8* buf, i32 value) { write_u32(buf, (u32)value); }
+inline void write_f32(u8* buf, f32 value) {
+    union { f32 f; u32 u; } cvt;
+    cvt.f = value;
+    write_u32(buf, cvt.u);
+}
+inline void write_ptr(u8* buf, MY_PTR_t value) {
+#if MY_PTR_SIZE_BYTES == 2
+    write_u16(buf, (u16)value);
+#else
+    write_u32(buf, (u32)value);
+#endif
+}
 #ifdef USE_X64_OPS
-inline void write_u64(u8* buf, u64 value) { *(u64*)buf = value; }
-inline void write_i64(u8* buf, i64 value) { *(i64*)buf = value; }
-inline void write_f64(u8* buf, f64 value) { *(f64*)buf = value; }
+inline void write_u64(u8* buf, u64 value) {
+    buf[0] = (u8)(value & 0xFF);
+    buf[1] = (u8)((value >> 8) & 0xFF);
+    buf[2] = (u8)((value >> 16) & 0xFF);
+    buf[3] = (u8)((value >> 24) & 0xFF);
+    buf[4] = (u8)((value >> 32) & 0xFF);
+    buf[5] = (u8)((value >> 40) & 0xFF);
+    buf[6] = (u8)((value >> 48) & 0xFF);
+    buf[7] = (u8)((value >> 56) & 0xFF);
+}
+inline void write_i64(u8* buf, i64 value) { write_u64(buf, (u64)value); }
+inline void write_f64(u8* buf, f64 value) {
+    union { f64 f; u64 u; } cvt;
+    cvt.f = value;
+    write_u64(buf, cvt.u);
+}
 #endif // USE_X64_OPS
 
-// Read multi-byte values from buffer using native endianness
-inline u16 read_u16(const u8* buf) { return *(const u16*)buf; }
-inline i16 read_i16(const u8* buf) { return *(const i16*)buf; }
-inline u32 read_u32(const u8* buf) { return *(const u32*)buf; }
-inline i32 read_i32(const u8* buf) { return *(const i32*)buf; }
-inline f32 read_f32(const u8* buf) { return *(const f32*)buf; }
-inline MY_PTR_t read_ptr(const u8* buf) { return *(const MY_PTR_t*)buf; }
+// Read multi-byte values from buffer (little-endian, unaligned-safe)
+inline u16 read_u16(const u8* buf) {
+    return (u16)buf[0] | ((u16)buf[1] << 8);
+}
+inline i16 read_i16(const u8* buf) { return (i16)read_u16(buf); }
+inline u32 read_u32(const u8* buf) {
+    return (u32)buf[0] | ((u32)buf[1] << 8) | ((u32)buf[2] << 16) | ((u32)buf[3] << 24);
+}
+inline i32 read_i32(const u8* buf) { return (i32)read_u32(buf); }
+inline f32 read_f32(const u8* buf) {
+    union { u32 u; f32 f; } cvt;
+    cvt.u = read_u32(buf);
+    return cvt.f;
+}
+inline MY_PTR_t read_ptr(const u8* buf) {
+#if MY_PTR_SIZE_BYTES == 2
+    return (MY_PTR_t)read_u16(buf);
+#else
+    return (MY_PTR_t)read_u32(buf);
+#endif
+}
 #ifdef USE_X64_OPS
-inline u64 read_u64(const u8* buf) { return *(const u64*)buf; }
-inline i64 read_i64(const u8* buf) { return *(const i64*)buf; }
-inline f64 read_f64(const u8* buf) { return *(const f64*)buf; }
+inline u64 read_u64(const u8* buf) {
+    return (u64)buf[0] | ((u64)buf[1] << 8) | ((u64)buf[2] << 16) | ((u64)buf[3] << 24) |
+           ((u64)buf[4] << 32) | ((u64)buf[5] << 40) | ((u64)buf[6] << 48) | ((u64)buf[7] << 56);
+}
+inline i64 read_i64(const u8* buf) { return (i64)read_u64(buf); }
+inline f64 read_f64(const u8* buf) {
+    union { u64 u; f64 f; } cvt;
+    cvt.u = read_u64(buf);
+    return cvt.f;
+}
 #endif // USE_X64_OPS
