@@ -5513,7 +5513,7 @@ public:
                         // Parse optional base argument (default 10)
                         u8 base = 10;
                         if (!check(PSTOK_RPAREN)) {
-                            PLCScriptVarType baseType = parseExpression();
+                            (void)parseExpression();  // Parse and discard base expression
                             // Base must be a constant, for now we evaluate at compile time
                             // For simplicity, we only support literal bases
                             // Pop the base value from the expression - since it's already emitted
@@ -5562,7 +5562,7 @@ public:
                                 if (decimals > 15) decimals = 15;
                                 nextToken();
                             } else {
-                                PLCScriptVarType decType = parseExpression();
+                                (void)parseExpression();  // Parse and discard decimals expression
                                 emit("u8.drop\n");  // Drop - use default
                                 decimals = 2;
                             }

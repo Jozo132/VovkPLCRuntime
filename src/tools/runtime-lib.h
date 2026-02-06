@@ -2338,22 +2338,16 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
             u8 sig_param_count = ffi_parseSignatureParams(entry->signature, param_types, PLCRUNTIME_FFI_MAX_PARAMS);
             if (sig_param_count != param_count) return FFI_INVALID_PARAMS;
             
-            // Calculate total bytes to pop from stack
-            u32 total_param_bytes = 0;
-            for (u8 i = 0; i < param_count; i++) {
-                total_param_bytes += ffi_getTypeSize(param_types[i]);
-            }
-            
             // Allocate temp buffer for params (on stack memory in a reserved area)
-            // We use a temporary area at the end of memory
-            u16 temp_base = PLCRUNTIME_MAX_MEMORY_SIZE - 256; // Reserved FFI scratch area
+            // We use a temporary area at the end of memory (use u32 to avoid overflow)
+            u16 temp_base = (u16)(((u32)PLCRUNTIME_MAX_MEMORY_SIZE) - 256); // Reserved FFI scratch area
             u16 param_addrs[PLCRUNTIME_FFI_MAX_PARAMS];
             u16 offset = 0;
             
             // Pop parameters from stack (reverse order) and store in temp memory
             for (i8 i = param_count - 1; i >= 0; i--) {
-                u8 size = ffi_getTypeSize(param_types[i]);
-                param_addrs[i] = temp_base + offset;
+                u8 size = ffi_getTypeSize(param_types[(u8)i]);
+                param_addrs[(u8)i] = temp_base + offset;
                 
                 // Pop bytes from stack and write to temp memory
                 for (u8 j = 0; j < size; j++) {

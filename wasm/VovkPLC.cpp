@@ -165,7 +165,7 @@ WASM_EXPORT void doSomething() {
 #define FFI_STRING_BUFFER_SIZE 128
 #define FFI_STRING_BUFFER_COUNT 4
 
-static char ffi_string_buffers[FFI_STRING_BUFFER_COUNT][FFI_STRING_BUFFER_SIZE] = {0};
+static char ffi_string_buffers[FFI_STRING_BUFFER_COUNT][FFI_STRING_BUFFER_SIZE] = {{}};
 
 // Get pointer to a string buffer (0-3)
 WASM_EXPORT u32 ffi_getStringBuffer(u8 index) {

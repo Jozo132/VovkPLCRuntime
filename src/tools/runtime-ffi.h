@@ -501,7 +501,7 @@ struct PLCFFIEntry {
 // ============================================================================
 // Static Global FFI Entries (to survive WASM class reinitialization)
 // ============================================================================
-static PLCFFIEntry g_ffi_entries[PLCRUNTIME_MAX_FFI_FUNCTIONS] = {0};
+static PLCFFIEntry g_ffi_entries[PLCRUNTIME_MAX_FFI_FUNCTIONS] = {{}};
 static bool g_ffi_initialized = false;
 
 // ============================================================================

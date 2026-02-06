@@ -1160,8 +1160,8 @@ public:
             if (opcode == CSTR_LIT) {
                 // CSTR_LIT instruction: opcode + dest_type + dest_addr(2) + len(2) + ASCII chars
                 // Format: [ CSTR_LIT, dest_type, dest_addr_lo, dest_addr_hi, len_lo, len_hi, char data... ]
-                u8 dest_type = (index + 1 < prog_size) ? program[index + 1] : 0;
-                u16 dest_addr = (index + 3 < prog_size) ? read_u16(program + index + 2) : 0;
+                // u8 dest_type = (index + 1 < prog_size) ? program[index + 1] : 0;  // Reserved for future use
+                // u16 dest_addr = (index + 3 < prog_size) ? read_u16(program + index + 2) : 0;  // Reserved for future use
                 u16 str_len = (index + 5 < prog_size) ? read_u16(program + index + 4) : 0;
                 u16 instruction_size = 1 + 1 + MY_PTR_SIZE_BYTES + 2 + str_len; // opcode + type + addr + len + data
                 Serial.print(F("CSTR_LIT ------- [size "));
@@ -1187,8 +1187,8 @@ public:
             if (opcode == CSTR_CAT) {
                 // CSTR_CAT instruction: opcode + dest_type + dest_addr(2) + len(2) + ASCII chars
                 // Format: [ CSTR_CAT, dest_type, dest_addr_lo, dest_addr_hi, len_lo, len_hi, char data... ]
-                u8 dest_type = (index + 1 < prog_size) ? program[index + 1] : 0;
-                u16 dest_addr = (index + 3 < prog_size) ? read_u16(program + index + 2) : 0;
+                // u8 dest_type = (index + 1 < prog_size) ? program[index + 1] : 0;  // Reserved for future use
+                // u16 dest_addr = (index + 3 < prog_size) ? read_u16(program + index + 2) : 0;  // Reserved for future use
                 u16 str_len = (index + 5 < prog_size) ? read_u16(program + index + 4) : 0;
                 u16 instruction_size = 1 + 1 + MY_PTR_SIZE_BYTES + 2 + str_len; // opcode + type + addr + len + data
                 Serial.print(F("CSTR_CAT ------- [size "));
