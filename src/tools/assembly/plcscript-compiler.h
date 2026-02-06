@@ -187,6 +187,8 @@ enum PLCScriptTokenType {
     PSTOK_TYPE_U64,
     PSTOK_TYPE_F32,
     PSTOK_TYPE_F64,
+    PSTOK_TYPE_STR8,
+    PSTOK_TYPE_STR16,
     
     // Operators
     PSTOK_PLUS,         // +
@@ -262,6 +264,47 @@ struct PLCScriptToken {
 };
 
 // ============================================================================
+// String Support (str8 / str16)
+// ============================================================================
+//
+// PLCScript supports two string types with JS-like syntax:
+//   - str8:  Max 254 chars, 2-byte header (u8 capacity, u8 length) + chars
+//   - str16: Max 65534 chars, 4-byte header (u16 capacity, u16 length) + chars
+//
+// Declaration:
+//   let msg: str8[32] @ M0;      // 32-char capacity at memory address M0
+//   let buf: str16[256] @ auto;  // 256-char capacity, auto-allocated
+//   let greeting: str8[100];     // Capacity 100, auto memory
+//
+// Literals (with JS escape sequences):
+//   msg = "Hello, World!";
+//   buf = "Line1\nLine2\tTabbed";
+//   // Supported escapes: \n \t \r \0 \\ \" \'
+//
+// Operators:
+//   msg += " appended";         // Concatenate to msg
+//   let result: str8[64] @ auto = msg + buf;  // Concatenate two strings
+//   if (msg == buf) { ... }      // String equality comparison
+//   if (msg != buf) { ... }      // String inequality comparison
+//
+// Properties:
+//   let len: u16 = msg.length;   // Current string length (characters used)
+//   let cap: u16 = msg.capacity; // Maximum capacity (characters available)
+//
+// Methods:
+//   msg.clear();                 // Reset string to empty (length = 0)
+//   let pos: i16 = msg.indexOf("World");   // Find substring, -1 if not found
+//   let found: bool = msg.includes("ello"); // Check if substring exists
+//   let ch: u8 = msg.charAt(0);  // Get character at index (0-based)
+//   msg.concat(buf);             // Append another string
+//
+// Memory Layout Example (str8[32]):
+//   Byte 0:    capacity (32)
+//   Byte 1:    length (current string length)
+//   Bytes 2-33: character data (capacity bytes)
+//   Total size: 2 + 32 = 34 bytes
+//
+// ============================================================================
 // Symbol Types
 // ============================================================================
 
@@ -278,6 +321,8 @@ enum PLCScriptVarType {
     PSTYPE_U64,
     PSTYPE_F32,
     PSTYPE_F64,
+    PSTYPE_STR8,     // String8 type: [u8 capacity, u8 length, char[capacity]]
+    PSTYPE_STR16,    // String16 type: [u16 capacity, u16 length, char[capacity]]
     PSTYPE_STRUCT,   // Custom struct type (uses structTypeIndex for lookup)
 };
 
@@ -364,6 +409,9 @@ struct PLCScriptSymbol {
     // Array support
     MY_PTR_t array_size;       // Number of elements (0 = not an array, 1+ = array)
     
+    // String support (for PSTYPE_STR8 and PSTYPE_STR16)
+    u16 stringCapacity;        // Maximum string length (0 = not a string)
+    
     // Memory location (PLC address)
     char address[32];     // Original address string (e.g., "X0.0", "MW10")
     u32 memoryOffset;     // Computed memory offset
@@ -390,10 +438,21 @@ struct PLCScriptSymbol {
     // Check if this is an array type
     bool isArray() const { return array_size > 0; }
     
+    // Check if this is a string type
+    bool isStringType() const { return type == PSTYPE_STR8 || type == PSTYPE_STR16; }
+    
+    // Get total size in bytes for string (header + capacity)
+    u32 stringSizeInBytes() const {
+        if (type == PSTYPE_STR8) return 2 + stringCapacity;   // u8 cap + u8 len + chars
+        if (type == PSTYPE_STR16) return 4 + stringCapacity;  // u16 cap + u16 len + chars
+        return 0;
+    }
+    
     // Get element size in bytes - requires getTypeSize from compiler
     // Note: This returns 0 for struct types (needs compiler context)
     u8 elementSize() const {
         if (structTypeIndex >= 0) return 0; // Struct size determined at runtime
+        if (isStringType()) return 0;       // String size determined by stringCapacity
         // Simple type size lookup (doesn't require compiler context)
         switch(type) {
             case PSTYPE_BOOL: return 1;
@@ -405,8 +464,9 @@ struct PLCScriptSymbol {
         }
     }
     
-    // Get total size in bytes (element size * count for arrays)
+    // Get total size in bytes (element size * count for arrays, string size for strings)
     u32 totalSize() const {
+        if (isStringType()) return stringSizeInBytes();
         u8 elem_size = elementSize();
         if (array_size == 0) return elem_size;
         return (u32)elem_size * (u32)array_size;
@@ -514,6 +574,14 @@ public:
     // When set, integer literals will be emitted as this type instead of i32
     PLCScriptVarType targetType = PSTYPE_VOID;
     
+    // String literal pending for assignment (e.g., in msg = "hello")
+    char pendingStringLiteral[PLCSCRIPT_MAX_IDENTIFIER_LEN];
+    int pendingStringLiteralLen = 0;
+    bool hasPendingStringLiteral = false;
+    
+    // String expression context - tracks last referenced string variable
+    PLCScriptSymbol* lastStringSymbol = nullptr;
+    
     // Function table (for user-defined functions)
     PLCScriptFunction functions[PLCSCRIPT_MAX_FUNCTIONS];
     int functionCount = 0;
@@ -552,6 +620,11 @@ public:
         loopStackDepth = 0;
         // Reset type inference hint
         targetType = PSTYPE_VOID;
+        // Reset string context
+        pendingStringLiteral[0] = '\0';
+        pendingStringLiteralLen = 0;
+        hasPendingStringLiteral = false;
+        lastStringSymbol = nullptr;
         // Reset auto-address counters
         autoAddrBit = 900;
         autoAddrByte = 950;
@@ -858,6 +931,9 @@ public:
         if (strEq(text, "u64")) return PSTOK_TYPE_U64;
         if (strEq(text, "f32")) return PSTOK_TYPE_F32;
         if (strEq(text, "f64")) return PSTOK_TYPE_F64;
+        if (strEq(text, "str8")) return PSTOK_TYPE_STR8;
+        if (strEq(text, "str16")) return PSTOK_TYPE_STR16;
+        if (strEq(text, "string")) return PSTOK_TYPE_STR8;  // alias: string = str8
         
         return PSTOK_IDENTIFIER;
     }
@@ -1077,13 +1153,28 @@ public:
             return;
         }
         
-        // String literals
+        // String literals with JS-style escape sequences
         if (c == '"' || c == '\'') {
             char quote = advance();
             while (pos < sourceLength && peek() != quote) {
-                if (peek() == '\\' && peek(1) == quote) {
-                    advance();
-                    currentToken.text[currentToken.textLen++] = advance();
+                if (peek() == '\\') {
+                    advance(); // consume backslash
+                    if (pos >= sourceLength) {
+                        setError("Unterminated escape sequence");
+                        currentToken.type = PSTOK_ERROR;
+                        return;
+                    }
+                    char escaped = advance();
+                    switch (escaped) {
+                        case 'n': currentToken.text[currentToken.textLen++] = '\n'; break;
+                        case 't': currentToken.text[currentToken.textLen++] = '\t'; break;
+                        case 'r': currentToken.text[currentToken.textLen++] = '\r'; break;
+                        case '0': currentToken.text[currentToken.textLen++] = '\0'; break;
+                        case '\\': currentToken.text[currentToken.textLen++] = '\\'; break;
+                        case '"': currentToken.text[currentToken.textLen++] = '"'; break;
+                        case '\'': currentToken.text[currentToken.textLen++] = '\''; break;
+                        default: currentToken.text[currentToken.textLen++] = escaped; break;
+                    }
                 } else if (peek() == '\n') {
                     setError("Unterminated string literal");
                     currentToken.type = PSTOK_ERROR;
@@ -1319,6 +1410,8 @@ public:
             case PSTOK_TYPE_U64: return PSTYPE_U64;
             case PSTOK_TYPE_F32: return PSTYPE_F32;
             case PSTOK_TYPE_F64: return PSTYPE_F64;
+            case PSTOK_TYPE_STR8: return PSTYPE_STR8;
+            case PSTOK_TYPE_STR16: return PSTYPE_STR16;
             default: return PSTYPE_VOID;
         }
     }
@@ -1336,6 +1429,8 @@ public:
             case PSTYPE_U64: return "u64";
             case PSTYPE_F32: return "f32";
             case PSTYPE_F64: return "f64";
+            case PSTYPE_STR8: return "str8";
+            case PSTYPE_STR16: return "str16";
             default: return "u8";
         }
     }
@@ -1358,7 +1453,11 @@ public:
     }
     
     bool isTypeKeyword(PLCScriptTokenType type) {
-        return type >= PSTOK_TYPE_BOOL && type <= PSTOK_TYPE_F64;
+        return type >= PSTOK_TYPE_BOOL && type <= PSTOK_TYPE_STR16;
+    }
+    
+    bool isStringType(PLCScriptVarType type) {
+        return type == PSTYPE_STR8 || type == PSTYPE_STR16;
     }
     
     // ========================================================================
@@ -1802,6 +1901,8 @@ public:
     }
     
     void emitDrop(PLCScriptVarType type) {
+        // String types don't push values to stack, so nothing to drop
+        if (type == PSTYPE_STR8 || type == PSTYPE_STR16) return;
         emit(varTypeToPlcasm(type));
         emitLine(".drop");
     }
@@ -1919,6 +2020,34 @@ public:
             for (int i = numLen - 1; i >= 0; i--) addr[len++] = numBuf[i];
             addr[len] = '\0';
             autoAddrWord += 2 * count;  // Words are 2 bytes apart, reserve for all elements
+            // Copy directly - already in PLCASM format
+            int j = 0;
+            while (addr[j] && j < 31) {
+                sym->address[j] = addr[j];
+                j++;
+            }
+            sym->address[j] = '\0';
+        } else if (sym->type == PSTYPE_STR8 || sym->type == PSTYPE_STR16) {
+            // String address: M<n> - use dword alignment for strings
+            // String size = header + capacity
+            u32 strSize = sym->stringSizeInBytes();
+            sym->memoryOffset = plcasm_marker_offset + autoAddrDword;
+            int len = 0;
+            addr[len++] = 'M';
+            char numBuf[16];
+            int numLen = 0;
+            int n = autoAddrDword;
+            if (n == 0) {
+                numBuf[numLen++] = '0';
+            } else {
+                while (n > 0) {
+                    numBuf[numLen++] = '0' + (n % 10);
+                    n /= 10;
+                }
+            }
+            for (int i = numLen - 1; i >= 0; i--) addr[len++] = numBuf[i];
+            addr[len] = '\0';
+            autoAddrDword += strSize;  // Reserve space for string header + capacity
             // Copy directly - already in PLCASM format
             int j = 0;
             while (addr[j] && j < 31) {
@@ -2678,6 +2807,7 @@ public:
         PLCScriptVarType varType = PSTYPE_I16; // Default type
         int structTypeIdx = -1;
         MY_PTR_t array_size = 0;  // 0 = not an array
+        u16 string_capacity = 0;  // 0 = not a string, or string capacity
         
         if (match(PSTOK_COLON)) {
             // Check for struct type first
@@ -2702,33 +2832,60 @@ public:
                 return;
             }
             
-            // Check for array syntax: type[size]
+            // Check for array/capacity syntax: type[size]
             if (match(PSTOK_LBRACKET)) {
-                // Arrays of bit types not supported
-                if (varType == PSTYPE_BOOL) {
-                    setError("Arrays of bool types not supported");
-                    return;
+                // Handle string capacity: str8[capacity] or str16[capacity]
+                if (varType == PSTYPE_STR8 || varType == PSTYPE_STR16) {
+                    // Expect a numeric literal for string capacity
+                    if (!check(PSTOK_INTEGER)) {
+                        setError("Expected string capacity (numeric literal)");
+                        return;
+                    }
+                    
+                    int64_t cap = currentToken.intValue;
+                    u16 max_cap = (varType == PSTYPE_STR8) ? 254 : 65534;
+                    if (cap < 1 || cap > max_cap) {
+                        setError("String capacity out of range");
+                        return;
+                    }
+                    string_capacity = (u16)cap;
+                    nextToken();
+                    
+                    if (!match(PSTOK_RBRACKET)) {
+                        setError("Expected ']' after string capacity");
+                        return;
+                    }
+                } else {
+                    // Arrays of bit types not supported
+                    if (varType == PSTYPE_BOOL) {
+                        setError("Arrays of bool types not supported");
+                        return;
+                    }
+                    
+                    // Expect a numeric literal for array size
+                    if (!check(PSTOK_INTEGER)) {
+                        setError("Expected array size (numeric literal)");
+                        return;
+                    }
+                    
+                    // Parse array size from token
+                    int64_t size = currentToken.intValue;
+                    if (size < 1 || size > MY_PTR_MAX) {
+                        setError("Array size out of range");
+                        return;
+                    }
+                    array_size = (MY_PTR_t)size;
+                    nextToken();
+                    
+                    if (!match(PSTOK_RBRACKET)) {
+                        setError("Expected ']' after array size");
+                        return;
+                    }
                 }
-                
-                // Expect a numeric literal for array size
-                if (!check(PSTOK_INTEGER)) {
-                    setError("Expected array size (numeric literal)");
-                    return;
-                }
-                
-                // Parse array size from token
-                int64_t size = currentToken.intValue;
-                if (size < 1 || size > MY_PTR_MAX) {
-                    setError("Array size out of range");
-                    return;
-                }
-                array_size = (MY_PTR_t)size;
-                nextToken();
-                
-                if (!match(PSTOK_RBRACKET)) {
-                    setError("Expected ']' after array size");
-                    return;
-                }
+            } else if (varType == PSTYPE_STR8 || varType == PSTYPE_STR16) {
+                // String without capacity - require capacity specification
+                setError("String type requires capacity: str8[capacity] or str16[capacity]");
+                return;
             }
         }
         
@@ -2771,6 +2928,7 @@ public:
         sym->isAutoAddress = isAutoAddress;
         sym->stackSlot = -1;
         sym->array_size = array_size;
+        sym->stringCapacity = string_capacity;
         
         if (isAutoAddress || isLocal) {
             // Generate auto address for both explicit "@ auto" and local variables
@@ -2794,6 +2952,10 @@ public:
         if (hasAddress && varType == PSTYPE_STRUCT && structTypeIdx >= 0) {
             const char* structTypeName = structTypes[structTypeIdx].name;
             addSharedSymbol(name, structTypeName, sym->memoryOffset, 0, false, structTypes[structTypeIdx].totalSize, array_size);
+        } else if (hasAddress && (varType == PSTYPE_STR8 || varType == PSTYPE_STR16)) {
+            // Register string in shared symbol table (type_size = total string size)
+            u32 str_size = sym->stringSizeInBytes();
+            addSharedSymbol(name, varTypeToPlcasm(varType), sym->memoryOffset, 0, false, (u8)str_size, 0);
         } else if (hasAddress && array_size > 0) {
             // Register array in shared symbol table
             u8 elem_size = (u8)getTypeSize(varType);
@@ -2806,7 +2968,23 @@ public:
         emit(name);
         emit(": ");
         emit(varTypeToPlcasm(varType));
-        if (array_size > 0) {
+        if (string_capacity > 0) {
+            // Show string capacity
+            emit("[");
+            char sizeBuf[16];
+            int si = 0;
+            u16 s = string_capacity;
+            if (s == 0) sizeBuf[si++] = '0';
+            else {
+                char temp[16];
+                int ti = 0;
+                while (s > 0) { temp[ti++] = '0' + (s % 10); s /= 10; }
+                while (ti > 0) sizeBuf[si++] = temp[--ti];
+            }
+            sizeBuf[si] = '\0';
+            emit(sizeBuf);
+            emit("]");
+        } else if (array_size > 0) {
             emit("[");
             char sizeBuf[16];
             int si = 0;
@@ -3600,6 +3778,76 @@ public:
                 }
                 
                 nextToken(); // consume '='
+                
+                // Handle string assignment specially
+                if (sym->type == PSTYPE_STR8 || sym->type == PSTYPE_STR16) {
+                    const char* strType = (sym->type == PSTYPE_STR8) ? "str" : "str16";
+                    
+                    // Check if assigning from a string literal
+                    if (check(PSTOK_STRING)) {
+                        // String literal assignment - use str.clear then str.char for each char
+                        // The literal is in currentToken.text (WITHOUT quotes, escapes already processed by tokenizer)
+                        const char* litText = currentToken.text;
+                        int litLen = currentToken.textLen;
+                        
+                        // First clear the string
+                        emit(strType);
+                        emit(".clear ");
+                        emit(sym->address);
+                        emit("\n");
+                        
+                        // Then append each character using str.char
+                        for (int ci = 0; ci < litLen; ci++) {
+                            char c = litText[ci];
+                            emit("u8.const ");
+                            char charBuf[8];
+                            int cbi = 0;
+                            u8 cv = (u8)c;
+                            if (cv == 0) charBuf[cbi++] = '0';
+                            else {
+                                char temp[8];
+                                int ti = 0;
+                                while (cv > 0) { temp[ti++] = '0' + (cv % 10); cv /= 10; }
+                                while (ti > 0) charBuf[cbi++] = temp[--ti];
+                            }
+                            charBuf[cbi] = '\0';
+                            emit(charBuf);
+                            emit("\n");
+                            emit(strType);
+                            emit(".char ");
+                            emit(sym->address);
+                            emit("\n");
+                        }
+                        
+                        nextToken(); // consume string literal
+                        return sym->type;
+                    }
+                    
+                    // Otherwise, should be assigning from another string variable
+                    lastStringSymbol = nullptr;
+                    PLCScriptVarType rhsType = parseAssignment();
+                    
+                    if (rhsType != PSTYPE_STR8 && rhsType != PSTYPE_STR16) {
+                        setError("Cannot assign non-string to string variable");
+                        return PSTYPE_VOID;
+                    }
+                    
+                    if (!lastStringSymbol) {
+                        setError("String assignment requires a string variable source");
+                        return PSTYPE_VOID;
+                    }
+                    
+                    // Copy from source to destination
+                    emit(strType);
+                    emit(".copy ");
+                    emit(sym->address);
+                    emit(" ");
+                    emit(lastStringSymbol->address);
+                    emit("\n");
+                    
+                    return sym->type;
+                }
+                
                 // Set target type hint for expression parsing
                 PLCScriptVarType savedTarget = targetType;
                 targetType = sym->type;
@@ -3638,6 +3886,68 @@ public:
                 PLCScriptTokenType opType = currentToken.type;
                 nextToken();
                 
+                // Handle string concatenation with +=
+                if ((sym->type == PSTYPE_STR8 || sym->type == PSTYPE_STR16) && opType == PSTOK_PLUS_EQ) {
+                    const char* strType = (sym->type == PSTYPE_STR8) ? "str" : "str16";
+                    
+                    // Check if concatenating a string literal
+                    if (check(PSTOK_STRING)) {
+                        // The literal is in currentToken.text (WITHOUT quotes, escapes already processed)
+                        const char* litText = currentToken.text;
+                        int litLen = currentToken.textLen;
+                        
+                        // Append each character using str.char
+                        for (int ci = 0; ci < litLen; ci++) {
+                            char c = litText[ci];
+                            emit("u8.const ");
+                            char charBuf[8];
+                            int cbi = 0;
+                            u8 cv = (u8)c;
+                            if (cv == 0) charBuf[cbi++] = '0';
+                            else {
+                                char temp[8];
+                                int ti = 0;
+                                while (cv > 0) { temp[ti++] = '0' + (cv % 10); cv /= 10; }
+                                while (ti > 0) charBuf[cbi++] = temp[--ti];
+                            }
+                            charBuf[cbi] = '\0';
+                            emit(charBuf);
+                            emit("\n");
+                            emit(strType);
+                            emit(".char ");
+                            emit(sym->address);
+                            emit("\n");
+                        }
+                        
+                        nextToken(); // consume string literal
+                        return sym->type;
+                    }
+                    
+                    // Otherwise concatenating another string variable
+                    lastStringSymbol = nullptr;
+                    PLCScriptVarType rhsType = parseAssignment();
+                    
+                    if (rhsType != PSTYPE_STR8 && rhsType != PSTYPE_STR16) {
+                        setError("Cannot concatenate non-string with +=");
+                        return PSTYPE_VOID;
+                    }
+                    
+                    if (!lastStringSymbol) {
+                        setError("String += requires a string variable source");
+                        return PSTYPE_VOID;
+                    }
+                    
+                    emit(strType);
+                    emit(".concat ");
+                    emit(sym->address);
+                    emit(" ");
+                    emit(lastStringSymbol->address);
+                    emit("\n");
+                    
+                    return sym->type;
+                }
+                
+                // Non-string compound assignment
                 // Load current value
                 emitLoadFromAddress(sym);
                 
@@ -3808,6 +4118,47 @@ public:
     PLCScriptVarType parseEquality() {
         PLCScriptVarType left = parseComparison();
         
+        // String equality comparison
+        if ((left == PSTYPE_STR8 || left == PSTYPE_STR16) && (check(PSTOK_EQ_EQ) || check(PSTOK_BANG_EQ))) {
+            bool isEq = check(PSTOK_EQ_EQ);
+            nextToken();
+            
+            PLCScriptSymbol* leftSym = lastStringSymbol;
+            if (!leftSym) {
+                setError("String == requires a string variable on the left side");
+                return PSTYPE_BOOL;
+            }
+            const char* strType = (leftSym->type == PSTYPE_STR8) ? "str" : "str16";
+            
+            lastStringSymbol = nullptr;
+            PLCScriptVarType right = parseComparison();
+            
+            if (right != PSTYPE_STR8 && right != PSTYPE_STR16) {
+                setError("String == requires string operands");
+                return PSTYPE_BOOL;
+            }
+            
+            if (!lastStringSymbol) {
+                setError("String == requires a string variable on the right side");
+                return PSTYPE_BOOL;
+            }
+            
+            // Emit str.eq left right -> pushes bool
+            emit(strType);
+            emit(".eq ");
+            emit(leftSym->address);
+            emit(" ");
+            emit(lastStringSymbol->address);
+            emit("\n");
+            
+            if (!isEq) {
+                // For != , negate the result
+                emit("u8.not\n");
+            }
+            
+            return PSTYPE_BOOL;
+        }
+        
         while (check(PSTOK_EQ_EQ) || check(PSTOK_BANG_EQ)) {
             bool isEq = check(PSTOK_EQ_EQ);
             nextToken();
@@ -3877,6 +4228,42 @@ public:
     
     PLCScriptVarType parseAdditive() {
         PLCScriptVarType left = parseMultiplicative();
+        
+        // String concatenation with + operator
+        if ((left == PSTYPE_STR8 || left == PSTYPE_STR16) && check(PSTOK_PLUS)) {
+            // For strings, we need to track the destination and concat sources
+            // The left operand should have set lastStringSymbol
+            if (!lastStringSymbol) {
+                setError("String + requires a string variable on the left side");
+                return left;
+            }
+            PLCScriptSymbol* destSym = lastStringSymbol;
+            const char* strType = (destSym->type == PSTYPE_STR8) ? "str" : "str16";
+            
+            while (check(PSTOK_PLUS)) {
+                nextToken();
+                lastStringSymbol = nullptr;
+                PLCScriptVarType right = parseMultiplicative();
+                
+                if (right == PSTYPE_STR8 || right == PSTYPE_STR16) {
+                    // Concatenating another string variable
+                    if (!lastStringSymbol) {
+                        setError("String + requires string variables");
+                        return left;
+                    }
+                    emit(strType);
+                    emit(".concat ");
+                    emit(destSym->address);
+                    emit(" ");
+                    emit(lastStringSymbol->address);
+                    emit("\n");
+                } else {
+                    setError("Cannot concatenate non-string with string using +");
+                    return left;
+                }
+            }
+            return left;
+        }
         
         while (check(PSTOK_PLUS) || check(PSTOK_MINUS)) {
             bool isAdd = check(PSTOK_PLUS);
@@ -4015,6 +4402,21 @@ public:
             return PSTYPE_BOOL;
         }
         
+        // String literal - returns STR8 type, stores literal info for assignment
+        if (check(PSTOK_STRING)) {
+            // Save the string literal for later use in assignment
+            int i = 0;
+            while (currentToken.text[i] && i < PLCSCRIPT_MAX_IDENTIFIER_LEN - 1) {
+                pendingStringLiteral[i] = currentToken.text[i];
+                i++;
+            }
+            pendingStringLiteral[i] = '\0';
+            pendingStringLiteralLen = currentToken.textLen;
+            hasPendingStringLiteral = true;
+            nextToken();
+            return PSTYPE_STR8;  // String literals are str8 by default
+        }
+        
         // Parenthesized expression
         if (check(PSTOK_LPAREN)) {
             nextToken();
@@ -4095,6 +4497,201 @@ public:
                 }
                 propName[pi] = '\0';
                 nextToken();
+                
+                // Check for string property/method access (JS-style API)
+                PLCScriptSymbol* strSym = findSymbol(name);
+                if (strSym && (strSym->type == PSTYPE_STR8 || strSym->type == PSTYPE_STR16)) {
+                    const char* strType = (strSym->type == PSTYPE_STR8) ? "str" : "str16";
+                    
+                    // Property: .length
+                    if (strEq(propName, "length")) {
+                        emit(strType);
+                        emit(".len ");
+                        emit(strSym->address);
+                        emit("\n");
+                        return PSTYPE_U16;
+                    }
+                    // Property: .capacity
+                    if (strEq(propName, "capacity")) {
+                        emit(strType);
+                        emit(".cap ");
+                        emit(strSym->address);
+                        emit("\n");
+                        return PSTYPE_U16;
+                    }
+                    
+                    // Method: .clear()
+                    if (strEq(propName, "clear")) {
+                        if (!match(PSTOK_LPAREN)) {
+                            setError("Expected '(' after clear");
+                            return PSTYPE_VOID;
+                        }
+                        if (!match(PSTOK_RPAREN)) {
+                            setError("Expected ')' after clear(");
+                            return PSTYPE_VOID;
+                        }
+                        emit(strType);
+                        emit(".clear ");
+                        emit(strSym->address);
+                        emit("\n");
+                        return PSTYPE_VOID;
+                    }
+                    
+                    // Method: .indexOf(needle) - returns i16 (-1 if not found)
+                    if (strEq(propName, "indexOf")) {
+                        if (!match(PSTOK_LPAREN)) {
+                            setError("Expected '(' after indexOf");
+                            return PSTYPE_VOID;
+                        }
+                        // Parse needle argument - must be a string variable
+                        if (!check(PSTOK_IDENTIFIER)) {
+                            setError("indexOf expects a string variable argument");
+                            return PSTYPE_VOID;
+                        }
+                        char needleName[PLCSCRIPT_MAX_IDENTIFIER_LEN];
+                        int ni = 0;
+                        while (currentToken.text[ni] && ni < PLCSCRIPT_MAX_IDENTIFIER_LEN - 1) {
+                            needleName[ni] = currentToken.text[ni];
+                            ni++;
+                        }
+                        needleName[ni] = '\0';
+                        nextToken();
+                        
+                        PLCScriptSymbol* needleSym = findSymbol(needleName);
+                        if (!needleSym || (needleSym->type != PSTYPE_STR8 && needleSym->type != PSTYPE_STR16)) {
+                            setError("indexOf argument must be a string variable");
+                            return PSTYPE_VOID;
+                        }
+                        
+                        if (!match(PSTOK_RPAREN)) {
+                            setError("Expected ')' after indexOf argument");
+                            return PSTYPE_VOID;
+                        }
+                        
+                        // Emit str.find haystack needle -> pushes i16 index (-1 if not found)
+                        emit(strType);
+                        emit(".find ");
+                        emit(strSym->address);
+                        emit(" ");
+                        emit(needleSym->address);
+                        emit("\n");
+                        return PSTYPE_I16;
+                    }
+                    
+                    // Method: .includes(needle) - returns bool
+                    if (strEq(propName, "includes")) {
+                        if (!match(PSTOK_LPAREN)) {
+                            setError("Expected '(' after includes");
+                            return PSTYPE_VOID;
+                        }
+                        // Parse needle argument - must be a string variable
+                        if (!check(PSTOK_IDENTIFIER)) {
+                            setError("includes expects a string variable argument");
+                            return PSTYPE_VOID;
+                        }
+                        char needleName[PLCSCRIPT_MAX_IDENTIFIER_LEN];
+                        int ni = 0;
+                        while (currentToken.text[ni] && ni < PLCSCRIPT_MAX_IDENTIFIER_LEN - 1) {
+                            needleName[ni] = currentToken.text[ni];
+                            ni++;
+                        }
+                        needleName[ni] = '\0';
+                        nextToken();
+                        
+                        PLCScriptSymbol* needleSym = findSymbol(needleName);
+                        if (!needleSym || (needleSym->type != PSTYPE_STR8 && needleSym->type != PSTYPE_STR16)) {
+                            setError("includes argument must be a string variable");
+                            return PSTYPE_VOID;
+                        }
+                        
+                        if (!match(PSTOK_RPAREN)) {
+                            setError("Expected ')' after includes argument");
+                            return PSTYPE_VOID;
+                        }
+                        
+                        // Emit str.find then compare >= 0 to get bool
+                        emit(strType);
+                        emit(".find ");
+                        emit(strSym->address);
+                        emit(" ");
+                        emit(needleSym->address);
+                        emit("\n");
+                        // Convert result: -1 means not found (false), >= 0 means found (true)
+                        emit("i16.const -1\n");
+                        emit("i16.cmp_neq\n");
+                        return PSTYPE_BOOL;
+                    }
+                    
+                    // Method: .charAt(index) - returns u8 char code
+                    if (strEq(propName, "charAt")) {
+                        if (!match(PSTOK_LPAREN)) {
+                            setError("Expected '(' after charAt");
+                            return PSTYPE_VOID;
+                        }
+                        // Parse index argument
+                        PLCScriptVarType indexType = parseExpression();
+                        if (!match(PSTOK_RPAREN)) {
+                            setError("Expected ')' after charAt argument");
+                            return PSTYPE_VOID;
+                        }
+                        // Convert index to u16 if needed
+                        if (indexType != PSTYPE_U16) {
+                            emit("cvt ");
+                            emit(varTypeToPlcasm(indexType));
+                            emit(" u16\n");
+                        }
+                        // Emit str.get - pops u16 index, pushes u8 char
+                        emit(strType);
+                        emit(".get ");
+                        emit(strSym->address);
+                        emit("\n");
+                        return PSTYPE_U8;
+                    }
+                    
+                    // Method: .concat(other) - appends other string to this one
+                    if (strEq(propName, "concat")) {
+                        if (!match(PSTOK_LPAREN)) {
+                            setError("Expected '(' after concat");
+                            return PSTYPE_VOID;
+                        }
+                        // Parse source argument - must be a string variable
+                        if (!check(PSTOK_IDENTIFIER)) {
+                            setError("concat expects a string variable argument");
+                            return PSTYPE_VOID;
+                        }
+                        char srcName[PLCSCRIPT_MAX_IDENTIFIER_LEN];
+                        int si = 0;
+                        while (currentToken.text[si] && si < PLCSCRIPT_MAX_IDENTIFIER_LEN - 1) {
+                            srcName[si] = currentToken.text[si];
+                            si++;
+                        }
+                        srcName[si] = '\0';
+                        nextToken();
+                        
+                        PLCScriptSymbol* srcSym = findSymbol(srcName);
+                        if (!srcSym || (srcSym->type != PSTYPE_STR8 && srcSym->type != PSTYPE_STR16)) {
+                            setError("concat argument must be a string variable");
+                            return PSTYPE_VOID;
+                        }
+                        
+                        if (!match(PSTOK_RPAREN)) {
+                            setError("Expected ')' after concat argument");
+                            return PSTYPE_VOID;
+                        }
+                        
+                        // Emit str.concat dest src
+                        emit(strType);
+                        emit(".concat ");
+                        emit(strSym->address);
+                        emit(" ");
+                        emit(srcSym->address);
+                        emit("\n");
+                        return PSTYPE_VOID;
+                    }
+                    
+                    setError("Unknown string property or method");
+                    return PSTYPE_VOID;
+                }
                 
                 // First, check if this is a local struct variable
                 PLCScriptSymbol* localSym = findSymbol(name);
@@ -4512,6 +5109,19 @@ public:
             if (!sym) {
                 setError("Undefined variable");
                 return PSTYPE_VOID;
+            }
+            
+            // For string types, track the symbol for string operations (no value to load)
+            if (sym->type == PSTYPE_STR8 || sym->type == PSTYPE_STR16) {
+                lastStringSymbol = sym;
+                // For local symbols we need to store a reference, for tempSym we need to copy
+                if (sym == &tempSym) {
+                    // Copy the temp symbol to a more permanent location
+                    static PLCScriptSymbol stringSymbolStorage;
+                    memcpy(&stringSymbolStorage, &tempSym, sizeof(PLCScriptSymbol));
+                    lastStringSymbol = &stringSymbolStorage;
+                }
+                return sym->type;
             }
             
             emitLoadFromAddress(sym);

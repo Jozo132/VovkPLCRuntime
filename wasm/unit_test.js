@@ -25,6 +25,7 @@ import { runTests as runLadderLinterTests } from './node-test/ladder-tests/test_
 import { runTests as runProjectTests } from './node-test/project-tests/unit_test.js'
 import { runTests as runPLCScriptTests } from './node-test/stl-tests/test_plcscript.js'
 import { runTests as runStructTests } from './node-test/plcscript-tests/test_structs.js'
+import { runTests as runPLCScriptStringTests } from './node-test/plcscript-tests/test_strings.js'
 import { runTests as runSTTests } from './node-test/st-tests/test_st.js'
 import { runTests as runReservedWordTests } from './node-test/project-tests/test_reserved_words.js'
 import { runTests as runArrayTests } from './node-test/test_arrays.js'
@@ -116,6 +117,11 @@ const testSuites = [
         name: 'Typed Structs Integration',
         shortName: 'structs',
         run: runStructTests
+    },
+    {
+        name: 'PLCScript String Support',
+        shortName: 'plcscript-strings',
+        run: runPLCScriptStringTests
     },
     {
         name: 'Array Integration Tests',
