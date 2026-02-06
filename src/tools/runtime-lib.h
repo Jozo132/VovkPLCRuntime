@@ -819,10 +819,8 @@ public:
     // Read a custom type T value from the stack. This will pop the stack by sizeof(T) bytes and return the value.
     template <typename T> T read() {
         if (stack.size() < (u32) sizeof(T)) return 0;
-        u8 temp[sizeof(T)];
-        for (u32 i = 0; i < (u32) sizeof(T); i++)
-            temp[i] = stack.pop();
-        T value = *(T*) temp;
+        T value;
+        stack.stack.popRaw(&value, sizeof(T));
         return value;
     }
 
