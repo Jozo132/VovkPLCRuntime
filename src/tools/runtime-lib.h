@@ -2253,6 +2253,15 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
         case STR_SUBSTR: return PLCMethods::handle_STR_SUBSTR(this->stack, this->memory, program, prog_size, index);
         case STR_FIND: return PLCMethods::handle_STR_FIND(this->stack, this->memory, program, prog_size, index);
         case STR_CHAR: return PLCMethods::handle_STR_CHAR(this->stack, this->memory, program, prog_size, index);
+        case STR_INIT: return PLCMethods::handle_STR_INIT(this->stack, this->memory, program, prog_size, index);
+        case STR_TO_NUM: return PLCMethods::handle_STR_TO_NUM(this->stack, this->memory, program, prog_size, index);
+        case STR_FROM_NUM: return PLCMethods::handle_STR_FROM_NUM(this->stack, this->memory, program, prog_size, index);
+
+        // Constant string operations
+        case CSTR_LIT: return PLCMethods::handle_CSTR_LIT(this->stack, this->memory, program, prog_size, index);
+        case CSTR_CPY: return PLCMethods::handle_CSTR_CPY(this->stack, this->memory, program, prog_size, index);
+        case CSTR_EQ: return PLCMethods::handle_CSTR_EQ(this->stack, this->memory, program, prog_size, index);
+        case CSTR_CAT: return PLCMethods::handle_CSTR_CAT(this->stack, this->memory, program, prog_size, index);
 
         case BW_AND_X8: return PLCMethods::handle_BW_AND_X8(this->stack);
         case BW_AND_X16: return PLCMethods::handle_BW_AND_X16(this->stack);

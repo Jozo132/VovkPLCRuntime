@@ -1157,6 +1157,60 @@ public:
                 continue;
             }
 
+            if (opcode == CSTR_LIT) {
+                // CSTR_LIT instruction: opcode + dest_type + dest_addr(2) + len(2) + ASCII chars
+                // Format: [ CSTR_LIT, dest_type, dest_addr_lo, dest_addr_hi, len_lo, len_hi, char data... ]
+                u8 dest_type = (index + 1 < prog_size) ? program[index + 1] : 0;
+                u16 dest_addr = (index + 3 < prog_size) ? read_u16(program + index + 2) : 0;
+                u16 str_len = (index + 5 < prog_size) ? read_u16(program + index + 4) : 0;
+                u16 instruction_size = 1 + 1 + MY_PTR_SIZE_BYTES + 2 + str_len; // opcode + type + addr + len + data
+                Serial.print(F("CSTR_LIT ------- [size "));
+                if (instruction_size < 10) Serial.print(' ');
+                Serial.print(instruction_size);
+                Serial.print(F("] "));
+                // Print header bytes
+                for (u8 i = 0; i < 6 && (index + i) < prog_size; i++) {
+                    print_number_padStart(program[index + i], 2, '0', HEX);
+                }
+                Serial.print(F(" \""));
+                for (u16 i = 0; i < str_len && (index + 6 + i) < prog_size; i++) {
+                    char c = (char) program[index + 6 + i];
+                    if (c >= 32 && c < 127) Serial.print(c);
+                    else { Serial.print(F("\\x")); print_number_padStart((u8)c, 2, '0', HEX); }
+                }
+                Serial.println(F("\""));
+                index += instruction_size;
+                if (index >= prog_size) done = true;
+                continue;
+            }
+
+            if (opcode == CSTR_CAT) {
+                // CSTR_CAT instruction: opcode + dest_type + dest_addr(2) + len(2) + ASCII chars
+                // Format: [ CSTR_CAT, dest_type, dest_addr_lo, dest_addr_hi, len_lo, len_hi, char data... ]
+                u8 dest_type = (index + 1 < prog_size) ? program[index + 1] : 0;
+                u16 dest_addr = (index + 3 < prog_size) ? read_u16(program + index + 2) : 0;
+                u16 str_len = (index + 5 < prog_size) ? read_u16(program + index + 4) : 0;
+                u16 instruction_size = 1 + 1 + MY_PTR_SIZE_BYTES + 2 + str_len; // opcode + type + addr + len + data
+                Serial.print(F("CSTR_CAT ------- [size "));
+                if (instruction_size < 10) Serial.print(' ');
+                Serial.print(instruction_size);
+                Serial.print(F("] "));
+                // Print header bytes
+                for (u8 i = 0; i < 6 && (index + i) < prog_size; i++) {
+                    print_number_padStart(program[index + i], 2, '0', HEX);
+                }
+                Serial.print(F(" \""));
+                for (u16 i = 0; i < str_len && (index + 6 + i) < prog_size; i++) {
+                    char c = (char) program[index + 6 + i];
+                    if (c >= 32 && c < 127) Serial.print(c);
+                    else { Serial.print(F("\\x")); print_number_padStart((u8)c, 2, '0', HEX); }
+                }
+                Serial.println(F("\""));
+                index += instruction_size;
+                if (index >= prog_size) done = true;
+                continue;
+            }
+
             // Get current instruction size
             u8 instruction_size = OPCODE_SIZE(opcode);
             // Get current instruction name
@@ -1180,6 +1234,11 @@ public:
                 print_number_padStart(value, 2, '0', HEX);
             }
             Serial.println();
+            // Safety check: if instruction_size is 0, exit early to prevent infinite loop
+            if (instruction_size == 0) {
+                Serial.println(F("#### ERROR: Unknown variable-length instruction, aborting."));
+                return;
+            }
             index += instruction_size;
             if (index >= prog_size) done = true;
         }
@@ -1206,6 +1265,13 @@ public:
             return length;
         }
         u8 opcode_size = OPCODE_SIZE(opcode);
+        
+        // Handle variable-length CSTR_LIT and CSTR_CAT instructions specially
+        if (opcode == CSTR_LIT || opcode == CSTR_CAT) {
+            u16 str_len = (index + 5 < prog_size) ? read_u16(program + index + 4) : 0;
+            opcode_size = 1 + 1 + MY_PTR_SIZE_BYTES + 2 + str_len; // opcode + type + addr + len + data
+        }
+        
         length += Serial.print(F("Opcode["));
         if (opcode < 0x10) length += Serial.print('0');
         length += Serial.print(opcode, HEX);

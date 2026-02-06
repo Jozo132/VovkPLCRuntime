@@ -665,8 +665,14 @@ struct LUT_const {
     StringView value_string;
 };
 
+// Maximum size for a single instruction's bytecode
+// Most instructions are small (<16 bytes), but string literals (cstr.lit, cstr.cat)
+// can have embedded string data: 1 (opcode) + 1 (type) + 2 (addr) + 2 (len) + string
+// We allow strings up to ~500 characters per instruction
+#define MAX_PROGRAM_LINE_SIZE 512
+
 struct ProgramLine {
-    u8 code[16];
+    u8 code[MAX_PROGRAM_LINE_SIZE];
     int index;
     int size;
     Token* refToken;
@@ -1513,10 +1519,14 @@ public:
         if (token_count_temp >= 2) {
             Token& p1_token = tokens[token_count_temp - 1];
             Token& p2_token = tokens[token_count_temp - 2];
-            // If [' , * , '] then change to [string]
-            // Before: tokens = [..., ', content, '] with token_count_temp pointing past content
+            // If [quote, content, quote] (same quote type) then change to [string]
+            // Handles ', ", and ` as string delimiters
+            // Before: tokens = [..., quote, content, quote] with token_count_temp pointing past content
             // After:  tokens = [..., content_as_STRING] with token_count_temp pointing past the STRING
-            if (token == "'" && p2_token == "'") {
+            bool is_single_quote = (token == "'" && p2_token == "'");
+            bool is_double_quote = (token == "\"" && p2_token == "\"");
+            bool is_backtick = (token == "`" && p2_token == "`");
+            if (is_single_quote || is_double_quote || is_backtick) {
                 p2_token.type = TOKEN_STRING;
                 p2_token.string = p1_token.string;
                 p2_token.length = p1_token.length;
@@ -1555,11 +1565,44 @@ public:
         int assembly_string_length = string_len(assembly_string);
 
         bool in_string = false;
+        char string_char = '\0';  // The quote character that started the string (' or ")
         bool error = false;
         for (int i = 0; i < assembly_string_length; i++) {
             char c = assembly_string[i];
 
-            if (in_string && !(c == '\'' || c == '\n')) {
+            // Inside a string - accumulate all characters except unescaped string terminator or newline
+            if (in_string) {
+                // Check for escape sequence
+                if (c == '\\' && i + 1 < assembly_string_length) {
+                    // Accumulate the backslash and the escaped character
+                    if (token_length == 0) token_start = assembly_string + i;
+                    token_length++;  // backslash
+                    i++;
+                    token_length++;  // escaped char
+                    column += 2;
+                    continue;
+                }
+                // Check for string terminator (unescaped quote matching the opening quote)
+                if (c == string_char) {
+                    // End of string - emit the content token, then the closing quote
+                    error = add_token_optional(token_start, token_length);
+                    if (error) return error;
+                    column += token_length;
+                    error = add_token(assembly_string + i, 1);  // Add closing quote
+                    if (error) return error;
+                    token_length = 0;
+                    token_start = assembly_string + i + 1;
+                    column++;
+                    in_string = false;
+                    string_char = '\0';
+                    continue;
+                }
+                // Check for newline (unterminated string error)
+                if (c == '\n') {
+                    Serial.print(F("Error: unterminated string at ")); Serial.print(line); Serial.print(F(":")); Serial.println(column);
+                    return true;
+                }
+                // Regular character inside string - accumulate
                 if (token_length == 0) token_start = assembly_string + i;
                 token_length++;
                 continue;
@@ -1648,8 +1691,20 @@ public:
                 error = add_token_optional(token_start, token_length);
                 if (error) return error;
                 column += token_length;
-                if (c == '\'') in_string = !in_string;
-                if (c != '"' && c != '=') error = add_token(assembly_string + i, 1);
+                
+                // Check if this is a string opening quote (', ", or `)
+                if (c == '\'' || c == '"' || c == '`') {
+                    in_string = true;
+                    string_char = c;  // Remember which quote type started the string
+                    error = add_token(assembly_string + i, 1);  // Add opening quote token
+                    if (error) return error;
+                    token_length = 0;
+                    token_start = assembly_string + i + 1;
+                    column++;
+                    continue;
+                }
+                
+                if (c != '=') error = add_token(assembly_string + i, 1);
                 if (error) return error;
                 token_length = 0;
                 column++;
@@ -2217,6 +2272,7 @@ public:
             _ir_op2_type = IR_OP_PTR; _ir_op2_pos = pt_pos; _ir_op2_val = pt_val;
 
 #define _line_push \
+            if (line.size > MAX_PROGRAM_LINE_SIZE) { buildError(token, "instruction too large (string too long?)"); return true; } \
             address_end = built_bytecode_length + line.size; \
             if (address_end >= PLCRUNTIME_MAX_PROGRAM_SIZE) { buildErrorSizeLimit(token); return true; } \
             if (!lintMode) { \
@@ -2685,6 +2741,7 @@ public:
                     else if (token == "str.set") { str_op = STR_SET; dest_type = type_str8; is_str_single = true; }
                     else if (token == "str.clear") { str_op = STR_CLEAR; dest_type = type_str8; is_str_single = true; }
                     else if (token == "str.char") { str_op = STR_CHAR; dest_type = type_str8; is_str_single = true; }
+                    else if (token == "str.init") { str_op = STR_INIT; dest_type = type_str8; is_str_single = true; }
                     // str8 same-type dual ops
                     else if (token == "str.cmp") { str_op = STR_CMP; dest_type = type_str8; src_type = type_str8; is_str_dual = true; }
                     else if (token == "str.eq") { str_op = STR_EQ; dest_type = type_str8; src_type = type_str8; is_str_dual = true; }
@@ -2706,6 +2763,7 @@ public:
                     else if (token == "str16.set") { str_op = STR_SET; dest_type = type_str16; is_str_single = true; }
                     else if (token == "str16.clear") { str_op = STR_CLEAR; dest_type = type_str16; is_str_single = true; }
                     else if (token == "str16.char") { str_op = STR_CHAR; dest_type = type_str16; is_str_single = true; }
+                    else if (token == "str16.init") { str_op = STR_INIT; dest_type = type_str16; is_str_single = true; }
                     // str16 same-type dual ops
                     else if (token == "str16.cmp") { str_op = STR_CMP; dest_type = type_str16; src_type = type_str16; is_str_dual = true; }
                     else if (token == "str16.eq") { str_op = STR_EQ; dest_type = type_str16; src_type = type_str16; is_str_dual = true; }
@@ -2744,6 +2802,255 @@ public:
                             line.size = InstructionCompiler::push_str_dual(bytecode, str_op, dest_type, src_type, (MY_PTR_t)addr1, (MY_PTR_t)addr2);
                             _line_push;
                         }
+                    }
+                    
+                    // String conversion operations: str.to.<type>, str.from.<type>
+                    // str.to.i32 addr -> parse string at addr to i32, push result
+                    // str.from.i32 addr base -> pop i32, convert to string at addr with base
+                    bool is_str_to = false;
+                    bool is_str_from = false;
+                    u8 conv_num_type = 0;
+                    u8 conv_str_type = type_str8;
+                    
+                    // str.to.<type> / str16.to.<type>
+                    if (token.startsWithNoCase("str.to.")) { is_str_to = true; conv_str_type = type_str8; }
+                    else if (token.startsWithNoCase("str16.to.")) { is_str_to = true; conv_str_type = type_str16; }
+                    else if (token.startsWithNoCase("str.from.")) { is_str_from = true; conv_str_type = type_str8; }
+                    else if (token.startsWithNoCase("str16.from.")) { is_str_from = true; conv_str_type = type_str16; }
+                    
+                    if (is_str_to || is_str_from) {
+                        // Parse type from token - check full token patterns
+                        if (is_str_to) {
+                            if (conv_str_type == type_str8) {
+                                if (token.equalsNoCase("str.to.i8")) conv_num_type = type_i8;
+                                else if (token.equalsNoCase("str.to.i16")) conv_num_type = type_i16;
+                                else if (token.equalsNoCase("str.to.i32")) conv_num_type = type_i32;
+                                else if (token.equalsNoCase("str.to.i64")) conv_num_type = type_i64;
+                                else if (token.equalsNoCase("str.to.u8")) conv_num_type = type_u8;
+                                else if (token.equalsNoCase("str.to.u16")) conv_num_type = type_u16;
+                                else if (token.equalsNoCase("str.to.u32")) conv_num_type = type_u32;
+                                else if (token.equalsNoCase("str.to.u64")) conv_num_type = type_u64;
+                                else if (token.equalsNoCase("str.to.f32")) conv_num_type = type_f32;
+                                else if (token.equalsNoCase("str.to.f64")) conv_num_type = type_f64;
+                                else { if (buildError(token, "unknown number type for string conversion")) return true; }
+                            } else {
+                                if (token.equalsNoCase("str16.to.i8")) conv_num_type = type_i8;
+                                else if (token.equalsNoCase("str16.to.i16")) conv_num_type = type_i16;
+                                else if (token.equalsNoCase("str16.to.i32")) conv_num_type = type_i32;
+                                else if (token.equalsNoCase("str16.to.i64")) conv_num_type = type_i64;
+                                else if (token.equalsNoCase("str16.to.u8")) conv_num_type = type_u8;
+                                else if (token.equalsNoCase("str16.to.u16")) conv_num_type = type_u16;
+                                else if (token.equalsNoCase("str16.to.u32")) conv_num_type = type_u32;
+                                else if (token.equalsNoCase("str16.to.u64")) conv_num_type = type_u64;
+                                else if (token.equalsNoCase("str16.to.f32")) conv_num_type = type_f32;
+                                else if (token.equalsNoCase("str16.to.f64")) conv_num_type = type_f64;
+                                else { if (buildError(token, "unknown number type for string conversion")) return true; }
+                            }
+                        } else {
+                            if (conv_str_type == type_str8) {
+                                if (token.equalsNoCase("str.from.i8")) conv_num_type = type_i8;
+                                else if (token.equalsNoCase("str.from.i16")) conv_num_type = type_i16;
+                                else if (token.equalsNoCase("str.from.i32")) conv_num_type = type_i32;
+                                else if (token.equalsNoCase("str.from.i64")) conv_num_type = type_i64;
+                                else if (token.equalsNoCase("str.from.u8")) conv_num_type = type_u8;
+                                else if (token.equalsNoCase("str.from.u16")) conv_num_type = type_u16;
+                                else if (token.equalsNoCase("str.from.u32")) conv_num_type = type_u32;
+                                else if (token.equalsNoCase("str.from.u64")) conv_num_type = type_u64;
+                                else if (token.equalsNoCase("str.from.f32")) conv_num_type = type_f32;
+                                else if (token.equalsNoCase("str.from.f64")) conv_num_type = type_f64;
+                                else { if (buildError(token, "unknown number type for string conversion")) return true; }
+                            } else {
+                                if (token.equalsNoCase("str16.from.i8")) conv_num_type = type_i8;
+                                else if (token.equalsNoCase("str16.from.i16")) conv_num_type = type_i16;
+                                else if (token.equalsNoCase("str16.from.i32")) conv_num_type = type_i32;
+                                else if (token.equalsNoCase("str16.from.i64")) conv_num_type = type_i64;
+                                else if (token.equalsNoCase("str16.from.u8")) conv_num_type = type_u8;
+                                else if (token.equalsNoCase("str16.from.u16")) conv_num_type = type_u16;
+                                else if (token.equalsNoCase("str16.from.u32")) conv_num_type = type_u32;
+                                else if (token.equalsNoCase("str16.from.u64")) conv_num_type = type_u64;
+                                else if (token.equalsNoCase("str16.from.f32")) conv_num_type = type_f32;
+                                else if (token.equalsNoCase("str16.from.f64")) conv_num_type = type_f64;
+                                else { if (buildError(token, "unknown number type for string conversion")) return true; }
+                            }
+                        }
+                        
+                        // Parse address
+                        if (!hasNext) { if (buildError(token, "string conversion requires address")) return true; }
+                        Token& addr_tok = tokens[++i];
+                        int addr = 0;
+                        if (addressFromToken(addr_tok, addr)) {
+                            if (buildError(addr_tok, "invalid address")) return true;
+                        }
+                        
+                        if (is_str_to) {
+                            // str.to.<type> addr -> [ STR_TO_NUM, str_type, addr, num_type ]
+                            line.size = 0;
+                            bytecode[line.size++] = STR_TO_NUM;
+                            bytecode[line.size++] = conv_str_type;
+                            write_ptr(bytecode + line.size, (MY_PTR_t)addr);
+                            line.size += sizeof(MY_PTR_t);
+                            bytecode[line.size++] = conv_num_type;
+                            _line_push;
+                        } else {
+                            // str.from.<type> addr base_or_dec -> [ STR_FROM_NUM, str_type, addr, num_type, base_or_dec ]
+                            // Default base/decimals is 10 for ints, 2 for floats
+                            line.size = 0;
+                            u8 base_or_dec = (conv_num_type == type_f32 || conv_num_type == type_f64) ? 2 : 10;
+                            if (i + 1 < token_count) {
+                                Token& next = tokens[i + 1];
+                                if (next.type == TOKEN_INTEGER && next.value_int >= 0 && next.value_int <= 255) {
+                                    i++;
+                                    base_or_dec = (u8)next.value_int;
+                                }
+                            }
+                            bytecode[line.size++] = STR_FROM_NUM;
+                            bytecode[line.size++] = conv_str_type;
+                            write_ptr(bytecode + line.size, (MY_PTR_t)addr);
+                            line.size += sizeof(MY_PTR_t);
+                            bytecode[line.size++] = conv_num_type;
+                            bytecode[line.size++] = base_or_dec;
+                            _line_push;
+                        }
+                    }
+                    
+                    // Constant string literal operation: cstr.lit addr "string" or cstr16.lit addr "string"
+                    // This embeds the string data inline in the bytecode
+                    // Format: [ CSTR_LIT, dest_type, dest_addr, u16 len, char data... ]
+                    bool is_cstr_lit = false;
+                    u8 cstr_dest_type = type_str8;
+                    
+                    if (token.equalsNoCase("cstr.lit")) { is_cstr_lit = true; cstr_dest_type = type_str8; }
+                    else if (token.equalsNoCase("cstr16.lit")) { is_cstr_lit = true; cstr_dest_type = type_str16; }
+                    
+                    if (is_cstr_lit) {
+                        // Parse destination address
+                        if (!hasNext) { if (buildError(token, "cstr.lit requires address")) return true; }
+                        Token& addr_tok = tokens[++i];
+                        int addr = 0;
+                        if (addressFromToken(addr_tok, addr)) {
+                            if (buildError(addr_tok, "invalid address")) return true;
+                        }
+                        
+                        // Parse string literal
+                        if (i + 1 >= token_count) { if (buildError(addr_tok, "cstr.lit requires string literal")) return true; }
+                        Token& str_tok = tokens[++i];
+                        if (str_tok.type != TOKEN_STRING) {
+                            if (buildError(str_tok, "cstr.lit requires string literal (quoted)")) return true;
+                        }
+                        
+                        // Build the bytecode with inline string data
+                        line.size = 0;
+                        bytecode[line.size++] = CSTR_LIT;
+                        bytecode[line.size++] = cstr_dest_type;
+                        write_ptr(bytecode + line.size, (MY_PTR_t)addr);
+                        line.size += sizeof(MY_PTR_t);
+                        
+                        // Process string literal - handle escape sequences
+                        u16 str_len = 0;
+                        const char* src = str_tok.string.data;
+                        u16 src_len = str_tok.string.length;
+                        
+                        // First pass: count actual length after escape processing
+                        for (u16 j = 0; j < src_len; j++) {
+                            if (src[j] == '\\' && j + 1 < src_len) {
+                                j++; // Skip escape char
+                            }
+                            str_len++;
+                        }
+                        
+                        // Write length as u16
+                        write_u16(bytecode + line.size, str_len);
+                        line.size += 2;
+                        
+                        // Second pass: copy with escape processing
+                        for (u16 j = 0; j < src_len; j++) {
+                            u8 ch = src[j];
+                            if (ch == '\\' && j + 1 < src_len) {
+                                j++;
+                                switch (src[j]) {
+                                    case 'n': ch = '\n'; break;
+                                    case 'r': ch = '\r'; break;
+                                    case 't': ch = '\t'; break;
+                                    case '0': ch = '\0'; break;
+                                    case '\\': ch = '\\'; break;
+                                    case '"': ch = '"'; break;
+                                    case '\'': ch = '\''; break;
+                                    default: ch = src[j]; break;
+                                }
+                            }
+                            bytecode[line.size++] = ch;
+                        }
+                        _line_push;
+                    }
+                    
+                    // Constant string concat operation: cstr.cat addr "string" or cstr16.cat addr "string"
+                    // This appends the string data to an existing mutable string
+                    // Format: [ CSTR_CAT, dest_type, dest_addr, u16 len, char data... ]
+                    bool is_cstr_cat = false;
+                    u8 cstr_cat_dest_type = type_str8;
+                    
+                    if (token.equalsNoCase("cstr.cat")) { is_cstr_cat = true; cstr_cat_dest_type = type_str8; }
+                    else if (token.equalsNoCase("cstr16.cat")) { is_cstr_cat = true; cstr_cat_dest_type = type_str16; }
+                    
+                    if (is_cstr_cat) {
+                        // Parse destination address
+                        if (!hasNext) { if (buildError(token, "cstr.cat requires address")) return true; }
+                        Token& addr_tok = tokens[++i];
+                        int addr = 0;
+                        if (addressFromToken(addr_tok, addr)) {
+                            if (buildError(addr_tok, "invalid address")) return true;
+                        }
+                        
+                        // Parse string literal
+                        if (i + 1 >= token_count) { if (buildError(addr_tok, "cstr.cat requires string literal")) return true; }
+                        Token& str_tok = tokens[++i];
+                        if (str_tok.type != TOKEN_STRING) {
+                            if (buildError(str_tok, "cstr.cat requires string literal (quoted)")) return true;
+                        }
+                        
+                        // Build the bytecode with inline string data
+                        line.size = 0;
+                        bytecode[line.size++] = CSTR_CAT;
+                        bytecode[line.size++] = cstr_cat_dest_type;
+                        write_ptr(bytecode + line.size, (MY_PTR_t)addr);
+                        line.size += sizeof(MY_PTR_t);
+                        
+                        // Process string literal - handle escape sequences
+                        u16 cat_str_len = 0;
+                        const char* cat_src = str_tok.string.data;
+                        u16 cat_src_len = str_tok.string.length;
+                        
+                        // First pass: count actual length after escape processing
+                        for (u16 j = 0; j < cat_src_len; j++) {
+                            if (cat_src[j] == '\\' && j + 1 < cat_src_len) {
+                                j++; // Skip escape char
+                            }
+                            cat_str_len++;
+                        }
+                        
+                        // Write length as u16
+                        write_u16(bytecode + line.size, cat_str_len);
+                        line.size += 2;
+                        
+                        // Second pass: copy with escape processing
+                        for (u16 j = 0; j < cat_src_len; j++) {
+                            u8 ch = cat_src[j];
+                            if (ch == '\\' && j + 1 < cat_src_len) {
+                                j++;
+                                switch (cat_src[j]) {
+                                    case 'n': ch = '\n'; break;
+                                    case 'r': ch = '\r'; break;
+                                    case 't': ch = '\t'; break;
+                                    case '0': ch = '\0'; break;
+                                    case '\\': ch = '\\'; break;
+                                    case '"': ch = '"'; break;
+                                    case '\'': ch = '\''; break;
+                                    default: ch = cat_src[j]; break;
+                                }
+                            }
+                            bytecode[line.size++] = ch;
+                        }
+                        _line_push;
                     }
                 }
 

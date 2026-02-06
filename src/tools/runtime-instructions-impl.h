@@ -277,6 +277,13 @@ bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
         case STR_SUBSTR:
         case STR_FIND:
         case STR_CHAR:
+        case STR_TO_NUM:
+        case STR_FROM_NUM:
+        case STR_INIT:
+        case CSTR_LIT:
+        case CSTR_CPY:
+        case CSTR_EQ:
+        case CSTR_CAT:
         case LOGIC_AND:
         case LOGIC_OR:
         case LOGIC_XOR:
@@ -516,6 +523,13 @@ const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
         case STR_SUBSTR: return F("STR_SUBSTR");
         case STR_FIND: return F("STR_FIND");
         case STR_CHAR: return F("STR_CHAR");
+        case STR_TO_NUM: return F("STR_TO_NUM");
+        case STR_FROM_NUM: return F("STR_FROM_NUM");
+        case STR_INIT: return F("STR_INIT");
+        case CSTR_LIT: return F("CSTR_LIT");
+        case CSTR_CPY: return F("CSTR_CPY");
+        case CSTR_EQ: return F("CSTR_EQ");
+        case CSTR_CAT: return F("CSTR_CAT");
         case LOGIC_AND: return F("LOGIC_AND");
         case LOGIC_OR: return F("LOGIC_OR");
         case LOGIC_XOR: return F("LOGIC_XOR");
@@ -768,13 +782,32 @@ u8 OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
         case STR_CLEAR:     // [ STR_CLEAR, type, addr ]
         case STR_CHAR:      // [ STR_CHAR, type, addr ] - pop char, append
             return 1 + 1 + MY_PTR_SIZE_BYTES;  // opcode + type + addr = 4 bytes
-        case STR_CMP:       // [ STR_CMP, type, addr1, addr2 ] -> push i8
-        case STR_EQ:        // [ STR_EQ, type, addr1, addr2 ] -> push bool
-        case STR_CONCAT:    // [ STR_CONCAT, type, dest, src ]
-        case STR_COPY:      // [ STR_COPY, type, dest, src ]
-        case STR_FIND:      // [ STR_FIND, type, haystack, needle ] -> push i16
-        case STR_SUBSTR:    // [ STR_SUBSTR, type, dest, src ] - pop len, pop start
-            return 1 + 1 + MY_PTR_SIZE_BYTES + MY_PTR_SIZE_BYTES;  // opcode + type + addr1 + addr2 = 6 bytes
+        case STR_CMP:       // [ STR_CMP, dest_type, src_type, addr1, addr2 ] -> push i8
+        case STR_EQ:        // [ STR_EQ, dest_type, src_type, addr1, addr2 ] -> push bool
+        case STR_CONCAT:    // [ STR_CONCAT, dest_type, src_type, dest, src ]
+        case STR_COPY:      // [ STR_COPY, dest_type, src_type, dest, src ]
+        case STR_FIND:      // [ STR_FIND, dest_type, src_type, haystack, needle ] -> push i16
+        case STR_SUBSTR:    // [ STR_SUBSTR, dest_type, src_type, dest, src ] - pop len, pop start
+            return 1 + 2 + MY_PTR_SIZE_BYTES + MY_PTR_SIZE_BYTES;  // opcode + dest_type + src_type + addr1 + addr2 = 7 bytes
+
+        // String conversion operations
+        case STR_TO_NUM:    // [ STR_TO_NUM, str_type, str_addr, num_type ] -> push number
+            return 1 + 1 + MY_PTR_SIZE_BYTES + 1;  // opcode + str_type + addr + num_type
+        case STR_FROM_NUM:  // [ STR_FROM_NUM, str_type, str_addr, num_type, base_or_dec ] - pop number
+            return 1 + 1 + MY_PTR_SIZE_BYTES + 1 + 1;  // opcode + str_type + addr + num_type + base
+        case STR_INIT:      // [ STR_INIT, type, addr ] - pop capacity, init header
+            return 1 + 1 + MY_PTR_SIZE_BYTES;  // opcode + type + addr = 4 bytes
+
+        // Constant string operations (variable-length for CSTR_LIT/CSTR_CAT)
+        // CSTR_LIT/CSTR_CAT size must be computed dynamically as they embed string data
+        case CSTR_LIT:      // [ CSTR_LIT, dest_type, dest_addr, u16 len, char data... ] - variable length!
+            return 0;       // Special case: size is variable, handled by runtime
+        case CSTR_CAT:      // [ CSTR_CAT, dest_type, dest_addr, u16 len, char data... ] - variable length!
+            return 0;       // Special case: size is variable, handled by runtime
+        case CSTR_CPY:      // [ CSTR_CPY, cstr_type, dest_type, dest_addr, u16 prog_offset ]
+            return 1 + 1 + 1 + MY_PTR_SIZE_BYTES + 2;  // opcode + cstr_type + dest_type + addr + offset = 8 bytes
+        case CSTR_EQ:       // [ CSTR_EQ, cstr_type, str_type, str_addr, u16 prog_offset ]
+            return 1 + 1 + 1 + MY_PTR_SIZE_BYTES + 2;  // opcode + cstr_type + str_type + addr + offset = 8 bytes
 
         case LOGIC_AND:
         case LOGIC_OR:

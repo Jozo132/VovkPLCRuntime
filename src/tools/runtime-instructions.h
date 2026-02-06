@@ -152,6 +152,8 @@ enum PLCRuntimeInstructionSet {
     type_char,          // Character type (u8 ASCII value)
     type_str8,          // String8: [ u8 capacity, u8 length, char[capacity] ] - max 254 chars
     type_str16,         // String16: [ u16 capacity, u16 length, char[capacity] ] - max 65534 chars
+    type_cstr8,         // Const String8: [ u8 length, char[length] ] - immutable, in program memory
+    type_cstr16,        // Const String16: [ u16 length, char[length] ] - immutable, in program memory
 
     CVT = 0x10,         // Convert value from one type to another. Example: [ u8 CVT, u8 source_type, u8 destination_type ]
     LOAD,               // Load value from memory to stack using pointer from the stack. Example: [ u8 LOAD, u8 type ]
@@ -394,6 +396,19 @@ enum PLCRuntimeInstructionSet {
     // FFI (Foreign Function Interface) operations
     FFI_CALL = 0xF0,        // Call FFI by index with memory addresses: [ FFI_CALL, u8 index, u8 param_count, u16 addr1, ..., u16 ret_addr ]
     FFI_CALL_STACK,         // Call FFI by index with params from stack: [ FFI_CALL_STACK, u8 index, u8 param_count ] - pops params, pushes result
+
+    // String conversion operations (number <-> string)
+    // Format: [ opcode, str_type, str_addr, num_type, ... ]
+    STR_TO_NUM = 0xF2,      // Parse string to number -> push number. [ STR_TO_NUM, str_type, str_addr, num_type ]
+    STR_FROM_NUM,           // Convert number (pop) to string. [ STR_FROM_NUM, str_type, str_addr, num_type, u8 base_or_decimals ]
+    STR_INIT,               // Initialize string with capacity (pop u16 capacity). [ STR_INIT, type, addr ]
+
+    // Constant string operations (strings embedded in program memory)
+    // cstr layout in program: [ u8/u16 length, char data... ] - no capacity, immutable
+    CSTR_LIT = 0xF5,        // Copy inline cstr to mutable str: [ CSTR_LIT, dest_type, dest_addr, u16 len, char data... ]
+    CSTR_CPY,               // Copy cstr at prog offset to str: [ CSTR_CPY, cstr_type, dest_type, dest_addr, u16 prog_offset ]
+    CSTR_EQ,                // Compare cstr with str -> push bool: [ CSTR_EQ, cstr_type, str_type, str_addr, u16 prog_offset ]
+    CSTR_CAT,               // Concat inline cstr to mutable str: [ CSTR_CAT, dest_type, dest_addr, u16 len, char data... ]
 
     // Runtime configuration instruction
     CONFIG_TC = 0xFC,   // Configure Timer/Counter offsets: [ CONFIG_TC, u16 timer_offset, u8 timer_count, u16 counter_offset, u8 counter_count ] - 7 bytes

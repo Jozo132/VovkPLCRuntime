@@ -159,6 +159,7 @@ enum PLCScriptTokenType {
     PSTOK_BOOL_TRUE,    // true
     PSTOK_BOOL_FALSE,   // false
     PSTOK_STRING,       // "hello"
+    PSTOK_TEMPLATE,     // `hello ${expr}` - JS-style template literal
     
     // Identifiers and keywords
     PSTOK_IDENTIFIER,   // variable/function names
@@ -579,8 +580,28 @@ public:
     int pendingStringLiteralLen = 0;
     bool hasPendingStringLiteral = false;
     
+    // Template literal pending for assignment (e.g., in msg = `Hello ${name}`)
+    char pendingTemplateLiteral[PLCSCRIPT_MAX_IDENTIFIER_LEN];
+    int pendingTemplateLiteralLen = 0;
+    bool hasPendingTemplateLiteral = false;
+    
+    // String variable pending for type casting (e.g., in i32(strVar))
+    bool hasPendingStringVar = false;
+    PLCScriptVarType pendingStringVarType = PSTYPE_VOID;
+    char pendingStringVarAddr[32];
+    
     // String expression context - tracks last referenced string variable
     PLCScriptSymbol* lastStringSymbol = nullptr;
+    
+    // Substr context - tracks when a .substr() call was made for assignment
+    PLCScriptSymbol* lastSubstrSymbol = nullptr;  // Source string for substr
+    bool hasSubstrArgs = false;  // True if from/to args are on stack
+    
+    // Number-to-string context - tracks when .toString() or .toFixed() was called
+    bool hasToStringCall = false;  // True if number is on stack for string conversion
+    PLCScriptVarType toStringNumType = PSTYPE_VOID;  // Type of number on stack
+    u8 toStringBase = 10;  // Base for integer conversion
+    u8 toStringDecimals = 2;  // Decimal places for float conversion
     
     // Function table (for user-defined functions)
     PLCScriptFunction functions[PLCSCRIPT_MAX_FUNCTIONS];
@@ -624,7 +645,21 @@ public:
         pendingStringLiteral[0] = '\0';
         pendingStringLiteralLen = 0;
         hasPendingStringLiteral = false;
+        // Reset template literal context
+        pendingTemplateLiteral[0] = '\0';
+        pendingTemplateLiteralLen = 0;
+        hasPendingTemplateLiteral = false;
+        // Reset other string context
+        hasPendingStringVar = false;
+        pendingStringVarType = PSTYPE_VOID;
+        pendingStringVarAddr[0] = '\0';
         lastStringSymbol = nullptr;
+        lastSubstrSymbol = nullptr;
+        hasSubstrArgs = false;
+        hasToStringCall = false;
+        toStringNumType = PSTYPE_VOID;
+        toStringBase = 10;
+        toStringDecimals = 2;
         // Reset auto-address counters
         autoAddrBit = 900;
         autoAddrByte = 950;
@@ -730,6 +765,62 @@ public:
             fracPart -= digit;
         }
         output[outputLength] = '\0';
+    }
+    
+    // Emit a string literal with proper escaping for PLCASM cstr.lit instruction
+    // The input string has already been processed by the tokenizer (escapes decoded)
+    // We need to re-encode escapes when emitting to PLCASM
+    // PLCASM uses single quotes for string literals
+    void emitStringLiteral(const char* str, int len) {
+        emit("'");
+        for (int i = 0; i < len; i++) {
+            char c = str[i];
+            switch (c) {
+                case '\n': emit("\\n"); break;
+                case '\r': emit("\\r"); break;
+                case '\t': emit("\\t"); break;
+                case '\0': emit("\\0"); break;
+                case '\\': emit("\\\\"); break;
+                case '\'': emit("\\'"); break;
+                default:
+                    // Emit printable ASCII directly, escape control chars
+                    if (c >= 32 && c < 127) {
+                        char buf[2] = { c, '\0' };
+                        emit(buf);
+                    } else {
+                        // Non-printable: emit as octal or just pass through
+                        // For simplicity, just emit the byte directly
+                        char buf[2] = { c, '\0' };
+                        emit(buf);
+                    }
+                    break;
+            }
+        }
+        emit("'");
+    }
+    
+    // Helper to emit a string literal without quotes (raw content for concat)
+    void emitStringLiteralRaw(const char* str, int len) {
+        for (int i = 0; i < len; i++) {
+            char c = str[i];
+            switch (c) {
+                case '\n': emit("\\n"); break;
+                case '\r': emit("\\r"); break;
+                case '\t': emit("\\t"); break;
+                case '\0': emit("\\0"); break;
+                case '\\': emit("\\\\"); break;
+                case '\'': emit("\\'"); break;
+                default:
+                    if (c >= 32 && c < 127) {
+                        char buf[2] = { c, '\0' };
+                        emit(buf);
+                    } else {
+                        char buf[2] = { c, '\0' };
+                        emit(buf);
+                    }
+                    break;
+            }
+        }
     }
     
     void emitHex(uint32_t value) {
@@ -1194,6 +1285,66 @@ public:
             return;
         }
         
+        // Template literals with backticks: `hello ${expr} world`
+        // We store the raw template string (including ${...}) for later parsing
+        if (c == '`') {
+            advance(); // consume opening backtick
+            int braceDepth = 0;
+            while (pos < sourceLength) {
+                char ch = peek();
+                if (ch == '`' && braceDepth == 0) {
+                    break; // End of template
+                }
+                if (ch == '\\') {
+                    advance(); // consume backslash
+                    if (pos >= sourceLength) {
+                        setError("Unterminated escape in template literal");
+                        currentToken.type = PSTOK_ERROR;
+                        return;
+                    }
+                    char escaped = advance();
+                    switch (escaped) {
+                        case 'n': currentToken.text[currentToken.textLen++] = '\n'; break;
+                        case 't': currentToken.text[currentToken.textLen++] = '\t'; break;
+                        case 'r': currentToken.text[currentToken.textLen++] = '\r'; break;
+                        case '0': currentToken.text[currentToken.textLen++] = '\0'; break;
+                        case '\\': currentToken.text[currentToken.textLen++] = '\\'; break;
+                        case '`': currentToken.text[currentToken.textLen++] = '`'; break;
+                        case '$': currentToken.text[currentToken.textLen++] = '$'; break;
+                        default: currentToken.text[currentToken.textLen++] = escaped; break;
+                    }
+                } else if (ch == '$' && pos + 1 < sourceLength && source[pos + 1] == '{') {
+                    // Start of interpolation - store raw ${
+                    currentToken.text[currentToken.textLen++] = advance(); // $
+                    currentToken.text[currentToken.textLen++] = advance(); // {
+                    braceDepth++;
+                } else if (ch == '{' && braceDepth > 0) {
+                    currentToken.text[currentToken.textLen++] = advance();
+                    braceDepth++;
+                } else if (ch == '}' && braceDepth > 0) {
+                    currentToken.text[currentToken.textLen++] = advance();
+                    braceDepth--;
+                } else {
+                    currentToken.text[currentToken.textLen++] = advance();
+                }
+                
+                if (currentToken.textLen >= PLCSCRIPT_MAX_IDENTIFIER_LEN - 1) {
+                    setError("Template literal too long");
+                    currentToken.type = PSTOK_ERROR;
+                    return;
+                }
+            }
+            if (pos >= sourceLength) {
+                setError("Unterminated template literal");
+                currentToken.type = PSTOK_ERROR;
+                return;
+            }
+            advance(); // Closing backtick
+            currentToken.text[currentToken.textLen] = '\0';
+            currentToken.type = PSTOK_TEMPLATE;
+            return;
+        }
+        
         // Operators and punctuation
         currentToken.text[0] = c;
         currentToken.text[1] = '\0';
@@ -1458,6 +1609,14 @@ public:
     
     bool isStringType(PLCScriptVarType type) {
         return type == PSTYPE_STR8 || type == PSTYPE_STR16;
+    }
+    
+    bool isNumericType(PLCScriptVarType type) {
+        return type >= PSTYPE_BOOL && type <= PSTYPE_F64 && !isStringType(type);
+    }
+    
+    bool isFloatType(PLCScriptVarType type) {
+        return type == PSTYPE_F32 || type == PSTYPE_F64;
     }
     
     // ========================================================================
@@ -3011,37 +3170,111 @@ public:
         }
         emit("\n");
         
+        // String initialization: emit str.init to set capacity
+        if (varType == PSTYPE_STR8 || varType == PSTYPE_STR16) {
+            const char* strType = (varType == PSTYPE_STR8) ? "str" : "str16";
+            u16 cap = sym->stringCapacity;
+            
+            // Emit: u16.const <capacity>; str.init <addr>
+            emit("u16.const ");
+            char capBuf[16];
+            int ci = 0;
+            if (cap == 0) capBuf[ci++] = '0';
+            else {
+                char temp[16];
+                int ti = 0;
+                while (cap > 0) { temp[ti++] = '0' + (cap % 10); cap /= 10; }
+                while (ti > 0) capBuf[ci++] = temp[--ti];
+            }
+            capBuf[ci] = '\0';
+            emit(capBuf);
+            emit("\n");
+            emit(strType);
+            emit(".init ");
+            emit(sym->address);
+            emit("\n");
+        }
+        
         // Initializer: "= expression"
         if (match(PSTOK_EQ)) {
             // Set target type hint for expression parsing
             PLCScriptVarType savedTarget = targetType;
             targetType = varType;
+            
+            // Reset string context tracking
+            lastStringSymbol = nullptr;
+            hasPendingStringLiteral = false;
+            hasPendingTemplateLiteral = false;
+            
             // Generate expression code
             PLCScriptVarType exprType = parseExpression();
             targetType = savedTarget;
             
-            // Type conversion if needed
-            if (exprType != varType && exprType != PSTYPE_VOID) {
-                emit("cvt ");
-                emit(varTypeToPlcasm(exprType));
-                emit(" ");
-                emit(varTypeToPlcasm(varType));
-                emit("\n");
-            }
-            
-            // Store to memory
-            if (hasAddress) {
-                emitStoreToAddress(sym);
-            } else {
-                // For constants without address, just drop (value is compile-time only)
-                if (!isConst) {
-                    setError("Variable without @ address cannot be stored");
+            // Handle string type initialization specially
+            if (varType == PSTYPE_STR8 || varType == PSTYPE_STR16) {
+                if (exprType != PSTYPE_STR8 && exprType != PSTYPE_STR16) {
+                    setError("Cannot initialize string with non-string value");
                     return;
                 }
-                emitDrop(varType);
+                
+                const char* cstrType = (varType == PSTYPE_STR8) ? "cstr" : "cstr16";
+                const char* strType = (varType == PSTYPE_STR8) ? "str" : "str16";
+                
+                // Check for template literal initialization (e.g., `Hello ${name}`)
+                if (hasPendingTemplateLiteral) {
+                    emitTemplateLiteral(sym->address, varType, pendingTemplateLiteral, pendingTemplateLiteralLen);
+                    hasPendingTemplateLiteral = false;
+                    sym->hasInitializer = true;
+                }
+                // Check for string literal initialization
+                else if (hasPendingStringLiteral) {
+                    // Use cstr.lit for efficient inline string literal copy
+                    emit(cstrType);
+                    emit(".lit ");
+                    emit(sym->address);
+                    emit(" ");
+                    emitStringLiteral(pendingStringLiteral, pendingStringLiteralLen);
+                    emit("\n");
+                    hasPendingStringLiteral = false;
+                    sym->hasInitializer = true;
+                } else if (lastStringSymbol) {
+                    // Copy from another string variable
+                    emit(strType);
+                    emit(".copy ");
+                    emit(sym->address);
+                    emit(" ");
+                    emit(lastStringSymbol->address);
+                    emit("\n");
+                    sym->hasInitializer = true;
+                } else {
+                    setError("String initializer must be a literal or variable");
+                    return;
+                }
+
+            } else {
+                // Type conversion if needed (non-string types)
+                if (exprType != varType && exprType != PSTYPE_VOID && !isStringType(exprType)) {
+                    emit("cvt ");
+                    emit(varTypeToPlcasm(exprType));
+                    emit(" ");
+                    emit(varTypeToPlcasm(varType));
+                    emit("\n");
+                }
+                
+                // Store to memory
+                if (hasAddress) {
+                    emitStoreToAddress(sym);
+                } else {
+                    // For constants without address, just drop (value is compile-time only)
+                    if (!isConst) {
+                        setError("Variable without @ address cannot be stored");
+                        return;
+                    }
+                    emitDrop(varType);
+                }
+                
+                sym->hasInitializer = true;
             }
-            
-            sym->hasInitializer = true;
         }
         
         // Semicolon is optional
@@ -3275,6 +3508,289 @@ public:
         
         // Semicolon is optional
         match(PSTOK_SEMICOLON);
+    }
+    
+    // ========================================================================
+    // Template Literal Processing: `Hello ${name}!`
+    // ========================================================================
+    
+    // Emit a template literal to a string destination
+    // tmpl and tmplLen are the template content (without backticks)
+    void emitTemplateLiteral(const char* destAddr, PLCScriptVarType destType, const char* tmpl, int tmplLen) {
+        const char* strType = (destType == PSTYPE_STR8) ? "str" : "str16";
+        const char* cstrType = (destType == PSTYPE_STR8) ? "cstr" : "cstr16";
+        
+        // First, clear the destination string
+        emit(strType);
+        emit(".clear ");
+        emit(destAddr);
+        emit("\n");
+        
+        // Parse through the template string
+        int i = 0;
+        char textBuf[PLCSCRIPT_MAX_IDENTIFIER_LEN];
+        int textLen = 0;
+        bool isFirstSegment = true;
+        
+        while (i < tmplLen) {
+            // Check for interpolation start ${
+            if (i + 1 < tmplLen && tmpl[i] == '$' && tmpl[i + 1] == '{') {
+                // Emit accumulated text segment first
+                if (textLen > 0) {
+                    if (isFirstSegment) {
+                        // Use cstr.lit for first segment
+                        emit(cstrType);
+                        emit(".lit ");
+                        emit(destAddr);
+                        emit(" ");
+                        emitStringLiteral(textBuf, textLen);
+                        emit("\n");
+                        isFirstSegment = false;
+                    } else {
+                        // Use cstr.cat for subsequent text segments (efficient concatenation)
+                        emit(cstrType);
+                        emit(".cat ");
+                        emit(destAddr);
+                        emit(" ");
+                        emitStringLiteral(textBuf, textLen);
+                        emit("\n");
+                    }
+                    textLen = 0;
+                }
+                
+                // Skip ${
+                i += 2;
+                
+                // Extract the expression between ${ and }
+                char exprBuf[PLCSCRIPT_MAX_IDENTIFIER_LEN];
+                int exprLen = 0;
+                int braceDepth = 1;
+                
+                while (i < tmplLen && braceDepth > 0) {
+                    if (tmpl[i] == '{') braceDepth++;
+                    else if (tmpl[i] == '}') {
+                        braceDepth--;
+                        if (braceDepth == 0) break;
+                    }
+                    if (exprLen < PLCSCRIPT_MAX_IDENTIFIER_LEN - 1) {
+                        exprBuf[exprLen++] = tmpl[i];
+                    }
+                    i++;
+                }
+                exprBuf[exprLen] = '\0';
+                i++; // Skip closing }
+                
+                // Now we need to parse and emit the expression
+                // Save current tokenizer state
+                int savedPos = pos;
+                int savedLine = currentLine;
+                int savedCol = currentColumn;
+                PLCScriptToken savedToken = currentToken;
+                bool savedHasPeek = hasPeekToken;
+                PLCScriptToken savedPeek = peekToken;
+                char* savedSource = source;
+                int savedSourceLen = sourceLength;
+                
+                // Temporarily set source to the expression
+                source = exprBuf;
+                sourceLength = exprLen;
+                pos = 0;
+                currentLine = 1;
+                currentColumn = 1;
+                hasPeekToken = false;
+                
+                // Tokenize and parse the expression
+                nextToken();
+                PLCScriptVarType exprType = parseExpression();
+                
+                // Restore tokenizer state
+                source = savedSource;
+                sourceLength = savedSourceLen;
+                pos = savedPos;
+                currentLine = savedLine;
+                currentColumn = savedCol;
+                currentToken = savedToken;
+                hasPeekToken = savedHasPeek;
+                peekToken = savedPeek;
+                
+                // Emit code to concat the expression result to the string
+                if (exprType == PSTYPE_STR8 || exprType == PSTYPE_STR16) {
+                    // String expression - should have set lastStringSymbol
+                    if (lastStringSymbol) {
+                        emit(strType);
+                        emit(".concat ");
+                        emit(destAddr);
+                        emit(" ");
+                        emit(lastStringSymbol->address);
+                        emit("\n");
+                    }
+                } else if (exprType != PSTYPE_VOID) {
+                    // Numeric expression - convert to string and concat
+                    // Stack has the numeric value, use str.from to append
+                    emit(strType);
+                    emit(".from.");
+                    emit(varTypeToPlcasm(exprType));
+                    emit(" ");
+                    emit(destAddr);
+                    emit(" ");
+                    // Use default base (10) or decimals (2)
+                    if (isFloatType(exprType)) {
+                        emit("2"); // 2 decimal places for floats
+                    } else {
+                        emit("10"); // base 10 for integers
+                    }
+                    emit("\n");
+                }
+                
+                isFirstSegment = false;
+            } else {
+                // Regular character - accumulate
+                if (textLen < PLCSCRIPT_MAX_IDENTIFIER_LEN - 1) {
+                    textBuf[textLen++] = tmpl[i];
+                }
+                i++;
+            }
+        }
+        
+        // Emit remaining text segment
+        if (textLen > 0) {
+            if (isFirstSegment) {
+                // Use cstr.lit for first (and only) segment
+                emit(cstrType);
+                emit(".lit ");
+                emit(destAddr);
+                emit(" ");
+                emitStringLiteral(textBuf, textLen);
+                emit("\n");
+            } else {
+                // Use cstr.cat for subsequent text segments (efficient concatenation)
+                emit(cstrType);
+                emit(".cat ");
+                emit(destAddr);
+                emit(" ");
+                emitStringLiteral(textBuf, textLen);
+                emit("\n");
+            }
+        }
+    }
+    
+    // Emit a template literal for concatenation (+=) - doesn't clear first
+    void emitTemplateLiteralConcat(const char* destAddr, PLCScriptVarType destType, const char* tmpl, int tmplLen) {
+        const char* strType = (destType == PSTYPE_STR8) ? "str" : "str16";
+        const char* cstrType = (destType == PSTYPE_STR8) ? "cstr" : "cstr16";
+        
+        // Parse through the template string
+        int i = 0;
+        char textBuf[PLCSCRIPT_MAX_IDENTIFIER_LEN];
+        int textLen = 0;
+        
+        while (i < tmplLen) {
+            // Check for interpolation start ${
+            if (i + 1 < tmplLen && tmpl[i] == '$' && tmpl[i + 1] == '{') {
+                // Emit accumulated text segment using cstr.cat (efficient concatenation)
+                if (textLen > 0) {
+                    emit(cstrType);
+                    emit(".cat ");
+                    emit(destAddr);
+                    emit(" ");
+                    emitStringLiteral(textBuf, textLen);
+                    emit("\n");
+                    textLen = 0;
+                }
+                
+                // Skip ${
+                i += 2;
+                
+                // Extract the expression between ${ and }
+                char exprBuf[PLCSCRIPT_MAX_IDENTIFIER_LEN];
+                int exprLen = 0;
+                int braceDepth = 1;
+                
+                while (i < tmplLen && braceDepth > 0) {
+                    if (tmpl[i] == '{') braceDepth++;
+                    else if (tmpl[i] == '}') {
+                        braceDepth--;
+                        if (braceDepth == 0) break;
+                    }
+                    if (exprLen < PLCSCRIPT_MAX_IDENTIFIER_LEN - 1) {
+                        exprBuf[exprLen++] = tmpl[i];
+                    }
+                    i++;
+                }
+                exprBuf[exprLen] = '\0';
+                i++; // Skip closing }
+                
+                // Parse and emit the expression
+                int savedPos = pos;
+                int savedLine = currentLine;
+                int savedCol = currentColumn;
+                PLCScriptToken savedToken = currentToken;
+                bool savedHasPeek = hasPeekToken;
+                PLCScriptToken savedPeek = peekToken;
+                char* savedSource = source;
+                int savedSourceLen = sourceLength;
+                
+                source = exprBuf;
+                sourceLength = exprLen;
+                pos = 0;
+                currentLine = 1;
+                currentColumn = 1;
+                hasPeekToken = false;
+                
+                nextToken();
+                PLCScriptVarType exprType = parseExpression();
+                
+                source = savedSource;
+                sourceLength = savedSourceLen;
+                pos = savedPos;
+                currentLine = savedLine;
+                currentColumn = savedCol;
+                currentToken = savedToken;
+                hasPeekToken = savedHasPeek;
+                peekToken = savedPeek;
+                
+                // Emit code to concat the expression result to the string
+                if (exprType == PSTYPE_STR8 || exprType == PSTYPE_STR16) {
+                    if (lastStringSymbol) {
+                        emit(strType);
+                        emit(".concat ");
+                        emit(destAddr);
+                        emit(" ");
+                        emit(lastStringSymbol->address);
+                        emit("\n");
+                    }
+                } else if (exprType != PSTYPE_VOID) {
+                    emit(strType);
+                    emit(".from.");
+                    emit(varTypeToPlcasm(exprType));
+                    emit(" ");
+                    emit(destAddr);
+                    emit(" ");
+                    if (isFloatType(exprType)) {
+                        emit("2");
+                    } else {
+                        emit("10");
+                    }
+                    emit("\n");
+                }
+            } else {
+                // Regular character - accumulate
+                if (textLen < PLCSCRIPT_MAX_IDENTIFIER_LEN - 1) {
+                    textBuf[textLen++] = tmpl[i];
+                }
+                i++;
+            }
+        }
+        
+        // Emit remaining text segment using cstr.cat (efficient concatenation)
+        if (textLen > 0) {
+            emit(cstrType);
+            emit(".cat ");
+            emit(destAddr);
+            emit(" ");
+            emitStringLiteral(textBuf, textLen);
+            emit("\n");
+        }
     }
     
     // ========================================================================
@@ -3785,46 +4301,35 @@ public:
                     
                     // Check if assigning from a string literal
                     if (check(PSTOK_STRING)) {
-                        // String literal assignment - use str.clear then str.char for each char
+                        // String literal assignment - use cstr.lit for efficient inline copy
                         // The literal is in currentToken.text (WITHOUT quotes, escapes already processed by tokenizer)
                         const char* litText = currentToken.text;
                         int litLen = currentToken.textLen;
                         
-                        // First clear the string
-                        emit(strType);
-                        emit(".clear ");
+                        const char* cstrType = (sym->type == PSTYPE_STR8) ? "cstr" : "cstr16";
+                        emit(cstrType);
+                        emit(".lit ");
                         emit(sym->address);
+                        emit(" ");
+                        emitStringLiteral(litText, litLen);
                         emit("\n");
-                        
-                        // Then append each character using str.char
-                        for (int ci = 0; ci < litLen; ci++) {
-                            char c = litText[ci];
-                            emit("u8.const ");
-                            char charBuf[8];
-                            int cbi = 0;
-                            u8 cv = (u8)c;
-                            if (cv == 0) charBuf[cbi++] = '0';
-                            else {
-                                char temp[8];
-                                int ti = 0;
-                                while (cv > 0) { temp[ti++] = '0' + (cv % 10); cv /= 10; }
-                                while (ti > 0) charBuf[cbi++] = temp[--ti];
-                            }
-                            charBuf[cbi] = '\0';
-                            emit(charBuf);
-                            emit("\n");
-                            emit(strType);
-                            emit(".char ");
-                            emit(sym->address);
-                            emit("\n");
-                        }
                         
                         nextToken(); // consume string literal
                         return sym->type;
                     }
                     
-                    // Otherwise, should be assigning from another string variable
+                    // Check if assigning from a template literal: `Hello ${name}!`
+                    if (check(PSTOK_TEMPLATE)) {
+                        emitTemplateLiteral(sym->address, sym->type, currentToken.text, currentToken.textLen);
+                        nextToken(); // consume template literal
+                        return sym->type;
+                    }
+                    
+                    // Otherwise, should be assigning from another string variable or toString()
                     lastStringSymbol = nullptr;
+                    lastSubstrSymbol = nullptr;
+                    hasSubstrArgs = false;
+                    hasToStringCall = false;
                     PLCScriptVarType rhsType = parseAssignment();
                     
                     if (rhsType != PSTYPE_STR8 && rhsType != PSTYPE_STR16) {
@@ -3832,18 +4337,58 @@ public:
                         return PSTYPE_VOID;
                     }
                     
+                    // Check if this is a number.toString() or number.toFixed() operation
+                    if (hasToStringCall) {
+                        // Stack has the number value, emit str.from.<type>
+                        emit(strType);
+                        emit(".from.");
+                        emit(varTypeToPlcasm(toStringNumType));
+                        emit(" ");
+                        emit(sym->address);
+                        emit(" ");
+                        // Emit base or decimals
+                        char numBuf[8];
+                        int nbi = 0;
+                        u8 val = isFloatType(toStringNumType) ? toStringDecimals : toStringBase;
+                        if (val == 0) numBuf[nbi++] = '0';
+                        else {
+                            char temp[8];
+                            int ti = 0;
+                            while (val > 0) { temp[ti++] = '0' + (val % 10); val /= 10; }
+                            while (ti > 0) numBuf[nbi++] = temp[--ti];
+                        }
+                        numBuf[nbi] = '\0';
+                        emit(numBuf);
+                        emit("\n");
+                        hasToStringCall = false;
+                        return sym->type;
+                    }
+                    
                     if (!lastStringSymbol) {
                         setError("String assignment requires a string variable source");
                         return PSTYPE_VOID;
                     }
                     
-                    // Copy from source to destination
-                    emit(strType);
-                    emit(".copy ");
-                    emit(sym->address);
-                    emit(" ");
-                    emit(lastStringSymbol->address);
-                    emit("\n");
+                    // Check if this is a substr operation
+                    if (lastSubstrSymbol && hasSubstrArgs) {
+                        // str.substr dest src - stack has [start, length]
+                        emit(strType);
+                        emit(".substr ");
+                        emit(sym->address);
+                        emit(" ");
+                        emit(lastSubstrSymbol->address);
+                        emit("\n");
+                        lastSubstrSymbol = nullptr;
+                        hasSubstrArgs = false;
+                    } else {
+                        // Copy from source to destination
+                        emit(strType);
+                        emit(".copy ");
+                        emit(sym->address);
+                        emit(" ");
+                        emit(lastStringSymbol->address);
+                        emit("\n");
+                    }
                     
                     return sym->type;
                 }
@@ -3920,6 +4465,13 @@ public:
                         }
                         
                         nextToken(); // consume string literal
+                        return sym->type;
+                    }
+                    
+                    // Check if concatenating a template literal: s += `Hello ${name}!`
+                    if (check(PSTOK_TEMPLATE)) {
+                        emitTemplateLiteralConcat(sym->address, sym->type, currentToken.text, currentToken.textLen);
+                        nextToken(); // consume template literal
                         return sym->type;
                     }
                     
@@ -4300,6 +4852,23 @@ public:
     }
     
     PLCScriptVarType parseUnary() {
+        // Unary plus: +str parses string to f32 (like JavaScript)
+        if (check(PSTOK_PLUS)) {
+            nextToken();
+            PLCScriptVarType type = parseUnary();
+            // If string type, convert to number (default f32 like JS)
+            if (isStringType(type) && hasPendingStringVar) {
+                const char* strType = (pendingStringVarType == PSTYPE_STR8) ? "str" : "str16";
+                emit(strType);
+                emit(".to.f32 ");
+                emit(pendingStringVarAddr);
+                emit("\n");
+                hasPendingStringVar = false;
+                return PSTYPE_F32;
+            }
+            // For numeric types, unary + is a no-op
+            return type;
+        }
         if (check(PSTOK_BANG)) {
             nextToken();
             (void)parseUnary();
@@ -4417,6 +4986,21 @@ public:
             return PSTYPE_STR8;  // String literals are str8 by default
         }
         
+        // Template literal - returns STR8 type, stores literal info for assignment
+        if (check(PSTOK_TEMPLATE)) {
+            // Save the template literal for later use in assignment
+            int i = 0;
+            while (currentToken.text[i] && i < PLCSCRIPT_MAX_IDENTIFIER_LEN - 1) {
+                pendingTemplateLiteral[i] = currentToken.text[i];
+                i++;
+            }
+            pendingTemplateLiteral[i] = '\0';
+            pendingTemplateLiteralLen = currentToken.textLen;
+            hasPendingTemplateLiteral = true;
+            nextToken();
+            return PSTYPE_STR8;  // Template literals produce str8
+        }
+        
         // Parenthesized expression
         if (check(PSTOK_LPAREN)) {
             nextToken();
@@ -4461,6 +5045,55 @@ public:
                 emit("\n");
                 return type;
             }
+        }
+        
+        // Type casting: i32(expr), f32(str), etc.
+        if (isTypeKeyword(currentToken.type)) {
+            PLCScriptVarType castType = tokenTypeToVarType(currentToken.type);
+            nextToken();
+            
+            if (!check(PSTOK_LPAREN)) {
+                setError("Expected '(' after type name for type cast");
+                return PSTYPE_VOID;
+            }
+            nextToken(); // consume '('
+            
+            // Parse the expression inside the cast
+            PLCScriptVarType exprType = parseExpression();
+            
+            expect(PSTOK_RPAREN, "Expected ')' after type cast expression");
+            
+            // Check for string-to-number conversion
+            if (isStringType(exprType) && isNumericType(castType)) {
+                // String to number: need to use str.to.<type>
+                // The expression should have left us with a string address context
+                if (!hasPendingStringVar) {
+                    setError("Cannot cast expression to number - expected string variable");
+                    return PSTYPE_VOID;
+                }
+                
+                const char* strType = (pendingStringVarType == PSTYPE_STR8) ? "str" : "str16";
+                emit(strType);
+                emit(".to.");
+                emit(varTypeToPlcasm(castType));
+                emit(" ");
+                emit(pendingStringVarAddr);
+                emit("\n");
+                
+                hasPendingStringVar = false;
+                return castType;
+            }
+            
+            // Regular numeric conversion using cvt
+            if (exprType != castType && !isStringType(exprType) && !isStringType(castType)) {
+                emit("cvt ");
+                emit(varTypeToPlcasm(exprType));
+                emit(" ");
+                emit(varTypeToPlcasm(castType));
+                emit("\n");
+            }
+            
+            return castType;
         }
         
         // Identifier (variable or function call)
@@ -4622,6 +5255,78 @@ public:
                         return PSTYPE_BOOL;
                     }
                     
+                    // Method: .substr(from, to) or .substring(from, to) - returns string for assignment
+                    // Usage: dest = src.substr(0, 5);
+                    // This pushes from and (to-from) to stack and sets lastSubstrSymbol for assignment handling
+                    if (strEq(propName, "substr") || strEq(propName, "substring")) {
+                        if (!match(PSTOK_LPAREN)) {
+                            setError("Expected '(' after substr");
+                            return PSTYPE_VOID;
+                        }
+                        
+                        // Parse 'from' argument
+                        PLCScriptVarType fromType = parseExpression();
+                        if (fromType == PSTYPE_VOID) {
+                            setError("Invalid 'from' argument in substr");
+                            return PSTYPE_VOID;
+                        }
+                        // Convert from to u16 if needed
+                        if (fromType != PSTYPE_U16) {
+                            emit("cvt ");
+                            emit(varTypeToPlcasm(fromType));
+                            emit(" u16\n");
+                        }
+                        
+                        if (!match(PSTOK_COMMA)) {
+                            setError("Expected ',' after 'from' argument in substr");
+                            return PSTYPE_VOID;
+                        }
+                        
+                        // Parse 'to' argument
+                        PLCScriptVarType toType = parseExpression();
+                        if (toType == PSTYPE_VOID) {
+                            setError("Invalid 'to' argument in substr");
+                            return PSTYPE_VOID;
+                        }
+                        // Convert to to u16 if needed
+                        if (toType != PSTYPE_U16) {
+                            emit("cvt ");
+                            emit(varTypeToPlcasm(toType));
+                            emit(" u16\n");
+                        }
+                        
+                        if (!match(PSTOK_RPAREN)) {
+                            setError("Expected ')' after substr arguments");
+                            return PSTYPE_VOID;
+                        }
+                        
+                        // Stack has: from, to
+                        // STR_SUBSTR expects: start (u16), length (u16) where we pop length first, then start
+                        // So we need to compute length = to - from
+                        // Stack is: [from, to] (top of stack is 'to')
+                        // We need to emit: swap, dup (copy from), rot up, sub (to - from)
+                        // Result: [from, length] with length on top
+                        
+                        // Actually STR_SUBSTR pops: len first, then start
+                        // So stack order should be: start, len (len on top)
+                        // We have: from, to (to on top)
+                        // Need: from, (to - from)
+                        emit("u16.swap\n");    // to, from
+                        emit("u16.copy\n");    // to, from, from
+                        emit("u16.rot_up\n");  // from, from, to
+                        emit("u16.swap\n");    // from, to, from
+                        emit("u16.sub\n");     // from, (to - from) = from, length
+                        
+                        // Now stack has: from (start), length with length on top - correct for STR_SUBSTR
+                        
+                        // Set context for assignment handling
+                        lastSubstrSymbol = strSym;
+                        lastStringSymbol = strSym;  // Also set this for compatibility
+                        hasSubstrArgs = true;
+                        
+                        return strSym->type;
+                    }
+                    
                     // Method: .charAt(index) - returns u8 char code
                     if (strEq(propName, "charAt")) {
                         if (!match(PSTOK_LPAREN)) {
@@ -4689,8 +5394,196 @@ public:
                         return PSTYPE_VOID;
                     }
                     
+                    // Method: .startsWith(prefix) - returns bool
+                    if (strEq(propName, "startsWith")) {
+                        if (!match(PSTOK_LPAREN)) {
+                            setError("Expected '(' after startsWith");
+                            return PSTYPE_VOID;
+                        }
+                        // Parse prefix argument - must be a string variable
+                        if (!check(PSTOK_IDENTIFIER)) {
+                            setError("startsWith expects a string variable argument");
+                            return PSTYPE_VOID;
+                        }
+                        char prefixName[PLCSCRIPT_MAX_IDENTIFIER_LEN];
+                        int pi2 = 0;
+                        while (currentToken.text[pi2] && pi2 < PLCSCRIPT_MAX_IDENTIFIER_LEN - 1) {
+                            prefixName[pi2] = currentToken.text[pi2];
+                            pi2++;
+                        }
+                        prefixName[pi2] = '\0';
+                        nextToken();
+                        
+                        PLCScriptSymbol* prefixSym = findSymbol(prefixName);
+                        if (!prefixSym || (prefixSym->type != PSTYPE_STR8 && prefixSym->type != PSTYPE_STR16)) {
+                            setError("startsWith argument must be a string variable");
+                            return PSTYPE_VOID;
+                        }
+                        
+                        if (!match(PSTOK_RPAREN)) {
+                            setError("Expected ')' after startsWith argument");
+                            return PSTYPE_VOID;
+                        }
+                        
+                        // startsWith: indexOf(prefix) == 0
+                        emit(strType);
+                        emit(".find ");
+                        emit(strSym->address);
+                        emit(" ");
+                        emit(prefixSym->address);
+                        emit("\n");
+                        emit("i16.const 0\n");
+                        emit("i16.cmp_eq\n");
+                        return PSTYPE_BOOL;
+                    }
+                    
+                    // Method: .endsWith(suffix) - returns bool
+                    if (strEq(propName, "endsWith")) {
+                        if (!match(PSTOK_LPAREN)) {
+                            setError("Expected '(' after endsWith");
+                            return PSTYPE_VOID;
+                        }
+                        // Parse suffix argument - must be a string variable
+                        if (!check(PSTOK_IDENTIFIER)) {
+                            setError("endsWith expects a string variable argument");
+                            return PSTYPE_VOID;
+                        }
+                        char suffixName[PLCSCRIPT_MAX_IDENTIFIER_LEN];
+                        int si2 = 0;
+                        while (currentToken.text[si2] && si2 < PLCSCRIPT_MAX_IDENTIFIER_LEN - 1) {
+                            suffixName[si2] = currentToken.text[si2];
+                            si2++;
+                        }
+                        suffixName[si2] = '\0';
+                        nextToken();
+                        
+                        PLCScriptSymbol* suffixSym = findSymbol(suffixName);
+                        if (!suffixSym || (suffixSym->type != PSTYPE_STR8 && suffixSym->type != PSTYPE_STR16)) {
+                            setError("endsWith argument must be a string variable");
+                            return PSTYPE_VOID;
+                        }
+                        
+                        if (!match(PSTOK_RPAREN)) {
+                            setError("Expected ')' after endsWith argument");
+                            return PSTYPE_VOID;
+                        }
+                        
+                        // endsWith: indexOf(suffix) == (strLen - suffixLen)
+                        // First get indexOf result
+                        emit(strType);
+                        emit(".find ");
+                        emit(strSym->address);
+                        emit(" ");
+                        emit(suffixSym->address);
+                        emit("\n");
+                        // Get string length
+                        emit(strType);
+                        emit(".len ");
+                        emit(strSym->address);
+                        emit("\n");
+                        // Get suffix length
+                        const char* suffixType = (suffixSym->type == PSTYPE_STR8) ? "str" : "str16";
+                        emit(suffixType);
+                        emit(".len ");
+                        emit(suffixSym->address);
+                        emit("\n");
+                        // Calculate expected position: strLen - suffixLen
+                        emit("u16.sub\n");
+                        // Convert to i16 for comparison
+                        emit("cvt u16 i16\n");
+                        // Compare: indexOf == expected position
+                        emit("i16.cmp_eq\n");
+                        return PSTYPE_BOOL;
+                    }
+                    
                     setError("Unknown string property or method");
                     return PSTYPE_VOID;
+                }
+                
+                // Check for numeric variable methods (.toString, .toFixed)
+                PLCScriptSymbol* numSym = findSymbol(name);
+                if (numSym && isNumericType(numSym->type)) {
+                    // Method: .toString(base = 10) - returns string for assignment
+                    if (strEq(propName, "toString")) {
+                        if (!match(PSTOK_LPAREN)) {
+                            setError("Expected '(' after toString");
+                            return PSTYPE_VOID;
+                        }
+                        
+                        // Parse optional base argument (default 10)
+                        u8 base = 10;
+                        if (!check(PSTOK_RPAREN)) {
+                            PLCScriptVarType baseType = parseExpression();
+                            // Base must be a constant, for now we evaluate at compile time
+                            // For simplicity, we only support literal bases
+                            // Pop the base value from the expression - since it's already emitted
+                            // We need to drop it and use the literal value
+                            emit("u8.drop\n");  // Drop the base value
+                            // Use a fixed default for now - TODO: runtime base would need more work
+                            base = 10;
+                        }
+                        
+                        if (!match(PSTOK_RPAREN)) {
+                            setError("Expected ')' after toString argument");
+                            return PSTYPE_VOID;
+                        }
+                        
+                        // Load the number value to stack
+                        emitLoadFromAddress(numSym);
+                        
+                        // Set context for assignment to handle str.from.<type>
+                        hasToStringCall = true;
+                        toStringNumType = numSym->type;
+                        toStringBase = base;
+                        toStringDecimals = 0;  // Not used for integers
+                        
+                        // Return a string type to indicate this should be assigned to a string
+                        return PSTYPE_STR8;
+                    }
+                    
+                    // Method: .toFixed(decimals = 2) - for float types, returns string
+                    if (strEq(propName, "toFixed")) {
+                        if (numSym->type != PSTYPE_F32 && numSym->type != PSTYPE_F64) {
+                            setError("toFixed() can only be used on float types");
+                            return PSTYPE_VOID;
+                        }
+                        
+                        if (!match(PSTOK_LPAREN)) {
+                            setError("Expected '(' after toFixed");
+                            return PSTYPE_VOID;
+                        }
+                        
+                        // Parse optional decimals argument (default 2)
+                        u8 decimals = 2;
+                        if (!check(PSTOK_RPAREN)) {
+                            // For now, require a literal for decimals
+                            if (check(PSTOK_INTEGER)) {
+                                decimals = (u8)currentToken.intValue;
+                                if (decimals > 15) decimals = 15;
+                                nextToken();
+                            } else {
+                                PLCScriptVarType decType = parseExpression();
+                                emit("u8.drop\n");  // Drop - use default
+                                decimals = 2;
+                            }
+                        }
+                        
+                        if (!match(PSTOK_RPAREN)) {
+                            setError("Expected ')' after toFixed argument");
+                            return PSTYPE_VOID;
+                        }
+                        
+                        // Load the float value to stack
+                        emitLoadFromAddress(numSym);
+                        
+                        // Set context for assignment to handle str.from.<type>
+                        hasToStringCall = true;
+                        toStringNumType = numSym->type;
+                        toStringBase = 10;
+                        toStringDecimals = decimals;
+                        
+                        return PSTYPE_STR8;
+                    }
                 }
                 
                 // First, check if this is a local struct variable
@@ -5121,6 +6014,15 @@ public:
                     memcpy(&stringSymbolStorage, &tempSym, sizeof(PLCScriptSymbol));
                     lastStringSymbol = &stringSymbolStorage;
                 }
+                // Also set pending string var context for type casting like i32(str)
+                hasPendingStringVar = true;
+                pendingStringVarType = sym->type;
+                int ai = 0;
+                while (sym->address[ai] && ai < 31) {
+                    pendingStringVarAddr[ai] = sym->address[ai];
+                    ai++;
+                }
+                pendingStringVarAddr[ai] = '\0';
                 return sym->type;
             }
             
