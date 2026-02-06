@@ -109,7 +109,7 @@ export async function runFFITests() {
     try {
         reset();
         
-        const idx = plc.registerJSFunction(
+        const idx = plc.registerFFI(
             'F_js_add',
             'i32,i32->i32',
             'Add two numbers in JS',
@@ -132,7 +132,7 @@ export async function runFFITests() {
         reset();
         
         // Register JS function
-        const idx = plc.registerJSFunction('F_js_add', 'i32,i32->i32', 'Add in JS', (a, b) => a + b);
+        const idx = plc.registerFFI('F_js_add', 'i32,i32->i32', 'Add in JS', (a, b) => a + b);
         
         // Write input values to M (Marker) memory
         writeMemory(M+0, 'i32', 10);   // First param at M+0
@@ -161,7 +161,7 @@ export async function runFFITests() {
     try {
         reset();
         
-        plc.registerJSFunction('F_js_mul', 'f32,f32->f32', 'Multiply floats in JS', (a, b) => a * b);
+        plc.registerFFI('F_js_mul', 'f32,f32->f32', 'Multiply floats in JS', (a, b) => a * b);
         
         writeMemory(M+0, 'f32', 2.5);
         writeMemory(M+4, 'f32', 4.0);
@@ -187,7 +187,7 @@ export async function runFFITests() {
     try {
         reset();
         
-        plc.registerJSFunction('F_js_gt', 'i32,i32->bool', 'Greater than in JS', (a, b) => a > b);
+        plc.registerFFI('F_js_gt', 'i32,i32->bool', 'Greater than in JS', (a, b) => a > b);
         
         writeMemory(M+0, 'i32', 100);
         writeMemory(M+4, 'i32', 50);
@@ -213,7 +213,7 @@ export async function runFFITests() {
     try {
         reset();
         
-        plc.registerJSFunction('F_js_clamp', 'i32,i32,i32->i32', 'Clamp value', (val, min, max) => {
+        plc.registerFFI('F_js_clamp', 'i32,i32,i32->i32', 'Clamp value', (val, min, max) => {
             if (val < min) return min;
             if (val > max) return max;
             return val;
@@ -245,7 +245,7 @@ export async function runFFITests() {
         reset();
         
         let callCount = 0;
-        plc.registerJSFunction('F_js_count', 'void->i32', 'Count calls', () => ++callCount);
+        plc.registerFFI('F_js_count', 'void->i32', 'Count calls', () => ++callCount);
         
         const result = compileAndRun(`
             ffi F_js_count ${M+0}
@@ -272,9 +272,9 @@ export async function runFFITests() {
     try {
         reset();
         
-        plc.registerJSFunction('F_square', 'i32->i32', 'Square', x => x * x);
-        plc.registerJSFunction('F_double', 'i32->i32', 'Double', x => x * 2);
-        plc.registerJSFunction('F_inc', 'i32->i32', 'Increment', x => x + 1);
+        plc.registerFFI('F_square', 'i32->i32', 'Square', x => x * x);
+        plc.registerFFI('F_double', 'i32->i32', 'Double', x => x * 2);
+        plc.registerFFI('F_inc', 'i32->i32', 'Increment', x => x + 1);
         
         writeMemory(M+0, 'i32', 5);
         
@@ -306,7 +306,7 @@ export async function runFFITests() {
         plc.wasm_exports.ffi_registerDemos();
         
         // Register JS function
-        plc.registerJSFunction('F_js_negate', 'i32->i32', 'Negate in JS', x => -x);
+        plc.registerFFI('F_js_negate', 'i32->i32', 'Negate in JS', x => -x);
         
         writeMemory(M+0, 'i32', 10);
         writeMemory(M+4, 'i32', 20);
@@ -334,7 +334,7 @@ export async function runFFITests() {
     try {
         reset();
         
-        plc.registerJSFunction('F_js_u16', 'u16->u16', 'Increment u16', x => x + 1);
+        plc.registerFFI('F_js_u16', 'u16->u16', 'Increment u16', x => x + 1);
         
         writeMemory(M+0, 'u16', 65534);
         
@@ -359,10 +359,10 @@ export async function runFFITests() {
     try {
         reset();
         
-        const idx = plc.registerJSFunction('F_temp', 'i32->i32', 'Temp', x => x);
+        const idx = plc.registerFFI('F_temp', 'i32->i32', 'Temp', x => x);
         const beforeCount = plc.getFFICount();
         
-        const unregistered = plc.unregisterJSFunction(idx);
+        const unregistered = plc.unregisterFFI(idx);
         const afterCount = plc.getFFICount();
         
         if (unregistered && afterCount === beforeCount - 1 && !plc.ffiCallbacks.has(idx)) {
@@ -461,7 +461,7 @@ export async function runFFITests() {
         
         // Test 14: Worker - Register JS function
         try {
-            const idx = await worker.registerJSFunction(
+            const idx = await worker.registerFFI(
                 'F_worker_add',
                 'i32,i32->i32',
                 'Add in worker',
@@ -480,7 +480,7 @@ export async function runFFITests() {
         // Test 15: Worker - Call JS function from PLCASM
         try {
             await worker.clearFFI();
-            await worker.registerJSFunction('F_worker_add', 'i32,i32->i32', 'Add', (a, b) => a + b);
+            await worker.registerFFI('F_worker_add', 'i32,i32->i32', 'Add', (a, b) => a + b);
             
             // Write input values to M memory
             await worker.writeMemoryArea(M+0, [20, 0, 0, 0]);  // i32 = 20 at M+0
@@ -505,7 +505,7 @@ export async function runFFITests() {
         // Test 16: Worker - JS function with floats
         try {
             await worker.clearFFI();
-            await worker.registerJSFunction('F_worker_mul', 'f32,f32->f32', 'Multiply', (a, b) => a * b);
+            await worker.registerFFI('F_worker_mul', 'f32,f32->f32', 'Multiply', (a, b) => a * b);
             
             // Write f32 values (2.5 and 4.0)
             const buf = new ArrayBuffer(8);
@@ -535,8 +535,8 @@ export async function runFFITests() {
         // Test 17: Worker - getFFICount
         try {
             await worker.clearFFI();
-            await worker.registerJSFunction('F_a', 'i32->i32', 'A', x => x);
-            await worker.registerJSFunction('F_b', 'i32->i32', 'B', x => x);
+            await worker.registerFFI('F_a', 'i32->i32', 'A', x => x);
+            await worker.registerFFI('F_b', 'i32->i32', 'B', x => x);
             
             const count = await worker.getFFICount();
             
@@ -552,10 +552,10 @@ export async function runFFITests() {
         // Test 18: Worker - Unregister JS function
         try {
             await worker.clearFFI();
-            const idx = await worker.registerJSFunction('F_temp', 'i32->i32', 'Temp', x => x);
+            const idx = await worker.registerFFI('F_temp', 'i32->i32', 'Temp', x => x);
             const beforeCount = await worker.getFFICount();
             
-            const unregistered = await worker.unregisterJSFunction(idx);
+            const unregistered = await worker.unregisterFFI(idx);
             const afterCount = await worker.getFFICount();
             
             if (unregistered && afterCount === beforeCount - 1) {
@@ -569,8 +569,8 @@ export async function runFFITests() {
 
         // Test 19: Worker - clearFFI
         try {
-            await worker.registerJSFunction('F_x', 'i32->i32', 'X', x => x);
-            await worker.registerJSFunction('F_y', 'i32->i32', 'Y', x => x);
+            await worker.registerFFI('F_x', 'i32->i32', 'X', x => x);
+            await worker.registerFFI('F_y', 'i32->i32', 'Y', x => x);
             await worker.clearFFI();
             
             const count = await worker.getFFICount();
@@ -715,14 +715,14 @@ export async function runTests(options = {}) {
         // Test 1: Register JS function
         () => {
             reset();
-            const idx = plc.registerJSFunction('F_js_add', 'i32,i32->i32', 'Add two numbers in JS', (a, b) => a + b);
+            const idx = plc.registerFFI('F_js_add', 'i32,i32->i32', 'Add two numbers in JS', (a, b) => a + b);
             if (idx >= 0 && plc.ffiCallbacks.has(idx)) return { passed: true };
             return { passed: false, error: `got index ${idx}` };
         },
         // Test 2: Call JS function from PLCASM
         () => {
             reset();
-            plc.registerJSFunction('F_js_add', 'i32,i32->i32', 'Add in JS', (a, b) => a + b);
+            plc.registerFFI('F_js_add', 'i32,i32->i32', 'Add in JS', (a, b) => a + b);
             writeMemory(M+0, 'i32', 10);
             writeMemory(M+4, 'i32', 25);
             const result = compileAndRun(`ffi F_js_add ${M+0} ${M+4} ${M+8}`);
@@ -733,7 +733,7 @@ export async function runTests(options = {}) {
         // Test 3: JS function with float types
         () => {
             reset();
-            plc.registerJSFunction('F_js_mul', 'f32,f32->f32', 'Multiply floats in JS', (a, b) => a * b);
+            plc.registerFFI('F_js_mul', 'f32,f32->f32', 'Multiply floats in JS', (a, b) => a * b);
             writeMemory(M+0, 'f32', 2.5);
             writeMemory(M+4, 'f32', 4.0);
             const result = compileAndRun(`ffi F_js_mul ${M+0} ${M+4} ${M+8}`);
@@ -744,7 +744,7 @@ export async function runTests(options = {}) {
         // Test 4: JS function with boolean return
         () => {
             reset();
-            plc.registerJSFunction('F_js_gt', 'i32,i32->bool', 'Greater than', (a, b) => a > b);
+            plc.registerFFI('F_js_gt', 'i32,i32->bool', 'Greater than', (a, b) => a > b);
             writeMemory(M+0, 'i32', 100);
             writeMemory(M+4, 'i32', 50);
             const result = compileAndRun(`ffi F_js_gt ${M+0} ${M+4} ${M+8}`);
@@ -755,7 +755,7 @@ export async function runTests(options = {}) {
         // Test 5: JS function with 3 parameters
         () => {
             reset();
-            plc.registerJSFunction('F_js_clamp', 'i32,i32,i32->i32', 'Clamp value', (v, lo, hi) => Math.max(lo, Math.min(hi, v)));
+            plc.registerFFI('F_js_clamp', 'i32,i32,i32->i32', 'Clamp value', (v, lo, hi) => Math.max(lo, Math.min(hi, v)));
             writeMemory(M+0, 'i32', 150);
             writeMemory(M+4, 'i32', 0);
             writeMemory(M+8, 'i32', 100);
@@ -768,7 +768,7 @@ export async function runTests(options = {}) {
         () => {
             reset();
             let callCount = 0;
-            plc.registerJSFunction('F_js_count', '->i32', 'Count calls', () => ++callCount);
+            plc.registerFFI('F_js_count', '->i32', 'Count calls', () => ++callCount);
             compileAndRun(`ffi F_js_count ${M+0}`);
             compileAndRun(`ffi F_js_count ${M+4}`);
             compileAndRun(`ffi F_js_count ${M+8}`);
@@ -778,8 +778,8 @@ export async function runTests(options = {}) {
         // Test 7: Multiple JS functions chained
         () => {
             reset();
-            plc.registerJSFunction('F_js_add', 'i32,i32->i32', 'Add', (a, b) => a + b);
-            plc.registerJSFunction('F_js_double', 'i32->i32', 'Double', x => x * 2);
+            plc.registerFFI('F_js_add', 'i32,i32->i32', 'Add', (a, b) => a + b);
+            plc.registerFFI('F_js_double', 'i32->i32', 'Double', x => x * 2);
             writeMemory(M+0, 'i32', 5);
             writeMemory(M+4, 'i32', 3);
             compileAndRun(`ffi F_js_add ${M+0} ${M+4} ${M+8}`);
@@ -791,7 +791,7 @@ export async function runTests(options = {}) {
         // Test 8: Mix of C++ and JS functions (C++ FFI not registered, just test JS)
         () => {
             reset();
-            plc.registerJSFunction('F_js_square', 'i32->i32', 'Square', x => x * x);
+            plc.registerFFI('F_js_square', 'i32->i32', 'Square', x => x * x);
             writeMemory(M+0, 'i32', 7);
             const result = compileAndRun(`ffi F_js_square ${M+0} ${M+4}`);
             const value = readMemory(M+4, 'i32');
@@ -801,7 +801,7 @@ export async function runTests(options = {}) {
         // Test 9: JS function with u16 types
         () => {
             reset();
-            plc.registerJSFunction('F_js_add16', 'u16,u16->u16', 'Add u16', (a, b) => (a + b) & 0xFFFF);
+            plc.registerFFI('F_js_add16', 'u16,u16->u16', 'Add u16', (a, b) => (a + b) & 0xFFFF);
             writeMemory(M+0, 'u16', 1000);
             writeMemory(M+2, 'u16', 2000);
             const result = compileAndRun(`ffi F_js_add16 ${M+0} ${M+2} ${M+4}`);
@@ -812,9 +812,9 @@ export async function runTests(options = {}) {
         // Test 10: Unregister JS function
         () => {
             reset();
-            const idx = plc.registerJSFunction('F_temp', 'i32->i32', 'Temp', x => x);
+            const idx = plc.registerFFI('F_temp', 'i32->i32', 'Temp', x => x);
             const beforeCount = plc.getFFICount();
-            const unregistered = plc.unregisterJSFunction(idx);
+            const unregistered = plc.unregisterFFI(idx);
             const afterCount = plc.getFFICount();
             if (unregistered && afterCount === beforeCount - 1 && !plc.ffiCallbacks.has(idx)) return { passed: true };
             return { passed: false, error: `unregistered=${unregistered}, before=${beforeCount}, after=${afterCount}` };
@@ -882,7 +882,7 @@ export async function runTests(options = {}) {
         
         // Test 14: Worker - Register JS function
         try {
-            const idx = await worker.registerJSFunction('F_worker_add', 'i32,i32->i32', 'Add', (a, b) => a + b);
+            const idx = await worker.registerFFI('F_worker_add', 'i32,i32->i32', 'Add', (a, b) => a + b);
             if (idx >= 0) {
                 passed++;
                 tests.push({ name: testDefinitions[13].name, passed: true });
@@ -898,7 +898,7 @@ export async function runTests(options = {}) {
         // Test 15: Worker - Call JS function from PLCASM
         try {
             await worker.clearFFI();
-            await worker.registerJSFunction('F_worker_add', 'i32,i32->i32', 'Add', (a, b) => a + b);
+            await worker.registerFFI('F_worker_add', 'i32,i32->i32', 'Add', (a, b) => a + b);
             await worker.writeMemoryArea(M+0, [20, 0, 0, 0]);
             await worker.writeMemoryArea(M+4, [15, 0, 0, 0]);
             const result = await worker.compilePLCASM(`ffi F_worker_add ${M+0} ${M+4} ${M+8}`, { run: true });
@@ -919,7 +919,7 @@ export async function runTests(options = {}) {
         // Test 16: Worker - JS function with floats
         try {
             await worker.clearFFI();
-            await worker.registerJSFunction('F_worker_mul', 'f32,f32->f32', 'Mul', (a, b) => a * b);
+            await worker.registerFFI('F_worker_mul', 'f32,f32->f32', 'Mul', (a, b) => a * b);
             const buf = new ArrayBuffer(8);
             const view = new DataView(buf);
             view.setFloat32(0, 2.5, true);
@@ -948,8 +948,8 @@ export async function runTests(options = {}) {
         // Test 17: Worker - getFFICount
         try {
             await worker.clearFFI();
-            await worker.registerJSFunction('F_a', 'i32->i32', 'A', x => x);
-            await worker.registerJSFunction('F_b', 'i32->i32', 'B', x => x);
+            await worker.registerFFI('F_a', 'i32->i32', 'A', x => x);
+            await worker.registerFFI('F_b', 'i32->i32', 'B', x => x);
             const count = await worker.getFFICount();
             if (count === 2) {
                 passed++;
@@ -966,9 +966,9 @@ export async function runTests(options = {}) {
         // Test 18: Worker - Unregister JS function
         try {
             await worker.clearFFI();
-            const idx = await worker.registerJSFunction('F_temp', 'i32->i32', 'Temp', x => x);
+            const idx = await worker.registerFFI('F_temp', 'i32->i32', 'Temp', x => x);
             const beforeCount = await worker.getFFICount();
-            const unregistered = await worker.unregisterJSFunction(idx);
+            const unregistered = await worker.unregisterFFI(idx);
             const afterCount = await worker.getFFICount();
             if (unregistered && afterCount === beforeCount - 1) {
                 passed++;
@@ -984,8 +984,8 @@ export async function runTests(options = {}) {
         
         // Test 19: Worker - clearFFI
         try {
-            await worker.registerJSFunction('F_x', 'i32->i32', 'X', x => x);
-            await worker.registerJSFunction('F_y', 'i32->i32', 'Y', x => x);
+            await worker.registerFFI('F_x', 'i32->i32', 'X', x => x);
+            await worker.registerFFI('F_y', 'i32->i32', 'Y', x => x);
             await worker.clearFFI();
             const count = await worker.getFFICount();
             if (count === 0) {

@@ -340,12 +340,12 @@ const processRequest = async (post, id, type, payload) => {
             throw new Error('FFI function string did not evaluate to a function')
         }
         
-        return instance.registerJSFunction(name, signature, description, fn)
+        return instance.registerFFI(name, signature, description, fn)
     } else if (type === 'ffi_unregister') {
         const { instanceId, index } = payload
         const instance = instanceId == null ? defaultInstance : instances.get(instanceId)
         if (!instance) throw new Error('WebAssembly module not initialized')
-        return instance.unregisterJSFunction(index)
+        return instance.unregisterFFI(index)
     } else if (type === 'ffi_count') {
         const { instanceId } = payload
         const instance = instanceId == null ? defaultInstance : instances.get(instanceId)

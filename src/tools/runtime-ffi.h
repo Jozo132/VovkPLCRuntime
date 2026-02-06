@@ -74,8 +74,10 @@
 //   "u8,u16->void"    - Takes u8 and u16, returns nothing
 //   "void->u32"       - Takes nothing, returns u32
 //   "f32,f32,f32->f32" - Takes three f32, returns f32
+//   "str8->void"      - Takes str8 string address, returns nothing
+//   "str8,i32->str8"  - Takes str8 and i32, returns str8 address
 //
-// Supported types: void, bool, u8, i8, u16, i16, u32, i32, u64, i64, f32, f64
+// Supported types: void, bool, u8, i8, u16, i16, u32, i32, u64, i64, f32, f64, str8, str16
 //
 // ============================================================================
 // PLCASM Usage
@@ -117,6 +119,52 @@
 #endif
 
 // ============================================================================
+// String Struct Types for FFI
+// ============================================================================
+
+// str8 - 8-bit capacity/length string (max 255 chars)
+// Memory layout: [u8 capacity, u8 length, char data...]
+struct str8 {
+    u8* capacity;   // Pointer to capacity byte
+    u8* length;     // Pointer to length byte
+    char* data;     // Pointer to character data
+    
+    // Constructor from PLC memory address
+    static str8 fromMemory(u8* memory, u16 addr) {
+        return str8{ &memory[addr], &memory[addr + 1], (char*)&memory[addr + 2] };
+    }
+    
+    // Get as null-terminated string (copies to provided buffer)
+    void copyTo(char* buf, u8 maxLen) const {
+        u8 len = *length;
+        if (len > maxLen - 1) len = maxLen - 1;
+        for (u8 i = 0; i < len; i++) buf[i] = data[i];
+        buf[len] = '\0';
+    }
+};
+
+// str16 - 16-bit capacity/length string (max 65535 chars)
+// Memory layout: [u16 capacity, u16 length, char data...]
+struct str16 {
+    u16* capacity;  // Pointer to capacity (2 bytes)
+    u16* length;    // Pointer to length (2 bytes)
+    char* data;     // Pointer to character data
+    
+    // Constructor from PLC memory address
+    static str16 fromMemory(u8* memory, u16 addr) {
+        return str16{ (u16*)&memory[addr], (u16*)&memory[addr + 2], (char*)&memory[addr + 4] };
+    }
+    
+    // Get as null-terminated string (copies to provided buffer)
+    void copyTo(char* buf, u16 maxLen) const {
+        u16 len = *length;
+        if (len > maxLen - 1) len = maxLen - 1;
+        for (u16 i = 0; i < len; i++) buf[i] = data[i];
+        buf[len] = '\0';
+    }
+};
+
+// ============================================================================
 // Memory Marshalling Helpers
 // ============================================================================
 
@@ -133,6 +181,13 @@ template<> inline u64 ffi_read<u64>(u8* memory, u16 addr) { return *(u64*)&memor
 template<> inline i64 ffi_read<i64>(u8* memory, u16 addr) { return *(i64*)&memory[addr]; }
 template<> inline f32 ffi_read<f32>(u8* memory, u16 addr) { return *(f32*)&memory[addr]; }
 template<> inline f64 ffi_read<f64>(u8* memory, u16 addr) { return *(f64*)&memory[addr]; }
+// String types: read u16 address value, return struct with direct pointers into memory
+template<> inline str8 ffi_read<str8>(u8* memory, u16 addr) { 
+    return str8::fromMemory(memory, *(u16*)&memory[addr]); 
+}
+template<> inline str16 ffi_read<str16>(u8* memory, u16 addr) { 
+    return str16::fromMemory(memory, *(u16*)&memory[addr]); 
+}
 
 // Write typed value to PLC memory
 template<typename T> inline void ffi_write(u8* memory, u16 addr, T value);
@@ -147,6 +202,13 @@ template<> inline void ffi_write<u64>(u8* memory, u16 addr, u64 v) { *(u64*)&mem
 template<> inline void ffi_write<i64>(u8* memory, u16 addr, i64 v) { *(i64*)&memory[addr] = v; }
 template<> inline void ffi_write<f32>(u8* memory, u16 addr, f32 v) { *(f32*)&memory[addr] = v; }
 template<> inline void ffi_write<f64>(u8* memory, u16 addr, f64 v) { *(f64*)&memory[addr] = v; }
+// String types: write the string address (u16) to memory - computed from capacity pointer
+template<> inline void ffi_write<str8>(u8* memory, u16 addr, str8 v) { 
+    *(u16*)&memory[addr] = (u16)(v.capacity - memory); 
+}
+template<> inline void ffi_write<str16>(u8* memory, u16 addr, str16 v) { 
+    *(u16*)&memory[addr] = (u16)((u8*)v.capacity - memory); 
+}
 
 // ============================================================================
 // Internal Handler Type (used for type-erased storage)
@@ -341,7 +403,7 @@ struct FFIWrapper6<void, A1, A2, A3, A4, A5, A6> {
 // Signature Parsing Helpers (for editor/transport API)
 // ============================================================================
 
-// Type codes: 0=void, 1=bool, 2=u8, 3=i8, 4=u16, 5=i16, 6=u32, 7=i32, 8=u64, 9=i64, 10=f32, 11=f64
+// Type codes: 0=void, 1=bool, 2=u8, 3=i8, 4=u16, 5=i16, 6=u32, 7=i32, 8=u64, 9=i64, 10=f32, 11=f64, 12=str8, 13=str16
 inline u8 ffi_parseSignatureParams(const char* sig, u8* param_types, u8 max_params) {
     u8 count = 0;
     const char* p = sig;
@@ -357,6 +419,9 @@ inline u8 ffi_parseSignatureParams(const char* sig, u8* param_types, u8 max_para
         if (*p == '-' || *p == '\0') break;
         
         if (p[0] == 'b' && p[1] == 'o' && p[2] == 'o' && p[3] == 'l') { param_types[count++] = 1; p += 4; }
+        else if (p[0] == 's' && p[1] == 't' && p[2] == 'r' && p[3] == '1' && p[4] == '6') { param_types[count++] = 13; p += 5; }
+        else if (p[0] == 's' && p[1] == 't' && p[2] == 'r' && p[3] == '8') { param_types[count++] = 12; p += 4; }
+        else if (p[0] == 's' && p[1] == 't' && p[2] == 'r') { param_types[count++] = 12; p += 3; } // str alias for str8
         else if (p[0] == 'u' && p[1] == '8') { param_types[count++] = 2; p += 2; }
         else if (p[0] == 'i' && p[1] == '8') { param_types[count++] = 3; p += 2; }
         else if (p[0] == 'u' && p[1] == '1' && p[2] == '6') { param_types[count++] = 4; p += 3; }
@@ -390,6 +455,9 @@ inline u8 ffi_parseSignatureReturn(const char* sig) {
             if (p[0] == 'i' && p[1] == '6' && p[2] == '4') return 9;
             if (p[0] == 'f' && p[1] == '3' && p[2] == '2') return 10;
             if (p[0] == 'f' && p[1] == '6' && p[2] == '4') return 11;
+            if (p[0] == 's' && p[1] == 't' && p[2] == 'r' && p[3] == '1' && p[4] == '6') return 13;
+            if (p[0] == 's' && p[1] == 't' && p[2] == 'r' && p[3] == '8') return 12;
+            if (p[0] == 's' && p[1] == 't' && p[2] == 'r') return 12; // str alias for str8
             return 0;
         }
         p++;
@@ -411,6 +479,8 @@ inline u8 ffi_getTypeSize(u8 type_code) {
         case 9: return 8;   // i64
         case 10: return 4;  // f32
         case 11: return 8;  // f64
+        case 12: return 2;  // str8 (passed as u16 address)
+        case 13: return 2;  // str16 (passed as u16 address)
         default: return 0;
     }
 }

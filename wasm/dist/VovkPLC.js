@@ -442,6 +442,9 @@ class VovkPLC_class {
         this.wasm_exports = {...wasmInstance.exports}
         if (!this.wasm_exports) throw new Error('WebAssembly module exports not found')
         this.wasm_exports.initialize()
+        // Note: ffi_registerBuiltins() is available but NOT called automatically
+        // to avoid FFI index conflicts when compiling for devices.
+        // Call plc.wasm_exports.ffi_registerBuiltins() manually if needed for debugging.
         this.wasm_exports.downloadAssembly = assembly => this.downloadAssembly(assembly)
         this.wasm_exports.extractProgram = () => this.extractProgram()
         const required_methods = ['printInfo', 'run_unit_test', 'run_custom_test', 'memoryReset', 'get_free_memory', 'doNothing', 'compileAssembly', 'loadCompiledProgram', 'runFullProgramDebug', 'runFullProgram', 'uploadProgram', 'getMemoryArea', 'writeMemoryByte']
@@ -2833,7 +2836,7 @@ class VovkPLC_class {
      * @param {Function} fn - The JavaScript function to call
      * @returns {number} - The FFI index on success, -1 on failure
      */
-    registerJSFunction = (name, signature, description, fn) => {
+    registerFFI = (name, signature, description, fn) => {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         if (!this.wasm_exports.ffi_registerJS) throw new Error("'ffi_registerJS' export not found")
         if (!this.wasm_exports.ffi_getStringBuffer) throw new Error("'ffi_getStringBuffer' export not found")
@@ -2858,7 +2861,7 @@ class VovkPLC_class {
      * @param {number} index - The FFI index
      * @returns {boolean} - True if unregistered successfully
      */
-    unregisterJSFunction = (index) => {
+    unregisterFFI = (index) => {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         if (!this.wasm_exports.ffi_unregister) throw new Error("'ffi_unregister' export not found")
 
@@ -3943,7 +3946,7 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
      * @param {Function} fn - The JavaScript function to call (must be serializable)
      * @returns {Promise<number>} - The FFI index on success, -1 on failure
      */
-    registerJSFunction = (name, signature, description, fn) => {
+    registerFFI = (name, signature, description, fn) => {
         const fnString = fn.toString()
         return this._send('ffi_register', { name, signature, description, fnString })
     }
@@ -3953,7 +3956,7 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
      * @param {number} index - The FFI index
      * @returns {Promise<boolean>} - True if unregistered successfully
      */
-    unregisterJSFunction = (index) => {
+    unregisterFFI = (index) => {
         return this._send('ffi_unregister', { index })
     }
 
