@@ -417,7 +417,11 @@ namespace PLCMethods {
                 double value = (double)intVal;
                 if (negative) value = -value;
                 if (num_type == type_f32) return stack.push_f32((f32)value);
+#ifdef USE_X64_OPS
                 else return stack.push_f64(value);
+#else
+                else return stack.push_f32((f32)value);  // Fallback to f32 on platforms without 64-bit
+#endif
             }
             
             // Parse as double (decimal)
@@ -446,7 +450,11 @@ namespace PLCMethods {
             if (num_type == type_f32) {
                 return stack.push_f32((f32)value);
             } else {
+#ifdef USE_X64_OPS
                 return stack.push_f64(value);
+#else
+                return stack.push_f32((f32)value);  // Fallback to f32 on platforms without 64-bit
+#endif
             }
         } else {
             // Parse as integer with base support
@@ -467,11 +475,19 @@ namespace PLCMethods {
                 case type_i8:  return stack.push_i8((i8)value);
                 case type_i16: return stack.push_i16((i16)value);
                 case type_i32: return stack.push_i32((i32)value);
+#ifdef USE_X64_OPS
                 case type_i64: return stack.push_i64(value);
+#else
+                case type_i64: return stack.push_i32((i32)value);  // Fallback to i32 on platforms without 64-bit
+#endif
                 case type_u8:  return stack.push_u8((u8)(u64)value);
                 case type_u16: return stack.push_u16((u16)(u64)value);
                 case type_u32: return stack.push_u32((u32)(u64)value);
+#ifdef USE_X64_OPS
                 case type_u64: return stack.push_u64((u64)value);
+#else
+                case type_u64: return stack.push_u32((u32)(u64)value);  // Fallback to u32 on platforms without 64-bit
+#endif
                 case type_bool: return stack.push_u8(value != 0 ? 1 : 0);
                 default: return INVALID_DATA_TYPE;
             }
@@ -498,7 +514,11 @@ namespace PLCMethods {
         
         if (num_type == type_f32 || num_type == type_f64) {
             // Float to string with decimal places
+#ifdef USE_X64_OPS
             double value = (num_type == type_f32) ? (double)stack.pop_f32() : stack.pop_f64();
+#else
+            double value = (double)stack.pop_f32();  // Fallback to f32 on platforms without 64-bit
+#endif
             u8 decimals = base_or_dec;
             if (decimals > 15) decimals = 15;
             
@@ -550,11 +570,19 @@ namespace PLCMethods {
                 case type_i8:  { i8 v = stack.pop_i8(); neg = v < 0; value = neg ? (u64)(-(i64)v) : (u64)v; } break;
                 case type_i16: { i16 v = stack.pop_i16(); neg = v < 0; value = neg ? (u64)(-(i64)v) : (u64)v; } break;
                 case type_i32: { i32 v = stack.pop_i32(); neg = v < 0; value = neg ? (u64)(-(i64)v) : (u64)v; } break;
+#ifdef USE_X64_OPS
                 case type_i64: { i64 v = stack.pop_i64(); neg = v < 0; value = neg ? (u64)(-v) : (u64)v; } break;
+#else
+                case type_i64: { i32 v = stack.pop_i32(); neg = v < 0; value = neg ? (u64)(-(i64)v) : (u64)v; } break;  // Fallback
+#endif
                 case type_u8:  value = stack.pop_u8(); break;
                 case type_u16: value = stack.pop_u16(); break;
                 case type_u32: value = stack.pop_u32(); break;
+#ifdef USE_X64_OPS
                 case type_u64: value = stack.pop_u64(); break;
+#else
+                case type_u64: value = stack.pop_u32(); break;  // Fallback to u32 on platforms without 64-bit
+#endif
                 case type_bool: value = stack.pop_u8() ? 1 : 0; break;
                 default: return INVALID_DATA_TYPE;
             }
