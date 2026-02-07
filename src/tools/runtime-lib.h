@@ -1950,20 +1950,9 @@ void VovkPLCRuntime::updateGlobals() {
     static bool _last_P_1s = false;
     if (P_1s && !_last_P_1s) {
         // Increment system time in memory (Little Endian)
-        u32 t_current = 0;
-        // Read current
-        t_current |= memory[base + 16];
-        t_current |= ((u32) memory[base + 17]) << 8;
-        t_current |= ((u32) memory[base + 18]) << 16;
-        t_current |= ((u32) memory[base + 19]) << 24;
-
+        u32 t_current = read_u32(memory + base + 16);
         t_current++;
-
-        // Write back
-        memory[base + 16] = t_current & 0xFF;
-        memory[base + 17] = (t_current >> 8) & 0xFF;
-        memory[base + 18] = (t_current >> 16) & 0xFF;
-        memory[base + 19] = (t_current >> 24) & 0xFF;
+        write_u32(memory + base + 16, t_current);
     }
     _last_P_1s = P_1s;
 

@@ -451,15 +451,13 @@ namespace PLCMethods {
         if (invert) input_val = !input_val;
         
         // Target Address
-        u16 target_addr;
-        target_addr = program[index++] << 8;
-        target_addr |= program[index++];
+        u16 target_addr = read_ptr(program + index);
+        index += sizeof(MY_PTR_t);
         u8 target_bit = program[index++];
         
         // State Address
-        u16 state_addr;
-        state_addr = program[index++] << 8;
-        state_addr |= program[index++];
+        u16 state_addr = read_ptr(program + index);
+        index += sizeof(MY_PTR_t);
         u8 state_bit = program[index++];
 
         // Read State
@@ -539,9 +537,8 @@ namespace PLCMethods {
         bool input_val = (val_stack_byte != 0); // Implicit u8->bool
 
         // State Address
-        u16 state_addr;
-        state_addr = program[index++] << 8;
-        state_addr |= program[index++];
+        u16 state_addr = read_ptr(program + index);
+        index += sizeof(MY_PTR_t);
         u8 state_bit = program[index++];
 
         // Read State
@@ -575,9 +572,8 @@ namespace PLCMethods {
         bool input_val = (val_stack_byte != 0);
 
         // State Address
-        u16 state_addr;
-        state_addr = program[index++] << 8;
-        state_addr |= program[index++];
+        u16 state_addr = read_ptr(program + index);
+        index += sizeof(MY_PTR_t);
         u8 state_bit = program[index++];
 
         // Read State

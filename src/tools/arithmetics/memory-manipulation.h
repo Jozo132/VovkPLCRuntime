@@ -435,17 +435,14 @@ namespace PLCMethods {
             case type_u16:
             case type_i16: {
                 if (address + 2 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
-                // Read little-endian from memory
-                u16 value = memory[address] | ((u16)memory[address + 1] << 8);
+                u16 value = read_u16(memory + address);
                 return stack.push_u16(value);
             }
             case type_u32:
             case type_i32:
             case type_f32: {
                 if (address + 4 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
-                // Read little-endian from memory
-                u32 value = memory[address] | ((u32)memory[address + 1] << 8) |
-                            ((u32)memory[address + 2] << 16) | ((u32)memory[address + 3] << 24);
+                u32 value = read_u32(memory + address);
                 return stack.push_u32(value);
             }
 #ifdef USE_X64_OPS
@@ -453,11 +450,7 @@ namespace PLCMethods {
             case type_i64:
             case type_f64: {
                 if (address + 8 > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
-                // Read little-endian from memory
-                u64 value = memory[address] | ((u64)memory[address + 1] << 8) |
-                            ((u64)memory[address + 2] << 16) | ((u64)memory[address + 3] << 24) |
-                            ((u64)memory[address + 4] << 32) | ((u64)memory[address + 5] << 40) |
-                            ((u64)memory[address + 6] << 48) | ((u64)memory[address + 7] << 56);
+                u64 value = read_u64(memory + address);
                 return stack.push_u64(value);
             }
 #endif // USE_X64_OPS
@@ -483,9 +476,7 @@ namespace PLCMethods {
                 if (stack.size() < sizeof(MY_PTR_t)) return STACK_UNDERFLOW;
                 if (address + sizeof(MY_PTR_t) > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
                 MY_PTR_t value = stack.pop_pointer();
-                for (u32 i = 0; i < sizeof(MY_PTR_t); i++) {
-                    memory[address + i] = (value >> (8 * i)) & 0xFF;
-                }
+                write_ptr(memory + address, value);
                 return STATUS_SUCCESS;
             }
             case type_bool:

@@ -735,10 +735,7 @@ namespace EEPROMStorage {
         const u8* flash_ptr = _flash_base + PLCRUNTIME_EEPROM_START_ADDRESS;
         
         // Read size (little-endian)
-        prog_size = ((u32)flash_ptr[0]) |
-                    ((u32)flash_ptr[1] << 8) |
-                    ((u32)flash_ptr[2] << 16) |
-                    ((u32)flash_ptr[3] << 24);
+        prog_size = read_u32(flash_ptr);
         flash_ptr += 4;
         
         if (prog_size == 0 || prog_size == 0xFFFFFFFF || prog_size > PLCRUNTIME_MAX_PROGRAM_SIZE) {
@@ -774,10 +771,7 @@ namespace EEPROMStorage {
     
     inline bool hasValidProgram() {
         const u8* flash_ptr = _flash_base + PLCRUNTIME_EEPROM_START_ADDRESS;
-        u32 prog_size = ((u32)flash_ptr[0]) |
-                        ((u32)flash_ptr[1] << 8) |
-                        ((u32)flash_ptr[2] << 16) |
-                        ((u32)flash_ptr[3] << 24);
+        u32 prog_size = read_u32(flash_ptr);
         
         return (prog_size > 0 && prog_size != 0xFFFFFFFF && 
                 prog_size <= PLCRUNTIME_MAX_PROGRAM_SIZE &&
@@ -1047,10 +1041,9 @@ public:
         return STATUS_SUCCESS;
     }
 
-    RuntimeError modifyValue(u32 index, u32 value) {
-        if (index + sizeof(u32) > prog_size) return INVALID_PROGRAM_INDEX;
-        program[index] = value >> 8;
-        program[index + 1] = value & 0xFF;
+    RuntimeError modifyValue(u32 index, u16 value) {
+        if (index + sizeof(u16) > prog_size) return INVALID_PROGRAM_INDEX;
+        write_u16(program + index, value);
         return STATUS_SUCCESS;
     }
 
