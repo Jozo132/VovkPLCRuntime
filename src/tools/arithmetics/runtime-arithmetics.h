@@ -28,7 +28,9 @@
 #include "math-i8.h"
 #include "math-i16.h"
 #include "math-i32.h"
+#ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
 #include "math-f32.h"
+#endif // PLCRUNTIME_FLOAT_OPS_ENABLED
 #ifdef USE_X64_OPS
 #include "math-u64.h"
 #include "math-i64.h"
@@ -75,7 +77,9 @@ namespace PLCMethods {
             case type_i8: return ADD_int8_t(stack);
             case type_i16: return ADD_int16_t(stack);
             case type_i32: return ADD_int32_t(stack);
+#ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
             case type_f32: return ADD_float(stack);
+#endif // PLCRUNTIME_FLOAT_OPS_ENABLED
 #ifdef USE_X64_OPS
             case type_u64: return ADD_uint64_t(stack);
             case type_i64: return ADD_int64_t(stack);
@@ -96,7 +100,9 @@ namespace PLCMethods {
             case type_i8: return SUB_int8_t(stack);
             case type_i16: return SUB_int16_t(stack);
             case type_i32: return SUB_int32_t(stack);
+#ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
             case type_f32: return SUB_float(stack);
+#endif // PLCRUNTIME_FLOAT_OPS_ENABLED
 #ifdef USE_X64_OPS
             case type_u64: return SUB_uint64_t(stack);
             case type_i64: return SUB_int64_t(stack);
@@ -118,7 +124,9 @@ namespace PLCMethods {
             case type_i8: return MUL_int8_t(stack);
             case type_i16: return MUL_int16_t(stack);
             case type_i32: return MUL_int32_t(stack);
+#ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
             case type_f32: return MUL_float(stack);
+#endif // PLCRUNTIME_FLOAT_OPS_ENABLED
 #ifdef USE_X64_OPS
             case type_u64: return MUL_uint64_t(stack);
             case type_i64: return MUL_int64_t(stack);
@@ -139,7 +147,9 @@ namespace PLCMethods {
             case type_i8: return DIV_int8_t(stack);
             case type_i16: return DIV_int16_t(stack);
             case type_i32: return DIV_int32_t(stack);
+#ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
             case type_f32: return DIV_float(stack);
+#endif // PLCRUNTIME_FLOAT_OPS_ENABLED
 #ifdef USE_X64_OPS
             case type_u64: return DIV_uint64_t(stack);
             case type_i64: return DIV_int64_t(stack);
@@ -160,7 +170,9 @@ namespace PLCMethods {
             case type_i8: return MOD_int8_t(stack);
             case type_i16: return MOD_int16_t(stack);
             case type_i32: return MOD_int32_t(stack);
+#ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
             case type_f32: return MOD_float(stack);
+#endif // PLCRUNTIME_FLOAT_OPS_ENABLED
 #ifdef USE_X64_OPS
             case type_u64: return MOD_uint64_t(stack);
             case type_i64: return MOD_int64_t(stack);
@@ -181,7 +193,9 @@ namespace PLCMethods {
             case type_i8: return POW_int8_t(stack);
             case type_i16: return POW_int16_t(stack);
             case type_i32: return POW_int32_t(stack);
+#ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
             case type_f32: return POW_float(stack);
+#endif // PLCRUNTIME_FLOAT_OPS_ENABLED
 #ifdef USE_X64_OPS
             case type_u64: return POW_uint64_t(stack);
             case type_i64: return POW_int64_t(stack);
@@ -198,7 +212,9 @@ namespace PLCMethods {
             case type_i8: return NEG_int8_t(stack);
             case type_i16: return NEG_int16_t(stack);
             case type_i32: return NEG_int32_t(stack);
+#ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
             case type_f32: return NEG_float(stack);
+#endif // PLCRUNTIME_FLOAT_OPS_ENABLED
 #ifdef USE_X64_OPS
             case type_i64: return NEG_int64_t(stack);
             case type_f64: return NEG_double(stack);
@@ -214,7 +230,9 @@ RuntimeError handle_ABS(RuntimeStack& stack, u8* program, u32 prog_size, u32& in
             case type_i8: return ABS_int8_t(stack);
             case type_i16: return ABS_int16_t(stack);
             case type_i32: return ABS_int32_t(stack);
+#ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
             case type_f32: return ABS_float(stack);
+#endif // PLCRUNTIME_FLOAT_OPS_ENABLED
 #ifdef USE_X64_OPS
             case type_i64: return ABS_int64_t(stack);
             case type_f64: return ABS_double(stack);
@@ -227,7 +245,9 @@ RuntimeError handle_ABS(RuntimeStack& stack, u8* program, u32 prog_size, u32& in
         SAFE_BOUNDS_CHECK(index + 1 > prog_size, PROGRAM_POINTER_OUT_OF_BOUNDS);
         u8 data_type = program[index++];
         switch (data_type) {
+#ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
             case type_f32: return SQRT_float(stack);
+#endif // PLCRUNTIME_FLOAT_OPS_ENABLED
 #ifdef USE_X64_OPS
             case type_f64: return SQRT_double(stack);
 #endif // USE_X64_OPS
@@ -239,7 +259,9 @@ RuntimeError handle_ABS(RuntimeStack& stack, u8* program, u32 prog_size, u32& in
         SAFE_BOUNDS_CHECK(index + 1 > prog_size, PROGRAM_POINTER_OUT_OF_BOUNDS);
         u8 data_type = program[index++];
         switch (data_type) {
+#ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
             case type_f32: return SIN_float(stack);
+#endif // PLCRUNTIME_FLOAT_OPS_ENABLED
 #ifdef USE_X64_OPS
             case type_f64: return SIN_double(stack);
 #endif // USE_X64_OPS
@@ -251,7 +273,9 @@ RuntimeError handle_ABS(RuntimeStack& stack, u8* program, u32 prog_size, u32& in
         SAFE_BOUNDS_CHECK(index + 1 > prog_size, PROGRAM_POINTER_OUT_OF_BOUNDS);
         u8 data_type = program[index++];
         switch (data_type) {
+#ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
             case type_f32: return COS_float(stack);
+#endif // PLCRUNTIME_FLOAT_OPS_ENABLED
 #ifdef USE_X64_OPS
             case type_f64: return COS_double(stack);
 #endif // USE_X64_OPS
@@ -272,7 +296,9 @@ RuntimeError handle_ABS(RuntimeStack& stack, u8* program, u32 prog_size, u32& in
             case type_i8: return CMP_EQ_int8_t(stack);
             case type_i16: return CMP_EQ_int16_t(stack);
             case type_i32: return CMP_EQ_int32_t(stack);
+#ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
             case type_f32: return CMP_EQ_float(stack);
+#endif // PLCRUNTIME_FLOAT_OPS_ENABLED
 #ifdef USE_X64_OPS
             case type_u64: return CMP_EQ_uint64_t(stack);
             case type_i64: return CMP_EQ_int64_t(stack);
@@ -292,7 +318,9 @@ RuntimeError handle_ABS(RuntimeStack& stack, u8* program, u32 prog_size, u32& in
             case type_i8: return CMP_NEQ_int8_t(stack);
             case type_i16: return CMP_NEQ_int16_t(stack);
             case type_i32: return CMP_NEQ_int32_t(stack);
+#ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
             case type_f32: return CMP_NEQ_float(stack);
+#endif // PLCRUNTIME_FLOAT_OPS_ENABLED
 #ifdef USE_X64_OPS
             case type_u64: return CMP_NEQ_uint64_t(stack);
             case type_i64: return CMP_NEQ_int64_t(stack);
@@ -312,7 +340,9 @@ RuntimeError handle_ABS(RuntimeStack& stack, u8* program, u32 prog_size, u32& in
             case type_i8: return CMP_GT_int8_t(stack);
             case type_i16: return CMP_GT_int16_t(stack);
             case type_i32: return CMP_GT_int32_t(stack);
+#ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
             case type_f32: return CMP_GT_float(stack);
+#endif // PLCRUNTIME_FLOAT_OPS_ENABLED
 #ifdef USE_X64_OPS
             case type_u64: return CMP_GT_uint64_t(stack);
             case type_i64: return CMP_GT_int64_t(stack);
@@ -332,7 +362,9 @@ RuntimeError handle_ABS(RuntimeStack& stack, u8* program, u32 prog_size, u32& in
             case type_i8: return CMP_GTE_int8_t(stack);
             case type_i16: return CMP_GTE_int16_t(stack);
             case type_i32: return CMP_GTE_int32_t(stack);
+#ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
             case type_f32: return CMP_GTE_float(stack);
+#endif // PLCRUNTIME_FLOAT_OPS_ENABLED
 #ifdef USE_X64_OPS
             case type_u64: return CMP_GTE_uint64_t(stack);
             case type_i64: return CMP_GTE_int64_t(stack);
@@ -352,7 +384,9 @@ RuntimeError handle_ABS(RuntimeStack& stack, u8* program, u32 prog_size, u32& in
             case type_i8: return CMP_LT_int8_t(stack);
             case type_i16: return CMP_LT_int16_t(stack);
             case type_i32: return CMP_LT_int32_t(stack);
+#ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
             case type_f32: return CMP_LT_float(stack);
+#endif // PLCRUNTIME_FLOAT_OPS_ENABLED
 #ifdef USE_X64_OPS
             case type_u64: return CMP_LT_uint64_t(stack);
             case type_i64: return CMP_LT_int64_t(stack);
@@ -372,7 +406,9 @@ RuntimeError handle_ABS(RuntimeStack& stack, u8* program, u32 prog_size, u32& in
             case type_i8: return CMP_LTE_int8_t(stack);
             case type_i16: return CMP_LTE_int16_t(stack);
             case type_i32: return CMP_LTE_int32_t(stack);
+#ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
             case type_f32: return CMP_LTE_float(stack);
+#endif // PLCRUNTIME_FLOAT_OPS_ENABLED
 #ifdef USE_X64_OPS
             case type_u64: return CMP_LTE_uint64_t(stack);
             case type_i64: return CMP_LTE_int64_t(stack);

@@ -33,6 +33,7 @@
 //   #define PLCRUNTIME_NO_TIMERS     // Disable timer operations (~2KB savings)
 //   #define PLCRUNTIME_NO_FFI        // Disable FFI function calls (~1KB savings)
 //   #define PLCRUNTIME_NO_X64_OPS    // Disable 64-bit operations (~2KB savings)
+//   #define PLCRUNTIME_NO_FLOAT_OPS  // Disable float (f32) operations (~3KB savings)
 //   #define PLCRUNTIME_NO_TRANSPORT  // Disable transport system
 //
 // Or use the preset:
@@ -49,7 +50,7 @@
 // ============================================================================
 
 // PLCRUNTIME_MINIMAL - For severely resource-constrained devices (Arduino Nano, ATtiny)
-// Disables: strings, FFI, 64-bit operations
+// Disables: strings, FFI, 64-bit operations, float operations
 // Keeps: timers, counters (essential for PLC operations)
 #ifdef PLCRUNTIME_MINIMAL
     #ifndef PLCRUNTIME_NO_STRINGS
@@ -61,10 +62,13 @@
     #ifndef PLCRUNTIME_NO_X64_OPS
         #define PLCRUNTIME_NO_X64_OPS
     #endif
+    #ifndef PLCRUNTIME_NO_FLOAT_OPS
+        #define PLCRUNTIME_NO_FLOAT_OPS
+    #endif
 #endif // PLCRUNTIME_MINIMAL
 
 // PLCRUNTIME_TINY - For extremely constrained devices (absolute minimum)
-// Disables: strings, FFI, 64-bit ops, counters
+// Disables: strings, FFI, 64-bit ops, float ops, counters
 // Keeps: timers only
 #ifdef PLCRUNTIME_TINY
     #ifndef PLCRUNTIME_NO_STRINGS
@@ -75,6 +79,9 @@
     #endif
     #ifndef PLCRUNTIME_NO_X64_OPS
         #define PLCRUNTIME_NO_X64_OPS
+    #endif
+    #ifndef PLCRUNTIME_NO_FLOAT_OPS
+        #define PLCRUNTIME_NO_FLOAT_OPS
     #endif
     #ifndef PLCRUNTIME_NO_COUNTERS
         #define PLCRUNTIME_NO_COUNTERS
@@ -101,6 +108,10 @@
 
 #ifndef PLCRUNTIME_NO_FFI
     #define PLCRUNTIME_FFI_ENABLED
+#endif
+
+#ifndef PLCRUNTIME_NO_FLOAT_OPS
+    #define PLCRUNTIME_FLOAT_OPS_ENABLED
 #endif
 
 // Transport system (Serial, WiFi, Ethernet, etc.)
@@ -137,7 +148,8 @@
 //   Bit 5:  64-bit operations enabled
 //   Bit 6:  Safe mode enabled (bounds checking)
 //   Bit 7:  Transport system enabled (Serial/WiFi/Ethernet)
-//   Bit 8-15: Reserved for future use
+//   Bit 8:  Float (f32) operations enabled
+//   Bit 9-15: Reserved for future use
 // ============================================================================
 
 #define PLCRUNTIME_FLAG_LITTLE_ENDIAN   0x0001  // Bit 0
@@ -148,6 +160,7 @@
 #define PLCRUNTIME_FLAG_X64_OPS         0x0020  // Bit 5
 #define PLCRUNTIME_FLAG_SAFE_MODE       0x0040  // Bit 6
 #define PLCRUNTIME_FLAG_TRANSPORT       0x0080  // Bit 7
+#define PLCRUNTIME_FLAG_FLOAT_OPS       0x0100  // Bit 8
 
 // ============================================================================
 // Safe Mode - Enable runtime bounds checking
@@ -255,6 +268,11 @@ inline uint16_t plcruntime_get_feature_flags() {
     // Bit 7: Transport system
 #ifdef PLCRUNTIME_TRANSPORT_ENABLED
     flags |= PLCRUNTIME_FLAG_TRANSPORT;
+#endif
+
+    // Bit 8: Float operations
+#ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
+    flags |= PLCRUNTIME_FLAG_FLOAT_OPS;
 #endif
 
     return flags;

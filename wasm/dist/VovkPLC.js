@@ -4179,6 +4179,7 @@ const RUNTIME_FLAGS = {
     X64_OPS:       0x0020,  // Bit 5: 64-bit operations enabled
     SAFE_MODE:     0x0040,  // Bit 6: Safe mode enabled
     TRANSPORT:     0x0080,  // Bit 7: Transport system enabled
+    FLOAT_OPS:     0x0100,  // Bit 8: Float (f32) operations enabled
 }
 
 /**
@@ -4192,6 +4193,7 @@ const RUNTIME_FLAGS = {
  * @property {boolean} x64Ops - Bit 5: 64-bit operations enabled
  * @property {boolean} safeMode - Bit 6: Safe mode / bounds checking enabled
  * @property {boolean} transport - Bit 7: Transport system enabled
+ * @property {boolean} floatOps - Bit 8: Float (f32) operations enabled
  */
 
 /**
@@ -4227,6 +4229,7 @@ VovkPLC_class.decodeRuntimeFlags = (flags) => ({
     x64Ops:       !!(flags & RUNTIME_FLAGS.X64_OPS),
     safeMode:     !!(flags & RUNTIME_FLAGS.SAFE_MODE),
     transport:    !!(flags & RUNTIME_FLAGS.TRANSPORT),
+    floatOps:     !!(flags & RUNTIME_FLAGS.FLOAT_OPS),
 })
 
 /**

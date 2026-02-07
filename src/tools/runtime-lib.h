@@ -2104,7 +2104,9 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
         case type_i16: return PLCMethods::push_i16(this->stack, program, prog_size, index);
         case type_u32: return PLCMethods::push_u32(this->stack, program, prog_size, index);
         case type_i32: return PLCMethods::push_i32(this->stack, program, prog_size, index);
+#ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
         case type_f32: return PLCMethods::push_f32(this->stack, program, prog_size, index);
+#endif // PLCRUNTIME_FLOAT_OPS_ENABLED
 #ifdef USE_X64_OPS
         case type_u64: return PLCMethods::push_u64(this->stack, program, prog_size, index);
         case type_i64: return PLCMethods::push_i64(this->stack, program, prog_size, index);
