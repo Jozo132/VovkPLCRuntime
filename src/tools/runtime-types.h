@@ -28,17 +28,22 @@
 // VovkPLCRuntime.h to disable specific features and reduce code size.
 //
 // For Arduino Nano or similar resource-constrained devices, you might want:
-//   #define PLCRUNTIME_NO_STRINGS    // Disable string operations (~4KB savings)
-//   #define PLCRUNTIME_NO_COUNTERS   // Disable counter operations (~1KB savings)
-//   #define PLCRUNTIME_NO_TIMERS     // Disable timer operations (~2KB savings)
-//   #define PLCRUNTIME_NO_FFI        // Disable FFI function calls (~1KB savings)
-//   #define PLCRUNTIME_NO_X64_OPS    // Disable 64-bit operations (~2KB savings)
-//   #define PLCRUNTIME_NO_FLOAT_OPS  // Disable float (f32) operations (~3KB savings)
-//   #define PLCRUNTIME_NO_TRANSPORT  // Disable transport system
+//   #define PLCRUNTIME_NO_STRINGS       // Disable string operations (~4KB savings)
+//   #define PLCRUNTIME_NO_COUNTERS      // Disable counter operations (~1KB savings)
+//   #define PLCRUNTIME_NO_TIMERS        // Disable timer operations (~2KB savings)
+//   #define PLCRUNTIME_NO_FFI           // Disable FFI function calls (~1KB savings)
+//   #define PLCRUNTIME_NO_X64_OPS       // Disable 64-bit operations (~2KB savings)
+//   #define PLCRUNTIME_NO_FLOAT_OPS     // Disable float (f32) operations (~3KB savings)
+//   #define PLCRUNTIME_NO_TRANSPORT     // Disable transport system
+//   #define PLCRUNTIME_NO_ADVANCED_MATH // Disable POW, SQRT, SIN, COS (~3KB from math libs)
+//   #define PLCRUNTIME_NO_32BIT_OPS     // Only u8/i8/u16/i16 types (~2KB savings)
+//   #define PLCRUNTIME_NO_CVT           // Disable type conversion (~1.5KB savings)
+//   #define PLCRUNTIME_NO_STACK_OPS     // Disable SWAP, PICK, POKE (~1KB savings)
 //
-// Or use the preset:
-//   #define PLCRUNTIME_MINIMAL       // Disables strings, FFI, 64-bit ops
-//   #define PLCRUNTIME_TINY          // Also disables counters, transport
+// Or use a preset:
+//   #define PLCRUNTIME_MINIMAL  // Disables strings, FFI, x64, float - keeps timers/counters
+//   #define PLCRUNTIME_TINY     // Also disables counters, transport
+//   #define PLCRUNTIME_NANO     // For ATmega328P: maximum stripping (~18KB target)
 //
 // Feature status is reported in:
 // - System memory byte 0-1 (S0-S1): Runtime feature flags (u16 little-endian)
@@ -91,6 +96,43 @@
     #endif
 #endif // PLCRUNTIME_TINY
 
+// PLCRUNTIME_NANO - For ATmega328P and similar (32KB flash, aggressive stripping)
+// Target: ~18KB flash footprint for basic PLC functionality
+// Disables: strings, FFI, x64, float, counters, transport, advanced math, 32-bit ops, CVT, stack ops
+// Keeps: timers (TON/TOF/TP), basic logic, 8/16-bit arithmetic, memory ops, jumps
+#ifdef PLCRUNTIME_NANO
+    #ifndef PLCRUNTIME_NO_STRINGS
+        #define PLCRUNTIME_NO_STRINGS
+    #endif
+    #ifndef PLCRUNTIME_NO_FFI
+        #define PLCRUNTIME_NO_FFI
+    #endif
+    #ifndef PLCRUNTIME_NO_X64_OPS
+        #define PLCRUNTIME_NO_X64_OPS
+    #endif
+    #ifndef PLCRUNTIME_NO_FLOAT_OPS
+        #define PLCRUNTIME_NO_FLOAT_OPS
+    #endif
+    #ifndef PLCRUNTIME_NO_COUNTERS
+        #define PLCRUNTIME_NO_COUNTERS
+    #endif
+    #ifndef PLCRUNTIME_NO_TRANSPORT
+        #define PLCRUNTIME_NO_TRANSPORT
+    #endif
+    #ifndef PLCRUNTIME_NO_ADVANCED_MATH
+        #define PLCRUNTIME_NO_ADVANCED_MATH
+    #endif
+    #ifndef PLCRUNTIME_NO_32BIT_OPS
+        #define PLCRUNTIME_NO_32BIT_OPS
+    #endif
+    #ifndef PLCRUNTIME_NO_CVT
+        #define PLCRUNTIME_NO_CVT
+    #endif
+    #ifndef PLCRUNTIME_NO_STACK_OPS
+        #define PLCRUNTIME_NO_STACK_OPS
+    #endif
+#endif // PLCRUNTIME_NANO
+
 // ============================================================================
 // Feature enable/disable macros (inverted for cleaner code)
 // ============================================================================
@@ -131,6 +173,26 @@
     #endif
 #else
     #undef USE_X64_OPS
+#endif
+
+// Advanced math operations (POW, SQRT, SIN, COS) - pulls in heavy math libraries
+#ifndef PLCRUNTIME_NO_ADVANCED_MATH
+    #define PLCRUNTIME_ADVANCED_MATH_ENABLED
+#endif
+
+// 32-bit integer operations (u32, i32)
+#ifndef PLCRUNTIME_NO_32BIT_OPS
+    #define PLCRUNTIME_32BIT_OPS_ENABLED
+#endif
+
+// Type conversion (CVT instruction)
+#ifndef PLCRUNTIME_NO_CVT
+    #define PLCRUNTIME_CVT_ENABLED
+#endif
+
+// Stack manipulation operations (SWAP, PICK, POKE)
+#ifndef PLCRUNTIME_NO_STACK_OPS
+    #define PLCRUNTIME_STACK_OPS_ENABLED
 #endif
 
 // ============================================================================

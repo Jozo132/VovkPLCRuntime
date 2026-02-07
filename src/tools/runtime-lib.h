@@ -2067,7 +2067,9 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
         case LOGIC_OR: return PLCMethods::LOGIC_OR(this->stack);
         case LOGIC_NOT: return PLCMethods::LOGIC_NOT(this->stack);
         case LOGIC_XOR: return PLCMethods::LOGIC_XOR(this->stack);
+#ifdef PLCRUNTIME_CVT_ENABLED
         case CVT: return PLCMethods::CVT(this->stack, program, prog_size, index);
+#endif // PLCRUNTIME_CVT_ENABLED
         case LOAD: return PLCMethods::LOAD(this->stack, this->memory, program, prog_size, index);
         case MOVE: return PLCMethods::MOVE(this->stack, this->memory, program, prog_size, index);
         case MOVE_COPY: return PLCMethods::MOVE_COPY(this->stack, this->memory, program, prog_size, index);
@@ -2076,11 +2078,15 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
         case INC_MEM: return PLCMethods::INC_MEM(this->memory, program, prog_size, index);
         case DEC_MEM: return PLCMethods::DEC_MEM(this->memory, program, prog_size, index);
         case COPY: return PLCMethods::COPY(this->stack, program, prog_size, index);
+#ifdef PLCRUNTIME_STACK_OPS_ENABLED
         case SWAP: return PLCMethods::SWAP(this->stack, program, prog_size, index);
+#endif // PLCRUNTIME_STACK_OPS_ENABLED
         case DROP: return PLCMethods::DROP(this->stack, program, prog_size, index);
         case CLEAR: return PLCMethods::CLEAR(this->stack);
+#ifdef PLCRUNTIME_STACK_OPS_ENABLED
         case PICK: return PLCMethods::PICK(this->stack, program, prog_size, index);
         case POKE: return PLCMethods::POKE(this->stack, program, prog_size, index);
+#endif // PLCRUNTIME_STACK_OPS_ENABLED
         case JMP: return PLCMethods::handle_JMP(this->stack, program, prog_size, index);
         case JMP_IF: return PLCMethods::handle_JMP_IF(this->stack, program, prog_size, index);
         case JMP_IF_NOT: return PLCMethods::handle_JMP_IF_NOT(this->stack, program, prog_size, index);
@@ -2102,8 +2108,10 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
         case type_i8: return PLCMethods::push_i8(this->stack, program, prog_size, index);
         case type_u16: return PLCMethods::push_u16(this->stack, program, prog_size, index);
         case type_i16: return PLCMethods::push_i16(this->stack, program, prog_size, index);
+#ifdef PLCRUNTIME_32BIT_OPS_ENABLED
         case type_u32: return PLCMethods::push_u32(this->stack, program, prog_size, index);
         case type_i32: return PLCMethods::push_i32(this->stack, program, prog_size, index);
+#endif // PLCRUNTIME_32BIT_OPS_ENABLED
 #ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
         case type_f32: return PLCMethods::push_f32(this->stack, program, prog_size, index);
 #endif // PLCRUNTIME_FLOAT_OPS_ENABLED
@@ -2117,12 +2125,16 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
         case MUL: return PLCMethods::handle_MUL(this->stack, program, prog_size, index);
         case DIV: return PLCMethods::handle_DIV(this->stack, program, prog_size, index);
         case MOD: return PLCMethods::handle_MOD(this->stack, program, prog_size, index);
+#ifdef PLCRUNTIME_ADVANCED_MATH_ENABLED
         case POW: return PLCMethods::handle_POW(this->stack, program, prog_size, index);
+#endif // PLCRUNTIME_ADVANCED_MATH_ENABLED
         case ABS: return PLCMethods::handle_ABS(this->stack, program, prog_size, index);
         case NEG: return PLCMethods::handle_NEG(this->stack, program, prog_size, index);
+#ifdef PLCRUNTIME_ADVANCED_MATH_ENABLED
         case SQRT: return PLCMethods::handle_SQRT(this->stack, program, prog_size, index);
         case SIN: return PLCMethods::handle_SIN(this->stack, program, prog_size, index);
         case COS: return PLCMethods::handle_COS(this->stack, program, prog_size, index);
+#endif // PLCRUNTIME_ADVANCED_MATH_ENABLED
 
 #ifdef PLCRUNTIME_TIMERS_ENABLED
         case TON_CONST: return PLCMethods::handle_TON_CONST(this->stack, this->memory, program, prog_size, index);

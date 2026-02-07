@@ -73,10 +73,14 @@ namespace PLCMethods {
             case type_u8: return ADD_uint8_t(stack);
             case type_pointer: return ADD_pointer(stack);
             case type_u16: return ADD_uint16_t(stack);
+#ifdef PLCRUNTIME_32BIT_OPS_ENABLED
             case type_u32: return ADD_uint32_t(stack);
+#endif // PLCRUNTIME_32BIT_OPS_ENABLED
             case type_i8: return ADD_int8_t(stack);
             case type_i16: return ADD_int16_t(stack);
+#ifdef PLCRUNTIME_32BIT_OPS_ENABLED
             case type_i32: return ADD_int32_t(stack);
+#endif // PLCRUNTIME_32BIT_OPS_ENABLED
 #ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
             case type_f32: return ADD_float(stack);
 #endif // PLCRUNTIME_FLOAT_OPS_ENABLED
@@ -96,10 +100,14 @@ namespace PLCMethods {
             case type_bool:
             case type_u8: return SUB_uint8_t(stack);
             case type_u16: return SUB_uint16_t(stack);
+#ifdef PLCRUNTIME_32BIT_OPS_ENABLED
             case type_u32: return SUB_uint32_t(stack);
+#endif // PLCRUNTIME_32BIT_OPS_ENABLED
             case type_i8: return SUB_int8_t(stack);
             case type_i16: return SUB_int16_t(stack);
+#ifdef PLCRUNTIME_32BIT_OPS_ENABLED
             case type_i32: return SUB_int32_t(stack);
+#endif // PLCRUNTIME_32BIT_OPS_ENABLED
 #ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
             case type_f32: return SUB_float(stack);
 #endif // PLCRUNTIME_FLOAT_OPS_ENABLED
@@ -120,10 +128,14 @@ namespace PLCMethods {
             case type_u8: return MUL_uint8_t(stack);
             case type_pointer: return MUL_pointer(stack);
             case type_u16: return MUL_uint16_t(stack);
+#ifdef PLCRUNTIME_32BIT_OPS_ENABLED
             case type_u32: return MUL_uint32_t(stack);
+#endif // PLCRUNTIME_32BIT_OPS_ENABLED
             case type_i8: return MUL_int8_t(stack);
             case type_i16: return MUL_int16_t(stack);
+#ifdef PLCRUNTIME_32BIT_OPS_ENABLED
             case type_i32: return MUL_int32_t(stack);
+#endif // PLCRUNTIME_32BIT_OPS_ENABLED
 #ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
             case type_f32: return MUL_float(stack);
 #endif // PLCRUNTIME_FLOAT_OPS_ENABLED
@@ -143,10 +155,14 @@ namespace PLCMethods {
             case type_bool:
             case type_u8: return DIV_uint8_t(stack);
             case type_u16: return DIV_uint16_t(stack);
+#ifdef PLCRUNTIME_32BIT_OPS_ENABLED
             case type_u32: return DIV_uint32_t(stack);
+#endif // PLCRUNTIME_32BIT_OPS_ENABLED
             case type_i8: return DIV_int8_t(stack);
             case type_i16: return DIV_int16_t(stack);
+#ifdef PLCRUNTIME_32BIT_OPS_ENABLED
             case type_i32: return DIV_int32_t(stack);
+#endif // PLCRUNTIME_32BIT_OPS_ENABLED
 #ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
             case type_f32: return DIV_float(stack);
 #endif // PLCRUNTIME_FLOAT_OPS_ENABLED
@@ -166,10 +182,14 @@ namespace PLCMethods {
             case type_bool:
             case type_u8: return MOD_uint8_t(stack);
             case type_u16: return MOD_uint16_t(stack);
+#ifdef PLCRUNTIME_32BIT_OPS_ENABLED
             case type_u32: return MOD_uint32_t(stack);
+#endif // PLCRUNTIME_32BIT_OPS_ENABLED
             case type_i8: return MOD_int8_t(stack);
             case type_i16: return MOD_int16_t(stack);
+#ifdef PLCRUNTIME_32BIT_OPS_ENABLED
             case type_i32: return MOD_int32_t(stack);
+#endif // PLCRUNTIME_32BIT_OPS_ENABLED
 #ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
             case type_f32: return MOD_float(stack);
 #endif // PLCRUNTIME_FLOAT_OPS_ENABLED
@@ -189,10 +209,14 @@ namespace PLCMethods {
             case type_bool:
             case type_u8: return POW_uint8_t(stack);
             case type_u16: return POW_uint16_t(stack);
+#ifdef PLCRUNTIME_32BIT_OPS_ENABLED
             case type_u32: return POW_uint32_t(stack);
+#endif // PLCRUNTIME_32BIT_OPS_ENABLED
             case type_i8: return POW_int8_t(stack);
             case type_i16: return POW_int16_t(stack);
+#ifdef PLCRUNTIME_32BIT_OPS_ENABLED
             case type_i32: return POW_int32_t(stack);
+#endif // PLCRUNTIME_32BIT_OPS_ENABLED
 #ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
             case type_f32: return POW_float(stack);
 #endif // PLCRUNTIME_FLOAT_OPS_ENABLED
@@ -211,7 +235,9 @@ namespace PLCMethods {
         switch (data_type) {
             case type_i8: return NEG_int8_t(stack);
             case type_i16: return NEG_int16_t(stack);
+#ifdef PLCRUNTIME_32BIT_OPS_ENABLED
             case type_i32: return NEG_int32_t(stack);
+#endif // PLCRUNTIME_32BIT_OPS_ENABLED
 #ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
             case type_f32: return NEG_float(stack);
 #endif // PLCRUNTIME_FLOAT_OPS_ENABLED
@@ -229,7 +255,9 @@ RuntimeError handle_ABS(RuntimeStack& stack, u8* program, u32 prog_size, u32& in
         switch (data_type) {
             case type_i8: return ABS_int8_t(stack);
             case type_i16: return ABS_int16_t(stack);
+#ifdef PLCRUNTIME_32BIT_OPS_ENABLED
             case type_i32: return ABS_int32_t(stack);
+#endif // PLCRUNTIME_32BIT_OPS_ENABLED
 #ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
             case type_f32: return ABS_float(stack);
 #endif // PLCRUNTIME_FLOAT_OPS_ENABLED
@@ -292,10 +320,14 @@ RuntimeError handle_ABS(RuntimeStack& stack, u8* program, u32 prog_size, u32& in
             case type_bool:
             case type_u8: return CMP_EQ_uint8_t(stack);
             case type_u16: return CMP_EQ_uint16_t(stack);
+#ifdef PLCRUNTIME_32BIT_OPS_ENABLED
             case type_u32: return CMP_EQ_uint32_t(stack);
+#endif // PLCRUNTIME_32BIT_OPS_ENABLED
             case type_i8: return CMP_EQ_int8_t(stack);
             case type_i16: return CMP_EQ_int16_t(stack);
+#ifdef PLCRUNTIME_32BIT_OPS_ENABLED
             case type_i32: return CMP_EQ_int32_t(stack);
+#endif // PLCRUNTIME_32BIT_OPS_ENABLED
 #ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
             case type_f32: return CMP_EQ_float(stack);
 #endif // PLCRUNTIME_FLOAT_OPS_ENABLED
@@ -314,10 +346,14 @@ RuntimeError handle_ABS(RuntimeStack& stack, u8* program, u32 prog_size, u32& in
             case type_bool:
             case type_u8: return CMP_NEQ_uint8_t(stack);
             case type_u16: return CMP_NEQ_uint16_t(stack);
+#ifdef PLCRUNTIME_32BIT_OPS_ENABLED
             case type_u32: return CMP_NEQ_uint32_t(stack);
+#endif // PLCRUNTIME_32BIT_OPS_ENABLED
             case type_i8: return CMP_NEQ_int8_t(stack);
             case type_i16: return CMP_NEQ_int16_t(stack);
+#ifdef PLCRUNTIME_32BIT_OPS_ENABLED
             case type_i32: return CMP_NEQ_int32_t(stack);
+#endif // PLCRUNTIME_32BIT_OPS_ENABLED
 #ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
             case type_f32: return CMP_NEQ_float(stack);
 #endif // PLCRUNTIME_FLOAT_OPS_ENABLED
@@ -336,10 +372,14 @@ RuntimeError handle_ABS(RuntimeStack& stack, u8* program, u32 prog_size, u32& in
             case type_bool:
             case type_u8: return CMP_GT_uint8_t(stack);
             case type_u16: return CMP_GT_uint16_t(stack);
+#ifdef PLCRUNTIME_32BIT_OPS_ENABLED
             case type_u32: return CMP_GT_uint32_t(stack);
+#endif // PLCRUNTIME_32BIT_OPS_ENABLED
             case type_i8: return CMP_GT_int8_t(stack);
             case type_i16: return CMP_GT_int16_t(stack);
+#ifdef PLCRUNTIME_32BIT_OPS_ENABLED
             case type_i32: return CMP_GT_int32_t(stack);
+#endif // PLCRUNTIME_32BIT_OPS_ENABLED
 #ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
             case type_f32: return CMP_GT_float(stack);
 #endif // PLCRUNTIME_FLOAT_OPS_ENABLED
@@ -358,10 +398,14 @@ RuntimeError handle_ABS(RuntimeStack& stack, u8* program, u32 prog_size, u32& in
             case type_bool:
             case type_u8: return CMP_GTE_uint8_t(stack);
             case type_u16: return CMP_GTE_uint16_t(stack);
+#ifdef PLCRUNTIME_32BIT_OPS_ENABLED
             case type_u32: return CMP_GTE_uint32_t(stack);
+#endif // PLCRUNTIME_32BIT_OPS_ENABLED
             case type_i8: return CMP_GTE_int8_t(stack);
             case type_i16: return CMP_GTE_int16_t(stack);
+#ifdef PLCRUNTIME_32BIT_OPS_ENABLED
             case type_i32: return CMP_GTE_int32_t(stack);
+#endif // PLCRUNTIME_32BIT_OPS_ENABLED
 #ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
             case type_f32: return CMP_GTE_float(stack);
 #endif // PLCRUNTIME_FLOAT_OPS_ENABLED
@@ -380,10 +424,14 @@ RuntimeError handle_ABS(RuntimeStack& stack, u8* program, u32 prog_size, u32& in
             case type_bool:
             case type_u8: return CMP_LT_uint8_t(stack);
             case type_u16: return CMP_LT_uint16_t(stack);
+#ifdef PLCRUNTIME_32BIT_OPS_ENABLED
             case type_u32: return CMP_LT_uint32_t(stack);
+#endif // PLCRUNTIME_32BIT_OPS_ENABLED
             case type_i8: return CMP_LT_int8_t(stack);
             case type_i16: return CMP_LT_int16_t(stack);
+#ifdef PLCRUNTIME_32BIT_OPS_ENABLED
             case type_i32: return CMP_LT_int32_t(stack);
+#endif // PLCRUNTIME_32BIT_OPS_ENABLED
 #ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
             case type_f32: return CMP_LT_float(stack);
 #endif // PLCRUNTIME_FLOAT_OPS_ENABLED
@@ -402,10 +450,14 @@ RuntimeError handle_ABS(RuntimeStack& stack, u8* program, u32 prog_size, u32& in
             case type_bool:
             case type_u8: return CMP_LTE_uint8_t(stack);
             case type_u16: return CMP_LTE_uint16_t(stack);
+#ifdef PLCRUNTIME_32BIT_OPS_ENABLED
             case type_u32: return CMP_LTE_uint32_t(stack);
+#endif // PLCRUNTIME_32BIT_OPS_ENABLED
             case type_i8: return CMP_LTE_int8_t(stack);
             case type_i16: return CMP_LTE_int16_t(stack);
+#ifdef PLCRUNTIME_32BIT_OPS_ENABLED
             case type_i32: return CMP_LTE_int32_t(stack);
+#endif // PLCRUNTIME_32BIT_OPS_ENABLED
 #ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
             case type_f32: return CMP_LTE_float(stack);
 #endif // PLCRUNTIME_FLOAT_OPS_ENABLED
