@@ -30,18 +30,25 @@ cd wasm 2>nul
 
 IF not exist build (mkdir build)
 
-rem Build optimized version (no bounds checks)
-clang++ --target=wasm32-undefined-undefined-wasm -Wall -std=c++11 -nostdlib -O3 -D __WASM__ -c VovkPLC.cpp -o build/VovkPLC.o        || goto :error
+rem Check for --safe flag
+set SAFE_MODE=0
+for %%a in (%*) do (
+    if "%%a"=="--safe" set SAFE_MODE=1
+)
 
-rem Build debug version (with PLCRUNTIME_SAFE_MODE bounds checks)
-clang++ --target=wasm32-undefined-undefined-wasm -Wall -std=c++11 -nostdlib -O3 -D __WASM__ -D PLCRUNTIME_SAFE_MODE -c VovkPLC.cpp -o build/VovkPLC-debug.o        || goto :error
+if %SAFE_MODE%==1 (
+    rem Build safe mode version (with PLCRUNTIME_SAFE_MODE bounds checks)
+    clang++ --target=wasm32-undefined-undefined-wasm -Wall -std=c++11 -nostdlib -O3 -D __WASM__ -D PLCRUNTIME_SAFE_MODE -c VovkPLC.cpp -o build/VovkPLC.o        || goto :error
+) else (
+    rem Build production version (no bounds checks)
+    clang++ --target=wasm32-undefined-undefined-wasm -Wall -std=c++11 -nostdlib -O3 -D __WASM__ -c VovkPLC.cpp -o build/VovkPLC.o        || goto :error
+)
 
 @echo on
 @echo Building...
 @echo off
 
 wasm-ld --no-entry --export-dynamic --allow-undefined --lto-O3 build/VovkPLC.o -o dist/VovkPLC.wasm      || goto :error
-wasm-ld --no-entry --export-dynamic --allow-undefined --lto-O3 build/VovkPLC-debug.o -o dist/VovkPLC-debug.wasm      || goto :error
 
 @echo on
 @echo Done.

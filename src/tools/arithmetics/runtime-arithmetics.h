@@ -39,9 +39,15 @@
 #include "methods-logic.h"
 #include "methods-comparison.h"
 #include "methods-flow.h"
+#ifdef PLCRUNTIME_TIMERS_ENABLED
 #include "methods-timer.h"
+#endif // PLCRUNTIME_TIMERS_ENABLED
+#ifdef PLCRUNTIME_COUNTERS_ENABLED
 #include "methods-counter.h"
+#endif // PLCRUNTIME_COUNTERS_ENABLED
+#ifdef PLCRUNTIME_STRINGS_ENABLED
 #include "methods-string.h"
+#endif // PLCRUNTIME_STRINGS_ENABLED
 
 namespace PLCMethods {
 

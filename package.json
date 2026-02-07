@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "node wasm/wasm_build.js",
+    "build-safe": "node wasm/wasm_build.js --safe",
     "compile": "node --no-warnings wasm/node-test/compile.js",
     "explain": "node --no-warnings wasm/node-test/explain.js",
     "update": "git pull",

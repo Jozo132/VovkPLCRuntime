@@ -1492,10 +1492,19 @@ class VovkPLC_class {
      */
 
     /**
+     * @typedef {Object} ProjectCompileOptions
+     * @property {number} [targetFlags] - Target device feature flags for cross-compilation validation.
+     *   Use VovkPLC.RUNTIME_FLAGS constants or a value from decodeRuntimeFlags().raw.
+     *   Default is 0xFFFF (all features enabled). Set to a device's actual flags to get errors
+     *   when the project uses unsupported features like timers, counters, or strings.
+     */
+
+    /**
      * Compiles a complete PLC project definition into bytecode.
      * The project format supports multiple files, blocks, symbols, and mixed languages (PLCASM, STL, LADDER).
      *
      * @param {string} projectSource - The project definition string (starts with VOVKPLCPROJECT).
+     * @param {ProjectCompileOptions} [options] - Compilation options including target device flags.
      * @returns {ProjectCompileResult} - Object with either { bytecode, problem: null } on success or { bytecode: null, problem } on failure.
      *
      * @example
@@ -1516,8 +1525,14 @@ class VovkPLC_class {
      * } else {
      *     console.log('Bytecode:', result.bytecode)
      * }
+     *
+     * @example
+     * // Cross-compile for a device without timer support
+     * const deviceFlags = 0x0023; // Little-endian, strings, no timers/counters
+     * const result = runtime.compileProject(projectSource, { targetFlags: deviceFlags });
+     * // Will error if project uses timers or counters
      */
-    compileProject = projectSource => {
+    compileProject = (projectSource, options = {}) => {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         if (!this.wasm_exports.project_compile) throw new Error("'project_compile' function not found - Project compiler not available")
         if (!this.wasm_exports.project_reset) throw new Error("'project_reset' function not found")
@@ -1530,6 +1545,20 @@ class VovkPLC_class {
 
         // Reset compiler state
         this.wasm_exports.project_reset()
+
+        // Set or clear target flags based on options
+        // If targetFlags provided explicitly, use them (API takes priority)
+        // If not provided, clear API flag so FLAGS section in project can be used
+        if (typeof options.targetFlags === 'number') {
+            if (this.wasm_exports.project_setTargetFlags) {
+                this.wasm_exports.project_setTargetFlags(options.targetFlags)
+            }
+        } else {
+            // No explicit flags - clear API flag so FLAGS section or default (0xFFFF) is used
+            if (this.wasm_exports.project_clearTargetFlags) {
+                this.wasm_exports.project_clearTargetFlags()
+            }
+        }
 
         // Clear any stale data in the stream buffer first
         if (this.wasm_exports.streamClear) this.wasm_exports.streamClear()
@@ -2249,6 +2278,7 @@ class VovkPLC_class {
      * The project format supports multiple files, blocks, symbols, and mixed languages (PLCASM, STL, LADDER).
      *
      * @param {string} projectSource - The project definition string (starts with VOVKPLCPROJECT).
+     * @param {ProjectCompileOptions} [options] - Compilation options including target device flags.
      * @returns {ProjectLinterProblem[]} - Array of problems found (empty if valid).
      *
      * @example
@@ -2267,8 +2297,12 @@ class VovkPLC_class {
      * for (const problem of problems) {
      *     console.log(`${problem.type} at line ${problem.line}: ${problem.message}`)
      * }
+     *
+     * @example
+     * // Lint for a device without timer support
+     * const problems = runtime.lintProject(projectSource, { targetFlags: 0x0023 });
      */
-    lintProject = projectSource => {
+    lintProject = (projectSource, options = {}) => {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         if (!this.wasm_exports.project_compile) throw new Error("'project_compile' function not found - Project compiler not available")
         if (!this.wasm_exports.project_reset) throw new Error("'project_reset' function not found")
@@ -2278,6 +2312,20 @@ class VovkPLC_class {
 
         // Reset compiler state
         this.wasm_exports.project_reset()
+
+        // Set or clear target flags based on options
+        // If targetFlags provided explicitly, use them (API takes priority)
+        // If not provided, clear API flag so FLAGS section in project can be used
+        if (typeof options.targetFlags === 'number') {
+            if (this.wasm_exports.project_setTargetFlags) {
+                this.wasm_exports.project_setTargetFlags(options.targetFlags)
+            }
+        } else {
+            // No explicit flags - clear API flag so FLAGS section or default (0xFFFF) is used
+            if (this.wasm_exports.project_clearTargetFlags) {
+                this.wasm_exports.project_clearTargetFlags()
+            }
+        }
 
         // Clear any stale data in the stream buffer first
         if (this.wasm_exports.streamClear) this.wasm_exports.streamClear()
@@ -3892,10 +3940,10 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
     compileLadder = ladder => this.call('compileLadder', ladder)
     /** @type { (source: string | LadderGraph, language: 'ladder-graph' | 'stl' | 'plcasm') => Promise<{ ladderGraph?: string, stl?: string, plcasm?: string, bytecode?: string }> } */
     compileAll = (source, language) => this.call('compileAll', source, language)
-    /** @type { (projectSource: string) => Promise<ProjectCompileResult> } */
-    compileProject = projectSource => this.call('compileProject', projectSource)
-    /** @type { (projectSource: string) => Promise<ProjectLinterProblem[]> } */
-    lintProject = projectSource => this.call('lintProject', projectSource)
+    /** @type { (projectSource: string, options?: ProjectCompileOptions) => Promise<ProjectCompileResult> } */
+    compileProject = (projectSource, options = {}) => this.call('compileProject', projectSource, options)
+    /** @type { (projectSource: string, options?: ProjectCompileOptions) => Promise<ProjectLinterProblem[]> } */
+    lintProject = (projectSource, options = {}) => this.call('lintProject', projectSource, options)
     /** @type { (program: string | number[]) => Promise<any> } */
     downloadBytecode = program => this.call('downloadBytecode', program)
     /** @type { () => Promise<any> } */
@@ -4116,6 +4164,77 @@ const createWorker = async (factory, url) => {
 
 /** @type { (wasmPath?: string, options?: VovkPLCWorkerOptions) => Promise<VovkPLCWorker> } */ // @ts-ignore
 VovkPLC_class.createWorker = (wasmPath = '', options = {}) => VovkPLCWorker.create(wasmPath, options)
+
+/**
+ * Runtime flags bit definitions - matches runtime-types.h
+ * @readonly
+ * @enum {number}
+ */
+const RUNTIME_FLAGS = {
+    LITTLE_ENDIAN: 0x0001,  // Bit 0: Endianness (0 = big-endian, 1 = little-endian)
+    STRINGS:       0x0002,  // Bit 1: Strings enabled
+    COUNTERS:      0x0004,  // Bit 2: Counters enabled
+    TIMERS:        0x0008,  // Bit 3: Timers enabled
+    FFI:           0x0010,  // Bit 4: FFI enabled
+    X64_OPS:       0x0020,  // Bit 5: 64-bit operations enabled
+    SAFE_MODE:     0x0040,  // Bit 6: Safe mode enabled
+    TRANSPORT:     0x0080,  // Bit 7: Transport system enabled
+}
+
+/**
+ * @typedef {Object} RuntimeFlagsDecoded
+ * @property {number} raw - The raw flags value (u16)
+ * @property {boolean} littleEndian - Bit 0: Device endianness (true = little-endian)
+ * @property {boolean} strings - Bit 1: String operations enabled
+ * @property {boolean} counters - Bit 2: Counter instructions enabled
+ * @property {boolean} timers - Bit 3: Timer instructions enabled
+ * @property {boolean} ffi - Bit 4: Foreign Function Interface enabled
+ * @property {boolean} x64Ops - Bit 5: 64-bit operations enabled
+ * @property {boolean} safeMode - Bit 6: Safe mode / bounds checking enabled
+ * @property {boolean} transport - Bit 7: Transport system enabled
+ */
+
+/**
+ * Decodes runtime flags from a live device's S0-S1 memory or device info response.
+ * Use this to understand which features are enabled on a connected PLC device.
+ *
+ * @param {number} flags - The u16 runtime flags value from the device
+ * @returns {RuntimeFlagsDecoded} - Decoded flags object with boolean properties
+ *
+ * @example
+ * // From device info response or reading S0-S1 memory
+ * const flagsValue = 0x007F; // Example: all features enabled except transport
+ * const decoded = VovkPLC.decodeRuntimeFlags(flagsValue);
+ * console.log(decoded);
+ * // { raw: 127, littleEndian: true, strings: true, counters: true, timers: true, ffi: true, x64Ops: true, safeMode: true, transport: false }
+ *
+ * @example
+ * // Check specific features
+ * if (decoded.timers) {
+ *     console.log('Device supports timer instructions');
+ * }
+ * if (!decoded.strings) {
+ *     console.warn('Device was compiled without string support');
+ * }
+ */// @ts-ignore
+VovkPLC_class.decodeRuntimeFlags = (flags) => ({
+    raw: flags,
+    littleEndian: !!(flags & RUNTIME_FLAGS.LITTLE_ENDIAN),
+    strings:      !!(flags & RUNTIME_FLAGS.STRINGS),
+    counters:     !!(flags & RUNTIME_FLAGS.COUNTERS),
+    timers:       !!(flags & RUNTIME_FLAGS.TIMERS),
+    ffi:          !!(flags & RUNTIME_FLAGS.FFI),
+    x64Ops:       !!(flags & RUNTIME_FLAGS.X64_OPS),
+    safeMode:     !!(flags & RUNTIME_FLAGS.SAFE_MODE),
+    transport:    !!(flags & RUNTIME_FLAGS.TRANSPORT),
+})
+
+/**
+ * Runtime flags constants - matches runtime-types.h PLCRUNTIME_FLAG_* definitions.
+ * Useful for manual flag checking: `if (flags & VovkPLC.RUNTIME_FLAGS.TIMERS) { ... }`
+ * @type {typeof RUNTIME_FLAGS}
+ */// @ts-ignore
+VovkPLC_class.RUNTIME_FLAGS = RUNTIME_FLAGS
 
 // Export the module if we are in a browser
 if (typeof window !== 'undefined') {

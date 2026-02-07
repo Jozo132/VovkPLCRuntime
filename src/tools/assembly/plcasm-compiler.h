@@ -3670,6 +3670,10 @@ WASM_EXPORT void initialize() {
     IntervalReset();
 }
 
+WASM_EXPORT u16 getRuntimeFlags() {
+    return plcruntime_get_feature_flags();
+}
+
 WASM_EXPORT void printProperties() {
     runtime.printProperties();
 }

@@ -22,6 +22,134 @@
 #pragma once
 
 // ============================================================================
+// Feature Flags - Enable/disable runtime features for resource-constrained devices
+// ============================================================================
+// By default, all features are ENABLED. Define these macros BEFORE including
+// VovkPLCRuntime.h to disable specific features and reduce code size.
+//
+// For Arduino Nano or similar resource-constrained devices, you might want:
+//   #define PLCRUNTIME_NO_STRINGS    // Disable string operations (~4KB savings)
+//   #define PLCRUNTIME_NO_COUNTERS   // Disable counter operations (~1KB savings)
+//   #define PLCRUNTIME_NO_TIMERS     // Disable timer operations (~2KB savings)
+//   #define PLCRUNTIME_NO_FFI        // Disable FFI function calls (~1KB savings)
+//   #define PLCRUNTIME_NO_X64_OPS    // Disable 64-bit operations (~2KB savings)
+//   #define PLCRUNTIME_NO_TRANSPORT  // Disable transport system
+//
+// Or use the preset:
+//   #define PLCRUNTIME_MINIMAL       // Disables strings, FFI, 64-bit ops
+//   #define PLCRUNTIME_TINY          // Also disables counters, transport
+//
+// Feature status is reported in:
+// - System memory byte 0-1 (S0-S1): Runtime feature flags (u16 little-endian)
+// - Device info response: runtime_flags field (same bit positions)
+// ============================================================================
+
+// ============================================================================
+// Preset Configurations
+// ============================================================================
+
+// PLCRUNTIME_MINIMAL - For severely resource-constrained devices (Arduino Nano, ATtiny)
+// Disables: strings, FFI, 64-bit operations
+// Keeps: timers, counters (essential for PLC operations)
+#ifdef PLCRUNTIME_MINIMAL
+    #ifndef PLCRUNTIME_NO_STRINGS
+        #define PLCRUNTIME_NO_STRINGS
+    #endif
+    #ifndef PLCRUNTIME_NO_FFI
+        #define PLCRUNTIME_NO_FFI
+    #endif
+    #ifndef PLCRUNTIME_NO_X64_OPS
+        #define PLCRUNTIME_NO_X64_OPS
+    #endif
+#endif // PLCRUNTIME_MINIMAL
+
+// PLCRUNTIME_TINY - For extremely constrained devices (absolute minimum)
+// Disables: strings, FFI, 64-bit ops, counters
+// Keeps: timers only
+#ifdef PLCRUNTIME_TINY
+    #ifndef PLCRUNTIME_NO_STRINGS
+        #define PLCRUNTIME_NO_STRINGS
+    #endif
+    #ifndef PLCRUNTIME_NO_FFI
+        #define PLCRUNTIME_NO_FFI
+    #endif
+    #ifndef PLCRUNTIME_NO_X64_OPS
+        #define PLCRUNTIME_NO_X64_OPS
+    #endif
+    #ifndef PLCRUNTIME_NO_COUNTERS
+        #define PLCRUNTIME_NO_COUNTERS
+    #endif
+    #ifndef PLCRUNTIME_NO_TRANSPORT
+        #define PLCRUNTIME_NO_TRANSPORT
+    #endif
+#endif // PLCRUNTIME_TINY
+
+// ============================================================================
+// Feature enable/disable macros (inverted for cleaner code)
+// ============================================================================
+#ifndef PLCRUNTIME_NO_STRINGS
+    #define PLCRUNTIME_STRINGS_ENABLED
+#endif
+
+#ifndef PLCRUNTIME_NO_COUNTERS
+    #define PLCRUNTIME_COUNTERS_ENABLED
+#endif
+
+#ifndef PLCRUNTIME_NO_TIMERS
+    #define PLCRUNTIME_TIMERS_ENABLED
+#endif
+
+#ifndef PLCRUNTIME_NO_FFI
+    #define PLCRUNTIME_FFI_ENABLED
+#endif
+
+// Transport system (Serial, WiFi, Ethernet, etc.)
+// Note: Also requires PLCRUNTIME_TRANSPORT to be defined for backwards compatibility
+#ifndef PLCRUNTIME_NO_TRANSPORT
+    #ifdef PLCRUNTIME_TRANSPORT
+        #define PLCRUNTIME_TRANSPORT_ENABLED
+    #endif
+#else
+    #undef PLCRUNTIME_TRANSPORT
+#endif
+
+// 64-bit operations can also be disabled via USE_X64_OPS (legacy)
+#ifndef PLCRUNTIME_NO_X64_OPS
+    #ifndef USE_X64_OPS
+        #define USE_X64_OPS
+    #endif
+#else
+    #undef USE_X64_OPS
+#endif
+
+// ============================================================================
+// Runtime Feature Flags Bit Definitions
+// ============================================================================
+// These bits are used in system memory S0 and device info runtime_flags
+// to indicate which features are available at runtime.
+//
+// Bit layout (16-bit flags):
+//   Bit 0:  Endianness (1 = little-endian, 0 = big-endian)
+//   Bit 1:  String operations enabled
+//   Bit 2:  Counter operations enabled  
+//   Bit 3:  Timer operations enabled
+//   Bit 4:  FFI (Foreign Function Interface) enabled
+//   Bit 5:  64-bit operations enabled
+//   Bit 6:  Safe mode enabled (bounds checking)
+//   Bit 7:  Transport system enabled (Serial/WiFi/Ethernet)
+//   Bit 8-15: Reserved for future use
+// ============================================================================
+
+#define PLCRUNTIME_FLAG_LITTLE_ENDIAN   0x0001  // Bit 0
+#define PLCRUNTIME_FLAG_STRINGS         0x0002  // Bit 1
+#define PLCRUNTIME_FLAG_COUNTERS        0x0004  // Bit 2
+#define PLCRUNTIME_FLAG_TIMERS          0x0008  // Bit 3
+#define PLCRUNTIME_FLAG_FFI             0x0010  // Bit 4
+#define PLCRUNTIME_FLAG_X64_OPS         0x0020  // Bit 5
+#define PLCRUNTIME_FLAG_SAFE_MODE       0x0040  // Bit 6
+#define PLCRUNTIME_FLAG_TRANSPORT       0x0080  // Bit 7
+
+// ============================================================================
 // Safe Mode - Enable runtime bounds checking
 // ============================================================================
 // By default, bounds checking is DISABLED for maximum performance.
@@ -75,10 +203,62 @@
     #define PLCRUNTIME_LITTLE_ENDIAN 1
 #endif
 
-// System memory byte 0 (S0) stores endianness flag
-// Bit 0: 1 = little-endian, 0 = big-endian
-#define PLCRUNTIME_SYSTEM_ENDIAN_BYTE 0
+// ============================================================================
+// System memory byte 0 (S0) stores runtime feature flags
+// ============================================================================
+// The flags byte in system memory allows external tools to detect which
+// features are available at runtime. Same bit layout as device info flags.
+#define PLCRUNTIME_SYSTEM_FLAGS_BYTE 0
+
+// Legacy compatibility - endianness is now bit 0 of the flags byte
+#define PLCRUNTIME_SYSTEM_ENDIAN_BYTE PLCRUNTIME_SYSTEM_FLAGS_BYTE
 #define PLCRUNTIME_SYSTEM_ENDIAN_BIT  0
+
+// Helper function to compute runtime flags (called at startup)
+// Returns a u16 with all enabled feature flags
+inline uint16_t plcruntime_get_feature_flags() {
+    uint16_t flags = 0;
+    
+    // Bit 0: Endianness
+    if (PLCRUNTIME_LITTLE_ENDIAN) flags |= PLCRUNTIME_FLAG_LITTLE_ENDIAN;
+    
+    // Bit 1: Strings
+#ifdef PLCRUNTIME_STRINGS_ENABLED
+    flags |= PLCRUNTIME_FLAG_STRINGS;
+#endif
+
+    // Bit 2: Counters
+#ifdef PLCRUNTIME_COUNTERS_ENABLED
+    flags |= PLCRUNTIME_FLAG_COUNTERS;
+#endif
+
+    // Bit 3: Timers
+#ifdef PLCRUNTIME_TIMERS_ENABLED
+    flags |= PLCRUNTIME_FLAG_TIMERS;
+#endif
+
+    // Bit 4: FFI
+#ifdef PLCRUNTIME_FFI_ENABLED
+    flags |= PLCRUNTIME_FLAG_FFI;
+#endif
+
+    // Bit 5: 64-bit operations
+#ifdef USE_X64_OPS
+    flags |= PLCRUNTIME_FLAG_X64_OPS;
+#endif
+
+    // Bit 6: Safe mode
+#ifdef PLCRUNTIME_SAFE_MODE
+    flags |= PLCRUNTIME_FLAG_SAFE_MODE;
+#endif
+
+    // Bit 7: Transport system
+#ifdef PLCRUNTIME_TRANSPORT_ENABLED
+    flags |= PLCRUNTIME_FLAG_TRANSPORT;
+#endif
+
+    return flags;
+}
 
 
 // Pointer type for the runtime memory

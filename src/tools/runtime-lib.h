@@ -99,7 +99,9 @@
 #include "arithmetics/runtime-arithmetics.h"
 #include "runtime-program.h"
 #include "runtime-thread.h"
+#ifdef PLCRUNTIME_FFI_ENABLED
 #include "runtime-ffi.h"
+#endif // PLCRUNTIME_FFI_ENABLED
 
 // Transport system (optional - define PLCRUNTIME_TRANSPORT to enable)
 #include "transport/plc-transport.h"
@@ -409,9 +411,14 @@ public:
 
     void formatMemory() {
         for (u32 i = 0; i < PLCRUNTIME_MAX_MEMORY_SIZE; i++) memory[i] = 0;
-        // Set endianness flag in system memory byte 0 (S0)
-        // Bit 0: 1 = little-endian, 0 = big-endian
-        memory[PLCRUNTIME_SYSTEM_ENDIAN_BYTE] = PLCRUNTIME_LITTLE_ENDIAN;
+        // Set feature flags in system memory byte 0 (S0)
+        // This includes endianness (bit 0) and all enabled features
+        u16 flags = plcruntime_get_feature_flags();
+        memory[PLCRUNTIME_SYSTEM_FLAGS_BYTE] = (u8)(flags & 0xFF);
+        // Store high byte in S1 if we have more than 8 flags
+        if (PLCRUNTIME_NUM_OF_SYSTEMS > 1) {
+            memory[PLCRUNTIME_SYSTEM_FLAGS_BYTE + 1] = (u8)((flags >> 8) & 0xFF);
+        }
         is_first_cycle = true;
     }
 
@@ -1287,8 +1294,15 @@ public:
         STDOUT_PRINT.print(PLCRUNTIME_COUNTER_STRUCT_SIZE); STDOUT_PRINT.print(F(","));
         // Runtime flags (u16 as %04X)
         // Bit 0: Endianness (0 = big-endian, 1 = little-endian)
-        // Bits 1-15: Reserved for future use
-        u16 runtime_flags = PLCRUNTIME_LITTLE_ENDIAN; // Use compile-time endianness
+        // Bit 1: Strings enabled
+        // Bit 2: Counters enabled
+        // Bit 3: Timers enabled
+        // Bit 4: FFI enabled
+        // Bit 5: 64-bit operations enabled
+        // Bit 6: Safe mode enabled
+        // Bit 7: Transport system enabled
+        // Bits 8-15: Reserved for future use
+        u16 runtime_flags = plcruntime_get_feature_flags();
         // Print as 4-digit hex
         char hex_chars[] = "0123456789ABCDEF";
         STDOUT_PRINT.print(hex_chars[(runtime_flags >> 12) & 0x0F]);
@@ -2108,17 +2122,21 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
         case SIN: return PLCMethods::handle_SIN(this->stack, program, prog_size, index);
         case COS: return PLCMethods::handle_COS(this->stack, program, prog_size, index);
 
+#ifdef PLCRUNTIME_TIMERS_ENABLED
         case TON_CONST: return PLCMethods::handle_TON_CONST(this->stack, this->memory, program, prog_size, index);
         case TON_MEM: return PLCMethods::handle_TON_MEM(this->stack, this->memory, program, prog_size, index);
         case TOF_CONST: return PLCMethods::handle_TOF_CONST(this->stack, this->memory, program, prog_size, index);
         case TOF_MEM: return PLCMethods::handle_TOF_MEM(this->stack, this->memory, program, prog_size, index);
         case TP_CONST: return PLCMethods::handle_TP_CONST(this->stack, this->memory, program, prog_size, index);
         case TP_MEM: return PLCMethods::handle_TP_MEM(this->stack, this->memory, program, prog_size, index);
+#endif // PLCRUNTIME_TIMERS_ENABLED
 
+#ifdef PLCRUNTIME_COUNTERS_ENABLED
         case CTU_CONST: return PLCMethods::handle_CTU_CONST(this->stack, this->memory, program, prog_size, index);
         case CTU_MEM: return PLCMethods::handle_CTU_MEM(this->stack, this->memory, program, prog_size, index);
         case CTD_CONST: return PLCMethods::handle_CTD_CONST(this->stack, this->memory, program, prog_size, index);
         case CTD_MEM: return PLCMethods::handle_CTD_MEM(this->stack, this->memory, program, prog_size, index);
+#endif // PLCRUNTIME_COUNTERS_ENABLED
 
         case GET_X8_B0: return PLCMethods::handle_GET_X8_B0(this->stack);
         case GET_X8_B1: return PLCMethods::handle_GET_X8_B1(this->stack);
@@ -2227,6 +2245,7 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
             return STATUS_SUCCESS;
         }
 
+#ifdef PLCRUNTIME_STRINGS_ENABLED
         // String instructions (0x94-0x9F)
         case STR_LEN: return PLCMethods::handle_STR_LEN(this->stack, this->memory, program, prog_size, index);
         case STR_CAP: return PLCMethods::handle_STR_CAP(this->stack, this->memory, program, prog_size, index);
@@ -2249,6 +2268,7 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
         case CSTR_CPY: return PLCMethods::handle_CSTR_CPY(this->stack, this->memory, program, prog_size, index);
         case CSTR_EQ: return PLCMethods::handle_CSTR_EQ(this->stack, this->memory, program, prog_size, index);
         case CSTR_CAT: return PLCMethods::handle_CSTR_CAT(this->stack, this->memory, program, prog_size, index);
+#endif // PLCRUNTIME_STRINGS_ENABLED
 
         case BW_AND_X8: return PLCMethods::handle_BW_AND_X8(this->stack);
         case BW_AND_X16: return PLCMethods::handle_BW_AND_X16(this->stack);

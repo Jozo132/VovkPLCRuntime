@@ -1,19 +1,27 @@
 #!/usr/bin/env node
 // test_safe_mode.js - Tests for PLCRUNTIME_SAFE_MODE bounds checking
 //
-// This test runs malicious/untrusted bytecode against both WASM variants:
-// - VovkPLC.wasm (optimized, no bounds checks) - may produce undefined behavior
-// - VovkPLC-debug.wasm (safe mode, with bounds checks) - should catch errors gracefully
+// This test runs malicious/untrusted bytecode against VovkPLC.wasm.
+// Build with `npm run build-safe` to enable safe mode bounds checking.
+// Build with `npm run build` for production (no bounds checks).
+//
+// When running with a safe mode build:
+// - All tests run and verify proper error detection
+// When running with a production build:
+// - Safe-mode-only tests are skipped (they require bounds checking)
+// - Other tests still verify normal operation
 //
 // Usage: npm run test_safe_mode
 
 import VovkPLC from '../dist/VovkPLC.js'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import fs from 'fs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
+
+// Runtime flag for safe mode detection
+const PLCRUNTIME_FLAG_SAFE_MODE = 0x0040
 
 // RuntimeError enum values (from runtime-instructions.h)
 const RuntimeError = {
@@ -249,10 +257,13 @@ const testCases = [
     },
 ]
 
-// Check if debug WASM exists
-function debugWasmExists() {
-    const wasmDebug = path.resolve(__dirname, '../dist/VovkPLC-debug.wasm')
-    return fs.existsSync(wasmDebug)
+// Detect if the loaded runtime has safe mode enabled
+function isSafeModeRuntime(runtime) {
+    if (runtime.wasm_exports.getRuntimeFlags) {
+        const flags = runtime.wasm_exports.getRuntimeFlags()
+        return (flags & PLCRUNTIME_FLAG_SAFE_MODE) !== 0
+    }
+    return false
 }
 
 async function loadBytecodeToRuntime(runtime, bytecode) {
@@ -326,20 +337,23 @@ async function main() {
     console.log('╚══════════════════════════════════════════════════════════════════╝')
     console.log()
     
-    // Get shared runtime instances
-    const { runtimeOptimized, runtimeDebug } = await getSharedRuntimes()
+    // Get shared runtime instance
+    const runtime = await getSharedRuntime()
+    const isSafeMode = isSafeModeRuntime(runtime)
     
-    console.log('Testing malicious bytecode against WASM variants:')
-    console.log('  • VovkPLC.wasm       - production (no bounds checks)')
-    console.log('  • VovkPLC-debug.wasm - safe mode (with bounds checks)')
+    console.log(`Runtime build: ${isSafeMode ? 'SAFE MODE (with bounds checks)' : 'PRODUCTION (no bounds checks)'}`)
     console.log()
-    console.log('Most tests use the production build to verify normal operation.')
-    console.log('Tests marked [SAFE MODE ONLY] use the debug build for overflow protection.')
-    console.log()
+    
+    if (!isSafeMode) {
+        console.log('Note: Running with production build. Safe-mode-only tests will be skipped.')
+        console.log('      Run `npm run build-safe` to build with bounds checking enabled.')
+        console.log()
+    }
     
     const results = {
         passed: 0,
         failed: 0,
+        skipped: 0,
         total: testCases.length,
     }
     
@@ -347,23 +361,30 @@ async function main() {
     
     for (const testCase of testCases) {
         const isSafeModeOnly = testCase.safeModeOnly === true
-        const runtime = isSafeModeOnly ? runtimeDebug : runtimeOptimized
-        const variantName = isSafeModeOnly ? 'Safe Mode' : 'Production'
+        
+        // Skip safe-mode-only tests if running production build
+        if (isSafeModeOnly && !isSafeMode) {
+            console.log()
+            console.log(`┌─ ${testCase.name} [SKIPPED - requires safe mode build]`)
+            console.log(`│  ${testCase.description}`)
+            console.log(`└─ ○ SKIP: Test requires safe mode bounds checking`)
+            results.skipped++
+            continue
+        }
         
         console.log()
         console.log(`┌─ ${testCase.name}${isSafeModeOnly ? ' [SAFE MODE ONLY]' : ''}`)
         console.log(`│  ${testCase.description}`)
         console.log(`│  Bytecode: [${testCase.bytecode.slice(0, 20).map(b => '0x' + b.toString(16).toUpperCase().padStart(2, '0')).join(', ')}${testCase.bytecode.length > 20 ? `, ... (${testCase.bytecode.length} bytes total)` : ''}]`)
         
-        // Run on selected runtime
-        const result = await runTest(testCase, runtime, variantName.toLowerCase())
+        // Run on runtime
+        const result = await runTest(testCase, runtime, isSafeMode ? 'safe' : 'production')
         
         // Check if it returned the expected status
         const caughtExpected = result.status === testCase.expectedSafe
         
         // Display results
         console.log(`│`)
-        console.log(`│  Runtime: ${variantName}`)
         if (result.crashed) {
             console.log(`│    Status: CRASHED - ${result.error}`)
         } else if (!result.loaded) {
@@ -376,7 +397,7 @@ async function main() {
         // Determine pass/fail
         if (caughtExpected) {
             console.log(`│`)
-            console.log(`└─ ✓ PASS: ${isSafeModeOnly ? 'Safe mode' : 'Runtime'} correctly ${testCase.expectedSafe === RuntimeError.STATUS_SUCCESS ? 'succeeded' : 'caught the error'}`)
+            console.log(`└─ ✓ PASS: Runtime correctly ${testCase.expectedSafe === RuntimeError.STATUS_SUCCESS ? 'succeeded' : 'caught the error'}`)
             results.passed++
         } else {
             console.log(`│`)
@@ -393,6 +414,7 @@ async function main() {
     console.log('Summary:')
     console.log(`  Total tests: ${results.total}`)
     console.log(`  Passed: ${results.passed}`)
+    console.log(`  Skipped: ${results.skipped}`)
     console.log(`  Failed: ${results.failed}`)
     console.log()
     
@@ -400,40 +422,30 @@ async function main() {
         console.log('⚠ Some tests failed')
         process.exit(1)
     } else {
-        console.log('✓ All tests passed - shared instances work correctly across test suite')
+        console.log(`✓ All ${isSafeMode ? 'tests' : 'applicable tests'} passed`)
         process.exit(0)
     }
 }
 
-// Shared WASM instances for test suite (singleton pattern)
-let sharedRuntimeOptimized = null
-let sharedRuntimeDebug = null
+// Shared WASM instance for test suite (singleton pattern)
+let sharedRuntime = null
 
 /**
- * Initialize or return shared WASM runtime instances.
- * This ensures all tests in the suite share the same instances,
- * catching any state leakage between test runs.
- * @param {VovkPLC|null} externalRuntime - Optional external runtime for the optimized build
+ * Initialize or return shared WASM runtime instance.
+ * @param {VovkPLC|null} externalRuntime - Optional external runtime instance
  */
-async function getSharedRuntimes(externalRuntime = null) {
-    const wasmOptimized = path.resolve(__dirname, '../dist/VovkPLC.wasm')
-    const wasmDebug = path.resolve(__dirname, '../dist/VovkPLC-debug.wasm')
+async function getSharedRuntime(externalRuntime = null) {
+    const wasmPath = path.resolve(__dirname, '../dist/VovkPLC.wasm')
     
     // Use external runtime if provided (from unit test runner), otherwise create one
     if (externalRuntime) {
-        sharedRuntimeOptimized = externalRuntime
-    } else if (!sharedRuntimeOptimized) {
-        sharedRuntimeOptimized = new VovkPLC(wasmOptimized)
-        await sharedRuntimeOptimized.initialize(wasmOptimized, false, true)
+        sharedRuntime = externalRuntime
+    } else if (!sharedRuntime) {
+        sharedRuntime = new VovkPLC(wasmPath)
+        await sharedRuntime.initialize(wasmPath, false, true)
     }
     
-    // Debug runtime is always created separately (different WASM)
-    if (!sharedRuntimeDebug) {
-        sharedRuntimeDebug = new VovkPLC(wasmDebug)
-        await sharedRuntimeDebug.initialize(wasmDebug, false, true)
-    }
-    
-    return { runtimeOptimized: sharedRuntimeOptimized, runtimeDebug: sharedRuntimeDebug }
+    return sharedRuntime
 }
 
 /**
@@ -441,43 +453,33 @@ async function getSharedRuntimes(externalRuntime = null) {
  * @param {object} options - Test options
  * @param {boolean} options.verbose - Whether to show detailed output
  * @param {boolean} options.debug - Whether to show debug output
- * @param {VovkPLC} [options.runtime] - Shared runtime instance for optimized build
+ * @param {VovkPLC} [options.runtime] - Shared runtime instance
  * @returns {Promise<{name: string, passed: number, failed: number, total: number, tests: Array}>}
  */
 export async function runTests(options = {}) {
-    const { verbose = false, debug = false, runtime: sharedRuntime = null } = options
+    const { verbose = false, debug = false, runtime: externalRuntime = null } = options
     
-    // Check if debug WASM exists
-    if (!debugWasmExists()) {
-        return {
-            name: 'Safe Mode Bounds Checking',
-            passed: 0,
-            failed: 0,
-            total: 1,
-            tests: [{
-                name: 'Safe Mode Tests',
-                passed: false,
-                error: 'VovkPLC-debug.wasm not found. Run `npm run build` to generate it.'
-            }]
-        }
-    }
-    
-    // Get shared runtime instances (use external runtime for optimized if provided)
-    const { runtimeOptimized, runtimeDebug } = await getSharedRuntimes(sharedRuntime)
+    // Get shared runtime instance (use external runtime if provided)
+    const runtime = await getSharedRuntime(externalRuntime)
+    const isSafeMode = isSafeModeRuntime(runtime)
     
     const tests = []
     let passed = 0
     let failed = 0
+    let skipped = 0
     
     for (const testCase of testCases) {
-        // Choose which runtime to use:
-        // - safeModeOnly tests use the debug (safe mode) runtime
-        // - All other tests use the optimized (production) runtime to verify they work correctly
-        const runtime = testCase.safeModeOnly ? runtimeDebug : runtimeOptimized
-        const variant = testCase.safeModeOnly ? 'safe' : 'production'
+        const isSafeModeOnly = testCase.safeModeOnly === true
+        
+        // Skip safe-mode-only tests if running production build
+        if (isSafeModeOnly && !isSafeMode) {
+            skipped++
+            // Don't add skipped tests to output in unified runner
+            continue
+        }
         
         // Run the test
-        const result = await runTest(testCase, runtime, variant)
+        const result = await runTest(testCase, runtime, isSafeMode ? 'safe' : 'production')
         
         // Check if the runtime returned the expected error/status
         const caughtExpected = result.status === testCase.expectedSafe
@@ -499,12 +501,17 @@ export async function runTests(options = {}) {
         }
     }
     
+    // Adjust total to exclude skipped tests for cleaner output
+    const totalRun = testCases.length - skipped
+    
     return {
         name: 'Safe Mode Bounds Checking',
         passed,
         failed,
-        total: testCases.length,
-        tests
+        total: totalRun,
+        tests,
+        skipped,  // Include skipped count for reference
+        isSafeMode  // Include build type for reference
     }
 }
 

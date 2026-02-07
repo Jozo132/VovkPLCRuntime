@@ -325,8 +325,40 @@ public:
     // Debug output
     bool debug_mode;
 
+    // Target device feature flags (for cross-compilation validation)
+    // Priority: 1) API-provided flags, 2) FLAGS section in project, 3) default 0xFFFF
+    // Set via setTargetFlags() to validate against a specific device's capabilities
+    u16 target_flags;
+    bool target_flags_from_api;  // True if flags were set via API (takes priority over FLAGS section)
+
     ProjectCompiler() {
+        target_flags = 0xFFFF;  // Default: all features enabled
+        target_flags_from_api = false;
         reset();
+    }
+
+    // Set target device feature flags for cross-compilation validation
+    // Use VovkPLC.RUNTIME_FLAGS constants or values from device info response
+    // Note: API-provided flags take priority over FLAGS section in project
+    void setTargetFlags(u16 flags) {
+        target_flags = flags;
+        target_flags_from_api = true;
+    }
+
+    // Clear API-provided flags (allows FLAGS section to be used)
+    void clearTargetFlags() {
+        target_flags = 0xFFFF;
+        target_flags_from_api = false;
+    }
+
+    // Get current target flags
+    u16 getTargetFlags() const {
+        return target_flags;
+    }
+
+    // Check if a specific feature is enabled in target flags
+    bool targetHasFeature(u16 feature_flag) const {
+        return (target_flags & feature_flag) != 0;
     }
 
     void reset() {
@@ -408,6 +440,10 @@ public:
         current_block_language = LANG_UNKNOWN;
 
         debug_mode = false;
+
+        // Default target flags: all features enabled (0xFFFF)
+        // Note: target_flags is NOT reset here - it persists across compilations
+        // Use setTargetFlags() to change it, or it defaults to 0xFFFF on construction
 
         // Reset project-level edge memory counter (starts at bit 800 = M100.0)
         project_edge_mem_counter = 800;
@@ -1280,6 +1316,75 @@ public:
         }
     }
 
+    // Validate that features used in the project are supported by the target device
+    // Returns false and sets error if unsupported features are detected
+    bool validateTargetFeatures() {
+        // Check timers
+        if (timer_count > 0 && !targetHasFeature(PLCRUNTIME_FLAG_TIMERS)) {
+            setError("Project uses timers, but target device does not support timers (PLCRUNTIME_NO_TIMERS)");
+            return false;
+        }
+        
+        // Check counters
+        if (counter_count > 0 && !targetHasFeature(PLCRUNTIME_FLAG_COUNTERS)) {
+            setError("Project uses counters, but target device does not support counters (PLCRUNTIME_NO_COUNTERS)");
+            return false;
+        }
+        
+        // Check for string usage in symbols
+        bool uses_strings = false;
+        for (int i = 0; i < symbol_count; i++) {
+            if (strcmp(symbols[i].type, "str8") == 0 || strcmp(symbols[i].type, "str16") == 0 ||
+                strcmp(symbols[i].type, "string") == 0) {
+                uses_strings = true;
+                break;
+            }
+        }
+        if (uses_strings && !targetHasFeature(PLCRUNTIME_FLAG_STRINGS)) {
+            setError("Project uses strings, but target device does not support strings (PLCRUNTIME_NO_STRINGS)");
+            return false;
+        }
+        
+        // Check for 64-bit types in symbols
+        bool uses_x64 = false;
+        for (int i = 0; i < symbol_count; i++) {
+            if (strcmp(symbols[i].type, "i64") == 0 || strcmp(symbols[i].type, "u64") == 0 ||
+                strcmp(symbols[i].type, "f64") == 0 || strcmp(symbols[i].type, "lint") == 0 ||
+                strcmp(symbols[i].type, "ulint") == 0 || strcmp(symbols[i].type, "lreal") == 0) {
+                uses_x64 = true;
+                break;
+            }
+        }
+        if (uses_x64 && !targetHasFeature(PLCRUNTIME_FLAG_X64_OPS)) {
+            setError("Project uses 64-bit types, but target device does not support 64-bit operations (PLCRUNTIME_NO_X64_OPS)");
+            return false;
+        }
+        
+        // Check for FFI usage (scan source for FFI/CALL_NATIVE keywords)
+        bool uses_ffi = false;
+        const char* src = source;
+        for (int i = 0; i < source_length - 3; i++) {
+            // Check for "ffi" or "FFI" keyword
+            if ((src[i] == 'f' || src[i] == 'F') &&
+                (src[i+1] == 'f' || src[i+1] == 'F') &&
+                (src[i+2] == 'i' || src[i+2] == 'I')) {
+                // Check word boundary
+                bool preceded_ok = (i == 0) || !isAlphaNum(src[i-1]);
+                bool followed_ok = (i+3 >= source_length) || !isAlphaNum(src[i+3]);
+                if (preceded_ok && followed_ok) {
+                    uses_ffi = true;
+                    break;
+                }
+            }
+        }
+        if (uses_ffi && !targetHasFeature(PLCRUNTIME_FLAG_FFI)) {
+            setError("Project uses FFI (foreign function interface), but target device does not support FFI (PLCRUNTIME_NO_FFI)");
+            return false;
+        }
+        
+        return true;
+    }
+
     // Scan source for T/C references to determine usage before finalizing areas
     // This catches direct references like T0, T1, C0, C1 in ladder JSON or STL code
     void scanSourceForTimerCounterUsage() {
@@ -1366,6 +1471,132 @@ public:
         }
 
         return !has_error;
+    }
+
+    // ============ Flags Section Parser ============
+    // Parse FLAGS section for target device feature flags (optional)
+    // Format:
+    // FLAGS
+    //   LITTLE_ENDIAN
+    //   STRINGS
+    //   COUNTERS
+    //   TIMERS
+    //   FFI
+    //   X64_OPS
+    //   SAFE_MODE
+    //   TRANSPORT
+    //   // COUNTERS     ; commented out with //
+    //   # FFI          ; commented out with #
+    //   ; SAFE_MODE    ; commented out with ;
+    // END_FLAGS
+    //
+    // Note: If target flags were set via API, FLAGS section is ignored.
+    // Only flags listed (and not commented out) will be enabled.
+    bool parseFlags() {
+        skipComments();
+
+        if (!matchKeyword("FLAGS")) {
+            // FLAGS section is optional - use default or API-provided flags
+            return true;
+        }
+
+        // If API provided flags, skip parsing but still consume the section
+        bool use_section_flags = !target_flags_from_api;
+        
+        // Start with no flags enabled (will add as we parse)
+        u16 parsed_flags = 0;
+
+        while (pos < source_length && !has_error) {
+            skipComments();
+
+            if (matchKeyword("END_FLAGS")) {
+                break;
+            }
+
+            // Skip lines starting with comment characters
+            if (pos < source_length) {
+                char c = source[pos];
+                if (c == '/' && pos + 1 < source_length && source[pos + 1] == '/') {
+                    skipLine();
+                    continue;
+                }
+                if (c == '#' || c == ';') {
+                    skipLine();
+                    continue;
+                }
+            }
+
+            // Read flag name
+            char flag_name[32];
+            if (!readWord(flag_name, sizeof(flag_name))) {
+                // Empty line or whitespace only
+                skipLine();
+                continue;
+            }
+
+            // Match flag name to bit (case-insensitive)
+            if (strcmpI(flag_name, "LITTLE_ENDIAN") == 0) {
+                parsed_flags |= PLCRUNTIME_FLAG_LITTLE_ENDIAN;
+            } else if (strcmpI(flag_name, "STRINGS") == 0) {
+                parsed_flags |= PLCRUNTIME_FLAG_STRINGS;
+            } else if (strcmpI(flag_name, "COUNTERS") == 0) {
+                parsed_flags |= PLCRUNTIME_FLAG_COUNTERS;
+            } else if (strcmpI(flag_name, "TIMERS") == 0) {
+                parsed_flags |= PLCRUNTIME_FLAG_TIMERS;
+            } else if (strcmpI(flag_name, "FFI") == 0) {
+                parsed_flags |= PLCRUNTIME_FLAG_FFI;
+            } else if (strcmpI(flag_name, "X64_OPS") == 0 || strcmpI(flag_name, "X64") == 0) {
+                parsed_flags |= PLCRUNTIME_FLAG_X64_OPS;
+            } else if (strcmpI(flag_name, "SAFE_MODE") == 0 || strcmpI(flag_name, "SAFE") == 0) {
+                parsed_flags |= PLCRUNTIME_FLAG_SAFE_MODE;
+            } else if (strcmpI(flag_name, "TRANSPORT") == 0) {
+                parsed_flags |= PLCRUNTIME_FLAG_TRANSPORT;
+            } else {
+                // Unknown flag - warn but continue
+                char err[128];
+                int ei = 0;
+                const char* msg = "Unknown flag in FLAGS section (ignored): ";
+                while (*msg) err[ei++] = *msg++;
+                int wi = 0;
+                while (flag_name[wi] && ei < 120) err[ei++] = flag_name[wi++];
+                err[ei] = '\0';
+                // Add as warning problem instead of error
+                addProblem(LINT_WARNING, err, line, column, 0, nullptr);
+            }
+
+            skipLine();
+        }
+
+        // Apply parsed flags if not overridden by API
+        if (use_section_flags) {
+            target_flags = parsed_flags;
+            if (debug_mode) {
+                Serial.print(F("FLAGS section: using flags 0x"));
+                Serial.println(target_flags, HEX);
+            }
+        } else if (debug_mode) {
+            Serial.println(F("FLAGS section: ignored (API flags take priority)"));
+        }
+
+        return !has_error;
+    }
+
+    // Case-insensitive string compare helper
+    int strcmpI(const char* a, const char* b) {
+        while (*a && *b) {
+            char ca = *a;
+            char cb = *b;
+            if (ca >= 'A' && ca <= 'Z') ca += 32;
+            if (cb >= 'A' && cb <= 'Z') cb += 32;
+            if (ca != cb) return (unsigned char)ca - (unsigned char)cb;
+            a++;
+            b++;
+        }
+        char ca = *a;
+        char cb = *b;
+        if (ca >= 'A' && ca <= 'Z') ca += 32;
+        if (cb >= 'A' && cb <= 'Z') cb += 32;
+        return (unsigned char)ca - (unsigned char)cb;
     }
 
     // ============ Types Section Parser ============
@@ -3014,12 +3245,16 @@ public:
         if (!parseProject()) return false;
         if (!parseMemory()) return false;
         if (!parseFlash()) return false;
+        if (!parseFlags()) return false;   // Optional FLAGS section (fallback if no API flags)
         if (!parseTypes()) return false;
         if (!parseSymbols()) return false;
         
         // Scan source for T/C references before parsing blocks
         // This catches direct T0, T1, C0, C1 references in ladder/STL code
         scanSourceForTimerCounterUsage();
+        
+        // Validate feature usage against target device flags
+        if (!validateTargetFeatures()) return false;
         
         // Finalize timer and counter memory areas based on detected usage
         finalizeTimerCounterAreas();
@@ -3325,6 +3560,23 @@ ProjectCompiler& getProjectCompiler() {
 // ============================================================================
 
 extern "C" {
+
+    // Set target device feature flags for cross-compilation validation
+    // Use this before project_compile() to validate against a specific device's capabilities
+    // flags: Bitmask from PLCRUNTIME_FLAG_* constants (0xFFFF = all features enabled)
+    WASM_EXPORT void project_setTargetFlags(u16 flags) {
+        project_compiler.setTargetFlags(flags);
+    }
+
+    // Get current target device feature flags
+    WASM_EXPORT u16 project_getTargetFlags() {
+        return project_compiler.getTargetFlags();
+    }
+
+    // Clear API-provided target flags (allows FLAGS section in project to be used)
+    WASM_EXPORT void project_clearTargetFlags() {
+        project_compiler.clearTargetFlags();
+    }
 
     // Compile a full project from source string
     // Returns true on success, false on error
