@@ -118,6 +118,9 @@
     #ifndef PLCRUNTIME_NO_COUNTERS
         #define PLCRUNTIME_NO_COUNTERS
     #endif
+    #ifndef PLCRUNTIME_NO_TIMERS
+        #define PLCRUNTIME_NO_TIMERS
+    #endif
     #ifndef PLCRUNTIME_NO_TRANSPORT
         #define PLCRUNTIME_NO_TRANSPORT
     #endif
@@ -224,7 +227,12 @@
 //   Bit 6:  Safe mode enabled (bounds checking)
 //   Bit 7:  Transport system enabled (Serial/WiFi/Ethernet)
 //   Bit 8:  Float (f32) operations enabled
-//   Bit 9-15: Reserved for future use
+//   Bit 9:  Advanced math enabled (POW, SQRT, SIN, COS)
+//   Bit 10: 32-bit integer operations enabled (u32, i32)
+//   Bit 11: Type conversion (CVT) enabled
+//   Bit 12: Stack manipulation enabled (SWAP, PICK, POKE)
+//   Bit 13: Bitwise operations enabled (AND, OR, XOR, NOT, SHIFT)
+//   Bit 14-15: Reserved for future use
 // ============================================================================
 
 #define PLCRUNTIME_FLAG_LITTLE_ENDIAN   0x0001  // Bit 0
@@ -236,6 +244,11 @@
 #define PLCRUNTIME_FLAG_SAFE_MODE       0x0040  // Bit 6
 #define PLCRUNTIME_FLAG_TRANSPORT       0x0080  // Bit 7
 #define PLCRUNTIME_FLAG_FLOAT_OPS       0x0100  // Bit 8
+#define PLCRUNTIME_FLAG_ADVANCED_MATH   0x0200  // Bit 9
+#define PLCRUNTIME_FLAG_32BIT_OPS       0x0400  // Bit 10
+#define PLCRUNTIME_FLAG_CVT             0x0800  // Bit 11
+#define PLCRUNTIME_FLAG_STACK_OPS       0x1000  // Bit 12
+#define PLCRUNTIME_FLAG_BITWISE_OPS     0x2000  // Bit 13
 
 // ============================================================================
 // Safe Mode - Enable runtime bounds checking
@@ -348,6 +361,31 @@ inline uint16_t plcruntime_get_feature_flags() {
     // Bit 8: Float operations
 #ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
     flags |= PLCRUNTIME_FLAG_FLOAT_OPS;
+#endif
+
+    // Bit 9: Advanced math
+#ifdef PLCRUNTIME_ADVANCED_MATH_ENABLED
+    flags |= PLCRUNTIME_FLAG_ADVANCED_MATH;
+#endif
+
+    // Bit 10: 32-bit integer operations
+#ifdef PLCRUNTIME_32BIT_OPS_ENABLED
+    flags |= PLCRUNTIME_FLAG_32BIT_OPS;
+#endif
+
+    // Bit 11: Type conversion (CVT)
+#ifdef PLCRUNTIME_CVT_ENABLED
+    flags |= PLCRUNTIME_FLAG_CVT;
+#endif
+
+    // Bit 12: Stack manipulation
+#ifdef PLCRUNTIME_STACK_OPS_ENABLED
+    flags |= PLCRUNTIME_FLAG_STACK_OPS;
+#endif
+
+    // Bit 13: Bitwise operations
+#ifdef PLCRUNTIME_BITWISE_OPS_ENABLED
+    flags |= PLCRUNTIME_FLAG_BITWISE_OPS;
 #endif
 
     return flags;

@@ -4180,6 +4180,11 @@ const RUNTIME_FLAGS = {
     SAFE_MODE:     0x0040,  // Bit 6: Safe mode enabled
     TRANSPORT:     0x0080,  // Bit 7: Transport system enabled
     FLOAT_OPS:     0x0100,  // Bit 8: Float (f32) operations enabled
+    ADVANCED_MATH: 0x0200,  // Bit 9: Advanced math enabled (POW, SQRT, SIN, COS)
+    OPS_32BIT:     0x0400,  // Bit 10: 32-bit integer operations enabled (u32, i32)
+    CVT:           0x0800,  // Bit 11: Type conversion (CVT) enabled
+    STACK_OPS:     0x1000,  // Bit 12: Stack manipulation enabled (SWAP, PICK, POKE)
+    BITWISE_OPS:   0x2000,  // Bit 13: Bitwise operations enabled (AND, OR, XOR, NOT, SHIFT)
 }
 
 /**
@@ -4194,6 +4199,11 @@ const RUNTIME_FLAGS = {
  * @property {boolean} safeMode - Bit 6: Safe mode / bounds checking enabled
  * @property {boolean} transport - Bit 7: Transport system enabled
  * @property {boolean} floatOps - Bit 8: Float (f32) operations enabled
+ * @property {boolean} advancedMath - Bit 9: Advanced math enabled (POW, SQRT, SIN, COS)
+ * @property {boolean} ops32bit - Bit 10: 32-bit integer operations enabled (u32, i32)
+ * @property {boolean} cvt - Bit 11: Type conversion (CVT) enabled
+ * @property {boolean} stackOps - Bit 12: Stack manipulation enabled (SWAP, PICK, POKE)
+ * @property {boolean} bitwiseOps - Bit 13: Bitwise operations enabled (AND, OR, XOR, NOT, SHIFT)
  */
 
 /**
@@ -4230,6 +4240,11 @@ VovkPLC_class.decodeRuntimeFlags = (flags) => ({
     safeMode:     !!(flags & RUNTIME_FLAGS.SAFE_MODE),
     transport:    !!(flags & RUNTIME_FLAGS.TRANSPORT),
     floatOps:     !!(flags & RUNTIME_FLAGS.FLOAT_OPS),
+    advancedMath: !!(flags & RUNTIME_FLAGS.ADVANCED_MATH),
+    ops32bit:     !!(flags & RUNTIME_FLAGS.OPS_32BIT),
+    cvt:          !!(flags & RUNTIME_FLAGS.CVT),
+    stackOps:     !!(flags & RUNTIME_FLAGS.STACK_OPS),
+    bitwiseOps:   !!(flags & RUNTIME_FLAGS.BITWISE_OPS),
 })
 
 /**
