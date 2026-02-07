@@ -54,6 +54,7 @@ enum RuntimeError {
 };
 
 #ifdef __RUNTIME_DEBUG__
+#ifndef PLCRUNTIME_NUMERIC_DEBUG
 const char* const RuntimeErrorNames [] PROGMEM = {
     STRINGIFY(STATUS_SUCCESS),
     STRINGIFY(UNKNOWN_INSTRUCTION),
@@ -83,6 +84,7 @@ const char* const RuntimeErrorNames [] PROGMEM = {
     STRINGIFY(FFI_INVALID_PARAMS),
     STRINGIFY(FFI_EXECUTION_ERROR),
 };
+#endif // !PLCRUNTIME_NUMERIC_DEBUG
 
 const char* RUNTIME_ERROR_NAME(RuntimeError error);
 void logRuntimeErrorList();

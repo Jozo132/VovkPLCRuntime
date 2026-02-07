@@ -39,6 +39,8 @@
 //   #define PLCRUNTIME_NO_32BIT_OPS     // Only u8/i8/u16/i16 types (~2KB savings)
 //   #define PLCRUNTIME_NO_CVT           // Disable type conversion (~1.5KB savings)
 //   #define PLCRUNTIME_NO_STACK_OPS     // Disable SWAP, PICK, POKE (~1KB savings)
+//   #define PLCRUNTIME_NO_BITWISE_OPS   // Disable bitwise AND/OR/XOR/NOT/SHIFT (~1KB savings)
+//   #define PLCRUNTIME_NUMERIC_DEBUG    // Use numeric codes instead of string names (~2KB savings)
 //
 // Or use a preset:
 //   #define PLCRUNTIME_MINIMAL  // Disables strings, FFI, x64, float - keeps timers/counters
@@ -131,6 +133,12 @@
     #ifndef PLCRUNTIME_NO_STACK_OPS
         #define PLCRUNTIME_NO_STACK_OPS
     #endif
+    #ifndef PLCRUNTIME_NO_BITWISE_OPS
+        #define PLCRUNTIME_NO_BITWISE_OPS
+    #endif
+    #ifndef PLCRUNTIME_NUMERIC_DEBUG
+        #define PLCRUNTIME_NUMERIC_DEBUG
+    #endif
 #endif // PLCRUNTIME_NANO
 
 // ============================================================================
@@ -193,6 +201,11 @@
 // Stack manipulation operations (SWAP, PICK, POKE)
 #ifndef PLCRUNTIME_NO_STACK_OPS
     #define PLCRUNTIME_STACK_OPS_ENABLED
+#endif
+
+// Bitwise operations (AND, OR, XOR, NOT, LSHIFT, RSHIFT)
+#ifndef PLCRUNTIME_NO_BITWISE_OPS
+    #define PLCRUNTIME_BITWISE_OPS_ENABLED
 #endif
 
 // ============================================================================

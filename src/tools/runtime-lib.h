@@ -2284,6 +2284,7 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
         case CSTR_CAT: return PLCMethods::handle_CSTR_CAT(this->stack, this->memory, program, prog_size, index);
 #endif // PLCRUNTIME_STRINGS_ENABLED
 
+#ifdef PLCRUNTIME_BITWISE_OPS_ENABLED
         case BW_AND_X8: return PLCMethods::handle_BW_AND_X8(this->stack);
         case BW_AND_X16: return PLCMethods::handle_BW_AND_X16(this->stack);
         case BW_AND_X32: return PLCMethods::handle_BW_AND_X32(this->stack);
@@ -2310,6 +2311,7 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
         case BW_LSHIFT_X64: return PLCMethods::handle_BW_LSHIFT_X64(this->stack);
         case BW_RSHIFT_X64: return PLCMethods::handle_BW_RSHIFT_X64(this->stack);
 #endif // USE_X64_OPS
+#endif // PLCRUNTIME_BITWISE_OPS_ENABLED
         case CMP_EQ: return PLCMethods::handle_CMP_EQ(this->stack, program, prog_size, index);
         case CMP_NEQ: return PLCMethods::handle_CMP_NEQ(this->stack, program, prog_size, index);
         case CMP_GT: return PLCMethods::handle_CMP_GT(this->stack, program, prog_size, index);

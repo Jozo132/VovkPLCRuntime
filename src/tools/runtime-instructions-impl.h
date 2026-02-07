@@ -24,6 +24,20 @@
 #include "runtime-instructions.h"
 
 #ifdef __RUNTIME_DEBUG__
+
+#ifdef PLCRUNTIME_NUMERIC_DEBUG
+// Numeric debug mode - saves ~2KB flash by not storing string names
+char runtime_error_msg[12];
+const char* RUNTIME_ERROR_NAME(RuntimeError error) {
+    snprintf(runtime_error_msg, sizeof(runtime_error_msg), "ERR:%d", (int)error);
+    return runtime_error_msg;
+}
+
+void logRuntimeErrorList() {
+    Serial.println(F("RuntimeError codes: 0=OK, 1=UNKNOWN_INST, 2=INVALID_INST, 3=INVALID_TYPE, 4=STACK_OVF, 5=STACK_UNF"));
+}
+#else
+// Full string debug mode
 const char* const unknows_error_code_str PROGMEM = "UNKNOWN_ERROR_CODE";
 char runtime_error_msg[40];
 const char* RUNTIME_ERROR_NAME(RuntimeError error) {
@@ -44,7 +58,9 @@ void logRuntimeErrorList() {
     }
     Serial.println();
 }
-#endif
+#endif // PLCRUNTIME_NUMERIC_DEBUG
+
+#endif // __RUNTIME_DEBUG__
 
 // Language name lookup for LANG instruction
 const FSH* LANG_NAME(u8 lang_id) {
@@ -90,9 +106,13 @@ bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
         case type_i8:
         case type_u16:
         case type_i16:
+#ifdef PLCRUNTIME_32BIT_OPS_ENABLED
         case type_u32:
         case type_i32:
+#endif // PLCRUNTIME_32BIT_OPS_ENABLED
+#ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
         case type_f32:
+#endif // PLCRUNTIME_FLOAT_OPS_ENABLED
 #ifdef USE_X64_OPS
         case type_u64:
         case type_i64:
@@ -101,7 +121,9 @@ bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
         case type_char:
         case type_str8:
         case type_str16:
+#ifdef PLCRUNTIME_CVT_ENABLED
         case CVT:
+#endif // PLCRUNTIME_CVT_ENABLED
         case LOAD:
         case MOVE:
         case MOVE_COPY:
@@ -110,22 +132,30 @@ bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
         case INC_MEM:
         case DEC_MEM:
         case COPY:
+#ifdef PLCRUNTIME_STACK_OPS_ENABLED
         case SWAP:
+#endif // PLCRUNTIME_STACK_OPS_ENABLED
         case DROP:
         case CLEAR:
+#ifdef PLCRUNTIME_STACK_OPS_ENABLED
         case PICK:
         case POKE:
+#endif // PLCRUNTIME_STACK_OPS_ENABLED
         case ADD:
         case SUB:
         case MUL:
         case DIV:
         case MOD:
+#ifdef PLCRUNTIME_ADVANCED_MATH_ENABLED
         case POW:
         case SQRT:
+#endif // PLCRUNTIME_ADVANCED_MATH_ENABLED
         case NEG:
         case ABS:
+#ifdef PLCRUNTIME_ADVANCED_MATH_ENABLED
         case SIN:
         case COS:
+#endif // PLCRUNTIME_ADVANCED_MATH_ENABLED
             /* TODO: */
             // case MOD:
             // case POW:
@@ -239,6 +269,7 @@ bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
         case BR_DROP:
         case BR_CLR:
 
+#ifdef PLCRUNTIME_BITWISE_OPS_ENABLED
         case BW_AND_X8:
         case BW_AND_X16:
         case BW_AND_X32:
@@ -265,6 +296,8 @@ bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
         case BW_LSHIFT_X64:
         case BW_RSHIFT_X64:
 #endif
+#endif // PLCRUNTIME_BITWISE_OPS_ENABLED
+#ifdef PLCRUNTIME_STRINGS_ENABLED
         case STR_LEN:
         case STR_CAP:
         case STR_GET:
@@ -284,6 +317,7 @@ bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
         case CSTR_CPY:
         case CSTR_EQ:
         case CSTR_CAT:
+#endif // PLCRUNTIME_STRINGS_ENABLED
         case LOGIC_AND:
         case LOGIC_OR:
         case LOGIC_XOR:
@@ -309,16 +343,20 @@ bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
         case CALL_REL:
         case CALL_IF_REL:
         case CALL_IF_NOT_REL:
+#ifdef PLCRUNTIME_TIMERS_ENABLED
         case TON_CONST:
         case TON_MEM:
         case TOF_CONST:
         case TOF_MEM:
         case TP_CONST:
         case TP_MEM:
+#endif // PLCRUNTIME_TIMERS_ENABLED
+#ifdef PLCRUNTIME_COUNTERS_ENABLED
         case CTU_CONST:
         case CTU_MEM:
         case CTD_CONST:
         case CTD_MEM:
+#endif // PLCRUNTIME_COUNTERS_ENABLED
         case CONFIG_TC:
         case LANG:
         case COMMENT:
@@ -329,6 +367,16 @@ bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
 }
 
 #ifdef __RUNTIME_DEBUG__
+#ifdef PLCRUNTIME_NUMERIC_DEBUG
+// Numeric debug mode - saves ~2KB flash
+char opcode_name_buf[10];
+const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
+    snprintf(opcode_name_buf, sizeof(opcode_name_buf), "OP:0x%02X", (unsigned int)opcode);
+    // Return as non-PROGMEM since we're using a RAM buffer
+    return (const FSH*)opcode_name_buf;
+}
+#else
+// Full string debug mode
 const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
     switch (opcode) {
         case NOP: return F("NOP");
@@ -485,6 +533,7 @@ const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
         case BR_DROP: return F("BR_DROP");
         case BR_CLR: return F("BR_CLR");
 
+#ifdef PLCRUNTIME_BITWISE_OPS_ENABLED
         case BW_AND_X8: return F("BW_AND_X8");
         case BW_AND_X16: return F("BW_AND_X16");
         case BW_AND_X32: return F("BW_AND_X32");
@@ -511,6 +560,7 @@ const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
         case BW_LSHIFT_X64: return F("BW_LSHIFT_X64");
         case BW_RSHIFT_X64: return F("BW_RSHIFT_X64");
 #endif
+#endif // PLCRUNTIME_BITWISE_OPS_ENABLED
         case STR_LEN: return F("STR_LEN");
         case STR_CAP: return F("STR_CAP");
         case STR_GET: return F("STR_GET");
@@ -573,13 +623,14 @@ const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
     }
     return F("UNKNOWN OPCODE");
 }
+#endif // !PLCRUNTIME_NUMERIC_DEBUG
 #else
 const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
     bool exists = OPCODE_EXISTS(opcode);
     if (exists) return F("OPTIMIZED OUT");
     return F("UNKNOWN OPCODE");
 }
-#endif
+#endif // __RUNTIME_DEBUG__
 
 u8 OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
     // size = 1 + arg_size
