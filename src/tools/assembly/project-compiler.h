@@ -2931,9 +2931,17 @@ public:
             return false;
         }
 
-        // Skip empty blocks — they produce no bytecode
-        if (block_source[0] == '\0') {
-            return true;
+        // Skip empty or whitespace-only blocks — they produce no bytecode
+        {
+            bool has_content = false;
+            for (int i = 0; block_source[i] != '\0'; i++) {
+                char c = block_source[i];
+                if (c != ' ' && c != '\t' && c != '\n' && c != '\r') {
+                    has_content = true;
+                    break;
+                }
+            }
+            if (!has_content) return true;
         }
 
         if (debug_mode) {
