@@ -34,6 +34,7 @@ import { runTests as runFFITests } from './node-test/test_ffi.js'
 import { runTests as runMemoryLeakTests } from './memory_leak_test.js'
 import { runTests as runStringTests } from './node-test/test_string.js'
 import { runTests as runCaseInsensitiveTests } from './node-test/test_case_insensitive.js'
+import { runTests as runTimerTests } from './node-test/test_timers.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -147,6 +148,11 @@ const testSuites = [
         name: 'Case-Insensitive PLCASM',
         shortName: 'case-insensitive',
         run: runCaseInsensitiveTests
+    },
+    {
+        name: 'Timer & Counter Functional',
+        shortName: 'timers',
+        run: runTimerTests
     },
     {
         name: 'Memory Leak Detection',
