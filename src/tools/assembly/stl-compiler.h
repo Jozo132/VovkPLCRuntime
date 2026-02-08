@@ -290,6 +290,31 @@ public:
         error_message[i] = '\0';
     }
     
+    // Set error with instruction name context
+    void setErrorForInstruction(const char* instr, const char* msg) {
+        char full_msg[256];
+        int i = 0;
+        // Copy instruction name
+        while (instr[i] && i < 60) { full_msg[i] = instr[i]; i++; }
+        full_msg[i++] = ':';
+        full_msg[i++] = ' ';
+        // Copy message
+        int j = 0;
+        while (msg[j] && i < 255) { full_msg[i++] = msg[j++]; }
+        full_msg[i] = '\0';
+        setError(full_msg);
+    }
+
+    // Validate that an operand was read after an instruction.
+    // Returns true if the operand is present, false if missing (and sets an error).
+    bool requireOperand(const char* operand, const char* instrName) {
+        if (operand[0] == '\0') {
+            setErrorForInstruction(instrName, "expected operand (address or symbol)");
+            return false;
+        }
+        return true;
+    }
+
     // Virtual destructor for proper cleanup in derived classes
     virtual ~STLCompiler() = default;
 
@@ -1780,6 +1805,7 @@ public:
                     skipWhitespace();
                     char operand[64];
                     readIdentifier(operand, sizeof(operand));
+                    if (!requireOperand(operand, "=N")) continue;
                     handleAssignNegated(operand);
                     continue;
                 }
@@ -1787,6 +1813,7 @@ public:
                 skipWhitespace();
                 char operand[64];
                 readIdentifier(operand, sizeof(operand));
+                if (!requireOperand(operand, "=")) continue;
                 handleAssign(operand);
                 continue;
             }
@@ -1857,6 +1884,16 @@ public:
             advance();
         }
 
+        // Post-compilation validation: check for unconsumed RLO (stack leak)
+        if (!has_error && network_has_rlo) {
+            setError("Unconsumed RLO at end of program - missing output instruction (=, S, R, etc.)");
+        }
+
+        // Post-compilation validation: check for unclosed nesting
+        if (!has_error && nesting_depth > 0) {
+            setError("Unclosed parenthesis at end of program - missing ')'");
+        }
+
         return !has_error;
     }
 
@@ -1884,6 +1921,7 @@ public:
                 handleNestingOpen('A');
             } else {
                 readIdentifier(operand1, sizeof(operand1));
+                if (!requireOperand(operand1, "A")) return;
                 handleBitLogic('A', false, operand1);
             }
             return;
@@ -1891,6 +1929,7 @@ public:
         if (strEq(upperInstr, "AN")) {
             skipWhitespace();
             readIdentifier(operand1, sizeof(operand1));
+            if (!requireOperand(operand1, "AN")) return;
             handleBitLogic('A', true, operand1);
             return;
         }
@@ -1906,6 +1945,7 @@ public:
                 emitLine("// OR (network combine - not directly supported)");
             } else {
                 readIdentifier(operand1, sizeof(operand1));
+                if (!requireOperand(operand1, "O")) return;
                 handleBitLogic('O', false, operand1);
             }
             return;
@@ -1913,6 +1953,7 @@ public:
         if (strEq(upperInstr, "ON")) {
             skipWhitespace();
             readIdentifier(operand1, sizeof(operand1));
+            if (!requireOperand(operand1, "ON")) return;
             handleBitLogic('O', true, operand1);
             return;
         }
@@ -1925,6 +1966,7 @@ public:
                 handleNestingOpen('X');
             } else {
                 readIdentifier(operand1, sizeof(operand1));
+                if (!requireOperand(operand1, "X")) return;
                 handleBitLogic('X', false, operand1);
             }
             return;
@@ -1932,6 +1974,7 @@ public:
         if (strEq(upperInstr, "XN")) {
             skipWhitespace();
             readIdentifier(operand1, sizeof(operand1));
+            if (!requireOperand(operand1, "XN")) return;
             handleBitLogic('X', true, operand1);
             return;
         }
@@ -2036,6 +2079,7 @@ public:
         if (upperInstr[0] == '=' && upperInstr[1] == '\0') {
             skipWhitespace();
             readIdentifier(operand1, sizeof(operand1));
+            if (!requireOperand(operand1, "=")) return;
             handleAssign(operand1);
             return;
         }
@@ -2044,12 +2088,14 @@ public:
         if (strEq(upperInstr, "S")) {
             skipWhitespace();
             readIdentifier(operand1, sizeof(operand1));
+            if (!requireOperand(operand1, "S")) return;
             handleSet(operand1);
             return;
         }
         if (strEq(upperInstr, "R")) {
             skipWhitespace();
             readIdentifier(operand1, sizeof(operand1));
+            if (!requireOperand(operand1, "R")) return;
             handleReset(operand1);
             return;
         }
@@ -2059,18 +2105,21 @@ public:
         if (strEq(upperInstr, "FP")) {
             skipWhitespace();
             readIdentifier(operand1, sizeof(operand1));
+            if (!requireOperand(operand1, "FP")) return;
             handleFP(operand1);
             return;
         }
         if (strEq(upperInstr, "FN")) {
             skipWhitespace();
             readIdentifier(operand1, sizeof(operand1));
+            if (!requireOperand(operand1, "FN")) return;
             handleFN(operand1);
             return;
         }
         if (strEq(upperInstr, "FX")) {
             skipWhitespace();
             readIdentifier(operand1, sizeof(operand1));
+            if (!requireOperand(operand1, "FX")) return;
             handleFX(operand1);
             return;
         }
@@ -2080,10 +2129,12 @@ public:
         if (strEq(upperInstr, "TON") || strEq(upperInstr, "TOF") || strEq(upperInstr, "TP")) {
             skipWhitespace();
             readIdentifier(operand1, sizeof(operand1)); // Timer address
+            if (!requireOperand(operand1, upperInstr)) return;
             skipWhitespace();
             if (peek() == ',') advance();
             skipWhitespace();
             readIdentifier(operand2, sizeof(operand2)); // Preset
+            if (operand2[0] == '\0') { setErrorForInstruction(upperInstr, "expected preset value"); return; }
             
             const char* timerType = strEq(upperInstr, "TON") ? "ton" : 
                                     strEq(upperInstr, "TOF") ? "tof" : "tp";
@@ -2096,14 +2147,16 @@ public:
         if (strEq(upperInstr, "CTU")) {
             skipWhitespace();
             readIdentifier(operand1, sizeof(operand1)); // Counter address
+            if (!requireOperand(operand1, "CTU")) return;
             skipWhitespace();
             if (peek() == ',') advance();
             skipWhitespace();
             readIdentifier(operand2, sizeof(operand2)); // Preset
+            if (operand2[0] == '\0') { setErrorForInstruction("CTU", "expected preset value"); return; }
             skipWhitespace();
             if (peek() == ',') advance();
             skipWhitespace();
-            readIdentifier(operand3, sizeof(operand3)); // Reset bit
+            readIdentifier(operand3, sizeof(operand3)); // Reset bit (optional)
             handleCTU(operand1, operand2, operand3);
             return;
         }
@@ -2111,14 +2164,16 @@ public:
         if (strEq(upperInstr, "CTD")) {
             skipWhitespace();
             readIdentifier(operand1, sizeof(operand1)); // Counter address
+            if (!requireOperand(operand1, "CTD")) return;
             skipWhitespace();
             if (peek() == ',') advance();
             skipWhitespace();
             readIdentifier(operand2, sizeof(operand2)); // Preset
+            if (operand2[0] == '\0') { setErrorForInstruction("CTD", "expected preset value"); return; }
             skipWhitespace();
             if (peek() == ',') advance();
             skipWhitespace();
-            readIdentifier(operand3, sizeof(operand3)); // Load bit
+            readIdentifier(operand3, sizeof(operand3)); // Load bit (optional)
             handleCTD(operand1, operand2, operand3);
             return;
         }
@@ -2128,12 +2183,14 @@ public:
         if (strEq(upperInstr, "L")) {
             skipWhitespace();
             readIdentifier(operand1, sizeof(operand1));
+            if (!requireOperand(operand1, "L")) return;
             handleLoad(operand1);
             return;
         }
         if (strEq(upperInstr, "T")) {
             skipWhitespace();
             readIdentifier(operand1, sizeof(operand1));
+            if (!requireOperand(operand1, "T")) return;
             handleTransfer(operand1);
             return;
         }
@@ -2243,6 +2300,7 @@ public:
         if (strEq(upperInstr, "JU") || strEq(upperInstr, "JC") || strEq(upperInstr, "JCN")) {
             skipWhitespace();
             readIdentifier(operand1, sizeof(operand1));
+            if (!requireOperand(operand1, upperInstr)) return;
             handleJump(upperInstr, operand1);
             return;
         }
@@ -2252,6 +2310,7 @@ public:
         if (strEq(upperInstr, "CALL")) {
             skipWhitespace();
             readIdentifier(operand1, sizeof(operand1));
+            if (!requireOperand(operand1, "CALL")) return;
             handleCall(operand1);
             return;
         }
@@ -2293,6 +2352,7 @@ public:
         if (strEq(upperInstr, "LD")) {
             skipWhitespace();
             readIdentifier(operand1, sizeof(operand1));
+            if (!requireOperand(operand1, "LD")) return;
             emitBoolRead(operand1, false);
             network_has_rlo = true;
             return;
@@ -2302,6 +2362,7 @@ public:
         if (strEq(upperInstr, "LDN")) {
             skipWhitespace();
             readIdentifier(operand1, sizeof(operand1));
+            if (!requireOperand(operand1, "LDN")) return;
             emitBoolRead(operand1, true);
             network_has_rlo = true;
             return;
@@ -2311,6 +2372,7 @@ public:
         if (strEq(upperInstr, "ST")) {
             skipWhitespace();
             readIdentifier(operand1, sizeof(operand1));
+            if (!requireOperand(operand1, "ST")) return;
             handleAssign(operand1);
             return;
         }
@@ -2319,36 +2381,42 @@ public:
         if (strEq(upperInstr, "AND")) {
             skipWhitespace();
             readIdentifier(operand1, sizeof(operand1));
+            if (!requireOperand(operand1, "AND")) return;
             handleBitLogic('A', false, operand1);
             return;
         }
         if (strEq(upperInstr, "ANDN")) {
             skipWhitespace();
             readIdentifier(operand1, sizeof(operand1));
+            if (!requireOperand(operand1, "ANDN")) return;
             handleBitLogic('A', true, operand1);
             return;
         }
         if (strEq(upperInstr, "OR")) {
             skipWhitespace();
             readIdentifier(operand1, sizeof(operand1));
+            if (!requireOperand(operand1, "OR")) return;
             handleBitLogic('O', false, operand1);
             return;
         }
         if (strEq(upperInstr, "ORN")) {
             skipWhitespace();
             readIdentifier(operand1, sizeof(operand1));
+            if (!requireOperand(operand1, "ORN")) return;
             handleBitLogic('O', true, operand1);
             return;
         }
         if (strEq(upperInstr, "XOR")) {
             skipWhitespace();
             readIdentifier(operand1, sizeof(operand1));
+            if (!requireOperand(operand1, "XOR")) return;
             handleBitLogic('X', false, operand1);
             return;
         }
         if (strEq(upperInstr, "XORN")) {
             skipWhitespace();
             readIdentifier(operand1, sizeof(operand1));
+            if (!requireOperand(operand1, "XORN")) return;
             handleBitLogic('X', true, operand1);
             return;
         }
@@ -2357,18 +2425,21 @@ public:
         if (strEq(upperInstr, "JMP")) {
             skipWhitespace();
             readIdentifier(operand1, sizeof(operand1));
+            if (!requireOperand(operand1, "JMP")) return;
             handleJump("JU", operand1);
             return;
         }
         if (strEq(upperInstr, "JMPC")) {
             skipWhitespace();
             readIdentifier(operand1, sizeof(operand1));
+            if (!requireOperand(operand1, "JMPC")) return;
             handleJump("JC", operand1);
             return;
         }
         if (strEq(upperInstr, "JMPCN") || strEq(upperInstr, "JMPNC")) {
             skipWhitespace();
             readIdentifier(operand1, sizeof(operand1));
+            if (!requireOperand(operand1, "JMPCN")) return;
             handleJump("JCN", operand1);
             return;
         }
@@ -2377,6 +2448,7 @@ public:
         if (strEq(upperInstr, "CAL")) {
             skipWhitespace();
             readIdentifier(operand1, sizeof(operand1));
+            if (!requireOperand(operand1, "CAL")) return;
             handleCall(operand1);
             return;
         }

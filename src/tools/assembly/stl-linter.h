@@ -826,6 +826,11 @@ public:
             addWarning("Unclosed parenthesis - missing ')'");
         }
 
+        // Check for unconsumed RLO (stack leak)
+        if (network_has_rlo) {
+            setError("Unconsumed RLO at end of program - missing output instruction (=, S, R, etc.)");
+        }
+
         // If there are any errors, clear the output to prevent invalid PLCASM from being used
         bool hasErrors = false;
         for (int i = 0; i < problem_count; i++) {
