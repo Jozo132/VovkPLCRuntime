@@ -2879,8 +2879,8 @@ public:
     // Extract block source to temporary buffer
     bool extractBlockSource(ProgramBlock& block) {
         int len = block.source_end - block.source_start;
-        if (len <= 0 || len >= PROJECT_MAX_SOURCE_SIZE - 1) {
-            setError("Block source too large or empty");
+        if (len < 0 || len >= PROJECT_MAX_SOURCE_SIZE - 1) {
+            setError("Block source too large");
             return false;
         }
 
@@ -2929,6 +2929,11 @@ public:
 
         if (!extractBlockSource(block)) {
             return false;
+        }
+
+        // Skip empty blocks — they produce no bytecode
+        if (block_source[0] == '\0') {
+            return true;
         }
 
         if (debug_mode) {
