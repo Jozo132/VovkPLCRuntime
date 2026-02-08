@@ -27,6 +27,6 @@
   ],
   "memory": { "available": 1024, "used": 194 },
   "flash": { "size": 32768, "used": 73 },
-  "execution": { "steps": 22, "stackSize": 0 },
+  "execution": { "steps": 26, "stackSize": 0 },
   "problems": []
 }

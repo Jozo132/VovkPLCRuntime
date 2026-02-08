@@ -25,42 +25,11 @@ RuntimeError MANIPULATE_GET_X8_MACRO(RuntimeStack& stack, u8 bit_index) { u8 a =
 RuntimeError MANIPULATE_SET_X8_MACRO(RuntimeStack& stack, u8 bit_index) { u8 a = stack.pop_u8(); stack.push_u8(a | 1 << bit_index); return STATUS_SUCCESS; }
 RuntimeError MANIPULATE_RSET_X8_MACRO(RuntimeStack& stack, u8 bit_index) { u8 a = stack.pop_u8(); stack.push_u8(a & ~(1 << bit_index)); return STATUS_SUCCESS; }
 
-#if MY_PTR_SIZE_BYTES == 2
 #define READ_ADDRESS_FROM_MEMORY \
     IGNORE_UNUSED u32 index_start = index; \
-    u32 size = 2; \
+    u32 size = MY_PTR_SIZE_BYTES; \
     if (index + size > prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start); \
-    u8A_to_u16 cvt; \
-    cvt.u8A[1] = program[index]; \
-    cvt.u8A[0] = program[index + 1]; \
-    MY_PTR_t address = cvt._u16;
-#elif MY_PTR_SIZE_BYTES == 4
-#define READ_ADDRESS_FROM_MEMORY \
-    IGNORE_UNUSED u32 index_start = index; \
-    u32 size = 4; \
-    if (index + size > prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start); \
-    u8A_to_u32 cvt; \
-    cvt.u8A[3] = program[index]; \
-    cvt.u8A[2] = program[index + 1]; \
-    cvt.u8A[1] = program[index + 2]; \
-    cvt.u8A[0] = program[index + 3]; \
-    MY_PTR_t address = cvt._u32;
-#else // MY_PTR_SIZE_BYTES == 8
-#define READ_ADDRESS_FROM_MEMORY \
-    IGNORE_UNUSED u32 index_start = index; \
-    u32 size = 8; \
-    if (index + size > prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index_start); \
-    u8A_to_u64 cvt; \
-    cvt.u8A[7] = program[index]; \
-    cvt.u8A[6] = program[index + 1]; \
-    cvt.u8A[5] = program[index + 2]; \
-    cvt.u8A[4] = program[index + 3]; \
-    cvt.u8A[3] = program[index + 4]; \
-    cvt.u8A[2] = program[index + 5]; \
-    cvt.u8A[1] = program[index + 6]; \
-    cvt.u8A[0] = program[index + 7]; \
-    MY_PTR_t address = cvt._u64;
-#endif
+    MY_PTR_t address = read_ptr(program + index);
 
 
 RuntimeError READ_X8_MACRO(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index, u8 bit_index) {
@@ -355,53 +324,22 @@ namespace PLCMethods {
 
     // Helper for Edge Detection
     RuntimeError handle_READ_BIT_EDGE(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index, bool rising, bool invert = false) {
-        MY_PTR_t input_addr;
-        MY_PTR_t state_addr;
-        u8 input_bit;
-        u8 state_bit;
+        u32 needed = MY_PTR_SIZE_BYTES + 1 + MY_PTR_SIZE_BYTES + 1; // input_addr + input_bit + state_addr + state_bit
+        if (index + needed > prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index);
 
-#if MY_PTR_SIZE_BYTES == 2
-        if (index + 7 > prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index);
-        u8A_to_u16 cvt;
-        
         // Input Addr
-        cvt.u8A[1] = program[index]; cvt.u8A[0] = program[index + 1];
-        input_addr = cvt._u16;
-        index += 2;
-        
+        MY_PTR_t input_addr = read_ptr(program + index);
+        index += MY_PTR_SIZE_BYTES;
+
         // Input Bit
-        input_bit = program[index++];
-        
+        u8 input_bit = program[index++];
+
         // State Addr
-        cvt.u8A[1] = program[index]; cvt.u8A[0] = program[index + 1];
-        state_addr = cvt._u16;
-        index += 2;
-        
+        MY_PTR_t state_addr = read_ptr(program + index);
+        index += MY_PTR_SIZE_BYTES;
+
         // State Bit
-        state_bit = program[index++];
-        
-#elif MY_PTR_SIZE_BYTES == 4
-        if (index + 11 > prog_size) return CHECK_PROGRAM_POINTER_BOUNDS_HEAD(program, prog_size, index, index);
-        u8A_to_u32 cvt;
-        
-        // Input Addr
-        cvt.u8A[3] = program[index]; cvt.u8A[2] = program[index + 1];
-        cvt.u8A[1] = program[index + 2]; cvt.u8A[0] = program[index + 3];
-        input_addr = cvt._u32;
-        index += 4;
-        
-        // Input Bit
-        input_bit = program[index++];
-        
-        // State Addr
-        cvt.u8A[3] = program[index]; cvt.u8A[2] = program[index + 1];
-        cvt.u8A[1] = program[index + 2]; cvt.u8A[0] = program[index + 3];
-        state_addr = cvt._u32;
-        index += 4;
-        
-        // State Bit
-        state_bit = program[index++];
-#endif
+        u8 state_bit = program[index++];
 
         u8 val_byte = 0;
         
