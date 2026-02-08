@@ -2536,6 +2536,53 @@ class VovkPLC_class {
     }
 
     /**
+     * Downloads pre-compiled bytecode to the PLC using direct hex string transfer.
+     * This bypasses the stream system entirely - writes the hex string directly to
+     * a WASM buffer and parses it in C++.
+     *
+     * @param {string | number[]} program - Bytecode as a hex string or array of bytes.
+     * @returns {number} - 0 if success. 1=size error, 2=CRC mismatch, 3=invalid hex.
+     * @throws {Error} If verification fails.
+     */
+    downloadBytecodeHex = program => {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        if (!this.wasm_exports.downloadProgramHex) throw new Error("'downloadProgramHex' function not found")
+        if (!this.wasm_exports.getHexDownloadBuffer) throw new Error("'getHexDownloadBuffer' function not found")
+
+        // Convert to hex string if array
+        let hex
+        if (Array.isArray(program)) {
+            hex = program.map(b => b.toString(16).padStart(2, '0')).join('')
+        } else {
+            hex = program.replace(/[\s,]/g, '') // Strip whitespace and commas
+        }
+
+        const byteCount = hex.length / 2
+        if (byteCount !== Math.floor(byteCount)) throw new Error('Hex string must have even length')
+
+        const crc = this.crc8(this.parseHex(hex))
+
+        // Write hex string directly into WASM memory
+        const bufPtr = this.wasm_exports.getHexDownloadBuffer()
+        const bufSize = this.wasm_exports.getHexDownloadBufferSize
+            ? this.wasm_exports.getHexDownloadBufferSize()
+            : 129071
+        if (hex.length + 1 > bufSize) throw new Error(`Hex string too large (${hex.length} chars, max ${bufSize - 1})`)
+
+        const view = new Uint8Array(this.wasm_exports.memory.buffer, bufPtr, hex.length + 1)
+        for (let i = 0; i < hex.length; i++) {
+            view[i] = hex.charCodeAt(i)
+        }
+        view[hex.length] = 0 // Null terminator
+
+        const error = this.wasm_exports.downloadProgramHex(bufPtr, byteCount, crc)
+        if (error === 1) throw new Error('Failed to download program -> size error')
+        if (error === 2) throw new Error('Failed to download program -> checksum mismatch')
+        if (error === 3) throw new Error('Failed to download program -> invalid hex character')
+        return error
+    }
+
+    /**
      * Executes the loaded program once (Single Scan).
      * This is the fast execution path without debug overhead.
      *

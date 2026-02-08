@@ -184,6 +184,23 @@ WASM_EXPORT void ffi_clearStringBuffer(u8 index) {
     memset(ffi_string_buffers[index], 0, FFI_STRING_BUFFER_SIZE);
 }
 
+// ============================================================================
+// Hex Download Buffer
+// ============================================================================
+// Static buffer for downloadProgramHex - JS writes hex string here,
+// then calls downloadProgramHex with the pointer. Max program = 64535 bytes
+// = 129070 hex chars + null terminator.
+#define HEX_DOWNLOAD_BUFFER_SIZE (64535 * 2 + 1)
+static char hex_download_buffer[HEX_DOWNLOAD_BUFFER_SIZE] = {};
+
+WASM_EXPORT u32 getHexDownloadBuffer() {
+    return (u32)hex_download_buffer;
+}
+
+WASM_EXPORT u32 getHexDownloadBufferSize() {
+    return HEX_DOWNLOAD_BUFFER_SIZE;
+}
+
 WASM_EXPORT u32 getMemoryLocation() {
     return (u32) runtime.memory;
 }
