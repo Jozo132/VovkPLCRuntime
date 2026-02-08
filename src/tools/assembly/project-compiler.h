@@ -3208,6 +3208,11 @@ public:
             return false;
         }
 
+        // Empty ladder graph (e.g. nodes:[], connections:[]) produces no STL output - skip STL compilation
+        if (ladder_compiler.output_len == 0) {
+            return true;
+        }
+
         // Now compile STL to PLCASM
         // Note: errors from STL compilation of ladder output are internal errors
         // since the ladder compiler generated the STL
