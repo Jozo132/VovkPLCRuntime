@@ -35,6 +35,7 @@ import { runTests as runMemoryLeakTests } from './memory_leak_test.js'
 import { runTests as runStringTests } from './node-test/test_string.js'
 import { runTests as runCaseInsensitiveTests } from './node-test/test_case_insensitive.js'
 import { runTests as runTimerTests } from './node-test/test_timers.js'
+import { runTests as runPLCScriptValidationTests } from './node-test/plcscript-tests/test_plcscript_validation.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -153,6 +154,11 @@ const testSuites = [
         name: 'Timer & Counter Functional',
         shortName: 'timers',
         run: runTimerTests
+    },
+    {
+        name: 'PLCScript Validation',
+        shortName: 'plcscript-validation',
+        run: runPLCScriptValidationTests
     },
     {
         name: 'Memory Leak Detection',

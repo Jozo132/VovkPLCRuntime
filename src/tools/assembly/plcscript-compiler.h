@@ -617,6 +617,9 @@ public:
     // Current function being compiled (nullptr if in global scope)
     PLCScriptFunction* currentFunction = nullptr;
     
+    // Tracking for unreachable code detection
+    bool lastStatementWasTerminator = false;
+    
     PLCScriptCompiler() {
         reset();
     }
@@ -682,6 +685,7 @@ public:
         memset(symbols, 0, sizeof(symbols));
         memset(loopStack, 0, sizeof(loopStack));
         memset(functions, 0, sizeof(functions));
+        lastStatementWasTerminator = false;
     }
     
     void setSource(char* src, int length) {
@@ -900,6 +904,12 @@ public:
         }
         errorMessage[i] = '\0';
     }
+    
+    // Warning hook - base compiler ignores warnings, linter overrides to capture them
+    virtual void addWarning(const char* /*msg*/) { }
+    virtual void addWarningAt(const char* /*msg*/, int /*line*/, int /*col*/, int /*length*/) { }
+    virtual void addInfo(const char* /*msg*/) { }
+    virtual void addInfoAt(const char* /*msg*/, int /*line*/, int /*col*/, int /*length*/) { }
     
     // ========================================================================
     // Lexer
@@ -1508,6 +1518,14 @@ public:
             if (strEq(symbols[i].name, name)) {
                 setError("Duplicate symbol declaration");
                 return nullptr;
+            }
+        }
+        
+        // Check for shadowed variable in outer scope (warning only)
+        for (int i = symbolCount - 1; i >= 0; i--) {
+            if (symbols[i].scopeLevel < currentScopeLevel && strEq(symbols[i].name, name)) {
+                addWarning("Variable shadows outer declaration");
+                break;
             }
         }
         
@@ -2450,6 +2468,15 @@ public:
             }
         }
         
+        // Check for conflict with built-in function names
+        if (strEqCI(currentToken.text, "TON") || strEqCI(currentToken.text, "TOF") || strEqCI(currentToken.text, "TP") ||
+            strEqCI(currentToken.text, "CTU") || strEqCI(currentToken.text, "CTD") ||
+            strEqCI(currentToken.text, "risingEdge") || strEqCI(currentToken.text, "FP") ||
+            strEqCI(currentToken.text, "fallingEdge") || strEqCI(currentToken.text, "FN")) {
+            setError("Function name conflicts with built-in PLC function");
+            return;
+        }
+        
         // Check function limit
         if (functionCount >= PLCSCRIPT_MAX_FUNCTIONS) {
             setError("Too many functions");
@@ -2499,6 +2526,15 @@ public:
                 i++;
             }
             param->name[i] = '\0';
+            
+            // Check for duplicate parameter names
+            for (int p = 0; p < func->paramCount; p++) {
+                if (strEq(func->params[p].name, param->name)) {
+                    setError("Duplicate parameter name");
+                    return;
+                }
+            }
+            
             nextToken();
             
             // : type
@@ -2640,6 +2676,7 @@ public:
         }
         
         // Parse function body statements until '}'
+        lastStatementWasTerminator = false;
         while (!check(PSTOK_RBRACE) && !check(PSTOK_EOF) && !hasError) {
             parseStatement();
         }
@@ -2654,11 +2691,15 @@ public:
         if (func->returnType == PSTYPE_VOID) {
             emit("ret\n");
         } else {
-            // For non-void functions, push a default value and return
-            // This handles the case where not all code paths return a value
+            // For non-void functions, warn if the last statement wasn't a return
+            if (!lastStatementWasTerminator) {
+                addWarningAt("Not all code paths return a value", func->declarationLine, func->declarationColumn, 0);
+            }
+            // Push a default value and return as fallback
             emitLoadConst(func->returnType, 0);
             emit("ret\n");
         }
+        lastStatementWasTerminator = false;
         
         emit("\n");
         
@@ -2749,6 +2790,15 @@ public:
                 j++;
             }
             field->name[j] = '\0';
+            
+            // Check for duplicate field name
+            for (int f = 0; f < structType->fieldCount; f++) {
+                if (strEq(structType->fields[f].name, field->name)) {
+                    setError("Duplicate field name in struct");
+                    return;
+                }
+            }
+            
             nextToken();
             
             // Expect ':'
@@ -2893,6 +2943,15 @@ public:
     void parseStatement() {
         if (hasError) return;
         
+        // Check for unreachable code (after return/break/continue)
+        if (lastStatementWasTerminator) {
+            // Empty statements and closing braces don't count as unreachable code
+            if (currentToken.type != PSTOK_SEMICOLON && currentToken.type != PSTOK_RBRACE && currentToken.type != PSTOK_EOF) {
+                addWarning("Unreachable code after return/break/continue");
+            }
+            lastStatementWasTerminator = false;
+        }
+        
         switch (currentToken.type) {
             case PSTOK_TYPE:
                 parseStructDeclaration();
@@ -2918,12 +2977,15 @@ public:
                 break;
             case PSTOK_BREAK:
                 parseBreak();
+                lastStatementWasTerminator = true;
                 break;
             case PSTOK_CONTINUE:
                 parseContinue();
+                lastStatementWasTerminator = true;
                 break;
             case PSTOK_RETURN:
                 parseReturn();
+                lastStatementWasTerminator = true;
                 break;
             case PSTOK_SEMICOLON:
                 // Empty statement
@@ -3275,6 +3337,10 @@ public:
                 
                 sym->hasInitializer = true;
             }
+        } else if (isConst) {
+            // const requires an initializer
+            setError("Constant declaration requires an initializer");
+            return;
         }
         
         // Semicolon is optional
@@ -3428,9 +3494,21 @@ public:
         expect(PSTOK_LBRACE, "Expected '{'");
         enterScope();
         
+        // Check for empty block
+        if (check(PSTOK_RBRACE)) {
+            addWarning("Empty block");
+        }
+        
+        // Reset terminator tracking within block scope
+        bool savedTerminator = lastStatementWasTerminator;
+        lastStatementWasTerminator = false;
+        
         while (!check(PSTOK_RBRACE) && !check(PSTOK_EOF) && !hasError) {
             parseStatement();
         }
+        
+        // Restore terminator state (don't leak block-level state)
+        lastStatementWasTerminator = savedTerminator;
         
         exitScope();
         expect(PSTOK_RBRACE, "Expected '}'");
@@ -4836,10 +4914,19 @@ public:
         
         while (check(PSTOK_STAR) || check(PSTOK_SLASH) || check(PSTOK_PERCENT)) {
             const char* op = nullptr;
+            bool isDivOrMod = false;
             if (check(PSTOK_STAR)) op = "mul";
-            else if (check(PSTOK_SLASH)) op = "div";
-            else op = "mod";
+            else if (check(PSTOK_SLASH)) { op = "div"; isDivOrMod = true; }
+            else { op = "mod"; isDivOrMod = true; }
             nextToken();
+            
+            // Check for constant division by zero
+            if (isDivOrMod && check(PSTOK_INTEGER) && currentToken.intValue == 0) {
+                addWarning("Division by constant zero");
+            } else if (isDivOrMod && check(PSTOK_FLOAT) && currentToken.floatValue == 0.0) {
+                addWarning("Division by constant zero");
+            }
+            
             // Set target type so literals match the left operand's type
             PLCScriptVarType savedTarget = targetType;
             targetType = left;

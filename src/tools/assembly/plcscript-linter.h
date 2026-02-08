@@ -56,6 +56,21 @@ public:
     void addProblem(int line, int column, int length, LinterProblemType type, const char* message) {
         if (problem_count >= PLCSCRIPT_MAX_LINT_PROBLEMS) return;
         
+        // Check for duplicate problems at the same location with the same message
+        for (int i = 0; i < problem_count; i++) {
+            if (problems[i].line == line && problems[i].column == column && problems[i].type == type) {
+                // Check if same message
+                bool same = true;
+                const char* a = problems[i].message;
+                const char* b = message;
+                while (*a && *b) {
+                    if (*a != *b) { same = false; break; }
+                    a++; b++;
+                }
+                if (same && *a == *b) return; // Skip duplicate
+            }
+        }
+        
         LinterProblem& p = problems[problem_count++];
         p.line = line;
         p.column = column;
@@ -81,16 +96,23 @@ public:
         PLCScriptCompiler::setError(msg);
     }
 
-    // Add warning (doesn't stop compilation)
-    void addWarning(const char* msg) {
+    // Override warning methods to capture warnings as lint problems
+    void addWarning(const char* msg) override {
         int length = currentToken.textLen > 0 ? currentToken.textLen : 1;
         addProblem(currentLine, currentColumn, length, LINT_WARNING, msg);
     }
 
-    // Add info message
-    void addInfo(const char* msg) {
+    void addWarningAt(const char* msg, int line, int col, int length) override {
+        addProblem(line, col, length > 0 ? length : 1, LINT_WARNING, msg);
+    }
+
+    void addInfo(const char* msg) override {
         int length = currentToken.textLen > 0 ? currentToken.textLen : 1;
         addProblem(currentLine, currentColumn, length, LINT_INFO, msg);
+    }
+
+    void addInfoAt(const char* msg, int line, int col, int length) override {
+        addProblem(line, col, length > 0 ? length : 1, LINT_INFO, msg);
     }
 
     // Lint the source code (compile to collect errors but optionally don't generate code)
@@ -105,6 +127,7 @@ public:
         }
 
         // Perform full compilation - this will collect all errors via setError overrides
+        // and warnings via addWarning overrides
         compile();
         
         // If there were errors captured, also add them as problems if not already

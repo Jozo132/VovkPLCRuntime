@@ -3091,8 +3091,19 @@ public:
 
         if (!success || plcscript_compiler.hasError) {
             if (plcscript_compiler.getProblemCount() > 0) {
-                // Problems already copied above, just set error flag
-                has_error = true;
+                // Problems already copied above, also set main error from first error problem
+                const LinterProblem* firstError = nullptr;
+                for (int i = 0; i < plcscript_compiler.getProblemCount(); i++) {
+                    const LinterProblem* p = plcscript_compiler.getProblem(i);
+                    if (p && p->type == LINT_ERROR) { firstError = p; break; }
+                }
+                if (firstError) {
+                    setErrorFull("PLCScript Compiler", firstError->message,
+                        firstError->line, firstError->column,
+                        block_source, source_len, nullptr, 0);
+                } else {
+                    has_error = true;
+                }
             } else {
                 // Fallback to old error handling
                 setErrorFull("PLCScript Compiler", plcscript_compiler.errorMessage,
