@@ -1027,7 +1027,7 @@ class VovkPLC_class {
 
     /**
      * Parses the info string from printInfo/getInfoString into a RuntimeInfo object.
-     * Format: [VovkPLCRuntime,ARCH,MAJOR,MINOR,PATCH,BUILD,DATE,STACK,MEM,PROG,K_OFF,K_SZ,X_OFF,X_SZ,Y_OFF,Y_SZ,S_OFF,S_SZ,M_OFF,M_SZ,T_OFF,T_CNT,T_SZ,C_OFF,C_CNT,C_SZ,DEVICE]
+     * Format: [VovkPLCRuntime,ARCH,MAJOR,MINOR,PATCH,BUILD,DATE,STACK,MEM,PROG,S_OFF,S_SZ,X_OFF,X_SZ,Y_OFF,Y_SZ,M_OFF,M_SZ,T_OFF,T_CNT,T_SZ,C_OFF,C_CNT,C_SZ,FLAGS,DEVICE]
      *
      * @param {string} raw - The raw bracket-delimited info string.
      * @returns {RuntimeInfo|string} - Parsed object or raw string if parsing fails.
@@ -1051,8 +1051,30 @@ class VovkPLC_class {
                 memory: +parts[8],
                 program: +parts[9],
             }
+            if (parts.length >= 26) {
+                // New format with timer/counter info and runtime flags
+                return {
+                    ...base,
+                    system_offset: +parts[10],
+                    system_size: +parts[11],
+                    input_offset: +parts[12],
+                    input_size: +parts[13],
+                    output_offset: +parts[14],
+                    output_size: +parts[15],
+                    marker_offset: +parts[16],
+                    marker_size: +parts[17],
+                    timer_offset: +parts[18],
+                    timer_count: +parts[19],
+                    timer_struct_size: +parts[20],
+                    counter_offset: +parts[21],
+                    counter_count: +parts[22],
+                    counter_struct_size: +parts[23],
+                    flags: parseInt(parts[24], 16),
+                    device: parts[25],
+                }
+            }
             if (parts.length >= 25) {
-                // New format with timer and counter info (S/system area removed)
+                // Legacy format with timer and counter info but no flags
                 return {
                     ...base,
                     system_offset: +parts[10],

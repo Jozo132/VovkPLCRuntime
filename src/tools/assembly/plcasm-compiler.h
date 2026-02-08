@@ -3741,11 +3741,19 @@ WASM_EXPORT void printInfo() {
 
 // ============ Direct Info Getter (buffer-based API for WASM) ============
 // Returns pointer to a static string with same format as printInfo() serial output
-// Format: [VovkPLCRuntime,ARCH,MAJOR,MINOR,PATCH,BUILD,DATE,STACK,MEM,PROG,K_OFF,K_SZ,X_OFF,X_SZ,Y_OFF,Y_SZ,S_OFF,S_SZ,M_OFF,M_SZ,T_OFF,T_CNT,T_SZ,C_OFF,C_CNT,C_SZ,DEVICE]
+// Format: [VovkPLCRuntime,ARCH,MAJOR,MINOR,PATCH,BUILD,DATE,STACK,MEM,PROG,S_OFF,S_SZ,X_OFF,X_SZ,Y_OFF,Y_SZ,M_OFF,M_SZ,T_OFF,T_CNT,T_SZ,C_OFF,C_CNT,C_SZ,FLAGS,DEVICE]
 static char info_buffer[512];
 
 WASM_EXPORT const char* getInfoString() {
-    sprintf(info_buffer, "[VovkPLCRuntime,%s,%d,%d,%d,%d,%s,%d,%d,%d,%u,%d,%u,%d,%u,%d,%u,%d,%u,%d,%d,%u,%d,%d,%s]",
+    u16 runtime_flags = plcruntime_get_feature_flags();
+    char flags_hex[5];
+    const char hex_chars[] = "0123456789ABCDEF";
+    flags_hex[0] = hex_chars[(runtime_flags >> 12) & 0x0F];
+    flags_hex[1] = hex_chars[(runtime_flags >> 8) & 0x0F];
+    flags_hex[2] = hex_chars[(runtime_flags >> 4) & 0x0F];
+    flags_hex[3] = hex_chars[runtime_flags & 0x0F];
+    flags_hex[4] = '\0';
+    sprintf(info_buffer, "[VovkPLCRuntime,%s,%d,%d,%d,%d,%s,%d,%d,%d,%u,%d,%u,%d,%u,%d,%u,%d,%u,%d,%d,%u,%d,%d,%s,%s]",
         VOVKPLC_ARCH,
         VOVKPLCRUNTIME_VERSION_MAJOR,
         VOVKPLCRUNTIME_VERSION_MINOR,
@@ -3769,6 +3777,7 @@ WASM_EXPORT const char* getInfoString() {
         runtime.counter_offset,
         PLCRUNTIME_NUM_OF_COUNTERS,
         PLCRUNTIME_COUNTER_STRUCT_SIZE,
+        flags_hex,
         VOVKPLC_DEVICE_NAME
     );
     return info_buffer;
