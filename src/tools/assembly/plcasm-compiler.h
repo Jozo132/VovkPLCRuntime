@@ -3477,6 +3477,7 @@ public:
     }
 
     int downloadProgram(int size, int crc);
+    int downloadProgramHex(const char* hex, int byteCount, int crc);
 
     // loadCompiledProgram
     // Needs access to runtime global? Wait, loadCompiledProgram in original code called runtime.loadProgram
@@ -3592,6 +3593,33 @@ int PLCASMCompiler::downloadProgram(int size, int crc) {
     for (u32 i = 0; i < size; i++) {
         u8 byte = downloaded_program[i];
         crc8_simple(calculated_crc, byte);
+    }
+    if (calculated_crc != crc) return 2;
+    runtime.loadProgram(downloaded_program, downloaded_program_size, calculated_crc);
+    return 0;
+}
+
+static inline int hexNibble(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+int PLCASMCompiler::downloadProgramHex(const char* hex, int byteCount, int crc) {
+    if (byteCount <= 0 || byteCount > MAX_DOWNLOADED_PROGRAM_SIZE) return 1;
+    // Parse hex pairs directly into downloaded_program
+    for (int i = 0; i < byteCount; i++) {
+        int hi = hexNibble(hex[i * 2]);
+        int lo = hexNibble(hex[i * 2 + 1]);
+        if (hi < 0 || lo < 0) return 3; // Invalid hex character
+        downloaded_program[i] = (u8)((hi << 4) | lo);
+    }
+    downloaded_program_size = byteCount;
+    // Verify CRC
+    u8 calculated_crc = 0;
+    for (int i = 0; i < byteCount; i++) {
+        crc8_simple(calculated_crc, downloaded_program[i]);
     }
     if (calculated_crc != crc) return 2;
     runtime.loadProgram(downloaded_program, downloaded_program_size, calculated_crc);
@@ -3772,6 +3800,10 @@ WASM_EXPORT u32 uploadProgram() {
 
 WASM_EXPORT int downloadProgram(int size, int crc) {
     return defaultCompiler.downloadProgram(size, crc);
+}
+
+WASM_EXPORT int downloadProgramHex(const char* hex, int byteCount, int crc) {
+    return defaultCompiler.downloadProgramHex(hex, byteCount, crc);
 }
 
 WASM_EXPORT u32 getMemoryArea(u32 address, u32 size) {
