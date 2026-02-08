@@ -1351,6 +1351,9 @@ class VovkPLC_class {
         if (!this.wasm_exports.stl_get_output) throw new Error("'stl_get_output' function not found")
         if (!this.wasm_exports.stl_has_error) throw new Error("'stl_has_error' function not found")
 
+        // Return empty result for empty/whitespace-only input
+        if (!stl || !stl.trim()) return { type: 'plcasm', size: 0, output: '' }
+
         // Clear any stale data in the stream buffer first
         if (this.wasm_exports.streamClear) this.wasm_exports.streamClear()
 
@@ -1406,6 +1409,9 @@ class VovkPLC_class {
 
         // Convert object to JSON string if needed
         const ladderJson = typeof ladder === 'string' ? ladder : JSON.stringify(ladder)
+
+        // Return empty result for empty/whitespace-only input
+        if (!ladderJson || !ladderJson.trim()) return { type: 'stl', size: 0, output: '' }
 
         // Clear any stale data in the stream buffer first
         if (this.wasm_exports.streamClear) this.wasm_exports.streamClear()
@@ -1472,6 +1478,9 @@ class VovkPLC_class {
         if (!this.wasm_exports.plcscript_load_from_stream) throw new Error("'plcscript_load_from_stream' function not found - PLCScript compiler not available")
         if (!this.wasm_exports.plcscript_compile) throw new Error("'plcscript_compile' function not found")
 
+        // Return empty result for empty/whitespace-only input
+        if (!plcscript || !plcscript.trim()) return { type: 'plcasm', size: 0, output: '' }
+
         // Reset compiler state
         if (this.wasm_exports.plcscript_reset) this.wasm_exports.plcscript_reset()
 
@@ -1532,6 +1541,9 @@ class VovkPLC_class {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         if (!this.wasm_exports.st_compiler_load_from_stream) throw new Error("'st_compiler_load_from_stream' function not found - ST compiler not available")
         if (!this.wasm_exports.st_compiler_compile) throw new Error("'st_compiler_compile' function not found")
+
+        // Return empty result for empty/whitespace-only input
+        if (!st || !st.trim()) return { type: 'plcscript', size: 0, output: '' }
 
         // Clear any stale data in the stream buffer first
         if (this.wasm_exports.streamClear) this.wasm_exports.streamClear()
