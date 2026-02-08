@@ -11,9 +11,32 @@ const TARGET = resolve(TARGET_RELATIVE);
 // Check for --safe flag
 const safeMode = process.argv.includes('--safe');
 
-console.log('----------------------------------------------------------------------');
-console.log('Note: to compile the WASM executable, you need to have LLVM installed.');
-console.log('----------------------------------------------------------------------');
+// Check that LLVM tools (clang++ and wasm-ld) are installed
+function checkCommand(cmd) {
+    try {
+        const which = isWindows ? 'where' : 'which';
+        execSync(`${which} ${cmd}`, { stdio: 'ignore' });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+const hasClang = checkCommand('clang++');
+const hasWasmLd = checkCommand('wasm-ld');
+
+if (!hasClang || !hasWasmLd) {
+    const missing = [!hasClang && 'clang++', !hasWasmLd && 'wasm-ld'].filter(Boolean).join(', ');
+    console.error('----------------------------------------------------------------------');
+    console.error('ERROR: LLVM is not installed or not in PATH.');
+    console.error(`Missing: ${missing}`);
+    console.error('');
+    console.error('To compile the WASM executable, you need LLVM with WebAssembly support.');
+    console.error('Install LLVM from: https://releases.llvm.org/download.html');
+    console.error('----------------------------------------------------------------------');
+    process.exit(1);
+}
+
 console.log(`Building the WASM executable (${safeMode ? 'SAFE MODE' : 'production'}) ...`);
 console.log('Executing: ' + TARGET_RELATIVE + (safeMode ? ' --safe' : ''));
 
