@@ -136,6 +136,26 @@ const MEMORY_LAYOUT = {
  *     ladder_standalone_has_error: () => boolean, // Returns true if there was a Ladder Graph compilation error.
  *     ladder_standalone_get_error: () => number, // Returns a pointer to the Ladder Graph error message string.
  *     ladder_standalone_error_to_stream: () => void, // Streams the error message to stdout.
+ *     plcscript_load_from_stream: () => void, // Loads PLCScript code from the stream buffer into the PLCScript compiler.
+ *     plcscript_compile: () => boolean, // Compiles the loaded PLCScript code to PLCASM. Returns true on success.
+ *     plcscript_hasError: () => boolean, // Returns true if there was a PLCScript compilation error.
+ *     plcscript_getError: () => number, // Returns a pointer to the PLCScript error message string.
+ *     plcscript_getErrorLine: () => number, // Returns the line number of the PLCScript error.
+ *     plcscript_getErrorColumn: () => number, // Returns the column number of the PLCScript error.
+ *     plcscript_getOutput: () => number, // Returns a pointer to the generated PLCASM output.
+ *     plcscript_getOutputLength: () => number, // Returns the length of the generated PLCASM output.
+ *     plcscript_output_to_stream: () => void, // Streams the generated PLCASM output to stdout.
+ *     plcscript_reset: () => void, // Resets the PLCScript compiler state.
+ *     st_compiler_load_from_stream: () => void, // Loads ST code from the stream buffer into the ST compiler.
+ *     st_compiler_compile: () => number, // Compiles the loaded ST code to PLCScript. Returns 0 on success, 1 on error.
+ *     st_compiler_has_error: () => number, // Returns 1 if there was an ST compilation error, 0 otherwise.
+ *     st_compiler_get_error: () => number, // Returns a pointer to the ST error message string.
+ *     st_compiler_get_error_line: () => number, // Returns the line number of the ST error.
+ *     st_compiler_get_error_column: () => number, // Returns the column number of the ST error.
+ *     st_compiler_get_error_token_text: () => number, // Returns a pointer to the ST error token text.
+ *     st_compiler_get_output: () => number, // Returns a pointer to the generated PLCScript output.
+ *     st_compiler_get_output_length: () => number, // Returns the length of the generated PLCScript output.
+ *     st_compiler_output_to_stream: () => void, // Streams the generated PLCScript output to stdout.
  *     project_compile: (debug?: boolean | number) => boolean, // Compiles a project from the stream buffer. Returns true on success.
  *     project_compileString: (source: number, length: number, debug?: boolean) => boolean, // Compiles a project from a memory pointer. Returns true on success.
  *     project_getBytecode: () => number, // Returns a pointer to the compiled bytecode.
@@ -1441,15 +1461,142 @@ class VovkPLC_class {
     }
 
     /**
-     * @typedef {{ ladderGraph?: string, stl?: string, plcasm?: string, bytecode?: string }} CompileAllResult
+     * Transpiles PLCScript code to PLCASM assembly.
+     *
+     * @param {string} plcscript - The PLCScript source code.
+     * @returns {CompileResult} - The compilation result with type='plcasm'.
+     * @throws {Error} If transpilation fails.
+     */
+    compilePLCScript(plcscript) {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        if (!this.wasm_exports.plcscript_load_from_stream) throw new Error("'plcscript_load_from_stream' function not found - PLCScript compiler not available")
+        if (!this.wasm_exports.plcscript_compile) throw new Error("'plcscript_compile' function not found")
+
+        // Reset compiler state
+        if (this.wasm_exports.plcscript_reset) this.wasm_exports.plcscript_reset()
+
+        // Clear any stale data in the stream buffer first
+        if (this.wasm_exports.streamClear) this.wasm_exports.streamClear()
+
+        // Stream PLCScript code to compiler
+        let ok = true
+        for (let i = 0; i < plcscript.length && ok; i++) {
+            ok = this.wasm_exports.streamIn(plcscript.charCodeAt(i))
+        }
+        if (!ok) throw new Error('Failed to stream PLCScript code')
+        this.wasm_exports.streamIn(0) // Null terminator
+
+        // Load from stream and compile PLCScript to PLCASM
+        this.wasm_exports.plcscript_load_from_stream()
+        const success = this.wasm_exports.plcscript_compile()
+
+        if (!success) {
+            if (this.wasm_exports.plcscript_hasError && this.wasm_exports.plcscript_hasError()) {
+                const errorLine = this.wasm_exports.plcscript_getErrorLine ? this.wasm_exports.plcscript_getErrorLine() : 0
+                const errorCol = this.wasm_exports.plcscript_getErrorColumn ? this.wasm_exports.plcscript_getErrorColumn() : 0
+                const errPtr = this.wasm_exports.plcscript_getError ? this.wasm_exports.plcscript_getError() : 0
+                const errMsg = errPtr ? this.readCString(errPtr) : ''
+                throw new Error(`PLCScript compilation failed at line ${errorLine}, column ${errorCol}: ${errMsg}`)
+            }
+            throw new Error('PLCScript compilation failed')
+        }
+
+        // Get the generated PLCASM output
+        let plcasmCode = ''
+        if (this.wasm_exports.plcscript_output_to_stream) {
+            this.wasm_exports.plcscript_output_to_stream()
+            plcasmCode = this.readOutBuffer()
+        } else if (this.wasm_exports.plcscript_getOutput && this.wasm_exports.plcscript_getOutputLength) {
+            const outputPtr = this.wasm_exports.plcscript_getOutput()
+            const outputLen = this.wasm_exports.plcscript_getOutputLength()
+            if (outputLen > 0 && outputPtr) {
+                plcasmCode = this.readCString(outputPtr, outputLen + 1)
+            }
+        }
+
+        return {
+            type: 'plcasm',
+            size: plcasmCode.length,
+            output: plcasmCode,
+        }
+    }
+
+    /**
+     * Transpiles ST (Structured Text) code to PLCScript.
+     *
+     * @param {string} st - The ST source code.
+     * @returns {CompileResult} - The compilation result with type='plcscript'.
+     * @throws {Error} If transpilation fails.
+     */
+    compileST(st) {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        if (!this.wasm_exports.st_compiler_load_from_stream) throw new Error("'st_compiler_load_from_stream' function not found - ST compiler not available")
+        if (!this.wasm_exports.st_compiler_compile) throw new Error("'st_compiler_compile' function not found")
+
+        // Clear any stale data in the stream buffer first
+        if (this.wasm_exports.streamClear) this.wasm_exports.streamClear()
+
+        // Stream ST code to compiler
+        let ok = true
+        for (let i = 0; i < st.length && ok; i++) {
+            ok = this.wasm_exports.streamIn(st.charCodeAt(i))
+        }
+        if (!ok) throw new Error('Failed to stream ST code')
+        this.wasm_exports.streamIn(0) // Null terminator
+
+        // Load from stream and compile ST to PLCScript
+        this.wasm_exports.st_compiler_load_from_stream()
+        const errorCode = this.wasm_exports.st_compiler_compile()
+
+        if (errorCode !== 0) {
+            if (this.wasm_exports.st_compiler_has_error && this.wasm_exports.st_compiler_has_error()) {
+                const errorLine = this.wasm_exports.st_compiler_get_error_line ? this.wasm_exports.st_compiler_get_error_line() : 0
+                const errorCol = this.wasm_exports.st_compiler_get_error_column ? this.wasm_exports.st_compiler_get_error_column() : 0
+                const errPtr = this.wasm_exports.st_compiler_get_error ? this.wasm_exports.st_compiler_get_error() : 0
+                const errMsg = errPtr ? this.readCString(errPtr) : ''
+                const tokenPtr = this.wasm_exports.st_compiler_get_error_token_text ? this.wasm_exports.st_compiler_get_error_token_text() : 0
+                const tokenText = tokenPtr ? this.readCString(tokenPtr) : ''
+                throw new Error(`ST compilation failed at line ${errorLine}, column ${errorCol}: ${errMsg}${tokenText ? ` (token: "${tokenText}")` : ''}`)
+            }
+            throw new Error('ST compilation failed')
+        }
+
+        // Get the generated PLCScript output
+        let plcscriptCode = ''
+        if (this.wasm_exports.st_compiler_output_to_stream) {
+            this.wasm_exports.st_compiler_output_to_stream()
+            plcscriptCode = this.readOutBuffer()
+        } else if (this.wasm_exports.st_compiler_get_output && this.wasm_exports.st_compiler_get_output_length) {
+            const outputPtr = this.wasm_exports.st_compiler_get_output()
+            const outputLen = this.wasm_exports.st_compiler_get_output_length()
+            if (outputLen > 0 && outputPtr) {
+                plcscriptCode = this.readCString(outputPtr, outputLen + 1)
+            }
+        }
+
+        return {
+            type: 'plcscript',
+            size: plcscriptCode.length,
+            output: plcscriptCode,
+        }
+    }
+
+    /**
+     * @typedef {{ ladderGraph?: string, stl?: string, plcscript?: string, plcasm?: string, bytecode?: string }} CompileAllResult
      */
 
     /**
      * Compiles source code through the full pipeline based on starting language.
      * Returns all intermediate representations.
      *
-     * @param {string | LadderGraph} source - The source code (Ladder Graph JSON, STL, or PLCASM).
-     * @param {'ladder-graph' | 'stl' | 'plcasm'} language - The source language.
+     * Pipeline: Ladder → STL → PLCASM → Bytecode
+     *           ST → PLCScript → PLCASM → Bytecode
+     *           PLCScript → PLCASM → Bytecode
+     *           STL → PLCASM → Bytecode
+     *           PLCASM → Bytecode
+     *
+     * @param {string | LadderGraph} source - The source code.
+     * @param {'ladder-graph' | 'stl' | 'st' | 'plcscript' | 'plcasm'} language - The source language.
      * @returns {CompileAllResult} - Object containing all compilation stages.
      * @throws {Error} If any compilation step fails.
      */
@@ -1462,7 +1609,7 @@ class VovkPLC_class {
         let currentSource = typeof source === 'string' ? source : JSON.stringify(source)
         let currentLang = language
 
-        // Stage 1: Ladder Graph → STL (if starting from ladder-graph)
+        // Stage: Ladder Graph → STL
         if (currentLang === 'ladder-graph') {
             result.ladderGraph = currentSource
             const ladderResult = this.compileLadder(currentSource)
@@ -1471,7 +1618,25 @@ class VovkPLC_class {
             currentLang = 'stl'
         }
 
-        // Stage 2: STL → PLCASM (if starting from STL or ladder)
+        // Stage: ST → PLCScript
+        if (currentLang === 'st') {
+            result.st = currentSource
+            const stResult = this.compileST(currentSource)
+            result.plcscript = stResult.output
+            currentSource = stResult.output
+            currentLang = 'plcscript'
+        }
+
+        // Stage: PLCScript → PLCASM
+        if (currentLang === 'plcscript') {
+            if (!result.plcscript) result.plcscript = currentSource
+            const plcscriptResult = this.compilePLCScript(currentSource)
+            result.plcasm = plcscriptResult.output
+            currentSource = plcscriptResult.output
+            currentLang = 'plcasm'
+        }
+
+        // Stage: STL → PLCASM
         if (currentLang === 'stl') {
             if (!result.stl) result.stl = currentSource
             const stlResult = this.compileSTL(currentSource)
@@ -1480,7 +1645,7 @@ class VovkPLC_class {
             currentLang = 'plcasm'
         }
 
-        // Stage 3: PLCASM → Bytecode
+        // Stage: PLCASM → Bytecode
         if (currentLang === 'plcasm') {
             if (!result.plcasm) result.plcasm = currentSource
             const plcasmResult = this.compilePLCASM(currentSource)
@@ -4021,7 +4186,11 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
     compileSTL = stl => this.call('compileSTL', stl)
     /** @type { (ladder: string | LadderGraph) => Promise<CompileResult> } */
     compileLadder = ladder => this.call('compileLadder', ladder)
-    /** @type { (source: string | LadderGraph, language: 'ladder-graph' | 'stl' | 'plcasm') => Promise<{ ladderGraph?: string, stl?: string, plcasm?: string, bytecode?: string }> } */
+    /** @type { (plcscript: string) => Promise<CompileResult> } */
+    compilePLCScript = plcscript => this.call('compilePLCScript', plcscript)
+    /** @type { (st: string) => Promise<CompileResult> } */
+    compileST = st => this.call('compileST', st)
+    /** @type { (source: string | LadderGraph, language: 'ladder-graph' | 'stl' | 'st' | 'plcscript' | 'plcasm') => Promise<CompileAllResult> } */
     compileAll = (source, language) => this.call('compileAll', source, language)
     /** @type { (projectSource: string, options?: ProjectCompileOptions) => Promise<ProjectCompileResult> } */
     compileProject = (projectSource, options = {}) => this.call('compileProject', projectSource, options)
