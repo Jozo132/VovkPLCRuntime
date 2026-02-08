@@ -353,6 +353,11 @@ class VovkPLC_class {
     /** @type { Performance | null } */
     perf = null
 
+    /** @type { number | null } Override for millis() import. When non-null, WASM millis() returns this value instead of performance.now(). */
+    _millisOverride = null
+    /** @type { number | null } Override for micros() import. When non-null, WASM micros() returns this value instead of performance.now()*1000. */
+    _microsOverride = null
+
     /** @type { Uint8Array } */
     crc8_table = new Uint8Array(256)
     crc8_table_loaded = false
@@ -423,8 +428,8 @@ class VovkPLC_class {
                 stdout: this.console_print,
                 stderr: this.console_error,
                 streamOut: this.console_stream, // @ts-ignore
-                millis: () => Math.round(this.perf.now()), // @ts-ignore
-                micros: () => Math.round(this.perf.now() * 1000),
+                millis: () => this._millisOverride !== null ? this._millisOverride : Math.round(this.perf.now()), // @ts-ignore
+                micros: () => this._microsOverride !== null ? this._microsOverride : Math.round(this.perf.now() * 1000),
                 // memory: new WebAssembly.Memory({ initial: 256, maximum: 512 }),
 
                 // FFI import - called from WASM when runtime executes a JS-registered FFI
@@ -2636,25 +2641,23 @@ class VovkPLC_class {
     /**
      * Sets the system millisecond counter.
      * Useful for testing timer-based logic with deterministic time values.
+     * Pass null or undefined to revert to real-time (performance.now()).
      *
-     * @param {number} millis - The millisecond value to set.
+     * @param {number | null} millis - The millisecond value to set, or null to use real-time.
      */
     setMillis = millis => {
-        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
-        if (!this.wasm_exports.setMillis) throw new Error("'setMillis' function not found")
-        this.wasm_exports.setMillis(millis)
+        this._millisOverride = (millis != null) ? Math.round(millis) : null
     }
 
     /**
      * Sets the system microsecond counter.
      * Useful for testing timer-based logic with deterministic time values.
+     * Pass null or undefined to revert to real-time (performance.now() * 1000).
      *
-     * @param {number} micros - The microsecond value to set.
+     * @param {number | null} micros - The microsecond value to set, or null to use real-time.
      */
     setMicros = micros => {
-        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
-        if (!this.wasm_exports.setMicros) throw new Error("'setMicros' function not found")
-        this.wasm_exports.setMicros(micros)
+        this._microsOverride = (micros != null) ? Math.round(micros) : null
     }
 
     /**
@@ -2663,9 +2666,8 @@ class VovkPLC_class {
      * @returns {number} - The current millisecond counter value.
      */
     getMillis = () => {
-        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
-        if (!this.wasm_exports.getMillis) throw new Error("'getMillis' function not found")
-        return this.wasm_exports.getMillis()
+        if (this._millisOverride !== null) return this._millisOverride
+        return Math.round(this.perf.now())
     }
 
     /**
@@ -2674,9 +2676,8 @@ class VovkPLC_class {
      * @returns {number} - The current microsecond counter value.
      */
     getMicros = () => {
-        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
-        if (!this.wasm_exports.getMicros) throw new Error("'getMicros' function not found")
-        return this.wasm_exports.getMicros()
+        if (this._microsOverride !== null) return this._microsOverride
+        return Math.round(this.perf.now() * 1000)
     }
 
     /**
@@ -2755,18 +2756,17 @@ class VovkPLC_class {
      */
     writeMemoryArea = (address, data) => {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
-        if (!this.wasm_exports.writeMemoryByte) throw new Error("'writeMemoryByte' function not found")
+        if (!this.wasm_exports.memory) throw new Error('WebAssembly memory not found')
+        if (!this.wasm_exports.getMemoryLocation) throw new Error("'getMemoryLocation' function not found")
         if (address < MEMORY_LAYOUT.SYSTEM_SIZE) {
             throw new Error(`Cannot write to System partition (address ${address} < ${MEMORY_LAYOUT.SYSTEM_SIZE}). Use X/Y/M addresses instead.`)
         }
         if (address + data.length <= MEMORY_LAYOUT.SYSTEM_SIZE) {
             throw new Error(`Cannot write to System partition (range ${address}-${address + data.length - 1} overlaps system memory). Use X/Y/M addresses instead.`)
         }
-        for (let i = 0; i < data.length; i++) {
-            const byte = data[i] & 0xff
-            const success = this.wasm_exports.writeMemoryByte(address + i, byte)
-            if (!success) throw new Error(`Failed to write byte ${byte} at address ${address + i}`)
-        }
+        const offset = this.wasm_exports.getMemoryLocation()
+        const buffer = new Uint8Array(this.wasm_exports.memory.buffer, offset + address, data.length)
+        for (let i = 0; i < data.length; i++) buffer[i] = data[i] & 0xff
         const output = this.readStream()
         return output
     }
@@ -2782,7 +2782,8 @@ class VovkPLC_class {
      */
     writeMemoryAreaMasked = (address, data, mask) => {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
-        if (!this.wasm_exports.writeMemoryByteMasked) throw new Error("'writeMemoryByteMasked' function not found")
+        if (!this.wasm_exports.memory) throw new Error('WebAssembly memory not found')
+        if (!this.wasm_exports.getMemoryLocation) throw new Error("'getMemoryLocation' function not found")
         if (data.length !== mask.length) throw new Error('Mask length must match data length')
         if (address < MEMORY_LAYOUT.SYSTEM_SIZE) {
             throw new Error(`Cannot write to System partition (address ${address} < ${MEMORY_LAYOUT.SYSTEM_SIZE}). Use X/Y/M addresses instead.`)
@@ -2790,11 +2791,11 @@ class VovkPLC_class {
         if (address + data.length <= MEMORY_LAYOUT.SYSTEM_SIZE) {
             throw new Error(`Cannot write to System partition (range ${address}-${address + data.length - 1} overlaps system memory). Use X/Y/M addresses instead.`)
         }
+        const offset = this.wasm_exports.getMemoryLocation()
+        const buffer = new Uint8Array(this.wasm_exports.memory.buffer, offset + address, data.length)
         for (let i = 0; i < data.length; i++) {
-            const byte = data[i] & 0xff
             const maskByte = mask[i] & 0xff
-            const success = this.wasm_exports.writeMemoryByteMasked(address + i, byte, maskByte)
-            if (!success) throw new Error(`Failed to write byte ${byte} at address ${address + i}`)
+            buffer[i] = (buffer[i] & ~maskByte) | (data[i] & maskByte)
         }
         const output = this.readStream()
         return output
@@ -3341,6 +3342,19 @@ class VovkPLC_class {
             checksum = this.crc8(this.parseHex(value_hex), checksum)
             const checksum_hex = checksum.toString(16).padStart(2, '0')
             const command = cmd + address_hex_u32 + size_hex_u32 + value_hex + checksum_hex
+            return command
+        },
+        /** @param { number } timerOffset * @param { number } counterOffset * @returns { string } */
+        tcConfig: (timerOffset, counterOffset) => {
+            const cmd = 'TC'
+            const cmd_hex = this.stringToHex(cmd)
+            const timer_hex_u16 = timerOffset.toString(16).padStart(4, '0')
+            const counter_hex_u16 = counterOffset.toString(16).padStart(4, '0')
+            let checksum = this.crc8(this.parseHex(cmd_hex))
+            checksum = this.crc8(this.parseHex(timer_hex_u16), checksum)
+            checksum = this.crc8(this.parseHex(counter_hex_u16), checksum)
+            const checksum_hex = checksum.toString(16).padStart(2, '0')
+            const command = cmd + timer_hex_u16 + counter_hex_u16 + checksum_hex
             return command
         },
     }

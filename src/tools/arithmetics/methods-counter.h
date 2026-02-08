@@ -127,7 +127,6 @@ namespace PLCMethods {
         MY_PTR_t counter_ptr = 0;
         RuntimeError err = ProgramExtract.type_pointer(program, prog_size, index, &counter_ptr);
         if (err != STATUS_SUCCESS) return err;
-        counter_ptr = reverse_byte_order(counter_ptr);
 
         u32 PV = 0;
         err = ProgramExtract.type_u32(program, prog_size, index, &PV);
@@ -150,12 +149,10 @@ namespace PLCMethods {
         MY_PTR_t counter_ptr = 0;
         RuntimeError err = ProgramExtract.type_pointer(program, prog_size, index, &counter_ptr);
         if (err != STATUS_SUCCESS) return err;
-        counter_ptr = reverse_byte_order(counter_ptr);
 
         MY_PTR_t pv_ptr = 0;
         err = ProgramExtract.type_pointer(program, prog_size, index, &pv_ptr);
         if (err != STATUS_SUCCESS) return err;
-        pv_ptr = reverse_byte_order(pv_ptr);
 
         if (pv_ptr + 4 > PLCRUNTIME_MAX_MEMORY_SIZE) return MEMORY_ACCESS_ERROR;
         u32 PV = read_u32_from_mem(memory, pv_ptr);
@@ -177,7 +174,6 @@ namespace PLCMethods {
         MY_PTR_t counter_ptr = 0;
         RuntimeError err = ProgramExtract.type_pointer(program, prog_size, index, &counter_ptr);
         if (err != STATUS_SUCCESS) return err;
-        counter_ptr = reverse_byte_order(counter_ptr);
 
         u32 PV = 0;
         err = ProgramExtract.type_u32(program, prog_size, index, &PV);
@@ -200,12 +196,10 @@ namespace PLCMethods {
         MY_PTR_t counter_ptr = 0;
         RuntimeError err = ProgramExtract.type_pointer(program, prog_size, index, &counter_ptr);
         if (err != STATUS_SUCCESS) return err;
-        counter_ptr = reverse_byte_order(counter_ptr);
 
         MY_PTR_t pv_ptr = 0;
         err = ProgramExtract.type_pointer(program, prog_size, index, &pv_ptr);
         if (err != STATUS_SUCCESS) return err;
-        pv_ptr = reverse_byte_order(pv_ptr);
 
         if (pv_ptr + 4 > PLCRUNTIME_MAX_MEMORY_SIZE) return MEMORY_ACCESS_ERROR;
         u32 PV = read_u32_from_mem(memory, pv_ptr);

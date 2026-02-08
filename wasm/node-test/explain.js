@@ -349,7 +349,7 @@ const run = async () => {
         // Handle raw bytecode hex - skip compilation, go straight to execution
         if (language === 'bytecode-hex') {
             console.log('┌─────────────────────────────────────────────────────────────────┐')
-            console.log('│ STEP 2: Load Bytecode from Hex                                 │')
+            console.log('│ STEP 2: Load Bytecode from Hex                                  │')
             console.log('└─────────────────────────────────────────────────────────────────┘')
             console.log()
             
@@ -373,13 +373,27 @@ const run = async () => {
             console.log(`  CRC8 Checksum: 0x${checksum.toString(16).toUpperCase().padStart(2, '0')}`)
             console.log()
             
-            // Stream bytes to input and use downloadProgram
-            for (const b of bytes) {
-                runtime.wasm_exports.streamIn(b)
-            }
+            // Use hex buffer path (avoids stream null-terminator issue with 0x00 bytes)
+            const wasm = runtime.wasm_exports
+            const bufPtr = wasm.getHexDownloadBuffer ? wasm.getHexDownloadBuffer() : 0
+            const useHexPath = bufPtr > 0 && wasm.downloadProgramHex
             
             readCapturedOutput() // clear any previous output
-            const loadError = runtime.wasm_exports.downloadProgram(bytes.length, checksum)
+            let loadError
+            
+            if (useHexPath) {
+                // Write hex string directly into WASM memory buffer
+                const view = new Uint8Array(wasm.memory.buffer, bufPtr, hexOnly.length + 1)
+                for (let i = 0; i < hexOnly.length; i++) {
+                    view[i] = hexOnly.charCodeAt(i)
+                }
+                view[hexOnly.length] = 0 // Null terminator
+                loadError = wasm.downloadProgramHex(bufPtr, bytes.length, checksum)
+            } else {
+                // Fallback to stream-based download (may fail if bytecode contains 0x00)
+                for (const b of bytes) wasm.streamIn(b)
+                loadError = wasm.downloadProgram(bytes.length, checksum)
+            }
             
             const loadOutput = readCapturedOutput()
             if (loadOutput && loadOutput.trim()) {
@@ -390,11 +404,42 @@ const run = async () => {
             }
             
             if (loadError) {
-                console.error(`  ✗ Failed to load bytecode (error code: ${loadError})`)
-                process.exit(1)
+                const errorMessages = { 1: 'size mismatch', 2: 'CRC mismatch', 3: 'invalid hex character' }
+                const errorMsg = errorMessages[loadError] || `error code ${loadError}`
+                console.warn(`  ⚠ Download failed (${errorMsg}) - force-loading without CRC check...`)
+                
+                readCapturedOutput() // clear
+                
+                if (useHexPath && wasm.forceDownloadProgramHex) {
+                    const forceError = wasm.forceDownloadProgramHex(bufPtr, bytes.length)
+                    if (forceError) {
+                        console.error(`  ✗ Force-load also failed (error code: ${forceError})`)
+                        process.exit(1)
+                    }
+                } else if (wasm.forceDownloadProgram) {
+                    if (wasm.streamClear) wasm.streamClear()
+                    for (const b of bytes) wasm.streamIn(b)
+                    const forceError = wasm.forceDownloadProgram(bytes.length)
+                    if (forceError) {
+                        console.error(`  ✗ Force-load also failed (error code: ${forceError})`)
+                        process.exit(1)
+                    }
+                } else {
+                    console.error(`  ✗ Force-load exports not available - rebuild WASM`)
+                    process.exit(1)
+                }
+                
+                const forceOutput = readCapturedOutput()
+                if (forceOutput && forceOutput.trim()) {
+                    for (const line of forceOutput.split('\n')) {
+                        if (line.trim()) console.log(`  ${line}`)
+                    }
+                    console.log()
+                }
+                console.log(`  ✓ Bytecode force-loaded (CRC check skipped)`)
+            } else {
+                console.log('  ✓ Bytecode loaded successfully')
             }
-            
-            console.log('  ✓ Bytecode loaded successfully')
             console.log()
             
             bytecodeLoaded = true
@@ -403,7 +448,7 @@ const run = async () => {
         // Handle project file - compile entire project
         if (language === 'project') {
             console.log('┌─────────────────────────────────────────────────────────────────┐')
-            console.log('│ STEP 2: Project Compilation                                    │')
+            console.log('│ STEP 2: Project Compilation                                     │')
             console.log('└─────────────────────────────────────────────────────────────────┘')
             console.log()
             
@@ -504,7 +549,7 @@ const run = async () => {
         // Step 2: If Ladder Graph, transpile to STL first
         if (language === 'ladder-graph') {
             console.log('┌─────────────────────────────────────────────────────────────────┐')
-            console.log('│ STEP 2: Ladder Graph → STL Transpilation                       │')
+            console.log('│ STEP 2: Ladder Graph → STL Transpilation                        │')
             console.log('└─────────────────────────────────────────────────────────────────┘')
             console.log()
             
