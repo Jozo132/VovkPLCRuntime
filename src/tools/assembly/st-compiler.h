@@ -1091,9 +1091,76 @@ public:
         return nullptr;
     }
     
+    // Check if a name looks like a PLC address
+    bool isPLCAddressName(const char* name) {
+        if (!name || !name[0]) return false;
+        char first = name[0];
+        if (first >= 'a' && first <= 'z') first -= 32;
+        if (first != 'X' && first != 'Y' && first != 'I' && first != 'Q' &&
+            first != 'M' && first != 'T' && first != 'C' && first != 'S') return false;
+        if (!name[1]) return false;
+        if (name[1] >= '0' && name[1] <= '9') return true;
+        char second = name[1];
+        if (second >= 'a' && second <= 'z') second -= 32;
+        if ((second == 'W' || second == 'D' || second == 'B') && name[2] >= '0' && name[2] <= '9') return true;
+        return false;
+    }
+
+    // Check if a name is a reserved keyword (case-insensitive)
+    // Only reserve actual ST language keywords and type names.
+    // PLCASM instruction mnemonics are NOT reserved here.
+    bool isReservedKeyword(const char* name) {
+        if (!name || !name[0]) return false;
+        static const char* reserved[] = {
+            // ST type names
+            "bool", "sint", "int", "dint", "lint",
+            "usint", "uint", "udint", "ulint",
+            "byte", "word", "dword", "lword",
+            "real", "lreal", "time", "string",
+            // ST declaration keywords
+            "var", "var_input", "var_output", "var_in_out", "var_global", "var_temp",
+            "end_var", "constant", "at", "retain",
+            // ST control flow
+            "if", "then", "elsif", "else", "end_if",
+            "case", "of", "end_case",
+            "for", "to", "by", "do", "end_for",
+            "while", "end_while",
+            "repeat", "until", "end_repeat",
+            "exit", "return",
+            // ST operators
+            "and", "or", "xor", "not", "mod", "shl", "shr",
+            // ST literals
+            "true", "false",
+            // PLC function block types
+            "ton", "tof", "tp", "ctu", "ctd", "ctud",
+            "r_trig", "f_trig",
+            // Program blocks
+            "program", "end_program",
+            "function_block", "end_function_block",
+            "function", "end_function",
+            nullptr
+        };
+        for (int i = 0; reserved[i]; i++) {
+            if (strEqCI(reserved[i], name)) return true;
+        }
+        return false;
+    }
+
     STSymbol* addSymbol(const char* name, const char* plcType, const char* addr) {
         if (symbol_count >= ST_MAX_SYMBOLS) {
             setError("Too many symbols");
+            return nullptr;
+        }
+
+        // Check if name looks like a PLC address
+        if (isPLCAddressName(name)) {
+            setError("Variable name conflicts with a PLC address");
+            return nullptr;
+        }
+
+        // Check if name is a reserved keyword
+        if (isReservedKeyword(name)) {
+            setError("Variable name is a reserved keyword");
             return nullptr;
         }
         
@@ -1174,7 +1241,17 @@ public:
         // name : TYPE [:= initial] ;
         // name AT %address : TYPE [:= initial] ;
         
+        if (check(STTOK_ADDRESS)) {
+            setError("Variable name conflicts with a PLC address");
+            return;
+        }
         if (!check(STTOK_IDENTIFIER)) {
+            // Check if it's a keyword being used as a variable name
+            if (currentToken.text[0] != '\0' && currentToken.type != STTOK_EOF && 
+                currentToken.type != STTOK_SEMICOLON && currentToken.type != STTOK_COLON) {
+                setError("Variable name is a reserved keyword");
+                return;
+            }
             setError("Expected variable name");
             return;
         }

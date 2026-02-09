@@ -794,6 +794,25 @@ public:
         return *a == '\0' && *b == '\0';
     }
     
+    // Check if a name looks like a PLC address (X0, M0.1, Y0, I0, Q0, T0, C0, S0, MW10, etc.)
+    // Returns true if the name would conflict with PLC memory addressing
+    bool isPLCAddressName(const char* name) {
+        if (!name || !name[0]) return false;
+        char first = name[0];
+        if (first >= 'a' && first <= 'z') first -= 32;
+        // Valid address prefixes: X, Y, I, Q, M, T, C, S
+        if (first != 'X' && first != 'Y' && first != 'I' && first != 'Q' &&
+            first != 'M' && first != 'T' && first != 'C' && first != 'S') return false;
+        if (!name[1]) return false;
+        // Next char is digit -> address (M0, T5, X0, etc.)
+        if (name[1] >= '0' && name[1] <= '9') return true;
+        // Legacy W/D/B suffix (MW10, MD20, etc.)
+        char second = name[1];
+        if (second >= 'a' && second <= 'z') second -= 32;
+        if ((second == 'W' || second == 'D' || second == 'B') && name[2] >= '0' && name[2] <= '9') return true;
+        return false;
+    }
+
     // Check if a name is a reserved word (type name, instruction, keyword)
     // Returns true if the name is reserved and should not be used as a symbol/variable
     bool isReservedWord(const char* name) {
@@ -1945,6 +1964,22 @@ public:
             return false;
         }
         
+        // Check if the symbol name looks like a PLC address
+        if (isPLCAddressName(name)) {
+            char err[128];
+            int ei = 0;
+            const char* msg = "Symbol name '";
+            while (*msg && ei < 80) err[ei++] = *msg++;
+            int ni = 0;
+            while (name[ni] && ei < 100) err[ei++] = name[ni++];
+            const char* suffix = "' conflicts with a PLC address";
+            int si = 0;
+            while (suffix[si] && ei < 126) err[ei++] = suffix[si++];
+            err[ei] = '\0';
+            setError(err);
+            return false;
+        }
+
         // Check if the symbol name conflicts with a custom type name (exact case match)
         if (findUserStructTypeExact(name)) {
             char err[128];

@@ -422,6 +422,140 @@ END_FILE
         )
     })
 
+    // === Illegal Symbol Name Tests ===
+
+    test('PLC address as variable name (M0)', () => {
+        assertCompileError(`let M0: i32 = 0;`, 'conflicts with a PLC address')
+    })
+
+    test('PLC address as variable name (X0)', () => {
+        assertCompileError(`let X0: i32 = 0;`, 'conflicts with a PLC address')
+    })
+
+    test('PLC address as variable name (Y0)', () => {
+        assertCompileError(`let Y0: i32 = 0;`, 'conflicts with a PLC address')
+    })
+
+    test('PLC address as variable name (I0)', () => {
+        assertCompileError(`let I0: i32 = 0;`, 'conflicts with a PLC address')
+    })
+
+    test('PLC address as variable name (Q0)', () => {
+        assertCompileError(`let Q0: i32 = 0;`, 'conflicts with a PLC address')
+    })
+
+    test('PLC address as variable name (T0)', () => {
+        assertCompileError(`let T0: i32 = 0;`, 'conflicts with a PLC address')
+    })
+
+    test('PLC address as variable name (C0)', () => {
+        assertCompileError(`let C0: i32 = 0;`, 'conflicts with a PLC address')
+    })
+
+    test('PLC address as variable name (S0)', () => {
+        assertCompileError(`let S0: i32 = 0;`, 'conflicts with a PLC address')
+    })
+
+    test('PLC address case insensitive (m0)', () => {
+        assertCompileError(`let m0: i32 = 0;`, 'conflicts with a PLC address')
+    })
+
+    test('PLC address with W suffix (MW10)', () => {
+        assertCompileError(`let MW10: i32 = 0;`, 'conflicts with a PLC address')
+    })
+
+    test('PLC address with D suffix (MD20)', () => {
+        assertCompileError(`let MD20: i32 = 0;`, 'conflicts with a PLC address')
+    })
+
+    test('Reserved keyword as variable name (TON)', () => {
+        assertCompileError(`let TON: i32 = 0;`, 'reserved keyword')
+    })
+
+    test('Reserved keyword as variable name (AND)', () => {
+        assertCompileError(`let AND: i32 = 0;`, 'reserved keyword')
+    })
+
+    test('Reserved keyword as variable name (ctud)', () => {
+        assertCompileError(`let ctud: i32 = 0;`, 'reserved keyword')
+    })
+
+    test('Reserved keyword as variable name (var)', () => {
+        assertCompileError(`let var: i32 = 0;`, 'reserved keyword')
+    })
+
+    test('Reserved keyword as variable name (MOD)', () => {
+        assertCompileError(`let MOD: i32 = 0;`, 'reserved keyword')
+    })
+
+    test('Project symbol with PLC address name (M0)', () => {
+        const project = `
+VOVKPLCPROJECT TestProject
+VERSION 1.0.0
+
+MEMORY
+    OFFSET 0
+    AVAILABLE 1024
+    S 64
+    X 64
+    Y 64
+    M 512
+END_MEMORY
+
+SYMBOLS
+    M0 : i32 : M0
+END_SYMBOLS
+
+FILE main
+    BLOCK LANG=PLCSCRIPT Main
+let x: i32 @ M4 = 0;
+    END_BLOCK
+END_FILE
+`
+        const wasm = plc.wasm_exports
+        wasm.project_reset()
+        streamCode(project)
+        const success = wasm.project_compile(0)
+        assert(!success, 'Expected compilation to fail')
+        const error = getString(wasm.project_getError())
+        assert(error.toLowerCase().includes('conflicts with a plc address'),
+            `Expected PLC address error but got: "${error}"`)
+    })
+
+    test('Project symbol with reserved keyword name (ADD)', () => {
+        const project = `
+VOVKPLCPROJECT TestProject
+VERSION 1.0.0
+
+MEMORY
+    OFFSET 0
+    AVAILABLE 1024
+    S 64
+    X 64
+    Y 64
+    M 512
+END_MEMORY
+
+SYMBOLS
+    ADD : i32 : M0
+END_SYMBOLS
+
+FILE main
+    BLOCK LANG=PLCSCRIPT Main
+let x: i32 @ M4 = 0;
+    END_BLOCK
+END_FILE
+`
+        const wasm = plc.wasm_exports
+        wasm.project_reset()
+        streamCode(project)
+        const success = wasm.project_compile(0)
+        assert(!success, 'Expected compilation to fail')
+        const error = getString(wasm.project_getError())
+        assert(error.toLowerCase().includes('reserved word'),
+            `Expected reserved word error but got: "${error}"`)
+    })
+
     return { name: 'PLCScript Validation', passed, failed, total: passed + failed, tests: testResults, failures }
 }
 

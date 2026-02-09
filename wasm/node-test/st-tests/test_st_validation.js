@@ -605,6 +605,86 @@ c := a + b;
 `)
     })
 
+    // === Illegal Symbol Name Tests ===
+
+    test('PLC address as variable name (M0)', () => {
+        assertSTError(`
+VAR
+    M0 : INT;
+END_VAR
+M0 := 0;
+`, 'conflicts with a PLC address')
+    })
+
+    test('PLC address as variable name (X0)', () => {
+        assertSTError(`
+VAR
+    X0 : BOOL;
+END_VAR
+X0 := TRUE;
+`, 'conflicts with a PLC address')
+    })
+
+    test('PLC address as variable name (I0)', () => {
+        assertSTError(`
+VAR
+    I0 : BOOL;
+END_VAR
+I0 := TRUE;
+`, 'conflicts with a PLC address')
+    })
+
+    test('PLC address as variable name (Q0)', () => {
+        assertSTError(`
+VAR
+    Q0 : BOOL;
+END_VAR
+Q0 := TRUE;
+`, 'conflicts with a PLC address')
+    })
+
+    test('PLC address as variable name case insensitive (m0)', () => {
+        assertSTError(`
+VAR
+    m0 : INT;
+END_VAR
+m0 := 0;
+`, 'conflicts with a PLC address')
+    })
+
+    test('PLC address with W suffix (MW10)', () => {
+        assertSTError(`
+VAR
+    MW10 : INT;
+END_VAR
+MW10 := 0;
+`, 'conflicts with a PLC address')
+    })
+
+    test('Reserved keyword as variable name (AND)', () => {
+        assertSTError(`
+VAR
+    AND : INT;
+END_VAR
+`, 'reserved keyword')
+    })
+
+    test('Reserved keyword as variable name (mod)', () => {
+        assertSTError(`
+VAR
+    mod : INT;
+END_VAR
+`, 'reserved keyword')
+    })
+
+    test('Reserved keyword as variable name (RETURN)', () => {
+        assertSTError(`
+VAR
+    RETURN : INT;
+END_VAR
+`, 'reserved keyword')
+    })
+
     return { name: 'ST Validation', passed, failed, total: passed + failed, tests: testResults, failures }
 }
 

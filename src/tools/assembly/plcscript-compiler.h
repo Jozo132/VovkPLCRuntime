@@ -1517,9 +1517,65 @@ public:
         return nullptr;
     }
     
+    // Check if a name looks like a PLC address
+    bool isPLCAddressName(const char* name) {
+        if (!name || !name[0]) return false;
+        char first = name[0];
+        if (first >= 'a' && first <= 'z') first -= 32;
+        if (first != 'X' && first != 'Y' && first != 'I' && first != 'Q' &&
+            first != 'M' && first != 'T' && first != 'C' && first != 'S') return false;
+        if (!name[1]) return false;
+        if (name[1] >= '0' && name[1] <= '9') return true;
+        char second = name[1];
+        if (second >= 'a' && second <= 'z') second -= 32;
+        if ((second == 'W' || second == 'D' || second == 'B') && name[2] >= '0' && name[2] <= '9') return true;
+        return false;
+    }
+
+    // Check if a name is a reserved keyword (case-insensitive)
+    // Only reserve actual PLCScript language keywords and type names.
+    // PLCASM instruction mnemonics (gt, lt, eq, ld, st, add, etc.)
+    // are NOT reserved - they are valid variable names in PLCScript.
+    bool isReservedKeyword(const char* name) {
+        if (!name || !name[0]) return false;
+        static const char* reserved[] = {
+            // Type names
+            "bool", "bit", "byte",
+            "i8", "u8", "i16", "u16", "i32", "u32", "i64", "u64",
+            "f32", "f64", "str8", "str16", "string",
+            // Language keywords
+            "let", "const", "if", "else", "while", "do", "for",
+            "function", "return", "break", "continue",
+            "true", "false", "null", "auto",
+            "type", "struct",
+            // PLC function block types
+            "ton", "tof", "tp", "ctu", "ctd", "ctud",
+            // ST/IEC keywords commonly shared
+            "var", "end_var", "program", "end_program",
+            "and", "or", "xor", "not", "mod",
+            nullptr
+        };
+        for (int i = 0; reserved[i]; i++) {
+            if (strEqCI(reserved[i], name)) return true;
+        }
+        return false;
+    }
+
     PLCScriptSymbol* addSymbol(const char* name, PLCScriptVarType type, bool isConst) {
         if (symbolCount >= PLCSCRIPT_MAX_SYMBOLS) {
             setError("Too many symbols");
+            return nullptr;
+        }
+
+        // Check if name looks like a PLC address
+        if (isPLCAddressName(name)) {
+            setError("Variable name conflicts with a PLC address");
+            return nullptr;
+        }
+
+        // Check if name is a reserved keyword
+        if (isReservedKeyword(name)) {
+            setError("Variable name is a reserved keyword");
             return nullptr;
         }
         
@@ -3016,6 +3072,10 @@ public:
         nextToken(); // consume 'let' or 'const'
         
         // Variable name
+        if (check(PSTOK_ADDRESS)) {
+            setError("Variable name conflicts with a PLC address");
+            return;
+        }
         if (!check(PSTOK_IDENTIFIER)) {
             setError("Expected variable name");
             return;
