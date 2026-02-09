@@ -1089,10 +1089,10 @@ public:
         if (prefix == 'S' || prefix == 's') {
             base_offset = plcasm_system_offset;
             num_start = 1;
-        } else if (prefix == 'X' || prefix == 'x') {
+        } else if (prefix == 'X' || prefix == 'x' || prefix == 'I' || prefix == 'i') {
             base_offset = plcasm_input_offset;
             num_start = 1;
-        } else if (prefix == 'Y' || prefix == 'y') {
+        } else if (prefix == 'Y' || prefix == 'y' || prefix == 'Q' || prefix == 'q') {
             base_offset = plcasm_output_offset;
             num_start = 1;
         } else if (prefix == 'M' || prefix == 'm') {
@@ -1847,8 +1847,8 @@ public:
         multiplier = 1; // Default multiplier for byte-addressable areas
         switch (prefix) {
             case 'S': case 's': offset = (int) plcasm_system_offset; return true;
-            case 'X': case 'x': offset = (int) plcasm_input_offset; return true;
-            case 'Y': case 'y': offset = (int) plcasm_output_offset; return true;
+            case 'X': case 'x': case 'I': case 'i': offset = (int) plcasm_input_offset; return true;
+            case 'Y': case 'y': case 'Q': case 'q': offset = (int) plcasm_output_offset; return true;
             case 'M': case 'm': offset = (int) plcasm_marker_offset; return true;
             case 'T': case 't': offset = (int) plcasm_timer_offset; multiplier = PLCRUNTIME_TIMER_STRUCT_SIZE; return true;
             case 'C': case 'c': offset = (int) plcasm_counter_offset; multiplier = PLCRUNTIME_COUNTER_STRUCT_SIZE; return true;
@@ -1865,8 +1865,8 @@ public:
     bool memorySizeFromPrefix(char prefix, int& size, const char*& name) {
         switch (prefix) {
             case 'S': case 's': size = PLCRUNTIME_NUM_OF_SYSTEMS; name = "systems"; return true;
-            case 'X': case 'x': size = PLCRUNTIME_NUM_OF_INPUTS; name = "inputs"; return true;
-            case 'Y': case 'y': size = PLCRUNTIME_NUM_OF_OUTPUTS; name = "outputs"; return true;
+            case 'X': case 'x': case 'I': case 'i': size = PLCRUNTIME_NUM_OF_INPUTS; name = "inputs"; return true;
+            case 'Y': case 'y': case 'Q': case 'q': size = PLCRUNTIME_NUM_OF_OUTPUTS; name = "outputs"; return true;
             case 'M': case 'm': size = PLCRUNTIME_NUM_OF_MARKERS; name = "markers"; return true;
             case 'T': case 't': size = PLCRUNTIME_NUM_OF_TIMERS; name = "timers"; return true;
             case 'C': case 'c': size = PLCRUNTIME_NUM_OF_COUNTERS; name = "counters"; return true;

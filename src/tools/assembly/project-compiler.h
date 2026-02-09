@@ -2267,10 +2267,10 @@ public:
                     break;
                 }
             }
-            // Special handling for X/Y (bit addresses for I/Q)
-            if (strEqI(prefix, "X")) {
+            // Special handling for X/Y/I/Q (bit addresses for I/Q)
+            if (strEqI(prefix, "X") || strEqI(prefix, "I")) {
                 base_offset = plcasm_input_offset;
-            } else if (strEqI(prefix, "Y")) {
+            } else if (strEqI(prefix, "Y") || strEqI(prefix, "Q")) {
                 base_offset = plcasm_output_offset;
             } else if (strEqI(prefix, "M") && prefix_len == 1) {
                 base_offset = plcasm_marker_offset;

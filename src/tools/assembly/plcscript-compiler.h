@@ -1046,6 +1046,7 @@ public:
     
     bool isPLCAddressStart(char c) {
         return c == 'X' || c == 'x' || c == 'Y' || c == 'y' || 
+               c == 'I' || c == 'i' || c == 'Q' || c == 'q' ||
                c == 'M' || c == 'm' || c == 'T' || c == 't' || 
                c == 'C' || c == 'c' || c == 'S' || c == 's';
     }
@@ -1057,8 +1058,8 @@ public:
         char first = text[0];
         if (first >= 'a' && first <= 'z') first -= 32;
         
-        // Valid prefixes: X, Y, M, T, C, S
-        if (first != 'X' && first != 'Y' && first != 'M' && 
+        // Valid prefixes: X, Y, I, Q, M, T, C, S
+        if (first != 'X' && first != 'Y' && first != 'I' && first != 'Q' && first != 'M' && 
             first != 'T' && first != 'C' && first != 'S') {
             return false;
         }
@@ -1209,11 +1210,15 @@ public:
             }
             currentToken.text[currentToken.textLen] = '\0';
             
-            // Check if it's a PLC address
-            if (isPLCAddress(currentToken.text)) {
+            // Check if it's a PLC address or keyword
+            // Keywords checked first to prevent type names (i8, i16, etc.) being misidentified as addresses
+            PLCScriptTokenType kwType = checkKeyword(currentToken.text);
+            if (kwType != PSTOK_IDENTIFIER) {
+                currentToken.type = kwType;
+            } else if (isPLCAddress(currentToken.text)) {
                 currentToken.type = PSTOK_ADDRESS;
             } else {
-                currentToken.type = checkKeyword(currentToken.text);
+                currentToken.type = PSTOK_IDENTIFIER;
             }
             return;
         }
@@ -1886,8 +1891,8 @@ public:
         
         // Determine memory area
         switch (first) {
-            case 'X': baseOffset = plcasm_input_offset; break;
-            case 'Y': baseOffset = plcasm_output_offset; break;
+            case 'X': case 'I': baseOffset = plcasm_input_offset; break;
+            case 'Y': case 'Q': baseOffset = plcasm_output_offset; break;
             case 'M': baseOffset = plcasm_marker_offset; break;
             case 'S': baseOffset = plcasm_system_offset; break;
             case 'C': baseOffset = plcasm_counter_offset; break;

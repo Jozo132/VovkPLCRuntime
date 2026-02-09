@@ -1,0 +1,43 @@
+{
+  "success": 1,
+  "project": { "name": "iq_xy_equivalence", "version": "1.0.0" },
+  "bytecode": "FD 01 58 40 00 60 80 00 FD 01 59 40 00 61 80 00 FD 02 5A 40 00 62 80 00 FD 02 5B 40 00 63 80 00 FD 03 5C 40 00 64 80 00 FD 03 5D 40 00 65 80 00 FD 08 5E 40 00 14 02 66 80 00 16 02 FF FD 08 5F 40 00 14 02 67 80 00 16 02 FF FD 06 58 41 00 14 02 60 80 00 16 02 FF FD 06 59 41 00 14 02 61 80 00 16 02 FF",
+  "bytecodeLength": 100,
+  "checksum": 231,
+  "files": [
+    { "path": "ladder_iq", "firstBlockIndex": 5, "blockCount": 1, "executionOrder": 0 },
+    { "path": "ladder_xy", "firstBlockIndex": 4, "blockCount": 1, "executionOrder": 1 },
+    { "path": "plcasm_iq", "firstBlockIndex": 1, "blockCount": 1, "executionOrder": 2 },
+    { "path": "plcasm_xy", "firstBlockIndex": 0, "blockCount": 1, "executionOrder": 3 },
+    { "path": "plcscript_iq", "firstBlockIndex": 7, "blockCount": 1, "executionOrder": 4 },
+    { "path": "plcscript_xy", "firstBlockIndex": 6, "blockCount": 1, "executionOrder": 5 },
+    { "path": "st_iq", "firstBlockIndex": 9, "blockCount": 1, "executionOrder": 6 },
+    { "path": "st_xy", "firstBlockIndex": 8, "blockCount": 1, "executionOrder": 7 },
+    { "path": "stl_iq", "firstBlockIndex": 3, "blockCount": 1, "executionOrder": 8 },
+    { "path": "stl_xy", "firstBlockIndex": 2, "blockCount": 1, "executionOrder": 9 }
+  ],
+  "blocks": [
+    { "file": "plcasm_xy", "name": "plcasm_xy_block", "language": "PLCASM", "offset": 0, "size": 8 },
+    { "file": "plcasm_iq", "name": "plcasm_iq_block", "language": "PLCASM", "offset": 8, "size": 8 },
+    { "file": "stl_xy", "name": "stl_xy_block", "language": "STL", "offset": 16, "size": 8 },
+    { "file": "stl_iq", "name": "stl_iq_block", "language": "STL", "offset": 24, "size": 8 },
+    { "file": "ladder_xy", "name": "ladder_xy_block", "language": "LADDER", "offset": 32, "size": 8 },
+    { "file": "ladder_iq", "name": "ladder_iq_block", "language": "LADDER", "offset": 40, "size": 8 },
+    { "file": "plcscript_xy", "name": "plcscript_xy_block", "language": "UNKNOWN", "offset": 48, "size": 13 },
+    { "file": "plcscript_iq", "name": "plcscript_iq_block", "language": "UNKNOWN", "offset": 61, "size": 13 },
+    { "file": "st_xy", "name": "st_xy_block", "language": "ST", "offset": 74, "size": 13 },
+    { "file": "st_iq", "name": "st_iq_block", "language": "ST", "offset": 87, "size": 12 }
+  ],
+  "symbols": [],
+  "memoryAreas": [
+    { "name": "S", "start": 0, "end": 15 },
+    { "name": "X", "start": 16, "end": 23 },
+    { "name": "Y", "start": 24, "end": 31 },
+    { "name": "M", "start": 32, "end": 159 },
+    { "name": "C", "start": 160, "end": 169 }
+  ],
+  "memory": { "available": 2048, "used": 129 },
+  "flash": { "size": 65536, "used": 100 },
+  "execution": { "steps": 24, "stackSize": 0 },
+  "problems": []
+}

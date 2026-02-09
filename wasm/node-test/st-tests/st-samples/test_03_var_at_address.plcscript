@@ -2,6 +2,6 @@
 # Auto-generated - edit tokens as needed
 #
 # Required PLCScript tokens (must appear in transpiled output):
-@ XX0.0
-@ YX0.0
+@ X0.0
+@ Y0.0
 @ MW10

@@ -1,0 +1,106 @@
+VOVKPLCPROJECT iq_xy_equivalence
+VERSION 1.0.0
+
+MEMORY
+  OFFSET 0
+  AVAILABLE 2048
+  S 16
+  X 8
+  Y 8
+  M 128
+END_MEMORY
+
+FLASH
+  SIZE 65536
+END_FLASH
+
+SYMBOLS
+END_SYMBOLS
+
+FILE plcasm_xy
+  BLOCK LANG=PLCASM plcasm_xy_block
+// PLCASM: Read input X0.0, write to output Y0.0 (classic X/Y syntax)
+u8.readBit X0.0
+u8.writeBit Y0.0
+  END_BLOCK
+END_FILE
+
+FILE plcasm_iq
+  BLOCK LANG=PLCASM plcasm_iq_block
+// PLCASM: Read input I0.1, write to output Q0.1 (IEC I/Q syntax)
+u8.readBit I0.1
+u8.writeBit Q0.1
+  END_BLOCK
+END_FILE
+
+FILE stl_xy
+  BLOCK LANG=STL stl_xy_block
+// STL: Contact -> Coil using X/Y syntax
+LD X0.2
+= Y0.2
+  END_BLOCK
+END_FILE
+
+FILE stl_iq
+  BLOCK LANG=STL stl_iq_block
+// STL: Contact -> Coil using I/Q syntax
+LD I0.3
+= Q0.3
+  END_BLOCK
+END_FILE
+
+FILE ladder_xy
+  BLOCK LANG=LADDER ladder_xy_block
+{
+  "nodes": [
+    {"id": "c1", "type": "contact", "x": 0, "y": 0, "symbol": "X0.4"},
+    {"id": "o1", "type": "coil", "x": 1, "y": 0, "symbol": "Y0.4"}
+  ],
+  "connections": [
+    {"sources": ["c1"], "destinations": ["o1"]}
+  ]
+}
+  END_BLOCK
+END_FILE
+
+FILE ladder_iq
+  BLOCK LANG=LADDER ladder_iq_block
+{
+  "nodes": [
+    {"id": "c1", "type": "contact", "x": 0, "y": 0, "symbol": "I0.5"},
+    {"id": "o1", "type": "coil", "x": 1, "y": 0, "symbol": "Q0.5"}
+  ],
+  "connections": [
+    {"sources": ["c1"], "destinations": ["o1"]}
+  ]
+}
+  END_BLOCK
+END_FILE
+
+FILE plcscript_xy
+  BLOCK LANG=PLCSCRIPT plcscript_xy_block
+// PLCScript: Contact -> Coil using X/Y syntax
+Y0.6 = X0.6
+  END_BLOCK
+END_FILE
+
+FILE plcscript_iq
+  BLOCK LANG=PLCSCRIPT plcscript_iq_block
+// PLCScript: Contact -> Coil using I/Q syntax
+Q0.7 = I0.7
+  END_BLOCK
+END_FILE
+
+FILE st_xy
+  BLOCK LANG=ST st_xy_block
+// ST: Contact -> Coil using %IX/%QX syntax (standard IEC)
+%QX0.0 := %IX1.0;
+  END_BLOCK
+END_FILE
+
+FILE st_iq
+  BLOCK LANG=ST st_iq_block
+// ST: Contact -> Coil using %IX/%QX with different bits
+%QX0.1 := %IX1.1;
+  END_BLOCK
+END_FILE

@@ -1053,7 +1053,7 @@ public:
     }
     
     const char* iecAddressToPLCScript(const char* addr) {
-        // Convert %IX0.0 -> X0.0, %QW10 -> YW10, %MW10 -> MW10
+        // Convert %IX0.0 -> X0.0, %QX0.0 -> Y0.0, %QW10 -> YW10, %MW10 -> MW10
         static char buf[32];
         int i = 0, o = 0;
         
@@ -1066,7 +1066,11 @@ public:
         else buf[o++] = area;
         i++;
         
-        // Copy rest (size indicator and number)
+        // Skip IEC bit specifier 'X' if present (bit access is indicated by dot notation)
+        char sizeSpec = toUpper(addr[i]);
+        if (sizeSpec == 'X') i++;
+        
+        // Copy rest (size indicator W/D/B and number)
         while (addr[i] && o < 30) {
             buf[o++] = addr[i++];
         }
