@@ -845,7 +845,7 @@ public:
         // Language keywords
         static const char* keywords[] = {
             // PLCScript
-            "let", "const", "if", "else", "while", "for",
+            "let", "const", "if", "else", "while", "do", "for",
             "function", "return", "break", "continue",
             "type", "struct", "true", "false", "null",
             // ST/IEC 61131-3

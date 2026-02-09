@@ -104,6 +104,9 @@
 //   while (condition) statement
 //   while (condition) { statements }
 //
+// Do-while loop:
+//   do { statements } while (condition)
+//
 // For loop (braces optional for single statements):
 //   for (let i: i16 @ MW100 = 0; i < 10; i++) statement
 //   for (let i: i16 @ MW100 = 0; i < 10; i++) { statements }
@@ -168,6 +171,7 @@ enum PLCScriptTokenType {
     PSTOK_IF,           // if
     PSTOK_ELSE,         // else
     PSTOK_WHILE,        // while
+    PSTOK_DO,           // do
     PSTOK_FOR,          // for
     PSTOK_FUNCTION,     // function
     PSTOK_RETURN,       // return
@@ -1009,6 +1013,7 @@ public:
         if (strEq(text, "if")) return PSTOK_IF;
         if (strEq(text, "else")) return PSTOK_ELSE;
         if (strEq(text, "while")) return PSTOK_WHILE;
+        if (strEq(text, "do")) return PSTOK_DO;
         if (strEq(text, "for")) return PSTOK_FOR;
         if (strEq(text, "function")) return PSTOK_FUNCTION;
         if (strEq(text, "return")) return PSTOK_RETURN;
@@ -2969,6 +2974,9 @@ public:
             case PSTOK_WHILE:
                 parseWhileStatement();
                 break;
+            case PSTOK_DO:
+                parseDoWhileStatement();
+                break;
             case PSTOK_FOR:
                 parseForStatement();
                 break;
@@ -3414,6 +3422,52 @@ public:
         
         // Pop loop context
         if (loopStackDepth > 0) loopStackDepth--;
+    }
+    
+    void parseDoWhileStatement() {
+        nextToken(); // consume 'do'
+        
+        // Generate labels
+        char startLabel[64], endLabel[64];
+        generateLabel(startLabel, "dowhile");
+        generateLabel(endLabel, "enddowhile");
+        
+        // Push loop context
+        if (loopStackDepth < PLCSCRIPT_MAX_SCOPES) {
+            int j = 0;
+            while (endLabel[j]) { loopStack[loopStackDepth].breakLabel[j] = endLabel[j]; j++; }
+            loopStack[loopStackDepth].breakLabel[j] = '\0';
+            j = 0;
+            while (startLabel[j]) { loopStack[loopStackDepth].continueLabel[j] = startLabel[j]; j++; }
+            loopStack[loopStackDepth].continueLabel[j] = '\0';
+            loopStackDepth++;
+        }
+        
+        emitLabel(startLabel);
+        
+        // Body (must be a block)
+        parseStatement();
+        
+        // Expect 'while' after body
+        if (!check(PSTOK_WHILE)) {
+            setError("Expected 'while' after 'do' body");
+            if (loopStackDepth > 0) loopStackDepth--;
+            return;
+        }
+        nextToken(); // consume 'while'
+        
+        expect(PSTOK_LPAREN, "Expected '(' after 'while'");
+        parseExpression();
+        expect(PSTOK_RPAREN, "Expected ')' after condition");
+        
+        emitJumpIfTrue(startLabel);
+        emitLabel(endLabel);
+        
+        // Pop loop context
+        if (loopStackDepth > 0) loopStackDepth--;
+        
+        // Optional semicolon
+        match(PSTOK_SEMICOLON);
     }
     
     void parseForStatement() {
