@@ -109,6 +109,19 @@
 #define ST_MAX_OUTPUT_SIZE 65536
 #define ST_MAX_IDENTIFIER_LEN 64
 #define ST_MAX_SYMBOLS 256
+#define ST_MAX_WARNINGS 64
+
+// ============================================================================
+// Warning structure for compile-time diagnostics
+// ============================================================================
+
+struct STWarning {
+    char message[128];
+    int line;
+    int column;
+    int length;
+    int severity; // 0=info, 1=warning, 2=error
+};
 
 // ============================================================================
 // Token Types
@@ -255,6 +268,9 @@ struct STSymbol {
     int64_t initInt;
     double initFloat;
     bool isConstant;
+    bool used;                  // Track if variable is used after declaration
+    int declarationLine;        // Line where declared
+    int declarationColumn;      // Column where declared
 };
 
 // ============================================================================
@@ -300,6 +316,16 @@ public:
     // Auto address counter
     int auto_addr_counter;
     
+    // Warnings collected during compilation
+    STWarning warnings[ST_MAX_WARNINGS];
+    int warning_count;
+    
+    // Tracking for unreachable code detection
+    bool after_exit_or_return;
+    
+    // Loop nesting depth for EXIT validation
+    int loop_depth;
+    
     STCompiler(SharedSymbolTable& shared) : sharedSymbols(shared) {
         reset();
     }
@@ -322,6 +348,9 @@ public:
         hasPeekToken = false;
         indent_level = 0;
         auto_addr_counter = 100;  // Start auto addresses at M100
+        warning_count = 0;
+        after_exit_or_return = false;
+        loop_depth = 0;
     }
     
     void setSource(const char* src, int len) {
@@ -355,6 +384,41 @@ public:
             i++;
         }
         error_message[i] = '\0';
+    }
+    
+    // ========================================================================
+    // Warning/diagnostic methods
+    // ========================================================================
+    
+    void addWarning(const char* msg, int wline, int wcol, int wlength = 1) {
+        if (warning_count >= ST_MAX_WARNINGS) return;
+        STWarning& w = warnings[warning_count++];
+        w.line = wline;
+        w.column = wcol;
+        w.length = wlength > 0 ? wlength : 1;
+        w.severity = 1; // warning
+        int i = 0;
+        while (msg[i] && i < 127) { w.message[i] = msg[i]; i++; }
+        w.message[i] = '\0';
+    }
+    
+    void addWarningAtCurrent(const char* msg) {
+        int len = 0;
+        while (currentToken.text[len] && len < 63) len++;
+        if (len == 0) len = 1;
+        addWarning(msg, currentToken.line, currentToken.column, len);
+    }
+    
+    void addInfo(const char* msg, int iline, int icol, int ilength = 1) {
+        if (warning_count >= ST_MAX_WARNINGS) return;
+        STWarning& w = warnings[warning_count++];
+        w.line = iline;
+        w.column = icol;
+        w.length = ilength > 0 ? ilength : 1;
+        w.severity = 0; // info
+        int i = 0;
+        while (msg[i] && i < 127) { w.message[i] = msg[i]; i++; }
+        w.message[i] = '\0';
     }
     
     // ========================================================================
@@ -1029,6 +1093,13 @@ public:
             return nullptr;
         }
         
+        // Check for duplicate variable name
+        STSymbol* existing = findSymbol(name);
+        if (existing) {
+            setError("Duplicate variable name");
+            return nullptr;
+        }
+        
         STSymbol* sym = &symbols[symbol_count++];
         int i = 0;
         while (name[i] && i < ST_MAX_IDENTIFIER_LEN - 1) {
@@ -1055,6 +1126,9 @@ public:
         sym->initInt = 0;
         sym->initFloat = 0.0;
         sym->isConstant = false;
+        sym->used = false;
+        sym->declarationLine = currentToken.line;
+        sym->declarationColumn = currentToken.column;
         
         return sym;
     }
@@ -1109,6 +1183,10 @@ public:
         }
         name[i] = '\0';
         
+        // Save declaration position before advancing
+        int declLine = currentToken.line;
+        int declColumn = currentToken.column;
+        
         // Check if variable name conflicts with a struct type (exact case match only)
         if (findUserStructTypeExact(name)) {
             setError("Variable name conflicts with a type name");
@@ -1149,6 +1227,8 @@ public:
         STSymbol* sym = addSymbol(name, plcType, address);
         if (!sym) return;
         sym->isConstant = isConstant;
+        sym->declarationLine = declLine;
+        sym->declarationColumn = declColumn;
         
         // Check for initialization
         if (match(STTOK_ASSIGN)) {
@@ -1169,6 +1249,10 @@ public:
                 setError("Expected initial value");
                 return;
             }
+        } else if (isConstant) {
+            // CONSTANT without initializer is an error
+            setError("Constant declaration requires an initializer");
+            return;
         }
         
         expect(STTOK_SEMICOLON, "Expected ';'");
@@ -1199,10 +1283,16 @@ public:
     // ========================================================================
     
     void parseStatements() {
+        after_exit_or_return = false;
         while (!check(STTOK_EOF) && !check(STTOK_END_IF) && !check(STTOK_ELSIF) &&
                !check(STTOK_ELSE) && !check(STTOK_END_FOR) && !check(STTOK_END_WHILE) &&
                !check(STTOK_END_REPEAT) && !check(STTOK_UNTIL) && !check(STTOK_END_CASE) &&
                !has_error) {
+            // Detect unreachable code
+            if (after_exit_or_return) {
+                addWarningAtCurrent("Unreachable code after EXIT/RETURN");
+                after_exit_or_return = false; // Only warn once
+            }
             parseStatement();
         }
     }
@@ -1219,15 +1309,21 @@ public:
         } else if (check(STTOK_CASE)) {
             parseCaseStatement();
         } else if (check(STTOK_EXIT)) {
+            if (loop_depth == 0) {
+                setError("EXIT statement outside of loop");
+                return;
+            }
             nextToken();
             expect(STTOK_SEMICOLON, "Expected ';'");
             emitIndent();
             emitLine("break;");
+            after_exit_or_return = true;
         } else if (check(STTOK_RETURN)) {
             nextToken();
             expect(STTOK_SEMICOLON, "Expected ';'");
             emitIndent();
             emitLine("return;");
+            after_exit_or_return = true;
         } else if (check(STTOK_IDENTIFIER) || check(STTOK_ADDRESS)) {
             parseAssignmentOrCall();
         } else if (check(STTOK_SEMICOLON)) {
@@ -1247,9 +1343,15 @@ public:
         
         expect(STTOK_THEN, "Expected THEN");
         
+        int startOutput = output_len;
         indent_level++;
-        parseStatements();
+        { bool saved_aer = after_exit_or_return; parseStatements(); after_exit_or_return = saved_aer; }
         indent_level--;
+        
+        // Check for empty THEN block
+        if (output_len == startOutput) {
+            addWarning("Empty IF block", currentToken.line, currentToken.column, 1);
+        }
         
         while (check(STTOK_ELSIF)) {
             nextToken();
@@ -1261,7 +1363,7 @@ public:
             expect(STTOK_THEN, "Expected THEN");
             
             indent_level++;
-            parseStatements();
+            { bool saved_aer = after_exit_or_return; parseStatements(); after_exit_or_return = saved_aer; }
             indent_level--;
         }
         
@@ -1270,7 +1372,7 @@ public:
             emitIndent();
             emitLine("} else {");
             indent_level++;
-            parseStatements();
+            { bool saved_aer = after_exit_or_return; parseStatements(); after_exit_or_return = saved_aer; }
             indent_level--;
         }
         
@@ -1297,6 +1399,9 @@ public:
             i++;
         }
         loopVar[i] = '\0';
+        // Mark loop variable as used
+        STSymbol* loopSym = findSymbol(loopVar);
+        if (loopSym) loopSym->used = true;
         nextToken();
         
         expect(STTOK_ASSIGN, "Expected ':='");
@@ -1329,9 +1434,11 @@ public:
         
         emitLine(") {");
         
+        loop_depth++;
         indent_level++;
-        parseStatements();
+        { bool saved_aer = after_exit_or_return; parseStatements(); after_exit_or_return = saved_aer; }
         indent_level--;
+        loop_depth--;
         
         expect(STTOK_END_FOR, "Expected END_FOR");
         match(STTOK_SEMICOLON);
@@ -1351,9 +1458,11 @@ public:
         
         emitLine(") {");
         
+        loop_depth++;
         indent_level++;
-        parseStatements();
+        { bool saved_aer = after_exit_or_return; parseStatements(); after_exit_or_return = saved_aer; }
         indent_level--;
+        loop_depth--;
         
         expect(STTOK_END_WHILE, "Expected END_WHILE");
         match(STTOK_SEMICOLON);
@@ -1368,9 +1477,11 @@ public:
         emitIndent();
         emitLine("do {");
         
+        loop_depth++;
         indent_level++;
-        parseStatements();
+        { bool saved_aer = after_exit_or_return; parseStatements(); after_exit_or_return = saved_aer; }
         indent_level--;
+        loop_depth--;
         
         expect(STTOK_UNTIL, "Expected UNTIL");
         
@@ -1379,6 +1490,7 @@ public:
         parseExpression();
         emitLine("));");
         
+        match(STTOK_SEMICOLON); // Optional semicolon after UNTIL condition
         expect(STTOK_END_REPEAT, "Expected END_REPEAT");
         match(STTOK_SEMICOLON);
     }
@@ -1461,7 +1573,7 @@ public:
             emitIndent();
             emitLine("} else {");
             indent_level++;
-            parseStatements();
+            { bool saved_aer = after_exit_or_return; parseStatements(); after_exit_or_return = saved_aer; }
             indent_level--;
         }
         
@@ -1543,7 +1655,14 @@ public:
             expect(STTOK_RPAREN, "Expected ')'");
             emitLine(");");
         } else {
-            // Assignment
+            // Assignment - check for const
+            STSymbol* sym = findSymbol(target);
+            if (sym && sym->isConstant) {
+                setError("Cannot assign to CONSTANT variable");
+                return;
+            }
+            if (sym) sym->used = true;
+            
             expect(STTOK_ASSIGN, "Expected ':='");
             
             emitIndent();
@@ -1660,9 +1779,19 @@ public:
             } else if (check(STTOK_SLASH)) {
                 nextToken();
                 emit(" / ");
+                // Check for division by constant zero
+                if (check(STTOK_INTEGER) && currentToken.intValue == 0) {
+                    addWarningAtCurrent("Division by constant zero");
+                } else if (check(STTOK_FLOAT) && currentToken.floatValue == 0.0) {
+                    addWarningAtCurrent("Division by constant zero");
+                }
             } else {
                 nextToken();
                 emit(" % ");
+                // Check for modulo by constant zero
+                if (check(STTOK_INTEGER) && currentToken.intValue == 0) {
+                    addWarningAtCurrent("Division by constant zero");
+                }
             }
             parseUnaryExpression();
         }
@@ -1715,6 +1844,10 @@ public:
                 }
             }
         } else if (check(STTOK_IDENTIFIER)) {
+            // Mark symbol as used
+            STSymbol* sym = findSymbol(currentToken.text);
+            if (sym) sym->used = true;
+            
             emit(currentToken.text);
             nextToken();
             
@@ -1773,6 +1906,9 @@ public:
         output[0] = '\0';
         symbol_count = 0;
         indent_level = 0;
+        warning_count = 0;
+        after_exit_or_return = false;
+        loop_depth = 0;
         
         // Emit header comment
         emitLine("// Generated by ST to PLCScript Compiler");
@@ -1789,6 +1925,17 @@ public:
         
         // Parse statements
         parseStatements();
+        
+        // Post-compilation warnings: unused variables
+        if (!has_error) {
+            for (int i = 0; i < symbol_count; i++) {
+                if (!symbols[i].used && !symbols[i].isConstant) {
+                    int nameLen = 0;
+                    while (symbols[i].name[nameLen] && nameLen < ST_MAX_IDENTIFIER_LEN) nameLen++;
+                    addWarning("Unused variable", symbols[i].declarationLine, symbols[i].declarationColumn, nameLen);
+                }
+            }
+        }
         
         return !has_error;
     }

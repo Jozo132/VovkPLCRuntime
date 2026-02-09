@@ -102,7 +102,7 @@ public:
         p.column = column;
         p.length = length > 0 ? length : 1;
         p.token_text = nullptr;
-        p.lang = 4; // ST language ID
+        p.lang = LANG_ST; // ST language ID = 6
         p.block[0] = '\0';
         p.program[0] = '\0';
         
@@ -128,7 +128,7 @@ public:
         p.column = column;
         p.length = length > 0 ? length : 1;
         p.token_text = nullptr;
-        p.lang = 4; // ST language ID
+        p.lang = LANG_ST; // ST language ID = 6
         p.block[0] = '\0';
         p.program[0] = '\0';
         
@@ -153,7 +153,7 @@ public:
         p.column = column;
         p.length = length > 0 ? length : 1;
         p.token_text = nullptr;
-        p.lang = 4; // ST language ID
+        p.lang = LANG_ST; // ST language ID = 6
         p.block[0] = '\0';
         p.program[0] = '\0';
         
@@ -201,18 +201,23 @@ public:
                      len);
         }
         
-        // Additional semantic checks could be added here:
-        // - Unused variables
-        // - Type mismatches  
-        // - Unreachable code
-        // - Missing END_* statements
+        // Copy warnings from compiler
+        for (int w = 0; w < compiler.warning_count && problem_count < ST_MAX_LINT_PROBLEMS; w++) {
+            STWarning& warn = compiler.warnings[w];
+            if (warn.severity == 1) {
+                addWarning(warn.message, warn.line, warn.column, warn.length);
+            } else if (warn.severity == 0) {
+                addInfo(warn.message, warn.line, warn.column, warn.length);
+            }
+        }
         
         return problem_count == 0;
     }
     
-    // Compile (same as lint but returns compilation result)
+    // Compile (returns true if compilation succeeded, even if warnings exist)
     bool compile() {
-        return lint() && !has_error;
+        lint();
+        return !has_error;
     }
     
     // Get the PLCScript output (if compilation succeeded)
