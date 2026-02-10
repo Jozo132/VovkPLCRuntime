@@ -409,6 +409,87 @@ WASM_EXPORT void resetFirstCycle() {
 }
 
 // ============================================================================
+// DataBlock WASM Exports
+// ============================================================================
+
+WASM_EXPORT u16 db_getSlotCount() {
+    return runtime.dataBlocks.num_slots;
+}
+
+WASM_EXPORT u16 db_getTableOffset() {
+    return runtime.dataBlocks.table_offset;
+}
+
+WASM_EXPORT u16 db_getActiveCount() {
+    return runtime.dataBlocks.activeCount();
+}
+
+WASM_EXPORT u16 db_getFreeSpace() {
+    return runtime.dataBlocks.freeSpace();
+}
+
+// Get entry data by slot index. Returns db_number (0 = unused).
+// offset and size are written to out_offset and out_size pointers.
+WASM_EXPORT u16 db_getEntryDB(u16 slot) {
+    u16 db, offset, size;
+    if (!runtime.dataBlocks.getEntry(slot, db, offset, size)) return 0;
+    return db;
+}
+
+WASM_EXPORT u16 db_getEntryOffset(u16 slot) {
+    u16 db, offset, size;
+    if (!runtime.dataBlocks.getEntry(slot, db, offset, size)) return 0;
+    return offset;
+}
+
+WASM_EXPORT u16 db_getEntrySize(u16 slot) {
+    u16 db, offset, size;
+    if (!runtime.dataBlocks.getEntry(slot, db, offset, size)) return 0;
+    return size;
+}
+
+// Declare a new DataBlock. Returns slot index or -1 on failure.
+WASM_EXPORT i16 db_declare(u16 db_number, u16 size) {
+    return runtime.dataBlocks.declare(db_number, size);
+}
+
+// Remove a DataBlock by DB number. Returns 1 on success, 0 on failure.
+WASM_EXPORT u8 db_remove(u16 db_number) {
+    return runtime.dataBlocks.remove(db_number) ? 1 : 0;
+}
+
+// Migrate a DataBlock to a new offset. Returns 1 on success, 0 on failure.
+WASM_EXPORT u8 db_migrate(u16 db_number, u16 target_offset) {
+    return runtime.dataBlocks.migrate(db_number, target_offset) ? 1 : 0;
+}
+
+// Compact all DataBlocks. Returns the new lowest allocated address.
+WASM_EXPORT u16 db_compact() {
+    return runtime.dataBlocks.compact();
+}
+
+// Resolve a DB-relative address to an absolute address. Returns 0xFFFF on error.
+WASM_EXPORT u16 db_resolveAddress(u16 db_number, u16 db_offset) {
+    return runtime.dataBlocks.resolveAddress(db_number, db_offset);
+}
+
+// Format (clear) all DataBlock entries.
+WASM_EXPORT void db_format() {
+    runtime.dataBlocks.format();
+}
+
+// Set the number of DB slots (re-initializes the DB manager).
+// Must be called before any db_declare calls.
+// This allows the WASM compiler to configure the DB slot count
+// to match the target embedded device's configuration.
+WASM_EXPORT void db_setSlotCount(u16 count) {
+    if (count == 0 || count > 256) return; // sanity check
+    u16 db_area_end = (u16)(runtime.counter_offset + PLCRUNTIME_NUM_OF_COUNTERS * PLCRUNTIME_COUNTER_STRUCT_SIZE);
+    runtime.dataBlocks.init(runtime.memory, PLCRUNTIME_MAX_MEMORY_SIZE, count, db_area_end);
+    runtime.dataBlocks.format();
+}
+
+// ============================================================================
 // FFI (Foreign Function Interface) WASM Exports
 // ============================================================================
 

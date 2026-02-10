@@ -244,7 +244,7 @@ struct StructProperty {
 };
 
 // Maximum number of properties per struct type
-#define MAX_STRUCT_PROPERTIES 8
+#define MAX_STRUCT_PROPERTIES 16
 
 // Built-in Timer properties (matches TIMER_OFFSET_* in methods-timer.h)
 // Timer struct: [ET:u32][StartTime:u32][Flags:u8] = 9 bytes

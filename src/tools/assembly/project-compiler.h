@@ -53,6 +53,7 @@
 //   M <size>                    // Required: Markers (usage based on access)
 //   // T and C are auto-calculated based on actual usage in the project.
 //   // They can be specified for backwards compatibility but will be ignored.
+//   DB <number> <size>          // Optional: DataBlock declaration (number = unique ID, size = bytes)
 // END_MEMORY
 //
 // FLASH
@@ -318,6 +319,12 @@ public:
     u32 timer_offset;                  // Calculated timer offset (after M area)
     u32 counter_offset;                // Calculated counter offset (after T area)
 
+    // DataBlock tracking
+    static const int MAX_DATABLOCKS = PLCRUNTIME_NUM_OF_DATABLOCKS;
+    struct DBEntry { u16 db_number; u16 size; };
+    DBEntry db_entries[PLCRUNTIME_NUM_OF_DATABLOCKS];
+    int db_count;                      // Number of DataBlocks declared in the project
+
     // Problems array for multiple error tracking
     LinterProblem problems[MAX_LINT_PROBLEMS];
     int problem_count = 0;
@@ -457,6 +464,13 @@ public:
         next_auto_counter = 0;
         timer_offset = 0;
         counter_offset = 0;
+
+        // Reset DataBlock tracking
+        for (int i = 0; i < MAX_DATABLOCKS; i++) {
+            db_entries[i].db_number = 0;
+            db_entries[i].size = 0;
+        }
+        db_count = 0;
 
         // Reset child compilers' symbol tables
         plcasm_compiler.symbol_count = 0;
@@ -912,7 +926,7 @@ public:
             "memory", "end_memory", "flash", "end_flash",
             "symbols", "end_symbols", "types", "end_types",
             "file", "end_file", "block", "end_block",
-            "vovkplcproject", "version", "size", "offset", "available",
+            "vovkplcproject", "version", "size", "offset", "available", "db",
             "plcasm", "stl", "ladder", "st", "plcscript",
             "auto",
             nullptr
@@ -1176,6 +1190,29 @@ public:
                 }
                 skipLine();
                 continue;  // Skip T/C areas - they will be auto-added later
+            }
+
+            // Check if this is a DataBlock declaration: DB <number> <size>
+            if (strEqI(area.name, "DB")) {
+                u32 db_number = 0;
+                if (!readInt(db_number) || db_number == 0 || db_number > 65535) {
+                    setError("Expected non-zero DataBlock number after DB");
+                    return false;
+                }
+                u32 db_size = 0;
+                if (!readInt(db_size) || db_size == 0 || db_size > 65535) {
+                    setError("Expected non-zero DataBlock size");
+                    return false;
+                }
+                if (db_count >= MAX_DATABLOCKS) {
+                    setError("Too many DataBlock declarations");
+                    return false;
+                }
+                db_entries[db_count].db_number = (u16)db_number;
+                db_entries[db_count].size = (u16)db_size;
+                db_count++;
+                skipLine();
+                continue;  // DB entries are handled separately from memory areas
             }
 
             // Verify it matches the expected area in sequence
@@ -2603,6 +2640,21 @@ public:
             appendCombinedPLCASMInt(counter_offset);
             appendToCombinedPLCASM(" ");
             appendCombinedPLCASMInt(counter_count);
+            appendToCombinedPLCASM("\n\n");
+        }
+
+        // Generate DataBlock configuration directive (inside first-cycle block)
+        // Format: .runtime_config_db <count> <db1_number> <db1_size> [<db2_number> <db2_size> ...]
+        if (db_count > 0) {
+            appendToCombinedPLCASM("// DataBlock runtime configuration\n");
+            appendToCombinedPLCASM(".runtime_config_db ");
+            appendCombinedPLCASMInt(db_count);
+            for (int i = 0; i < db_count; i++) {
+                appendToCombinedPLCASM(" ");
+                appendCombinedPLCASMInt(db_entries[i].db_number);
+                appendToCombinedPLCASM(" ");
+                appendCombinedPLCASMInt(db_entries[i].size);
+            }
             appendToCombinedPLCASM("\n\n");
         }
 

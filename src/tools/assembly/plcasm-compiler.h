@@ -811,6 +811,52 @@ struct Symbol {
 };
 
 
+// ============================================================================
+// DataBlock Declaration (compile-time only)
+// ============================================================================
+// Tracks DB definitions parsed from .db<N> directives in PLCASM.
+// These are used to register UserStructTypes and emit CONFIG_DB + default values.
+
+#define PLCASM_MAX_DB_FIELDS 16 // Max fields per datablock
+#define PLCASM_MAX_DB_DECLS  PLCRUNTIME_NUM_OF_DATABLOCKS // Max datablock declarations
+
+struct PLCASM_DBField {
+    char name[32];       // Field name (e.g., "myInteger")
+    char type_name[8];   // Type string (e.g., "i16", "f32")
+    u8   type_size;      // Size in bytes (1, 2, 4, 8)
+    u16  offset;         // Byte offset within the DB
+    bool has_default;    // Whether a default value was specified
+    union {
+        i32 int_val;     // Default for integer types (i8/u8/i16/u16/i32/u32)
+        float float_val; // Default for f32
+    } default_value;
+};
+
+struct PLCASM_DBDecl {
+    u16  db_number;                         // DB number (1, 2, ...)
+    char alias[32];                         // Alias name (e.g., "MyDatablock")
+    PLCASM_DBField fields[PLCASM_MAX_DB_FIELDS];
+    int  field_count;                       // Number of fields
+    u16  total_size;                        // Total size in bytes
+    u16  computed_offset;                   // Computed absolute memory offset (filled during emit)
+
+    void reset() {
+        db_number = 0;
+        alias[0] = '\0';
+        field_count = 0;
+        total_size = 0;
+        computed_offset = 0;
+        for (int i = 0; i < PLCASM_MAX_DB_FIELDS; i++) {
+            fields[i].name[0] = '\0';
+            fields[i].type_name[0] = '\0';
+            fields[i].type_size = 0;
+            fields[i].offset = 0;
+            fields[i].has_default = false;
+            fields[i].default_value.int_val = 0;
+        }
+    }
+};
+
 class PLCASMCompiler {
 public:
     int built_bytecode_length = 0;
@@ -848,6 +894,11 @@ public:
     IR_Entry ir_entries[MAX_IR_ENTRIES];
     int ir_entry_count = 0;
 
+    // DataBlock declarations (compile-time registry)
+    PLCASM_DBDecl db_decls[PLCASM_MAX_DB_DECLS];
+    int db_decl_count = 0;
+    bool db_config_emitted = false; // Track whether CONFIG_DB was emitted in current build pass
+
 #define MAX_DOWNLOADED_PROGRAM_SIZE 64535
     u8 downloaded_program[MAX_DOWNLOADED_PROGRAM_SIZE];
     int downloaded_program_size = 0;
@@ -862,6 +913,7 @@ public:
         memset(programLines, 0, sizeof(programLines));
         memset(downloaded_program, 0, sizeof(downloaded_program));
         memset(ir_entries, 0, sizeof(ir_entries));
+        resetDBDecls();
         // Default assembly string
         char default_asm [] = "DEFAULT_ASM_STRING_MARKER";
         /*
@@ -888,6 +940,320 @@ public:
             return;
         }
         string_copy(assembly_string, new_assembly_string);
+    }
+
+    // ========================================================================
+    // DataBlock Declaration Management
+    // ========================================================================
+
+    void resetDBDecls() {
+        db_decl_count = 0;
+        for (int i = 0; i < PLCASM_MAX_DB_DECLS; i++) {
+            db_decls[i].reset();
+        }
+    }
+
+    // Find a DB declaration by number
+    PLCASM_DBDecl* findDBDeclByNumber(u16 db_number) {
+        for (int i = 0; i < db_decl_count; i++) {
+            if (db_decls[i].db_number == db_number) return &db_decls[i];
+        }
+        return nullptr;
+    }
+
+    // Find a DB declaration by alias (case-insensitive)
+    PLCASM_DBDecl* findDBDeclByAlias(const char* alias) {
+        for (int i = 0; i < db_decl_count; i++) {
+            if (db_decls[i].alias[0] != '\0' && sharedStrEqI(db_decls[i].alias, alias)) return &db_decls[i];
+        }
+        return nullptr;
+    }
+
+    // Find a DB declaration by name — checks both "DB<N>" format and alias
+    PLCASM_DBDecl* findDBDecl(const char* name) {
+        // Check for "DB<N>" format (case-insensitive)
+        if ((name[0] == 'D' || name[0] == 'd') && (name[1] == 'B' || name[1] == 'b') && name[2] >= '0' && name[2] <= '9') {
+            int num = 0;
+            for (int i = 2; name[i] >= '0' && name[i] <= '9'; i++) {
+                num = num * 10 + (name[i] - '0');
+            }
+            return findDBDeclByNumber((u16)num);
+        }
+        return findDBDeclByAlias(name);
+    }
+
+    // Get the type size from a type name string
+    u8 getDBFieldTypeSize(const char* type_name) {
+        if (sharedStrEqI(type_name, "i8") || sharedStrEqI(type_name, "u8") || sharedStrEqI(type_name, "byte")) return 1;
+        if (sharedStrEqI(type_name, "i16") || sharedStrEqI(type_name, "u16")) return 2;
+        if (sharedStrEqI(type_name, "i32") || sharedStrEqI(type_name, "u32") || sharedStrEqI(type_name, "f32")) return 4;
+        if (sharedStrEqI(type_name, "i64") || sharedStrEqI(type_name, "u64") || sharedStrEqI(type_name, "f64")) return 8;
+        if (sharedStrEqI(type_name, "bool") || sharedStrEqI(type_name, "bit")) return 1;
+        return 0; // unknown
+    }
+
+    // Parse a .db<N> declaration block from tokens
+    // Format: .db<N> "Alias" = { field: type [= default] ... }
+    // Returns: number of tokens consumed, or -1 on error
+    int parseDBDeclaration(int start_idx) {
+        Token& directive = tokens[start_idx];
+
+        // Extract DB number from directive token (e.g., ".db1" -> 1, ".db10" -> 10)
+        const char* directive_str = directive.string.data;
+        int directive_len = directive.string.length;
+        if (directive_len < 4 || directive_str[0] != '.' ||
+            (directive_str[1] != 'd' && directive_str[1] != 'D') ||
+            (directive_str[2] != 'b' && directive_str[2] != 'B')) {
+            return -1;
+        }
+        int db_num = 0;
+        for (int i = 3; i < directive_len; i++) {
+            char c = directive_str[i];
+            if (c < '0' || c > '9') return -1;
+            db_num = db_num * 10 + (c - '0');
+        }
+        if (db_num == 0 || db_num > 65535) {
+            Serial.print(F("Error: DB number must be 1-65535 at "));
+            Serial.print(directive.line); Serial.print(F(":")); Serial.println(directive.column);
+            return -1;
+        }
+
+        // Check for duplicate DB number
+        if (findDBDeclByNumber((u16)db_num)) {
+            Serial.print(F("Error: duplicate DB")); Serial.print(db_num);
+            Serial.print(F(" at ")); Serial.print(directive.line);
+            Serial.print(F(":")); Serial.println(directive.column);
+            return -1;
+        }
+        if (db_decl_count >= PLCASM_MAX_DB_DECLS) {
+            Serial.print(F("Error: too many datablock declarations (max "));
+            Serial.print(PLCASM_MAX_DB_DECLS);
+            Serial.print(F(") at ")); Serial.print(directive.line);
+            Serial.print(F(":")); Serial.println(directive.column);
+            return -1;
+        }
+
+        PLCASM_DBDecl& decl = db_decls[db_decl_count];
+        decl.reset();
+        decl.db_number = (u16)db_num;
+
+        int idx = start_idx + 1;
+
+        // Parse optional alias: "AliasName"
+        // Expect: " AliasName "  (three tokens: quote, name, quote)
+        if (idx + 2 < token_count && tokens[idx] == "\"") {
+            Token& alias_tok = tokens[idx + 1];
+            Token& close_quote = tokens[idx + 2];
+            if (close_quote == "\"") {
+                int alen = alias_tok.string.length < 31 ? alias_tok.string.length : 31;
+                for (int j = 0; j < alen; j++) decl.alias[j] = alias_tok.string.data[j];
+                decl.alias[alen] = '\0';
+
+                // Check for duplicate alias
+                for (int d = 0; d < db_decl_count; d++) {
+                    if (db_decls[d].alias[0] != '\0' && sharedStrEqI(db_decls[d].alias, decl.alias)) {
+                        Serial.print(F("Error: duplicate DB alias '"));
+                        Serial.print(decl.alias);
+                        Serial.print(F("' at ")); Serial.print(directive.line);
+                        Serial.print(F(":")); Serial.println(directive.column);
+                        return -1;
+                    }
+                }
+                idx += 3; // skip quote, alias, quote
+            }
+        }
+
+        // Expect opening brace {   (the = is consumed by the tokenizer)
+        if (idx >= token_count || !(tokens[idx] == "{")) {
+            Serial.print(F("Error: expected '{' in DB declaration at "));
+            Serial.print(directive.line); Serial.print(F(":")); Serial.println(directive.column);
+            return -1;
+        }
+        idx++; // skip {
+
+        // Parse fields until closing brace }
+        u16 field_offset = 0;
+        while (idx < token_count) {
+            // Check for closing brace
+            if (tokens[idx] == "}") {
+                idx++; // skip }
+                break;
+            }
+
+            // Parse field: name : type [= default_value]
+            if (decl.field_count >= PLCASM_MAX_DB_FIELDS) {
+                Serial.print(F("Error: too many fields in DB (max "));
+                Serial.print(PLCASM_MAX_DB_FIELDS);
+                Serial.print(F(") at ")); Serial.print(tokens[idx].line);
+                Serial.print(F(":")); Serial.println(tokens[idx].column);
+                return -1;
+            }
+
+            // Field name
+            Token& field_name_tok = tokens[idx];
+            if (field_name_tok.type != TOKEN_KEYWORD) {
+                Serial.print(F("Error: expected field name in DB at "));
+                Serial.print(field_name_tok.line); Serial.print(F(":")); Serial.println(field_name_tok.column);
+                return -1;
+            }
+            idx++;
+
+            // Colon separator
+            if (idx >= token_count || !(tokens[idx] == ":")) {
+                Serial.print(F("Error: expected ':' after field name in DB at "));
+                Serial.print(field_name_tok.line); Serial.print(F(":")); Serial.println(field_name_tok.column);
+                return -1;
+            }
+            idx++;
+
+            // Type name
+            if (idx >= token_count) {
+                Serial.print(F("Error: expected type after ':' in DB at "));
+                Serial.print(field_name_tok.line); Serial.print(F(":")); Serial.println(field_name_tok.column);
+                return -1;
+            }
+            Token& type_tok = tokens[idx];
+            idx++;
+
+            // Build the field
+            PLCASM_DBField& field = decl.fields[decl.field_count];
+            int nlen = field_name_tok.string.length < 31 ? field_name_tok.string.length : 31;
+            for (int j = 0; j < nlen; j++) field.name[j] = field_name_tok.string.data[j];
+            field.name[nlen] = '\0';
+
+            int tlen = type_tok.string.length < 7 ? type_tok.string.length : 7;
+            for (int j = 0; j < tlen; j++) field.type_name[j] = type_tok.string.data[j];
+            field.type_name[tlen] = '\0';
+
+            field.type_size = getDBFieldTypeSize(field.type_name);
+            if (field.type_size == 0) {
+                Serial.print(F("Error: unknown type '"));
+                type_tok.string.print();
+                Serial.print(F("' in DB field at "));
+                Serial.print(type_tok.line); Serial.print(F(":")); Serial.println(type_tok.column);
+                return -1;
+            }
+
+            field.offset = field_offset;
+            field_offset += field.type_size;
+
+            // Check for optional default value (the '=' was already consumed by tokenizer)
+            // The next token would be a literal value or negative sign
+            field.has_default = false;
+            field.default_value.int_val = 0;
+
+            if (idx < token_count && !(tokens[idx] == "}") && !(tokens[idx] == ":")) {
+                // Check if next token looks like a value (not a field name followed by colon)
+                // Peek ahead to see if token after next is ':'  — if so, this is a new field
+                bool is_value = false;
+                if (tokens[idx].type == TOKEN_INTEGER || tokens[idx].type == TOKEN_REAL) {
+                    is_value = true;
+                } else if (tokens[idx] == "-" && idx + 1 < token_count &&
+                           (tokens[idx + 1].type == TOKEN_INTEGER || tokens[idx + 1].type == TOKEN_REAL)) {
+                    is_value = true;
+                } else if (tokens[idx].type == TOKEN_KEYWORD) {
+                    // Could be a field name for the next field — check if colon follows
+                    if (idx + 1 < token_count && tokens[idx + 1] == ":") {
+                        is_value = false; // It's the next field name
+                    }
+                }
+
+                if (is_value) {
+                    bool is_negative = false;
+                    if (tokens[idx] == "-") {
+                        is_negative = true;
+                        idx++;
+                    }
+                    Token& val_tok = tokens[idx];
+                    field.has_default = true;
+                    bool is_float_type = sharedStrEqI(field.type_name, "f32") || sharedStrEqI(field.type_name, "f64");
+                    if (is_float_type) {
+                        float fval = 0;
+                        if (!realFromToken(val_tok, fval)) {
+                            field.default_value.float_val = is_negative ? -fval : fval;
+                        }
+                    } else {
+                        int ival = 0;
+                        if (!intFromToken(val_tok, ival)) {
+                            field.default_value.int_val = is_negative ? -ival : ival;
+                        }
+                    }
+                    idx++;
+                }
+            }
+
+            decl.field_count++;
+        }
+
+        decl.total_size = field_offset;
+        db_decl_count++;
+
+        // Register as a UserStructType so property access resolution works
+        registerDBAsStructType(decl);
+
+        return idx - start_idx; // tokens consumed
+    }
+
+    // Register a DB declaration as a UserStructType in the global registry
+    void registerDBAsStructType(const PLCASM_DBDecl& decl) {
+        // Build the struct type name as "DB<N>" (canonical name)
+        char type_name[16];
+        type_name[0] = 'D'; type_name[1] = 'B';
+        int pos = 2;
+        u16 num = decl.db_number;
+        // Convert number to string
+        char num_buf[6];
+        int num_len = 0;
+        do {
+            num_buf[num_len++] = '0' + (num % 10);
+            num /= 10;
+        } while (num > 0);
+        for (int i = num_len - 1; i >= 0; i--) type_name[pos++] = num_buf[i];
+        type_name[pos] = '\0';
+
+        // Add the struct type with DB<N> name
+        UserStructType* ust = addUserStructType(type_name);
+        if (ust) {
+            for (int i = 0; i < decl.field_count && i < MAX_STRUCT_PROPERTIES; i++) {
+                StructProperty& prop = ust->fields[i];
+                int nlen = 0;
+                while (decl.fields[i].name[nlen] && nlen < 15) {
+                    prop.name[nlen] = decl.fields[i].name[nlen];
+                    nlen++;
+                }
+                prop.name[nlen] = '\0';
+                prop.offset = (u8)decl.fields[i].offset;
+                prop.type_size = decl.fields[i].type_size;
+                prop.bit_pos = 255; // No bit access
+                prop.readable = true;
+                prop.writable = true;
+            }
+            ust->field_count = decl.field_count < MAX_STRUCT_PROPERTIES ? decl.field_count : MAX_STRUCT_PROPERTIES;
+            ust->total_size = (u8)decl.total_size;
+        }
+
+        // If there's an alias, register another type with the alias name
+        if (decl.alias[0] != '\0') {
+            UserStructType* alias_ust = addUserStructType(decl.alias);
+            if (alias_ust) {
+                for (int i = 0; i < decl.field_count && i < MAX_STRUCT_PROPERTIES; i++) {
+                    StructProperty& prop = alias_ust->fields[i];
+                    int nlen = 0;
+                    while (decl.fields[i].name[nlen] && nlen < 15) {
+                        prop.name[nlen] = decl.fields[i].name[nlen];
+                        nlen++;
+                    }
+                    prop.name[nlen] = '\0';
+                    prop.offset = (u8)decl.fields[i].offset;
+                    prop.type_size = decl.fields[i].type_size;
+                    prop.bit_pos = 255;
+                    prop.readable = true;
+                    prop.writable = true;
+                }
+                alias_ust->field_count = decl.field_count < MAX_STRUCT_PROPERTIES ? decl.field_count : MAX_STRUCT_PROPERTIES;
+                alias_ust->total_size = (u8)decl.total_size;
+            }
+        }
     }
 
     // Symbol validation and parsing functions
@@ -976,7 +1342,7 @@ public:
         }
         prop_buf[prop_len] = '\0';
 
-        // Determine if base is a direct address (T0, C0) or a symbol name
+        // Determine if base is a direct address (T0, C0), DB reference, or a symbol name
         char prefix = base_buf[0];
         bool is_timer_prefix = (prefix == 'T' || prefix == 't');
         bool is_counter_prefix = (prefix == 'C' || prefix == 'c');
@@ -984,6 +1350,34 @@ public:
         u32 base_address = 0;
         bool is_timer = false;
         bool is_counter = false;
+
+        // Check for DataBlock reference first: "DB1.field" or "MyAlias.field"
+        PLCASM_DBDecl* db_decl = findDBDecl(base_buf);
+        if (db_decl) {
+            // Build the struct type name for lookup
+            char db_type_name[16];
+            db_type_name[0] = 'D'; db_type_name[1] = 'B';
+            int tpos = 2;
+            u16 dnum = db_decl->db_number;
+            char nbuf[6]; int nlen = 0;
+            do { nbuf[nlen++] = '0' + (dnum % 10); dnum /= 10; } while (dnum > 0);
+            for (int ni = nlen - 1; ni >= 0; ni--) db_type_name[tpos++] = nbuf[ni];
+            db_type_name[tpos] = '\0';
+
+            UserStructType* ust = findUserStructType(db_type_name);
+            if (ust) {
+                u32 db_base = (u32)db_decl->computed_offset;
+                PropertyResolution res = resolveUserStructProperty(ust, db_base, prop_buf);
+                if (res.success) {
+                    address = res.address;
+                    bit = res.is_bit ? res.bit_pos : 0;
+                    is_bit = res.is_bit;
+                    type_size = res.type_size;
+                    return false;
+                }
+            }
+            return true; // DB found but field not found
+        }
 
         if ((is_timer_prefix || is_counter_prefix) && base_buf[1] >= '0' && base_buf[1] <= '9') {
             // Direct address like T0, C5
@@ -2223,6 +2617,7 @@ public:
         built_bytecode_length = 0;
         built_bytecode_checksum = 0;
         emit_warnings = finalPass && !lintMode;
+        db_config_emitted = false; // Reset DB emission flag for this pass
         if (finalPass) ir_entry_count = 0; // Clear IR on final pass
 
         // IR flags and operand info to be set before _line_push
@@ -2292,6 +2687,33 @@ public:
             continue;
 
         int address_end = 0;
+
+        // First pass: parse DataBlock declarations (.db<N> directives)
+        // Must be parsed before symbol definitions since symbols may reference DB types
+        if (!finalPass || lintMode) {
+            db_decl_count = 0;
+            for (int i = 0; i < token_count; i++) {
+                Token& token = tokens[i];
+                // Check for .db<N> directive pattern
+                if (token.string.length >= 4 && token.string.data[0] == '.' &&
+                    (token.string.data[1] == 'd' || token.string.data[1] == 'D') &&
+                    (token.string.data[2] == 'b' || token.string.data[2] == 'B') &&
+                    token.string.data[3] >= '0' && token.string.data[3] <= '9') {
+                    int consumed = parseDBDeclaration(i);
+                    if (consumed < 0) return true; // Error
+                    i += consumed - 1; // -1 because loop increments
+                }
+            }
+
+            // Compute DB memory offsets (allocate from end of memory, downward)
+            // Same allocation order as the runtime: each DB gets space just below the DB table
+            u16 db_table_offset = (u16)(PLCRUNTIME_MAX_MEMORY_SIZE - (PLCRUNTIME_NUM_OF_DATABLOCKS * PLCRUNTIME_DB_ENTRY_SIZE));
+            u16 next_allocation = db_table_offset;
+            for (int i = 0; i < db_decl_count; i++) {
+                next_allocation -= db_decls[i].total_size;
+                db_decls[i].computed_offset = next_allocation;
+            }
+        }
 
         // First pass: parse symbol definitions ($$)
         // Also parse in lint mode to show symbol errors in the linter
@@ -2384,6 +2806,134 @@ public:
                 }
                 // If we get here, format was invalid - just skip the directive token
                 // Skip to end of line
+                while (i + 1 < token_count && tokens[i + 1].line == token.line) {
+                    i++;
+                }
+                continue;
+            }
+
+            // Handle .db<N> DataBlock declarations
+            // These were pre-parsed in the first pass — skip their tokens and emit CONFIG_DB + defaults on first encounter
+            if (token.string.length >= 4 && token.string.data[0] == '.' &&
+                (token.string.data[1] == 'd' || token.string.data[1] == 'D') &&
+                (token.string.data[2] == 'b' || token.string.data[2] == 'B') &&
+                token.string.data[3] >= '0' && token.string.data[3] <= '9') {
+
+                // Skip all tokens until we find the closing brace '}'
+                while (i < token_count && !(tokens[i] == "}")) i++;
+                // i now points to '}', loop will increment past it
+
+                // Emit CONFIG_DB + default value writes only once (on the first .db<N> directive)
+                // db_config_emitted is reset at the start of each build pass
+                if (!db_config_emitted && db_decl_count > 0) {
+                    db_config_emitted = true;
+
+                    // Emit CONFIG_DB bytecode for all declared DBs
+                    {
+                        ProgramLine& line = programLines[programLineCount];
+                        line.index = built_bytecode_length;
+                        line.refToken = &token;
+                        u8* bytecode = line.code;
+                        u8 offset = 0;
+                        bytecode[offset++] = CONFIG_DB;
+                        bytecode[offset++] = (u8)db_decl_count;
+                        for (int di = 0; di < db_decl_count; di++) {
+                            write_u16(bytecode + offset, db_decls[di].db_number);
+                            offset += 2;
+                            write_u16(bytecode + offset, db_decls[di].total_size);
+                            offset += 2;
+                        }
+                        line.size = offset;
+                        _line_push;
+                    }
+
+                    // Emit default value writes for each field that has a default
+                    for (int di = 0; di < db_decl_count; di++) {
+                        PLCASM_DBDecl& decl = db_decls[di];
+                        for (int fi = 0; fi < decl.field_count; fi++) {
+                            PLCASM_DBField& field = decl.fields[fi];
+                            if (!field.has_default) continue;
+
+                            u16 abs_addr = decl.computed_offset + field.offset;
+
+                            // Emit: <type>.const <value> / <type>.move_to <address>
+                            ProgramLine& line = programLines[programLineCount];
+                            line.index = built_bytecode_length;
+                            line.refToken = &token;
+                            u8* bytecode = line.code;
+                            u8 offset = 0;
+
+                            bool is_float = sharedStrEqI(field.type_name, "f32");
+                            if (is_float) {
+                                offset += InstructionCompiler::push_f32(bytecode + offset, field.default_value.float_val);
+                                bytecode[offset++] = MOVE_TO; bytecode[offset++] = type_f32;
+                                write_u16(bytecode + offset, abs_addr); offset += 2;
+                            } else if (field.type_size == 1) {
+                                offset += InstructionCompiler::push_u8(bytecode + offset, (u8)(field.default_value.int_val & 0xFF));
+                                bytecode[offset++] = MOVE_TO; bytecode[offset++] = type_u8;
+                                write_u16(bytecode + offset, abs_addr); offset += 2;
+                            } else if (field.type_size == 2) {
+                                offset += InstructionCompiler::push_i16(bytecode + offset, (i16)(field.default_value.int_val & 0xFFFF));
+                                bytecode[offset++] = MOVE_TO; bytecode[offset++] = type_i16;
+                                write_u16(bytecode + offset, abs_addr); offset += 2;
+                            } else if (field.type_size == 4) {
+                                offset += InstructionCompiler::push_u32(bytecode + offset, (u32)field.default_value.int_val);
+                                bytecode[offset++] = MOVE_TO; bytecode[offset++] = type_u32;
+                                write_u16(bytecode + offset, abs_addr); offset += 2;
+                            }
+                            // Skip 8-byte types for now (f64/i64 defaults are rare)
+                            if (offset > 0) {
+                                line.size = offset;
+                                _line_push;
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
+
+            // Handle .runtime_config_db directive for DataBlock declarations
+            // Format: .runtime_config_db <count> <db1_number> <db1_size> [<db2_number> <db2_size> ...]
+            if (token == ".runtime_config_db") {
+                // Parse: <count> followed by count pairs of <db_number> <size>
+                if (i + 1 < token_count) {
+                    Token& cnt_tok = tokens[i + 1];
+                    int db_count_val = 0;
+                    if (!intFromToken(cnt_tok, db_count_val) && db_count_val > 0 && db_count_val <= 255) {
+                        // Check we have enough tokens
+                        if (i + 1 + db_count_val * 2 < token_count) {
+                            ProgramLine& line = programLines[programLineCount];
+                            line.index = built_bytecode_length;
+                            line.refToken = &token;
+                            u8* bytecode = line.code;
+                            u8 offset = 0;
+                            bytecode[offset++] = CONFIG_DB;
+                            bytecode[offset++] = (u8)db_count_val;
+
+                            bool parse_ok = true;
+                            for (int di = 0; di < db_count_val; di++) {
+                                Token& db_num_tok = tokens[i + 2 + di * 2];
+                                Token& db_sz_tok = tokens[i + 3 + di * 2];
+                                int db_num_val = 0, db_sz_val = 0;
+                                if (intFromToken(db_num_tok, db_num_val) || intFromToken(db_sz_tok, db_sz_val)) {
+                                    parse_ok = false;
+                                    break;
+                                }
+                                write_u16(bytecode + offset, (u16)db_num_val);
+                                offset += 2;
+                                write_u16(bytecode + offset, (u16)db_sz_val);
+                                offset += 2;
+                            }
+
+                            if (parse_ok) {
+                                line.size = offset;
+                                i += 1 + db_count_val * 2; // Skip tokens consumed
+                                _line_push;
+                            }
+                        }
+                    }
+                }
+                // Skip to end of line if parsing failed
                 while (i + 1 < token_count && tokens[i + 1].line == token.line) {
                     i++;
                 }

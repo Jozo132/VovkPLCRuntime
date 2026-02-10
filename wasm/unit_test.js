@@ -38,6 +38,7 @@ import { runTests as runTimerTests } from './node-test/test_timers.js'
 import { runTests as runPLCScriptValidationTests } from './node-test/plcscript-tests/test_plcscript_validation.js'
 import { runTests as runSTValidationTests } from './node-test/st-tests/test_st_validation.js'
 import { runTests as runTypeInferenceTests } from './node-test/plcscript-tests/test_plcscript_type_inference.js'
+import { runTests as runDataBlockTests } from './node-test/plcasm-tests/test_datablock_plcasm.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -171,6 +172,11 @@ const testSuites = [
         name: 'PLCScript Type Inference',
         shortName: 'type-inference',
         run: runTypeInferenceTests
+    },
+    {
+        name: 'DataBlock PLCASM Tests',
+        shortName: 'datablock',
+        run: runDataBlockTests
     },
     {
         name: 'Memory Leak Detection',

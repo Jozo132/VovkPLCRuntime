@@ -23,8 +23,8 @@
 
 #ifdef __WASM__
 #define PLCRUNTIME_MAX_STACK_SIZE 1024
-#define PLCRUNTIME_MAX_MEMORY_SIZE 104857
-#define PLCRUNTIME_MAX_PROGRAM_SIZE 104857
+#define PLCRUNTIME_MAX_MEMORY_SIZE 65536
+#define PLCRUNTIME_MAX_PROGRAM_SIZE 65536
 #endif // __WASM__
 
 #ifndef PLCRUNTIME_NUM_OF_SYSTEMS
@@ -98,6 +98,7 @@
 #include "stack/runtime-stack.h"
 #include "arithmetics/runtime-arithmetics.h"
 #include "runtime-program.h"
+#include "runtime-datablock.h"
 #include "runtime-thread.h"
 #ifdef PLCRUNTIME_FFI_ENABLED
 #include "runtime-ffi.h"
@@ -147,6 +148,7 @@ enum SymbolArea : u8 {
     AREA_MARKER = 3,  // M - Markers
     AREA_TIMER = 4,  // T - Timers
     AREA_COUNTER = 5,  // C - Counters
+    AREA_DB = 6,  // DB - DataBlocks
 };
 
 // Data type identifiers for registered symbols
@@ -209,6 +211,7 @@ inline char getSymbolAreaChar(SymbolArea area) {
         case AREA_MARKER:  return 'M';
         case AREA_TIMER:   return 'T';
         case AREA_COUNTER: return 'C';
+        case AREA_DB:      return 'D';
         default:           return '?';
     }
 }
@@ -346,6 +349,15 @@ private:
             Serial.print(c2);
         }
     }
+    void printHexU16(u16 value) {
+        char c1, c2;
+        byteToHex((value >> 8) & 0xff, c1, c2);
+        Serial.print(c1);
+        Serial.print(c2);
+        byteToHex(value & 0xff, c1, c2);
+        Serial.print(c1);
+        Serial.print(c2);
+    }
 public:
     u32 system_offset = PLCRUNTIME_SYSTEM_OFFSET; // System offset in memory
     u32 input_offset = PLCRUNTIME_INPUT_OFFSET; // Input offset in memory
@@ -357,6 +369,7 @@ public:
     RuntimeStack stack = RuntimeStack(); // Active memory stack for PLC execution
     u8 memory[PLCRUNTIME_MAX_MEMORY_SIZE]; // PLC memory to manipulate
     RuntimeProgram program = RuntimeProgram(); // Active PLC program
+    DataBlockManager dataBlocks; // DataBlock lookup table manager
     u32 BR = 0; // Binary RLO branch stack (32 bits for up to 32 levels of parallel branch nesting)
     u32 last_cycle_time_us = 0;
     u32 min_cycle_time_us = 1000000000;
@@ -388,6 +401,10 @@ public:
         stack.format();
         program.format();
         formatMemory();
+        // Initialize DataBlock manager
+        u16 db_area_end = (u16)(counter_offset + PLCRUNTIME_NUM_OF_COUNTERS * PLCRUNTIME_COUNTER_STRUCT_SIZE);
+        dataBlocks.init(memory, PLCRUNTIME_MAX_MEMORY_SIZE, PLCRUNTIME_NUM_OF_DATABLOCKS, db_area_end);
+        dataBlocks.format();
 #ifdef PLCRUNTIME_EEPROM_STORAGE
         program.loadFromEEPROM();
 #endif // PLCRUNTIME_EEPROM_STORAGE
@@ -1292,6 +1309,10 @@ public:
         STDOUT_PRINT.print(counter_offset); STDOUT_PRINT.print(F(","));
         STDOUT_PRINT.print(PLCRUNTIME_NUM_OF_COUNTERS); STDOUT_PRINT.print(F(","));
         STDOUT_PRINT.print(PLCRUNTIME_COUNTER_STRUCT_SIZE); STDOUT_PRINT.print(F(","));
+        // DataBlock info
+        STDOUT_PRINT.print(dataBlocks.table_offset); STDOUT_PRINT.print(F(","));
+        STDOUT_PRINT.print(PLCRUNTIME_NUM_OF_DATABLOCKS); STDOUT_PRINT.print(F(","));
+        STDOUT_PRINT.print(PLCRUNTIME_DB_ENTRY_SIZE); STDOUT_PRINT.print(F(","));
         // Runtime flags (u16 as %04X)
         // Bit 0: Endianness (0 = big-endian, 1 = little-endian)
         // Bit 1: Strings enabled
@@ -1346,7 +1367,7 @@ public:
         }
 
         // If the serial port is available and the first character is not 'P' or 'M', skip the character
-        while (Serial.available() && Serial.peek() != 'R' && Serial.peek() != 'P' && Serial.peek() != 'M' && Serial.peek() != 'S' && Serial.peek() != 'T' && Serial.peek() != '?') Serial.read();
+        while (Serial.available() && Serial.peek() != 'R' && Serial.peek() != 'P' && Serial.peek() != 'M' && Serial.peek() != 'S' && Serial.peek() != 'T' && Serial.peek() != 'D' && Serial.peek() != '?') Serial.read();
         if (Serial.available() > 1 || Serial.peek() == '?') {
             // Command syntax:
             // <command>[<size>][<data>]<checksum>
@@ -1368,6 +1389,13 @@ public:
             //  - Symbol list:      'SL<u8>' (checksum) // Only available if PLCRUNTIME_VARIABLE_REGISTRATION_ENABLED is defined
             //  - Transport info:   'TI<u8>' (checksum) // Only available if PLCRUNTIME_TRANSPORT is defined
             //  - TC config:        'TC<u16><u16><u8>' (timer_offset, counter_offset, checksum) - Set timer/counter memory offsets
+            //  - DB info:          'DA<u8>' (checksum) - DataBlock area info (slot count, free space, active entries)
+            //  - DB declare:       'DC<u16><u16><u8>' (db_number, size, checksum) - Declare a new DataBlock
+            //  - DB remove:        'DD<u16><u8>' (db_number, checksum) - Delete (remove) a DataBlock
+            //  - DB read:          'DR<u16><u16><u16><u8>' (db_number, offset, size, checksum) - Read from DataBlock
+            //  - DB write:         'DW<u16><u16><u16><u8[]><u8>' (db_number, offset, size, data, checksum) - Write to DataBlock
+            //  - DB migrate:       'DM<u16><u16><u8>' (db_number, target_offset, checksum) - Migrate DataBlock to new location
+            //  - DB compact:       'DK<u8>' (checksum) - Compact all DataBlocks
             // If the program is downloaded and the checksum is invalid, the runtime will restart
             u8 cmd[2] = { 0, 0 };
             u32 size = 0;
@@ -1402,6 +1430,13 @@ public:
             bool symbol_list = cmd[0] == 'S' && cmd[1] == 'L';
             bool transport_info = cmd[0] == 'T' && cmd[1] == 'I';
             bool tc_config = cmd[0] == 'T' && cmd[1] == 'C';
+            bool db_info = cmd[0] == 'D' && cmd[1] == 'A';
+            bool db_declare = cmd[0] == 'D' && cmd[1] == 'C';
+            bool db_delete = cmd[0] == 'D' && cmd[1] == 'D';
+            bool db_read = cmd[0] == 'D' && cmd[1] == 'R';
+            bool db_write = cmd[0] == 'D' && cmd[1] == 'W';
+            bool db_migrate = cmd[0] == 'D' && cmd[1] == 'M';
+            bool db_compact = cmd[0] == 'D' && cmd[1] == 'K';
 
             if (ping) {
                 Serial.println(F("<VovkPLC>"));
@@ -1867,6 +1902,206 @@ public:
                 Serial.print(t_offset);
                 Serial.print(F(" C="));
                 Serial.println(c_offset);
+            }
+
+            // ================================================================
+            // DataBlock Serial API commands
+            // ================================================================
+
+            else if (db_info) {
+                // DA - DataBlock Area Info
+                // Read the checksum
+                checksum = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                if (checksum != checksum_calc) { Serial.println(F("Invalid checksum")); return; }
+
+                // Response: DA<slots:u16><active:u16><table_offset:u16><free_space:u16><lowest:u16>
+                Serial.print(F("DA"));
+                printHexU16(PLCRUNTIME_NUM_OF_DATABLOCKS);
+                printHexU16(dataBlocks.activeCount());
+                printHexU16(dataBlocks.table_offset);
+                printHexU16(dataBlocks.freeSpace());
+                printHexU16(dataBlocks.lowestAllocatedAddress());
+                // Print each active entry: {db:u16, offset:u16, size:u16}
+                for (u16 i = 0; i < PLCRUNTIME_NUM_OF_DATABLOCKS; i++) {
+                    u16 db_num, db_off, db_sz;
+                    dataBlocks.getEntry(i, db_num, db_off, db_sz);
+                    if (db_num != 0) {
+                        printHexU16(db_num);
+                        printHexU16(db_off);
+                        printHexU16(db_sz);
+                    }
+                }
+                Serial.println();
+            } else if (db_declare) {
+                // DC - DataBlock Declare: DC<db_number:u16><size:u16><checksum>
+                u16 db_num = (u16) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (db_num & 0xff));
+                db_num = db_num << 8 | (u16) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (db_num & 0xff));
+
+                u16 db_sz = (u16) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (db_sz & 0xff));
+                db_sz = db_sz << 8 | (u16) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (db_sz & 0xff));
+
+                checksum = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                if (checksum != checksum_calc) { Serial.println(F("Invalid checksum")); return; }
+
+                i16 slot = dataBlocks.declare(db_num, db_sz);
+                if (slot >= 0) {
+                    Serial.print(F("OK DB DECLARE "));
+                    Serial.print(db_num);
+                    Serial.print(F(" SIZE="));
+                    Serial.println(db_sz);
+                } else {
+                    Serial.println(F("ERR DB DECLARE FAILED"));
+                }
+            } else if (db_delete) {
+                // DD - DataBlock Delete: DD<db_number:u16><checksum>
+                u16 db_num = (u16) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (db_num & 0xff));
+                db_num = db_num << 8 | (u16) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (db_num & 0xff));
+
+                checksum = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                if (checksum != checksum_calc) { Serial.println(F("Invalid checksum")); return; }
+
+                if (dataBlocks.remove(db_num)) {
+                    Serial.print(F("OK DB DELETE "));
+                    Serial.println(db_num);
+                } else {
+                    Serial.println(F("ERR DB NOT FOUND"));
+                }
+            } else if (db_read) {
+                // DR - DataBlock Read: DR<db_number:u16><offset:u16><size:u16><checksum>
+                u16 db_num = (u16) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (db_num & 0xff));
+                db_num = db_num << 8 | (u16) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (db_num & 0xff));
+
+                u16 db_off = (u16) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (db_off & 0xff));
+                db_off = db_off << 8 | (u16) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (db_off & 0xff));
+
+                u16 db_sz = (u16) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (db_sz & 0xff));
+                db_sz = db_sz << 8 | (u16) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (db_sz & 0xff));
+
+                checksum = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                if (checksum != checksum_calc) { Serial.println(F("Invalid checksum")); return; }
+
+                // Temporary buffer for the read (reuse stack area for small reads)
+                u8 read_buf[64];
+                u16 remaining = db_sz;
+                u16 read_off = db_off;
+                bool ok = true;
+                Serial.print(F("OK "));
+                while (remaining > 0) {
+                    u16 chunk = remaining > 64 ? 64 : remaining;
+                    if (!dataBlocks.readDB(db_num, read_off, read_buf, chunk)) {
+                        ok = false;
+                        break;
+                    }
+                    char c1, c2;
+                    for (u16 j = 0; j < chunk; j++) {
+                        byteToHex(read_buf[j], c1, c2);
+                        Serial.print(c1);
+                        Serial.print(c2);
+                    }
+                    read_off += chunk;
+                    remaining -= chunk;
+                }
+                if (!ok) {
+                    Serial.println(F("\nERR DB READ OUT OF RANGE"));
+                } else {
+                    Serial.println();
+                }
+            } else if (db_write) {
+                // DW - DataBlock Write: DW<db_number:u16><offset:u16><size:u16><data:u8[]><checksum>
+                u16 db_num = (u16) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (db_num & 0xff));
+                db_num = db_num << 8 | (u16) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (db_num & 0xff));
+
+                u16 db_off = (u16) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (db_off & 0xff));
+                db_off = db_off << 8 | (u16) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (db_off & 0xff));
+
+                u16 db_sz = (u16) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (db_sz & 0xff));
+                db_sz = db_sz << 8 | (u16) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (db_sz & 0xff));
+
+                // Read the data and write directly to DB
+                u8 write_buf[64];
+                u16 remaining = db_sz;
+                u16 write_off = db_off;
+                bool write_ok = true;
+                while (remaining > 0) {
+                    u16 chunk = remaining > 64 ? 64 : remaining;
+                    for (u16 j = 0; j < chunk; j++) {
+                        write_buf[j] = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                        crc8_simple(checksum_calc, write_buf[j]);
+                    }
+                    if (!dataBlocks.writeDB(db_num, write_off, write_buf, chunk)) {
+                        write_ok = false;
+                        // Still need to drain remaining serial data
+                        remaining -= chunk;
+                        while (remaining > 0) {
+                            u16 c = remaining > 64 ? 64 : remaining;
+                            for (u16 j = 0; j < c; j++) {
+                                serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                            }
+                            remaining -= c;
+                        }
+                        break;
+                    }
+                    write_off += chunk;
+                    remaining -= chunk;
+                }
+
+                checksum = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                if (checksum != checksum_calc) { Serial.println(F("Invalid checksum")); return; }
+
+                if (write_ok) {
+                    Serial.println(F("OK DB WRITE"));
+                } else {
+                    Serial.println(F("ERR DB WRITE OUT OF RANGE"));
+                }
+            } else if (db_migrate) {
+                // DM - DataBlock Migrate: DM<db_number:u16><target_offset:u16><checksum>
+                u16 db_num = (u16) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (db_num & 0xff));
+                db_num = db_num << 8 | (u16) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (db_num & 0xff));
+
+                u16 target = (u16) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (target & 0xff));
+                target = target << 8 | (u16) serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, (target & 0xff));
+
+                checksum = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                if (checksum != checksum_calc) { Serial.println(F("Invalid checksum")); return; }
+
+                if (dataBlocks.migrate(db_num, target)) {
+                    Serial.print(F("OK DB MIGRATE "));
+                    Serial.print(db_num);
+                    Serial.print(F(" TO "));
+                    Serial.println(target);
+                } else {
+                    Serial.println(F("ERR DB MIGRATE FAILED"));
+                }
+            } else if (db_compact) {
+                // DK - DataBlock Compact
+                checksum = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                if (checksum != checksum_calc) { Serial.println(F("Invalid checksum")); return; }
+
+                u16 new_lowest = dataBlocks.compact();
+                Serial.print(F("OK DB COMPACT LOWEST="));
+                Serial.println(new_lowest);
             }
         }
 #endif // PLCRUNTIME_SERIAL_ENABLED
@@ -2405,7 +2640,23 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
             return UNKNOWN_INSTRUCTION;
 #endif // PLCRUNTIME_FFI_ENABLED
 
-        // Runtime configuration instruction
+        // Runtime configuration instructions
+        case CONFIG_DB: {
+            // Format: CONFIG_DB <count:u8> { <db_number:u16> <size:u16> }...
+            if (index >= prog_size) return PROGRAM_SIZE_EXCEEDED;
+            u8 db_count = program[index++];
+            if (index + (u32)db_count * 4 > prog_size) return PROGRAM_SIZE_EXCEEDED;
+            for (u8 di = 0; di < db_count; di++) {
+                u16 db_num = read_u16(program + index);
+                u16 db_sz = read_u16(program + index + 2);
+                index += 4;
+                // Only declare if not already declared (idempotent on repeated first-cycle)
+                if (dataBlocks.findSlot(db_num) < 0) {
+                    dataBlocks.declare(db_num, db_sz);
+                }
+            }
+            return STATUS_SUCCESS;
+        }
         case CONFIG_TC: {
             // Format: CONFIG_TC <timer_offset:u16> <timer_count:u8> <counter_offset:u16> <counter_count:u8>
             if (index + 6 > prog_size) return PROGRAM_SIZE_EXCEEDED;

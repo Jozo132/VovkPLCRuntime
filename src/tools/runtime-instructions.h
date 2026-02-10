@@ -412,7 +412,8 @@ enum PLCRuntimeInstructionSet {
     CSTR_EQ,                // Compare cstr with str -> push bool: [ CSTR_EQ, cstr_type, str_type, str_addr, u16 prog_offset ]
     CSTR_CAT,               // Concat inline cstr to mutable str: [ CSTR_CAT, dest_type, dest_addr, u16 len, char data... ]
 
-    // Runtime configuration instruction
+    // Runtime configuration instructions
+    CONFIG_DB = 0xFB,   // Configure DataBlock: [ CONFIG_DB, u8 count, { u16 db_number, u16 size }... ] - 1 + count*4 bytes
     CONFIG_TC = 0xFC,   // Configure Timer/Counter offsets: [ CONFIG_TC, u16 timer_offset, u8 timer_count, u16 counter_offset, u8 counter_count ] - 7 bytes
 
     // Metadata instructions (for decompilation and debugging)
