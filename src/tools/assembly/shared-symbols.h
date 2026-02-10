@@ -502,6 +502,166 @@ inline PropertyResolution resolveUserStructProperty(const UserStructType* struct
 }
 
 // ============================================================================
+// Global DataBlock Declaration Registry
+// ============================================================================
+// Shared across all compilers (PLCASM, Project, STL, Ladder, etc.)
+// Duplicate DB numbers are globally forbidden.
+
+#define GLOBAL_MAX_DB_FIELDS 16
+#define GLOBAL_MAX_DB_DECLS  PLCRUNTIME_NUM_OF_DATABLOCKS
+
+struct GlobalDBField {
+    char name[32];       // Field name (e.g., "speed")
+    char type_name[8];   // Type string (e.g., "i16", "f32")
+    u8   type_size;      // Size in bytes (1, 2, 4, 8)
+    u16  offset;         // Byte offset within the DB (computed during parse)
+    bool has_default;    // Whether a default value was specified
+    union {
+        i32 int_val;     // Default for integer types (i8/u8/i16/u16/i32/u32)
+        float float_val; // Default for f32
+    } default_value;
+
+    void reset() {
+        name[0] = '\0';
+        type_name[0] = '\0';
+        type_size = 0;
+        offset = 0;
+        has_default = false;
+        default_value.int_val = 0;
+    }
+};
+
+struct GlobalDBDecl {
+    u16  db_number;                             // DB number (1, 2, ...)
+    char alias[32];                             // Optional alias name (e.g., "Motor")
+    GlobalDBField fields[GLOBAL_MAX_DB_FIELDS];
+    int  field_count;                           // Number of fields
+    u16  total_size;                            // Total size in bytes (sum of field sizes)
+    u16  computed_offset;                       // Absolute memory offset (filled during bytecode emission)
+
+    void reset() {
+        db_number = 0;
+        alias[0] = '\0';
+        field_count = 0;
+        total_size = 0;
+        computed_offset = 0;
+        for (int i = 0; i < GLOBAL_MAX_DB_FIELDS; i++) {
+            fields[i].reset();
+        }
+    }
+};
+
+// Global storage
+static GlobalDBDecl globalDBDecls[GLOBAL_MAX_DB_DECLS];
+static int globalDBDeclCount = 0;
+
+inline void resetGlobalDBDecls() {
+    globalDBDeclCount = 0;
+    for (int i = 0; i < GLOBAL_MAX_DB_DECLS; i++) {
+        globalDBDecls[i].reset();
+    }
+}
+
+inline GlobalDBDecl* findGlobalDBDeclByNumber(u16 db_number) {
+    for (int i = 0; i < globalDBDeclCount; i++) {
+        if (globalDBDecls[i].db_number == db_number) return &globalDBDecls[i];
+    }
+    return nullptr;
+}
+
+inline GlobalDBDecl* findGlobalDBDeclByAlias(const char* alias) {
+    for (int i = 0; i < globalDBDeclCount; i++) {
+        if (globalDBDecls[i].alias[0] != '\0' && sharedStrEqI(globalDBDecls[i].alias, alias))
+            return &globalDBDecls[i];
+    }
+    return nullptr;
+}
+
+// Find a DB declaration by name — checks both "DB<N>" format and alias
+inline GlobalDBDecl* findGlobalDBDecl(const char* name) {
+    // Check for "DB<N>" format (case-insensitive)
+    if ((name[0] == 'D' || name[0] == 'd') && (name[1] == 'B' || name[1] == 'b') && name[2] >= '0' && name[2] <= '9') {
+        int num = 0;
+        for (int i = 2; name[i] >= '0' && name[i] <= '9'; i++) {
+            num = num * 10 + (name[i] - '0');
+        }
+        return findGlobalDBDeclByNumber((u16)num);
+    }
+    return findGlobalDBDeclByAlias(name);
+}
+
+// Allocate a new slot in the global registry and return a pointer to it.
+// Returns nullptr if the registry is full.
+// Does NOT check for duplicates — caller must check first.
+inline GlobalDBDecl* allocGlobalDBDecl() {
+    if (globalDBDeclCount >= GLOBAL_MAX_DB_DECLS) return nullptr;
+    GlobalDBDecl& decl = globalDBDecls[globalDBDeclCount++];
+    decl.reset();
+    return &decl;
+}
+
+// Register a global DB declaration as UserStructType(s) in the global struct type registry
+inline void registerGlobalDBAsStructType(const GlobalDBDecl& decl) {
+    // Build the canonical "DB<N>" name
+    char type_name[16];
+    type_name[0] = 'D'; type_name[1] = 'B';
+    int tpos = 2;
+    u16 num = decl.db_number;
+    char num_buf[6]; int num_len = 0;
+    do { num_buf[num_len++] = '0' + (num % 10); num /= 10; } while (num > 0);
+    for (int i = num_len - 1; i >= 0; i--) type_name[tpos++] = num_buf[i];
+    type_name[tpos] = '\0';
+
+    // Register with canonical "DB<N>" name
+    UserStructType* ust = addUserStructType(type_name);
+    if (ust) {
+        for (int i = 0; i < decl.field_count && i < MAX_STRUCT_PROPERTIES; i++) {
+            StructProperty& prop = ust->fields[i];
+            int ni = 0;
+            while (decl.fields[i].name[ni] && ni < 15) { prop.name[ni] = decl.fields[i].name[ni]; ni++; }
+            prop.name[ni] = '\0';
+            prop.offset = (u8)decl.fields[i].offset;
+            prop.type_size = decl.fields[i].type_size;
+            prop.bit_pos = 255;
+            prop.readable = true;
+            prop.writable = true;
+        }
+        ust->field_count = decl.field_count < MAX_STRUCT_PROPERTIES ? decl.field_count : MAX_STRUCT_PROPERTIES;
+        ust->total_size = (u8)decl.total_size;
+    }
+
+    // If there's an alias, register another type with the alias name
+    if (decl.alias[0] != '\0') {
+        UserStructType* alias_ust = addUserStructType(decl.alias);
+        if (alias_ust) {
+            for (int i = 0; i < decl.field_count && i < MAX_STRUCT_PROPERTIES; i++) {
+                StructProperty& prop = alias_ust->fields[i];
+                int ni = 0;
+                while (decl.fields[i].name[ni] && ni < 15) { prop.name[ni] = decl.fields[i].name[ni]; ni++; }
+                prop.name[ni] = '\0';
+                prop.offset = (u8)decl.fields[i].offset;
+                prop.type_size = decl.fields[i].type_size;
+                prop.bit_pos = 255;
+                prop.readable = true;
+                prop.writable = true;
+            }
+            alias_ust->field_count = decl.field_count < MAX_STRUCT_PROPERTIES ? decl.field_count : MAX_STRUCT_PROPERTIES;
+            alias_ust->total_size = (u8)decl.total_size;
+        }
+    }
+}
+
+// Get the type size from a type name string (for DB field parsing)
+inline u8 globalDBFieldTypeSize(const char* type_name) {
+    if (sharedStrEqI(type_name, "i8") || sharedStrEqI(type_name, "u8") || sharedStrEqI(type_name, "byte")) return 1;
+    if (sharedStrEqI(type_name, "i16") || sharedStrEqI(type_name, "u16")) return 2;
+    if (sharedStrEqI(type_name, "i32") || sharedStrEqI(type_name, "u32") || sharedStrEqI(type_name, "f32")) return 4;
+    if (sharedStrEqI(type_name, "i64") || sharedStrEqI(type_name, "u64") || sharedStrEqI(type_name, "f64")) return 8;
+    if (sharedStrEqI(type_name, "bool") || sharedStrEqI(type_name, "bit")) return 1;
+    return 0; // unknown
+}
+
+// ============================================================================
 // Global Shared Symbol Table Instance
 // ============================================================================
 

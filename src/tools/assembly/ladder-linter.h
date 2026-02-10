@@ -103,7 +103,7 @@ public:
         // Check shared symbol table  
         if (sharedSymbols.findSymbol(addr)) return true;
         
-        // Check for struct property access (e.g., "myStruct.field")
+        // Check for struct property access (e.g., "myStruct.field", "DB1.speed", "Motor.position")
         int dotPos = -1;
         for (int i = 0; addr[i]; i++) {
             if (addr[i] == '.') {
@@ -119,18 +119,24 @@ public:
                 baseName[i] = addr[i];
             }
             baseName[dotPos] = '\0';
+            const char* propName = addr + dotPos + 1;
             
-            // Check if base symbol exists in shared symbols
+            // Check if base symbol exists in shared symbols (symbol-bound struct)
             SharedSymbol* baseSym = sharedSymbols.findSymbol(baseName);
             if (baseSym) {
-                // Check if it's a user struct type
                 UserStructType* userStruct = findUserStructType(baseSym->type);
                 if (userStruct) {
-                    // Verify the property exists
-                    const char* propName = addr + dotPos + 1;
                     if (userStruct->findField(propName)) {
-                        return true;  // Valid struct.property
+                        return true;  // Valid struct.property via symbol
                     }
+                }
+            }
+            
+            // Check if base is a known UserStructType directly (e.g., DB alias "Motor", DB number "DB1")
+            UserStructType* directStruct = findUserStructType(baseName);
+            if (directStruct) {
+                if (directStruct->findField(propName)) {
+                    return true;  // Valid DB/struct property access
                 }
             }
         }
@@ -478,6 +484,13 @@ public:
             first == 'T' || first == 't' || first == 'C' || first == 'c') {
             // Check if next char is a digit (raw address) or not (could be symbol)
             if (addr[1] >= '0' && addr[1] <= '9') return true;
+            // Typed M-addresses: MB (byte), MW (word), MD (dword)
+            if (first == 'M' || first == 'm') {
+                char second = addr[1];
+                if (second == 'B' || second == 'b' || second == 'W' || second == 'w' || second == 'D' || second == 'd') {
+                    if (addr[2] >= '0' && addr[2] <= '9') return true;
+                }
+            }
         }
         // Pure numeric address
         if (first >= '0' && first <= '9') return true;

@@ -106,6 +106,8 @@
 #define PROJECT_MAX_OUTPUT_SIZE 65536
 #define PROJECT_MAX_SOURCE_SIZE 65536
 #define PROJECT_MAX_ERROR_LEN 512
+// Project-level DataBlock declarations now use the global DB registry
+// (GlobalDBDecl, GlobalDBField) from shared-symbols.h
 
 // Memory area definition
 struct MemoryArea {
@@ -319,11 +321,13 @@ public:
     u32 timer_offset;                  // Calculated timer offset (after M area)
     u32 counter_offset;                // Calculated counter offset (after T area)
 
-    // DataBlock tracking
+    // DataBlock tracking (MEMORY section — size-only DB entries, backwards compatible)
     static const int MAX_DATABLOCKS = PLCRUNTIME_NUM_OF_DATABLOCKS;
     struct DBEntry { u16 db_number; u16 size; };
     DBEntry db_entries[PLCRUNTIME_NUM_OF_DATABLOCKS];
-    int db_count;                      // Number of DataBlocks declared in the project
+    int db_count;                      // Number of DataBlocks from MEMORY section
+
+    // Project-level DataBlock declarations use global registry (globalDBDecls in shared-symbols.h)
 
     // Problems array for multiple error tracking
     LinterProblem problems[MAX_LINT_PROBLEMS];
@@ -465,12 +469,15 @@ public:
         timer_offset = 0;
         counter_offset = 0;
 
-        // Reset DataBlock tracking
+        // Reset DataBlock tracking (MEMORY section)
         for (int i = 0; i < MAX_DATABLOCKS; i++) {
             db_entries[i].db_number = 0;
             db_entries[i].size = 0;
         }
         db_count = 0;
+
+        // Reset global DataBlock declarations (shared across all compilers)
+        resetGlobalDBDecls();
 
         // Reset child compilers' symbol tables
         plcasm_compiler.symbol_count = 0;
@@ -1889,6 +1896,289 @@ public:
         return !has_error;
     }
 
+    // ============ DATABLOCKS Section Parser ============
+    // Parses project-level DataBlock declarations with full field definitions.
+    // These are emitted as .db<N> PLCASM directives into the startup block,
+    // which the PLCASM compiler then handles (CONFIG_DB opcode, memory allocation,
+    // default value writes, and property access resolution).
+    //
+    // Syntax:
+    //   DATABLOCKS
+    //     DB<N> ["Alias"] {
+    //       field_name: type [= default_value]
+    //       ...
+    //     }
+    //     ...
+    //   END_DATABLOCKS
+    //
+    // Example:
+    //   DATABLOCKS
+    //     DB1 "Motor" {
+    //       speed:    i16 = 100
+    //       position: f32 = 0
+    //       status:   u8
+    //     }
+    //     DB2 "Sensor" {
+    //       value:     f32 = 0.0
+    //       threshold: i16 = 500
+    //     }
+    //   END_DATABLOCKS
+
+    bool parseDatablocks() {
+        skipComments();
+
+        if (!matchKeyword("DATABLOCKS")) {
+            // DATABLOCKS section is optional
+            return true;
+        }
+
+        while (pos < source_length && !has_error) {
+            skipComments();
+
+            if (matchKeyword("END_DATABLOCKS")) {
+                break;
+            }
+
+            // Expect "DB<N>" — read a word and parse it
+            char word[32];
+            if (!readWord(word, sizeof(word))) {
+                setError("Expected DB<N> declaration or END_DATABLOCKS");
+                return false;
+            }
+
+            // Validate it starts with "DB" (case-insensitive)
+            if (!((word[0] == 'D' || word[0] == 'd') && (word[1] == 'B' || word[1] == 'b') && word[2] >= '0' && word[2] <= '9')) {
+                char err[128];
+                int ei = 0;
+                const char* msg = "Expected DB<N> declaration, got '";
+                while (*msg && ei < 80) err[ei++] = *msg++;
+                int wi = 0;
+                while (word[wi] && ei < 110) err[ei++] = word[wi++];
+                err[ei++] = '\'';
+                err[ei] = '\0';
+                setError(err);
+                return false;
+            }
+
+            // Parse DB number from word
+            int db_num = 0;
+            for (int i = 2; word[i] >= '0' && word[i] <= '9'; i++) {
+                db_num = db_num * 10 + (word[i] - '0');
+            }
+            if (db_num == 0 || db_num > 65535) {
+                setError("DB number must be 1-65535");
+                return false;
+            }
+
+            // Check for duplicate DB number (across both MEMORY and DATABLOCKS)
+            for (int i = 0; i < db_count; i++) {
+                if (db_entries[i].db_number == (u16)db_num) {
+                    setError("Duplicate DB number (conflicts with MEMORY section DB)");
+                    return false;
+                }
+            }
+            if (findGlobalDBDeclByNumber((u16)db_num)) {
+                setError("Duplicate DB number in DATABLOCKS section");
+                return false;
+            }
+
+            GlobalDBDecl* decl_ptr = allocGlobalDBDecl();
+            if (!decl_ptr) {
+                setError("Too many DataBlock declarations (max 16)");
+                return false;
+            }
+
+            GlobalDBDecl& decl = *decl_ptr;
+            decl.reset();
+            decl.db_number = (u16)db_num;
+
+            skipWhitespaceNotNewline();
+
+            // Parse optional alias: quoted string "Alias"
+            if (peek() == '"') {
+                advance(); // skip opening quote
+                int ai = 0;
+                while (pos < source_length && peek() != '"' && ai < 31) {
+                    decl.alias[ai++] = peek();
+                    advance();
+                }
+                decl.alias[ai] = '\0';
+                if (peek() == '"') advance(); // skip closing quote
+                skipWhitespaceNotNewline();
+
+                // Check for duplicate alias
+                for (int i = 0; i < globalDBDeclCount - 1; i++) {
+                    if (globalDBDecls[i].alias[0] != '\0' && strEqI(globalDBDecls[i].alias, decl.alias)) {
+                        char err[128];
+                        int ei = 0;
+                        const char* msg = "Duplicate DB alias '";
+                        while (*msg && ei < 60) err[ei++] = *msg++;
+                        int ni = 0;
+                        while (decl.alias[ni] && ei < 90) err[ei++] = decl.alias[ni++];
+                        err[ei++] = '\'';
+                        err[ei] = '\0';
+                        setError(err);
+                        return false;
+                    }
+                }
+            }
+
+            // Expect opening brace {
+            skipWhitespaceNotNewline();
+            if (peek() != '{') {
+                setError("Expected '{' in DB declaration");
+                return false;
+            }
+            advance();
+
+            // Parse fields until closing brace }
+            u16 field_offset = 0;
+            while (pos < source_length && !has_error) {
+                skipComments();
+
+                if (peek() == '}') {
+                    advance();
+                    break;
+                }
+
+                if (decl.field_count >= GLOBAL_MAX_DB_FIELDS) {
+                    setError("Too many fields in DB declaration (max 16)");
+                    return false;
+                }
+
+                GlobalDBField& field = decl.fields[decl.field_count];
+                field.reset();
+
+                // Read field name
+                char fieldName[32];
+                if (!readWord(fieldName, sizeof(fieldName))) {
+                    setError("Expected field name in DB declaration");
+                    return false;
+                }
+
+                // Copy field name
+                int ni = 0;
+                while (fieldName[ni] && ni < 31) { field.name[ni] = fieldName[ni]; ni++; }
+                field.name[ni] = '\0';
+
+                // Expect ':'
+                skipWhitespaceNotNewline();
+                if (peek() != ':') {
+                    setError("Expected ':' after field name");
+                    return false;
+                }
+                advance();
+                skipWhitespaceNotNewline();
+
+                // Read field type
+                char fieldType[16];
+                if (!readWord(fieldType, sizeof(fieldType))) {
+                    setError("Expected field type after ':'");
+                    return false;
+                }
+
+                // Copy type name
+                int ti = 0;
+                while (fieldType[ti] && ti < 7) { field.type_name[ti] = fieldType[ti]; ti++; }
+                field.type_name[ti] = '\0';
+
+                // Determine type size
+                if (strEqI(fieldType, "bool") || strEqI(fieldType, "bit")) {
+                    field.type_size = 1;
+                } else if (strEqI(fieldType, "i8") || strEqI(fieldType, "u8") || strEqI(fieldType, "byte")) {
+                    field.type_size = 1;
+                } else if (strEqI(fieldType, "i16") || strEqI(fieldType, "u16")) {
+                    field.type_size = 2;
+                } else if (strEqI(fieldType, "i32") || strEqI(fieldType, "u32") || strEqI(fieldType, "f32")) {
+                    field.type_size = 4;
+                } else if (strEqI(fieldType, "i64") || strEqI(fieldType, "u64") || strEqI(fieldType, "f64")) {
+                    field.type_size = 8;
+                } else {
+                    char err[64];
+                    int ei = 0;
+                    const char* msg = "Unknown field type: ";
+                    while (*msg && ei < 40) err[ei++] = *msg++;
+                    int fi = 0;
+                    while (fieldType[fi] && ei < 60) err[ei++] = fieldType[fi++];
+                    err[ei] = '\0';
+                    setError(err);
+                    return false;
+                }
+
+                field.offset = field_offset;
+                field_offset += field.type_size;
+
+                // Check for optional default value: = <value>
+                skipWhitespaceNotNewline();
+                if (peek() == '=') {
+                    advance();
+                    skipWhitespaceNotNewline();
+
+                    field.has_default = true;
+                    bool is_negative = false;
+                    if (peek() == '-') {
+                        is_negative = true;
+                        advance();
+                    }
+
+                    // Read the value
+                    char valBuf[32];
+                    if (!readWord(valBuf, sizeof(valBuf))) {
+                        setError("Expected default value after '='");
+                        return false;
+                    }
+
+                    bool is_float_type = strEqI(field.type_name, "f32") || strEqI(field.type_name, "f64");
+                    if (is_float_type) {
+                        // Parse float
+                        float fval = 0;
+                        int vi = 0;
+                        // Simple float parser: integer part
+                        while (valBuf[vi] >= '0' && valBuf[vi] <= '9') {
+                            fval = fval * 10 + (valBuf[vi] - '0');
+                            vi++;
+                        }
+                        if (valBuf[vi] == '.') {
+                            vi++;
+                            float frac = 0.1f;
+                            while (valBuf[vi] >= '0' && valBuf[vi] <= '9') {
+                                fval += (valBuf[vi] - '0') * frac;
+                                frac *= 0.1f;
+                                vi++;
+                            }
+                        }
+                        field.default_value.float_val = is_negative ? -fval : fval;
+                    } else {
+                        // Parse integer
+                        int ival = 0;
+                        int vi = 0;
+                        while (valBuf[vi] >= '0' && valBuf[vi] <= '9') {
+                            ival = ival * 10 + (valBuf[vi] - '0');
+                            vi++;
+                        }
+                        field.default_value.int_val = is_negative ? -ival : ival;
+                    }
+                }
+
+                decl.field_count++;
+
+                // Skip optional trailing semicolon or comma
+                skipWhitespaceNotNewline();
+                if (peek() == ';' || peek() == ',') advance();
+            }
+
+            decl.total_size = field_offset;
+
+            // Register as UserStructType immediately so STL/PLCScript/Ladder can resolve property access
+            registerGlobalDBAsStructType(decl);
+        }
+
+        return !has_error;
+    }
+
+    // Register a project-level DB declaration as UserStructType(s) in the global registry
+    // registerProjectDBAsStructType removed — uses registerGlobalDBAsStructType() from shared-symbols.h
+
     bool parseSymbols() {
         skipComments();
 
@@ -2658,6 +2948,51 @@ public:
             appendToCombinedPLCASM("\n\n");
         }
 
+        // Generate project-level DataBlock declarations as .db<N> PLCASM directives
+        // The PLCASM compiler handles: CONFIG_DB, memory allocation, defaults, and property access
+        if (globalDBDeclCount > 0) {
+            appendToCombinedPLCASM("// Project-level DataBlock declarations\n");
+            for (int d = 0; d < globalDBDeclCount; d++) {
+                const GlobalDBDecl& decl = globalDBDecls[d];
+
+                // Emit: .db<N> ["Alias"] = { field: type [= default] ... }
+                appendToCombinedPLCASM(".db");
+                appendCombinedPLCASMInt(decl.db_number);
+
+                // Emit alias if present
+                if (decl.alias[0] != '\0') {
+                    appendToCombinedPLCASM(" \"");
+                    appendToCombinedPLCASM(decl.alias);
+                    appendToCombinedPLCASM("\"");
+                }
+
+                appendToCombinedPLCASM(" {\n");
+
+                // Emit fields
+                for (int f = 0; f < decl.field_count; f++) {
+                    const GlobalDBField& field = decl.fields[f];
+                    appendToCombinedPLCASM("  ");
+                    appendToCombinedPLCASM(field.name);
+                    appendToCombinedPLCASM(": ");
+                    appendToCombinedPLCASM(field.type_name);
+
+                    if (field.has_default) {
+                        appendToCombinedPLCASM(" = ");
+                        bool is_float = strEqI(field.type_name, "f32") || strEqI(field.type_name, "f64");
+                        if (is_float) {
+                            appendCombinedPLCASMFloat(field.default_value.float_val);
+                        } else {
+                            appendCombinedPLCASMInt(field.default_value.int_val);
+                        }
+                    }
+
+                    appendToCombinedPLCASM("\n");
+                }
+
+                appendToCombinedPLCASM("}\n\n");
+            }
+        }
+
         appendToCombinedPLCASM("// Write default values\n");
 
         bool has_content = false;
@@ -2893,6 +3228,38 @@ public:
             buf[j] = buf[i - 1 - j];
             buf[i - 1 - j] = t;
         }
+        appendToCombinedPLCASM(buf);
+    }
+
+    void appendCombinedPLCASMFloat(float v) {
+        char buf[32];
+        int i = 0;
+        if (v < 0) { buf[i++] = '-'; v = -v; }
+        // Integer part
+        int int_part = (int)v;
+        float frac_part = v - (float)int_part;
+        // Convert integer part
+        char ibuf[16];
+        int ilen = 0;
+        if (int_part == 0) ibuf[ilen++] = '0';
+        else {
+            while (int_part > 0) {
+                ibuf[ilen++] = '0' + (int_part % 10);
+                int_part /= 10;
+            }
+        }
+        for (int j = ilen - 1; j >= 0; j--) buf[i++] = ibuf[j];
+        buf[i++] = '.';
+        // Fractional part (6 digits, trim trailing zeros, keep at least 1)
+        for (int d = 0; d < 6; d++) {
+            frac_part *= 10;
+            int digit = (int)frac_part;
+            buf[i++] = '0' + digit;
+            frac_part -= digit;
+        }
+        // Trim trailing zeros but keep at least one decimal digit
+        while (i > 2 && buf[i - 1] == '0' && buf[i - 2] != '.') i--;
+        buf[i] = '\0';
         appendToCombinedPLCASM(buf);
     }
 
@@ -3404,6 +3771,7 @@ public:
         if (!parseFlash()) return false;
         if (!parseFlags()) return false;   // Optional FLAGS section (fallback if no API flags)
         if (!parseTypes()) return false;
+        if (!parseDatablocks()) return false; // Optional DATABLOCKS section (project-level DB declarations)
         if (!parseSymbols()) return false;
         
         // Scan source for T/C references before parsing blocks

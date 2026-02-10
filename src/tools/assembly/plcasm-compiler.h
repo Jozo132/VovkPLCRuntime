@@ -815,47 +815,8 @@ struct Symbol {
 // DataBlock Declaration (compile-time only)
 // ============================================================================
 // Tracks DB definitions parsed from .db<N> directives in PLCASM.
-// These are used to register UserStructTypes and emit CONFIG_DB + default values.
-
-#define PLCASM_MAX_DB_FIELDS 16 // Max fields per datablock
-#define PLCASM_MAX_DB_DECLS  PLCRUNTIME_NUM_OF_DATABLOCKS // Max datablock declarations
-
-struct PLCASM_DBField {
-    char name[32];       // Field name (e.g., "myInteger")
-    char type_name[8];   // Type string (e.g., "i16", "f32")
-    u8   type_size;      // Size in bytes (1, 2, 4, 8)
-    u16  offset;         // Byte offset within the DB
-    bool has_default;    // Whether a default value was specified
-    union {
-        i32 int_val;     // Default for integer types (i8/u8/i16/u16/i32/u32)
-        float float_val; // Default for f32
-    } default_value;
-};
-
-struct PLCASM_DBDecl {
-    u16  db_number;                         // DB number (1, 2, ...)
-    char alias[32];                         // Alias name (e.g., "MyDatablock")
-    PLCASM_DBField fields[PLCASM_MAX_DB_FIELDS];
-    int  field_count;                       // Number of fields
-    u16  total_size;                        // Total size in bytes
-    u16  computed_offset;                   // Computed absolute memory offset (filled during emit)
-
-    void reset() {
-        db_number = 0;
-        alias[0] = '\0';
-        field_count = 0;
-        total_size = 0;
-        computed_offset = 0;
-        for (int i = 0; i < PLCASM_MAX_DB_FIELDS; i++) {
-            fields[i].name[0] = '\0';
-            fields[i].type_name[0] = '\0';
-            fields[i].type_size = 0;
-            fields[i].offset = 0;
-            fields[i].has_default = false;
-            fields[i].default_value.int_val = 0;
-        }
-    }
-};
+// DataBlock declarations now use the global registry in shared-symbols.h
+// (GlobalDBField, GlobalDBDecl, findGlobalDBDecl, etc.)
 
 class PLCASMCompiler {
 public:
@@ -894,9 +855,7 @@ public:
     IR_Entry ir_entries[MAX_IR_ENTRIES];
     int ir_entry_count = 0;
 
-    // DataBlock declarations (compile-time registry)
-    PLCASM_DBDecl db_decls[PLCASM_MAX_DB_DECLS];
-    int db_decl_count = 0;
+    // DataBlock state (declarations live in the global registry — shared-symbols.h)
     bool db_config_emitted = false; // Track whether CONFIG_DB was emitted in current build pass
     int db_brace_depth = 0; // Track brace nesting during tokenization to suppress label registration inside DB blocks
 
@@ -914,7 +873,6 @@ public:
         memset(programLines, 0, sizeof(programLines));
         memset(downloaded_program, 0, sizeof(downloaded_program));
         memset(ir_entries, 0, sizeof(ir_entries));
-        resetDBDecls();
         // Default assembly string
         char default_asm [] = "DEFAULT_ASM_STRING_MARKER";
         /*
@@ -943,55 +901,8 @@ public:
         string_copy(assembly_string, new_assembly_string);
     }
 
-    // ========================================================================
-    // DataBlock Declaration Management
-    // ========================================================================
-
-    void resetDBDecls() {
-        db_decl_count = 0;
-        for (int i = 0; i < PLCASM_MAX_DB_DECLS; i++) {
-            db_decls[i].reset();
-        }
-    }
-
-    // Find a DB declaration by number
-    PLCASM_DBDecl* findDBDeclByNumber(u16 db_number) {
-        for (int i = 0; i < db_decl_count; i++) {
-            if (db_decls[i].db_number == db_number) return &db_decls[i];
-        }
-        return nullptr;
-    }
-
-    // Find a DB declaration by alias (case-insensitive)
-    PLCASM_DBDecl* findDBDeclByAlias(const char* alias) {
-        for (int i = 0; i < db_decl_count; i++) {
-            if (db_decls[i].alias[0] != '\0' && sharedStrEqI(db_decls[i].alias, alias)) return &db_decls[i];
-        }
-        return nullptr;
-    }
-
-    // Find a DB declaration by name — checks both "DB<N>" format and alias
-    PLCASM_DBDecl* findDBDecl(const char* name) {
-        // Check for "DB<N>" format (case-insensitive)
-        if ((name[0] == 'D' || name[0] == 'd') && (name[1] == 'B' || name[1] == 'b') && name[2] >= '0' && name[2] <= '9') {
-            int num = 0;
-            for (int i = 2; name[i] >= '0' && name[i] <= '9'; i++) {
-                num = num * 10 + (name[i] - '0');
-            }
-            return findDBDeclByNumber((u16)num);
-        }
-        return findDBDeclByAlias(name);
-    }
-
-    // Get the type size from a type name string
-    u8 getDBFieldTypeSize(const char* type_name) {
-        if (sharedStrEqI(type_name, "i8") || sharedStrEqI(type_name, "u8") || sharedStrEqI(type_name, "byte")) return 1;
-        if (sharedStrEqI(type_name, "i16") || sharedStrEqI(type_name, "u16")) return 2;
-        if (sharedStrEqI(type_name, "i32") || sharedStrEqI(type_name, "u32") || sharedStrEqI(type_name, "f32")) return 4;
-        if (sharedStrEqI(type_name, "i64") || sharedStrEqI(type_name, "u64") || sharedStrEqI(type_name, "f64")) return 8;
-        if (sharedStrEqI(type_name, "bool") || sharedStrEqI(type_name, "bit")) return 1;
-        return 0; // unknown
-    }
+    // DataBlock lookup/management now uses global registry (shared-symbols.h)
+    // See: findGlobalDBDecl(), findGlobalDBDeclByNumber(), findGlobalDBDeclByAlias(), globalDBFieldTypeSize()
 
     // Parse a .db<N> declaration block from tokens
     // Format: .db<N> "Alias" = { field: type [= default] ... }
@@ -1019,23 +930,24 @@ public:
             return -1;
         }
 
-        // Check for duplicate DB number
-        if (findDBDeclByNumber((u16)db_num)) {
+        // Check for duplicate DB number (global registry)
+        if (findGlobalDBDeclByNumber((u16)db_num)) {
             Serial.print(F("Error: duplicate DB")); Serial.print(db_num);
             Serial.print(F(" at ")); Serial.print(directive.line);
             Serial.print(F(":")); Serial.println(directive.column);
             return -1;
         }
-        if (db_decl_count >= PLCASM_MAX_DB_DECLS) {
+        if (globalDBDeclCount >= GLOBAL_MAX_DB_DECLS) {
             Serial.print(F("Error: too many datablock declarations (max "));
-            Serial.print(PLCASM_MAX_DB_DECLS);
+            Serial.print(GLOBAL_MAX_DB_DECLS);
             Serial.print(F(") at ")); Serial.print(directive.line);
             Serial.print(F(":")); Serial.println(directive.column);
             return -1;
         }
 
-        PLCASM_DBDecl& decl = db_decls[db_decl_count];
-        decl.reset();
+        GlobalDBDecl* declPtr = allocGlobalDBDecl();
+        if (!declPtr) return -1;
+        GlobalDBDecl& decl = *declPtr;
         decl.db_number = (u16)db_num;
 
         int idx = start_idx + 1;
@@ -1047,9 +959,9 @@ public:
             for (int j = 0; j < alen; j++) decl.alias[j] = alias_tok.string.data[j];
             decl.alias[alen] = '\0';
 
-            // Check for duplicate alias
-            for (int d = 0; d < db_decl_count; d++) {
-                if (db_decls[d].alias[0] != '\0' && sharedStrEqI(db_decls[d].alias, decl.alias)) {
+            // Check for duplicate alias (global registry)
+            for (int d = 0; d < globalDBDeclCount - 1; d++) {
+                if (globalDBDecls[d].alias[0] != '\0' && sharedStrEqI(globalDBDecls[d].alias, decl.alias)) {
                     Serial.print(F("Error: duplicate DB alias '"));
                     Serial.print(decl.alias);
                     Serial.print(F("' at ")); Serial.print(directive.line);
@@ -1078,9 +990,9 @@ public:
             }
 
             // Parse field: name : type [= default_value]
-            if (decl.field_count >= PLCASM_MAX_DB_FIELDS) {
+            if (decl.field_count >= GLOBAL_MAX_DB_FIELDS) {
                 Serial.print(F("Error: too many fields in DB (max "));
-                Serial.print(PLCASM_MAX_DB_FIELDS);
+                Serial.print(GLOBAL_MAX_DB_FIELDS);
                 Serial.print(F(") at ")); Serial.print(tokens[idx].line);
                 Serial.print(F(":")); Serial.println(tokens[idx].column);
                 return -1;
@@ -1109,7 +1021,7 @@ public:
             idx++;
 
             // Build the field
-            PLCASM_DBField& field = decl.fields[decl.field_count];
+            GlobalDBField& field = decl.fields[decl.field_count];
             int nlen = field_name_tok.string.length < 31 ? field_name_tok.string.length : 31;
             for (int j = 0; j < nlen; j++) field.name[j] = field_name_tok.string.data[j];
             field.name[nlen] = '\0';
@@ -1118,7 +1030,7 @@ public:
             for (int j = 0; j < tlen; j++) field.type_name[j] = type_tok.string.data[j];
             field.type_name[tlen] = '\0';
 
-            field.type_size = getDBFieldTypeSize(field.type_name);
+            field.type_size = globalDBFieldTypeSize(field.type_name);
             if (field.type_size == 0) {
                 Serial.print(F("Error: unknown type '"));
                 type_tok.string.print();
@@ -1182,74 +1094,12 @@ public:
         }
 
         decl.total_size = field_offset;
-        db_decl_count++;
+        // decl was already added to global registry via allocGlobalDBDecl()
 
         // Register as a UserStructType so property access resolution works
-        registerDBAsStructType(decl);
+        registerGlobalDBAsStructType(decl);
 
         return idx - start_idx; // tokens consumed
-    }
-
-    // Register a DB declaration as a UserStructType in the global registry
-    void registerDBAsStructType(const PLCASM_DBDecl& decl) {
-        // Build the struct type name as "DB<N>" (canonical name)
-        char type_name[16];
-        type_name[0] = 'D'; type_name[1] = 'B';
-        int pos = 2;
-        u16 num = decl.db_number;
-        // Convert number to string
-        char num_buf[6];
-        int num_len = 0;
-        do {
-            num_buf[num_len++] = '0' + (num % 10);
-            num /= 10;
-        } while (num > 0);
-        for (int i = num_len - 1; i >= 0; i--) type_name[pos++] = num_buf[i];
-        type_name[pos] = '\0';
-
-        // Add the struct type with DB<N> name
-        UserStructType* ust = addUserStructType(type_name);
-        if (ust) {
-            for (int i = 0; i < decl.field_count && i < MAX_STRUCT_PROPERTIES; i++) {
-                StructProperty& prop = ust->fields[i];
-                int nlen = 0;
-                while (decl.fields[i].name[nlen] && nlen < 15) {
-                    prop.name[nlen] = decl.fields[i].name[nlen];
-                    nlen++;
-                }
-                prop.name[nlen] = '\0';
-                prop.offset = (u8)decl.fields[i].offset;
-                prop.type_size = decl.fields[i].type_size;
-                prop.bit_pos = 255; // No bit access
-                prop.readable = true;
-                prop.writable = true;
-            }
-            ust->field_count = decl.field_count < MAX_STRUCT_PROPERTIES ? decl.field_count : MAX_STRUCT_PROPERTIES;
-            ust->total_size = (u8)decl.total_size;
-        }
-
-        // If there's an alias, register another type with the alias name
-        if (decl.alias[0] != '\0') {
-            UserStructType* alias_ust = addUserStructType(decl.alias);
-            if (alias_ust) {
-                for (int i = 0; i < decl.field_count && i < MAX_STRUCT_PROPERTIES; i++) {
-                    StructProperty& prop = alias_ust->fields[i];
-                    int nlen = 0;
-                    while (decl.fields[i].name[nlen] && nlen < 15) {
-                        prop.name[nlen] = decl.fields[i].name[nlen];
-                        nlen++;
-                    }
-                    prop.name[nlen] = '\0';
-                    prop.offset = (u8)decl.fields[i].offset;
-                    prop.type_size = decl.fields[i].type_size;
-                    prop.bit_pos = 255;
-                    prop.readable = true;
-                    prop.writable = true;
-                }
-                alias_ust->field_count = decl.field_count < MAX_STRUCT_PROPERTIES ? decl.field_count : MAX_STRUCT_PROPERTIES;
-                alias_ust->total_size = (u8)decl.total_size;
-            }
-        }
     }
 
     // Symbol validation and parsing functions
@@ -1348,7 +1198,7 @@ public:
         bool is_counter = false;
 
         // Check for DataBlock reference first: "DB1.field" or "MyAlias.field"
-        PLCASM_DBDecl* db_decl = findDBDecl(base_buf);
+        GlobalDBDecl* db_decl = findGlobalDBDecl(base_buf);
         if (db_decl) {
             // Build the struct type name for lookup
             char db_type_name[16];
@@ -2700,7 +2550,9 @@ public:
         // First pass: parse DataBlock declarations (.db<N> directives)
         // Must be parsed before symbol definitions since symbols may reference DB types
         if (!finalPass || lintMode) {
-            db_decl_count = 0;
+            // Note: Do NOT reset globalDBDeclCount here — project compiler may
+            // have already registered DBs from the DATABLOCKS section before
+            // calling compileAssembly(). Only scan for new .db<N> directives.
             for (int i = 0; i < token_count; i++) {
                 Token& token = tokens[i];
                 // Check for .db<N> directive pattern
@@ -2718,9 +2570,9 @@ public:
             // Same allocation order as the runtime: each DB gets space just below the DB table
             u16 db_table_offset = (u16)(PLCRUNTIME_MAX_MEMORY_SIZE - (PLCRUNTIME_NUM_OF_DATABLOCKS * PLCRUNTIME_DB_ENTRY_SIZE));
             u16 next_allocation = db_table_offset;
-            for (int i = 0; i < db_decl_count; i++) {
-                next_allocation -= db_decls[i].total_size;
-                db_decls[i].computed_offset = next_allocation;
+            for (int i = 0; i < globalDBDeclCount; i++) {
+                next_allocation -= globalDBDecls[i].total_size;
+                globalDBDecls[i].computed_offset = next_allocation;
             }
         }
 
@@ -2834,13 +2686,13 @@ public:
 
                 // Emit CONFIG_DB + default value writes only once (on the first .db<N> directive)
                 // db_config_emitted is reset at the start of each build pass
-                if (!db_config_emitted && db_decl_count > 0) {
+                if (!db_config_emitted && globalDBDeclCount > 0) {
                     db_config_emitted = true;
 
                     // Helper macro: copy a ProgramLine to built_bytecode without 'continue'
                     // (unlike _line_push which contains continue; and would skip subsequent emissions)
                     #define _db_line_emit(line_ref) do { \
-                        u8 _sz = (line_ref).size; \
+                        u16 _sz = (line_ref).size; \
                         if (_sz > MAX_PROGRAM_LINE_SIZE) { buildError(token, "instruction too large"); return true; } \
                         int _end = built_bytecode_length + _sz; \
                         if (_end >= PLCRUNTIME_MAX_PROGRAM_SIZE) { buildErrorSizeLimit(token); return true; } \
@@ -2865,11 +2717,11 @@ public:
                         u8* bytecode = line.code;
                         u8 offset = 0;
                         bytecode[offset++] = CONFIG_DB;
-                        bytecode[offset++] = (u8)db_decl_count;
-                        for (int di = 0; di < db_decl_count; di++) {
-                            write_u16(bytecode + offset, db_decls[di].db_number);
+                        bytecode[offset++] = (u8)globalDBDeclCount;
+                        for (int di = 0; di < globalDBDeclCount; di++) {
+                            write_u16(bytecode + offset, globalDBDecls[di].db_number);
                             offset += 2;
-                            write_u16(bytecode + offset, db_decls[di].total_size);
+                            write_u16(bytecode + offset, globalDBDecls[di].total_size);
                             offset += 2;
                         }
                         line.size = offset;
@@ -2877,10 +2729,10 @@ public:
                     }
 
                     // Emit default value writes for each field that has a default
-                    for (int di = 0; di < db_decl_count; di++) {
-                        PLCASM_DBDecl& decl = db_decls[di];
+                    for (int di = 0; di < globalDBDeclCount; di++) {
+                        GlobalDBDecl& decl = globalDBDecls[di];
                         for (int fi = 0; fi < decl.field_count; fi++) {
-                            PLCASM_DBField& field = decl.fields[fi];
+                            GlobalDBField& field = decl.fields[fi];
                             if (!field.has_default) continue;
 
                             u16 abs_addr = decl.computed_offset + field.offset;
@@ -4280,6 +4132,7 @@ WASM_EXPORT void logBytecode() {
 
 WASM_EXPORT bool compileAssembly(bool debug = true) {
     resetUserStructTypes();
+    resetGlobalDBDecls();
     return defaultCompiler.compileAssembly(debug, false);
 }
 

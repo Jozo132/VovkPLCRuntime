@@ -1,0 +1,56 @@
+VOVKPLCPROJECT DataBlocksTest
+VERSION 1.0
+
+MEMORY
+    OFFSET 0
+    AVAILABLE 2048
+    S 64
+    X 64
+    Y 64
+    M 256
+END_MEMORY
+
+DATABLOCKS
+    DB1 "Motor" {
+        speed:    i16 = 100
+        position: f32 = 0.0
+        status:   u8
+    }
+    DB2 "Sensor" {
+        value:     f32 = 3.14
+        threshold: i16 = 500
+    }
+END_DATABLOCKS
+
+PROGRAM main
+    // Test 1: Access DB by number (DB1.speed)
+    BLOCK LANG=PLCASM ReadMotorSpeed
+        i16.load_from DB1.speed
+        i16.move_to M0
+    END_BLOCK
+
+    // Test 2: Access DB by alias (Motor.position)
+    BLOCK LANG=PLCASM ReadMotorPosition
+        f32.load_from Motor.position
+        f32.move_to M2
+    END_BLOCK
+
+    // Test 3: Write to DB field
+    BLOCK LANG=PLCASM WriteMotorStatus
+        u8.const 1
+        u8.move_to DB1.status
+    END_BLOCK
+
+    // Test 4: Access second DB by alias
+    BLOCK LANG=PLCASM ReadSensorValue
+        f32.load_from Sensor.value
+        f32.move_to M6
+    END_BLOCK
+
+    // Test 5: Access second DB by number
+    BLOCK LANG=PLCASM ReadSensorThreshold
+        i16.load_from DB2.threshold
+        i16.move_to M10
+        exit
+    END_BLOCK
+END_PROGRAM

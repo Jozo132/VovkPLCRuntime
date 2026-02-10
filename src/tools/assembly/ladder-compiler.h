@@ -258,7 +258,27 @@ public:
                     // baseSym exists but is not a struct type - this address has a dot but the base isn't a struct
                     // Fall through to treat as regular symbol lookup (might be a typo)
                 } else {
-                    // Base symbol not found - report error
+                    // Base symbol not found in SharedSymbol table.
+                    // Check if it's a known UserStructType (e.g., DB alias like "Motor" or DB number like "DB1")
+                    UserStructType* directStruct = findUserStructType(baseName);
+                    if (directStruct) {
+                        // Verify the property exists in the struct type
+                        const char* propName = addr + dotPos + 1;
+                        if (directStruct->findField(propName)) {
+                            return true;  // Valid DB/struct property access
+                        }
+                        char msg[64];
+                        int mi = 0;
+                        const char* prefix = "Unknown property '";
+                        while (*prefix && mi < 40) msg[mi++] = *prefix++;
+                        int ai = 0;
+                        while (propName[ai] && mi < 55) msg[mi++] = propName[ai++];
+                        msg[mi++] = '\'';
+                        msg[mi] = '\0';
+                        reportNodeError(msg, nodeIdx);
+                        return false;
+                    }
+                    // Truly unknown base symbol
                     char msg[64];
                     int mi = 0;
                     const char* prefix = "Unknown symbol '";

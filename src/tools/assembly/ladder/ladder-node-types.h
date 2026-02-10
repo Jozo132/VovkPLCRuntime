@@ -177,6 +177,13 @@ inline bool ladderIsRawAddress(const char* addr) {
         first == 'T' || first == 't' || first == 'C' || first == 'c') {
         // Check if next char is a digit (raw address) or not (could be symbol)
         if (addr[1] >= '0' && addr[1] <= '9') return true;
+        // Typed M-addresses: MB (byte), MW (word), MD (dword)
+        if (first == 'M' || first == 'm') {
+            char second = addr[1];
+            if (second == 'B' || second == 'b' || second == 'W' || second == 'w' || second == 'D' || second == 'd') {
+                if (addr[2] >= '0' && addr[2] <= '9') return true;
+            }
+        }
     }
     // Pure numeric address
     if (first >= '0' && first <= '9') return true;

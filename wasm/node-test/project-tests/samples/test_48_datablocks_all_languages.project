@@ -1,0 +1,86 @@
+VOVKPLCPROJECT DataBlocksAllLanguages
+VERSION 1.0
+
+MEMORY
+    OFFSET 0
+    AVAILABLE 2048
+    S 64
+    X 64
+    Y 64
+    M 256
+END_MEMORY
+
+DATABLOCKS
+    DB1 "Motor" {
+        speed:    i16 = 100
+        position: f32 = 1.5
+        status:   u8
+    }
+    DB2 "Sensor" {
+        value:     f32 = 3.14
+        threshold: i16 = 500
+    }
+END_DATABLOCKS
+
+SYMBOLS
+    plcscript_out : i16 : M20
+    st_out : i16 : M22
+END_SYMBOLS
+
+PROGRAM main
+    // === PLCASM: Read and write DB fields directly ===
+    BLOCK LANG=PLCASM PlcasmRead
+        i16.load_from DB1.speed
+        i16.move_to M0
+    END_BLOCK
+
+    BLOCK LANG=PLCASM PlcasmWrite
+        u8.const 1
+        u8.move_to DB1.status
+    END_BLOCK
+
+    // === STL: Read f32 DB field via alias (passes through to PLCASM) ===
+    BLOCK LANG=STL StlReadAlias
+        L Motor.position
+        T MD2
+    END_BLOCK
+
+    // === STL: Read f32 DB field via DB number ===
+    BLOCK LANG=STL StlReadDBNum
+        L DB2.value
+        T MD6
+    END_BLOCK
+
+    // === STL: Write zero to f32 DB field ===
+    BLOCK LANG=STL StlWriteDB
+        L #0
+        T Motor.position
+    END_BLOCK
+
+    // === Ladder: fb_move to read/write DB fields ===
+    BLOCK LANG=LADDER LadderDB
+{
+  "nodes": [
+    {"id": "n1", "type": "contact", "x": 0, "y": 0, "symbol": "X0.0", "trigger": "normal"},
+    {"id": "n2", "type": "fb_move", "x": 2, "y": 0, "dataType": "u32", "in1": "Sensor.value", "out": "MD10"},
+    {"id": "n3", "type": "fb_move", "x": 4, "y": 0, "dataType": "u32", "in1": "MD2", "out": "DB2.value"},
+    {"id": "n4", "type": "coil", "x": 6, "y": 0, "symbol": "Y0.0"}
+  ],
+  "connections": [
+    {"sources": ["n1"], "destinations": ["n2"]},
+    {"sources": ["n2"], "destinations": ["n3"]},
+    {"sources": ["n3"], "destinations": ["n4"]}
+  ]
+}
+    END_BLOCK
+
+    // === PLCScript: Write constant via symbol (coexistence with DBs) ===
+    BLOCK LANG=PLCSCRIPT PlcscriptBlock
+let val: i16 @ plcscript_out = 777
+    END_BLOCK
+
+    // === ST: Write constant via symbol (coexistence with DBs) ===
+    BLOCK LANG=ST StBlock
+st_out := 888;
+    END_BLOCK
+END_PROGRAM
