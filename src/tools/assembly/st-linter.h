@@ -172,8 +172,8 @@ public:
     bool lint() {
         clearProblems();
         
-        // Run compilation
-        int result = compiler.compile();
+        // Run compilation (returns true on success, false on error)
+        bool success = compiler.compile();
         
         // Sync error state from compiler
         has_error = compiler.has_error;
@@ -188,8 +188,8 @@ public:
         }
         error_message[i] = '\0';
         
-        // If there was an error, capture it
-        if (result != 0 && compiler.has_error) {
+        // If there was an error, capture it as a linter problem
+        if (!success && compiler.has_error) {
             // Calculate token length from error token text
             int len = 0;
             while (compiler.error_token_text[len] && len < 63) len++;
@@ -199,6 +199,18 @@ public:
                      compiler.error_line, 
                      compiler.error_column,
                      len);
+            
+            // Copy error token text into the problem's token_buf
+            if (problem_count > 0 && compiler.error_token_text[0]) {
+                LinterProblem& p = problems[problem_count - 1];
+                int k = 0;
+                while (compiler.error_token_text[k] && k < 63) {
+                    p.token_buf[k] = compiler.error_token_text[k];
+                    k++;
+                }
+                p.token_buf[k] = '\0';
+                p.token_text = p.token_buf;
+            }
         }
         
         // Copy warnings from compiler
@@ -332,6 +344,57 @@ extern "C" {
     // Clear all linter problems
     WASM_EXPORT void st_lint_clear() {
         stLinter.clearProblems();
+    }
+
+    // ========================================================================
+    // WASM Exports for ST Symbol Table
+    // ========================================================================
+
+    // Get number of symbols declared in the ST code
+    WASM_EXPORT int st_lint_getSymbolCount() {
+        return stLinter.compiler.symbol_count;
+    }
+
+    // Get symbol name by index
+    WASM_EXPORT const char* st_lint_getSymbolName(int index) {
+        if (index < 0 || index >= stLinter.compiler.symbol_count) return "";
+        return stLinter.compiler.symbols[index].name;
+    }
+
+    // Get symbol type string by index (e.g. "i32", "u8", "bool", "f32")
+    WASM_EXPORT const char* st_lint_getSymbolType(int index) {
+        if (index < 0 || index >= stLinter.compiler.symbol_count) return "";
+        return stLinter.compiler.symbols[index].plcscriptType;
+    }
+
+    // Get symbol PLC address string (e.g. "M0", "MW10", "auto")
+    WASM_EXPORT const char* st_lint_getSymbolAddress(int index) {
+        if (index < 0 || index >= stLinter.compiler.symbol_count) return "";
+        return stLinter.compiler.symbols[index].address;
+    }
+
+    // Get symbol declaration line
+    WASM_EXPORT int st_lint_getSymbolLine(int index) {
+        if (index < 0 || index >= stLinter.compiler.symbol_count) return 0;
+        return stLinter.compiler.symbols[index].declarationLine;
+    }
+
+    // Get symbol declaration column
+    WASM_EXPORT int st_lint_getSymbolColumn(int index) {
+        if (index < 0 || index >= stLinter.compiler.symbol_count) return 0;
+        return stLinter.compiler.symbols[index].declarationColumn;
+    }
+
+    // Check if symbol is a constant (VAR CONSTANT)
+    WASM_EXPORT bool st_lint_getSymbolIsConst(int index) {
+        if (index < 0 || index >= stLinter.compiler.symbol_count) return false;
+        return stLinter.compiler.symbols[index].isConstant;
+    }
+
+    // Check if symbol is used after declaration
+    WASM_EXPORT bool st_lint_getSymbolIsUsed(int index) {
+        if (index < 0 || index >= stLinter.compiler.symbol_count) return false;
+        return stLinter.compiler.symbols[index].used;
     }
 }
 

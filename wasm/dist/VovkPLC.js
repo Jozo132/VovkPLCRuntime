@@ -609,6 +609,50 @@ class VovkPLC_class {
      */
 
     /**
+     * Reads LinterProblem structs (344 bytes each) from a WASM memory pointer.
+     * Used by lintSTL and lintST which share the same C++ LinterProblem layout.
+     * @param {number} pointer - WASM memory pointer to the problems array.
+     * @param {number} count - Number of problems to read.
+     * @returns {{ type: string, line: number, column: number, length: number, message: string, token_text: string }[]}
+     */
+    _readLinterProblems = (pointer, count) => {
+        const struct_size = 344
+        const view = new DataView(this.wasm_exports.memory.buffer)
+        const problems = []
+
+        const readFixedStr = (offset, start, maxLen) => {
+            let s = ''
+            for (let j = 0; j < maxLen; j++) {
+                const c = view.getUint8(offset + start + j)
+                if (c === 0) break
+                s += String.fromCharCode(c)
+            }
+            return s
+        }
+
+        for (let i = 0; i < count; i++) {
+            const offset = pointer + i * struct_size
+            const type_int = view.getUint32(offset + 0, true)
+            const line = view.getUint32(offset + 4, true)
+            const column = view.getUint32(offset + 8, true)
+            const length = view.getUint32(offset + 12, true)
+            const message = readFixedStr(offset, 16, 128)
+            // token_buf is 64 bytes at offset 276
+            const token_text = readFixedStr(offset, 276, 64)
+
+            problems.push({
+                type: type_int === 2 ? 'error' : type_int === 1 ? 'warning' : 'info',
+                line,
+                column,
+                length,
+                message,
+                token_text,
+            })
+        }
+        return problems
+    }
+
+    /**
      * Lints the provided STL (Statement List) code.
      * Streams the STL to the linter, runs the analysis, and returns problems and generated PLCASM.
      *
@@ -647,52 +691,11 @@ class VovkPLC_class {
             // 2. Run STL Linter
             this.wasm_exports.stl_lint_run()
 
-            // 3. Get problems
+            // 3. Get problems (344-byte LinterProblem structs)
             const count = this.wasm_exports.stl_lint_get_problem_count()
+            const pointer = count > 0 ? this.wasm_exports.stl_lint_get_problems_pointer() : 0
             /** @type { STLLinterProblem[] } */
-            const problems = []
-
-            if (count > 0) {
-                const pointer = this.wasm_exports.stl_lint_get_problems_pointer()
-                // Struct size = 84 bytes (same as PLCASM linter: 4+4+4+4+64+4)
-                const struct_size = 84
-
-                const memoryBuffer = this.wasm_exports.memory.buffer
-                const view = new DataView(memoryBuffer)
-
-                for (let i = 0; i < count; i++) {
-                    const offset = pointer + i * struct_size
-                    const type_int = view.getUint32(offset + 0, true)
-                    const line = view.getUint32(offset + 4, true)
-                    const column = view.getUint32(offset + 8, true)
-                    const length = view.getUint32(offset + 12, true)
-
-                    // message is 64 bytes at offset 16
-                    let message = ''
-                    for (let j = 0; j < 64; j++) {
-                        const charCode = view.getUint8(offset + 16 + j)
-                        if (charCode === 0) break
-                        message += String.fromCharCode(charCode)
-                    }
-
-                    // token_text pointer at offset 80
-                    const token_ptr = view.getUint32(offset + 80, true)
-                    let token_text = ''
-                    if (token_ptr !== 0 && length > 0) {
-                        const token_buf = new Uint8Array(memoryBuffer, token_ptr, length)
-                        token_text = new TextDecoder().decode(token_buf)
-                    }
-
-                    problems.push({
-                        type: type_int === 2 ? 'error' : type_int === 1 ? 'warning' : 'info',
-                        line,
-                        column,
-                        length,
-                        message,
-                        token_text,
-                    })
-                }
-            }
+            const problems = pointer ? this._readLinterProblems(pointer, count) : []
 
             // 4. Get generated PLCASM output
             this.wasm_exports.stl_lint_get_output()
@@ -808,6 +811,96 @@ class VovkPLC_class {
             // 5. Get generated PLCASM output
             const outputPtr = this.wasm_exports.plcscript_linter_getOutput()
             const output = getString(outputPtr)
+
+            return { problems, symbols, output }
+        } finally {
+            this.setSilent(wasSilent)
+            if (!debug) this.readStream()
+        }
+    }
+
+    /**
+     * @typedef {{ name: string, type: string, address: string, line: number, column: number, isConst: boolean, isUsed: boolean }} STSymbol
+     */
+
+    /**
+     * @typedef {{ type: 'error' | 'warning' | 'info', line: number, column: number, length: number, message: string, token_text: string }} STLinterProblem
+     */
+
+    /**
+     * @typedef {{ problems: STLinterProblem[], symbols: STSymbol[], output: string }} STLintResult
+     */
+
+    /**
+     * Lints the provided Structured Text (ST) source code.
+     * Compiles the code to collect errors/warnings and exports the resolved symbol table.
+     *
+     * @param {string} st - The ST source code to lint.
+     * @param {boolean} [debug=false] - If true, streams linter output to console.
+     * @returns {STLintResult} - Object containing problems, resolved symbols, and generated PLCASM output.
+     */
+    lintST = (st, debug = false) => {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        if (!this.wasm_exports.st_lint_load_from_stream) throw new Error("'st_lint_load_from_stream' function not found - ST linter not available")
+        if (!this.wasm_exports.st_lint_run) throw new Error("'st_lint_run' function not found")
+        if (!this.wasm_exports.st_lint_get_problem_count) throw new Error("'st_lint_get_problem_count' function not found")
+        if (!this.wasm_exports.st_lint_get_problems_pointer) throw new Error("'st_lint_get_problems_pointer' function not found")
+        if (!this.wasm_exports.st_lint_get_output) throw new Error("'st_lint_get_output' function not found")
+
+        const wasSilent = this.silent
+        if (!debug) this.setSilent(true)
+
+        try {
+            // 1. Stream ST code to linter
+            if (this.wasm_exports.streamClear) this.wasm_exports.streamClear()
+
+            let ok = true
+            for (let i = 0; i < st.length && ok; i++) {
+                ok = this.wasm_exports.streamIn(st.charCodeAt(i))
+            }
+            if (!ok) throw new Error('Failed to stream ST code')
+            this.wasm_exports.streamIn(0) // Null terminator
+            this.wasm_exports.st_lint_load_from_stream()
+
+            // 2. Run ST Linter
+            this.wasm_exports.st_lint_run()
+
+            // 3. Get problems (344-byte LinterProblem structs)
+            const count = this.wasm_exports.st_lint_get_problem_count()
+            const pointer = count > 0 ? this.wasm_exports.st_lint_get_problems_pointer() : 0
+            /** @type { STLinterProblem[] } */
+            const problems = pointer ? this._readLinterProblems(pointer, count) : []
+
+            // 4. Get resolved symbol table
+            /** @type { STSymbol[] } */
+            const symbols = []
+            if (this.wasm_exports.st_lint_getSymbolCount) {
+                const symbolCount = this.wasm_exports.st_lint_getSymbolCount()
+                /** @param {number} ptr */
+                const getString = ptr => {
+                    if (!ptr) return ''
+                    const mem = new Uint8Array(this.wasm_exports.memory.buffer)
+                    let str = ''
+                    for (let i = 0; i < 512 && mem[ptr + i] !== 0; i++) {
+                        str += String.fromCharCode(mem[ptr + i])
+                    }
+                    return str
+                }
+                for (let i = 0; i < symbolCount; i++) {
+                    const name = getString(this.wasm_exports.st_lint_getSymbolName(i))
+                    const type = getString(this.wasm_exports.st_lint_getSymbolType(i))
+                    const address = getString(this.wasm_exports.st_lint_getSymbolAddress(i))
+                    const line = this.wasm_exports.st_lint_getSymbolLine(i)
+                    const column = this.wasm_exports.st_lint_getSymbolColumn(i)
+                    const isConst = !!this.wasm_exports.st_lint_getSymbolIsConst(i)
+                    const isUsed = !!this.wasm_exports.st_lint_getSymbolIsUsed(i)
+                    symbols.push({ name, type, address, line, column, isConst, isUsed })
+                }
+            }
+
+            // 5. Get generated PLCASM output
+            this.wasm_exports.st_lint_get_output()
+            const output = this.readOutBuffer()
 
             return { problems, symbols, output }
         } finally {
@@ -4210,6 +4303,8 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
     lintSTL = (stl, debug = false) => this.call('lintSTL', stl, debug)
     /** @type { (script: string, debug?: boolean) => Promise<PLCScriptLintResult> } */
     lintPLCScript = (script, debug = false) => this.call('lintPLCScript', script, debug)
+    /** @type { (st: string, debug?: boolean) => Promise<STLintResult> } */
+    lintST = (st, debug = false) => this.call('lintST', st, debug)
     /** @type { (ladder: string | LadderGraph, debug?: boolean) => Promise<{ problems: LadderLinterProblem[], output: string }> } */
     lintLadder = (ladder, debug = false) => this.call('lintLadder', ladder, debug)
     /** @type { (value?: boolean) => Promise<any> } */
