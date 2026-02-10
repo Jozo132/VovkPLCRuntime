@@ -710,6 +710,113 @@ class VovkPLC_class {
     }
 
     /**
+     * @typedef {{ name: string, type: string, address: string, line: number, column: number, isLocal: boolean, isConst: boolean, isInferred: boolean, scopeLevel: number, memoryOffset: number }} PLCScriptSymbol
+     */
+
+    /**
+     * @typedef {{ type: 'error' | 'warning' | 'info', line: number, column: number, length: number, message: string }} PLCScriptLinterProblem
+     */
+
+    /**
+     * @typedef {{ problems: PLCScriptLinterProblem[], symbols: PLCScriptSymbol[], output: string }} PLCScriptLintResult
+     */
+
+    /**
+     * Lints the provided PLCScript source code.
+     * Compiles the code to collect errors/warnings and exports the resolved symbol table.
+     *
+     * @param {string} script - The PLCScript source code.
+     * @param {boolean} [debug=false] - If true, streams linter output to console.
+     * @returns {PLCScriptLintResult} - Object containing problems, resolved symbols, and generated PLCASM output.
+     */
+    lintPLCScript = (script, debug = false) => {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        if (!this.wasm_exports.plcscript_linter_load_from_stream) throw new Error("'plcscript_linter_load_from_stream' function not found - PLCScript linter not available")
+        if (!this.wasm_exports.plcscript_linter_lint) throw new Error("'plcscript_linter_lint' function not found")
+        if (!this.wasm_exports.plcscript_linter_getProblemCount) throw new Error("'plcscript_linter_getProblemCount' function not found")
+
+        const wasSilent = this.silent
+        if (!debug) this.setSilent(true)
+
+        /** @param {number} ptr */
+        const getString = ptr => {
+            if (!ptr) return ''
+            const mem = new Uint8Array(this.wasm_exports.memory.buffer)
+            let str = ''
+            for (let i = 0; i < 512 && mem[ptr + i] !== 0; i++) {
+                str += String.fromCharCode(mem[ptr + i])
+            }
+            return str
+        }
+
+        try {
+            // 1. Stream PLCScript code to linter
+            if (this.wasm_exports.streamClear) this.wasm_exports.streamClear()
+
+            let ok = true
+            for (let i = 0; i < script.length && ok; i++) {
+                ok = this.wasm_exports.streamIn(script.charCodeAt(i))
+            }
+            if (!ok) throw new Error('Failed to stream PLCScript code')
+            this.wasm_exports.plcscript_linter_load_from_stream()
+
+            // 2. Run PLCScript Linter
+            this.wasm_exports.plcscript_linter_lint()
+
+            // 3. Get problems (using per-field accessor pattern)
+            const problemCount = this.wasm_exports.plcscript_linter_getProblemCount()
+            /** @type { PLCScriptLinterProblem[] } */
+            const problems = []
+
+            for (let i = 0; i < problemCount; i++) {
+                const line = this.wasm_exports.plcscript_linter_getProblemLine(i)
+                const column = this.wasm_exports.plcscript_linter_getProblemColumn(i)
+                const length = this.wasm_exports.plcscript_linter_getProblemLength(i)
+                const severity = this.wasm_exports.plcscript_linter_getProblemSeverity(i)
+                const messagePtr = this.wasm_exports.plcscript_linter_getProblemMessage(i)
+                const message = getString(messagePtr)
+
+                problems.push({
+                    type: severity === 2 ? 'error' : severity === 1 ? 'warning' : 'info',
+                    line,
+                    column,
+                    length,
+                    message,
+                })
+            }
+
+            // 4. Get resolved symbol table
+            /** @type { PLCScriptSymbol[] } */
+            const symbols = []
+            if (this.wasm_exports.plcscript_linter_getSymbolCount) {
+                const symbolCount = this.wasm_exports.plcscript_linter_getSymbolCount()
+                for (let i = 0; i < symbolCount; i++) {
+                    const name = getString(this.wasm_exports.plcscript_linter_getSymbolName(i))
+                    const type = getString(this.wasm_exports.plcscript_linter_getSymbolType(i))
+                    const address = getString(this.wasm_exports.plcscript_linter_getSymbolAddress(i))
+                    const line = this.wasm_exports.plcscript_linter_getSymbolLine(i)
+                    const column = this.wasm_exports.plcscript_linter_getSymbolColumn(i)
+                    const isLocal = !!this.wasm_exports.plcscript_linter_getSymbolIsLocal(i)
+                    const isConst = !!this.wasm_exports.plcscript_linter_getSymbolIsConst(i)
+                    const isInferred = !!this.wasm_exports.plcscript_linter_getSymbolIsInferred(i)
+                    const scopeLevel = this.wasm_exports.plcscript_linter_getSymbolScopeLevel(i)
+                    const memoryOffset = this.wasm_exports.plcscript_linter_getSymbolMemoryOffset(i)
+                    symbols.push({ name, type, address, line, column, isLocal, isConst, isInferred, scopeLevel, memoryOffset })
+                }
+            }
+
+            // 5. Get generated PLCASM output
+            const outputPtr = this.wasm_exports.plcscript_linter_getOutput()
+            const output = getString(outputPtr)
+
+            return { problems, symbols, output }
+        } finally {
+            this.setSilent(wasSilent)
+            if (!debug) this.readStream()
+        }
+    }
+
+    /**
      * @typedef {{ type: 'error' | 'warning' | 'info', line: number, column: number, length: number, message: string, token_text: string }} LadderLinterProblem
      */
 
@@ -4178,6 +4285,8 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
     lintPLCASM = (assembly, debug = false) => this.call('lintPLCASM', assembly, debug)
     /** @type { (stl: string, debug?: boolean) => Promise<{ problems: STLLinterProblem[], output: string }> } */
     lintSTL = (stl, debug = false) => this.call('lintSTL', stl, debug)
+    /** @type { (script: string, debug?: boolean) => Promise<PLCScriptLintResult> } */
+    lintPLCScript = (script, debug = false) => this.call('lintPLCScript', script, debug)
     /** @type { (ladder: string | LadderGraph, debug?: boolean) => Promise<{ problems: LadderLinterProblem[], output: string }> } */
     lintLadder = (ladder, debug = false) => this.call('lintLadder', ladder, debug)
     /** @type { (value?: boolean) => Promise<any> } */

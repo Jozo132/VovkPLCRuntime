@@ -125,13 +125,10 @@ VERSION 1.0.0
 MEMORY
     OFFSET 0
     AVAILABLE 1024
-    K 64
+    S 64
     X 64
     Y 64
-    S 64
     M 512
-    T 16
-    C 8
 END_MEMORY
 
 FILE main

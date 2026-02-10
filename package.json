@@ -22,6 +22,7 @@
     "test_arrays": "node --no-warnings wasm/node-test/test_arrays.js",
     "test_readme_api": "node --no-warnings wasm/node-test/test_readme_api.js",
     "test_system_time": "node --no-warnings wasm/node-test/test_system_time.js",
+    "test_type_inference": "node --no-warnings wasm/node-test/plcscript-tests/test_plcscript_type_inference.js",
     "memory_leak_test": "node wasm/memory_leak_test.js",
     "memory_leak_test:verbose": "node wasm/memory_leak_test.js --verbose",
     "test": "node --no-warnings wasm/unit_test.js",

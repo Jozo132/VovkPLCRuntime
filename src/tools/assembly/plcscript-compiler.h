@@ -329,6 +329,7 @@ enum PLCScriptVarType {
     PSTYPE_STR8,     // String8 type: [u8 capacity, u8 length, char[capacity]]
     PSTYPE_STR16,    // String16 type: [u16 capacity, u16 length, char[capacity]]
     PSTYPE_STRUCT,   // Custom struct type (uses structTypeIndex for lookup)
+    PSTYPE_AUTO,     // Type inferred from context (address prefix, initializer, usage)
 };
 
 // ============================================================================
@@ -410,6 +411,7 @@ struct PLCScriptSymbol {
     bool isLocal;         // True if this is a local stack variable (no PLC address)
     bool isAutoAddress;   // True if address was auto-assigned
     bool isParam;         // True if this is a function parameter
+    bool isTypeInferred;  // True if type was inferred (not explicitly annotated)
     
     // Array support
     MY_PTR_t array_size;       // Number of elements (0 = not an array, 1+ = array)
@@ -1666,6 +1668,7 @@ public:
             case PSTYPE_F64: return "f64";
             case PSTYPE_STR8: return "str8";
             case PSTYPE_STR16: return "str16";
+            case PSTYPE_AUTO: return "auto";
             default: return "u8";
         }
     }
@@ -1872,6 +1875,33 @@ public:
     // ========================================================================
     // Address parsing
     // ========================================================================
+    
+    // Infer a PLCScript variable type from a PLC address prefix.
+    // Returns PSTYPE_AUTO if the address doesn't indicate a clear type.
+    PLCScriptVarType inferTypeFromAddress(const char* addr) {
+        if (!addr || !addr[0]) return PSTYPE_AUTO;
+        
+        // Check if bit address (contains '.')
+        for (int i = 0; addr[i]; i++) {
+            if (addr[i] == '.') return PSTYPE_BOOL;
+        }
+        
+        // Get the second character (size prefix) - uppercase it
+        char first = addr[0];
+        if (first >= 'a' && first <= 'z') first -= 32;
+        
+        // Single-letter prefixes: M, X, Y, I, Q, S, K, T, C
+        // Two-letter size prefixes: MW (word), MD (dword)
+        if (addr[1]) {
+            char second = addr[1];
+            if (second >= 'a' && second <= 'z') second -= 32;
+            if (second == 'W') return PSTYPE_I16;
+            if (second == 'D') return PSTYPE_I32;
+        }
+        
+        // Default: byte-sized access (M0, X0, Y0, S0, K0, etc.)
+        return PSTYPE_U8;
+    }
     
     bool parseAddress(PLCScriptSymbol* sym, const char* addr) {
         // First, check if this is a symbol name from the shared symbol table
@@ -3098,7 +3128,7 @@ public:
         nextToken();
         
         // Type annotation: ": type" or ": type[size]"
-        PLCScriptVarType varType = PSTYPE_I16; // Default type
+        PLCScriptVarType varType = PSTYPE_AUTO; // Infer type from context if not specified
         int structTypeIdx = -1;
         MY_PTR_t array_size = 0;  // 0 = not an array
         u16 string_capacity = 0;  // 0 = not a string, or string capacity
@@ -3213,6 +3243,17 @@ public:
             isLocal = !isConst;  // Constants without address are compile-time only
         }
         
+        // --- Type inference from address prefix ---
+        bool isTypeInferred = false;
+        if (varType == PSTYPE_AUTO && hasAddress && !isAutoAddress) {
+            // Infer type from explicit PLC address prefix (M→u8, MW→i16, MD→i32, bit→bool)
+            PLCScriptVarType addrType = inferTypeFromAddress(address);
+            if (addrType != PSTYPE_AUTO) {
+                varType = addrType;
+                isTypeInferred = true;
+            }
+        }
+        
         // Create symbol
         PLCScriptSymbol* sym = addSymbol(name, varType, isConst);
         if (!sym) return;
@@ -3220,121 +3261,125 @@ public:
         sym->structTypeIndex = structTypeIdx;
         sym->isLocal = isLocal;
         sym->isAutoAddress = isAutoAddress;
+        sym->isTypeInferred = isTypeInferred;
         sym->stackSlot = -1;
         sym->array_size = array_size;
         sym->stringCapacity = string_capacity;
         
-        if (isAutoAddress || isLocal) {
-            // Generate auto address for both explicit "@ auto" and local variables
-            // For arrays, generateAutoAddress needs to account for array size
-            generateAutoAddress(sym);
-            hasAddress = true;
-            isAutoAddress = true;
-            sym->isAutoAddress = true;
-            // Copy generated address to local for comment
-            int j = 0;
-            while (sym->address[j] && j < 31) {
-                address[j] = sym->address[j];
-                j++;
-            }
-            address[j] = '\0';
-        } else if (hasAddress) {
-            if (!parseAddress(sym, address)) return;
-        }
+        // --- Address resolution and setup (only when type is already resolved) ---
+        bool typeResolved = (varType != PSTYPE_AUTO);
         
-        // Register struct variables in the shared symbol table so PLCASM can use property access
-        if (hasAddress && varType == PSTYPE_STRUCT && structTypeIdx >= 0) {
-            const char* structTypeName = structTypes[structTypeIdx].name;
-            addSharedSymbol(name, structTypeName, sym->memoryOffset, 0, false, structTypes[structTypeIdx].totalSize, array_size);
-        } else if (hasAddress && (varType == PSTYPE_STR8 || varType == PSTYPE_STR16)) {
-            // Register string in shared symbol table (type_size = total string size)
-            u32 str_size = sym->stringSizeInBytes();
-            addSharedSymbol(name, varTypeToPlcasm(varType), sym->memoryOffset, 0, false, (u8)str_size, 0);
-        } else if (hasAddress && array_size > 0) {
-            // Register array in shared symbol table
-            u8 elem_size = (u8)getTypeSize(varType);
-            addSharedSymbol(name, varTypeToPlcasm(varType), sym->memoryOffset, 0, false, elem_size, array_size);
-        }
-        
-        // Emit comment
-        emit("// ");
-        emit(isConst ? "const " : "let ");
-        emit(name);
-        emit(": ");
-        emit(varTypeToPlcasm(varType));
-        if (string_capacity > 0) {
-            // Show string capacity
-            emit("[");
-            char sizeBuf[16];
-            int si = 0;
-            u16 s = string_capacity;
-            if (s == 0) sizeBuf[si++] = '0';
-            else {
-                char temp[16];
-                int ti = 0;
-                while (s > 0) { temp[ti++] = '0' + (s % 10); s /= 10; }
-                while (ti > 0) sizeBuf[si++] = temp[--ti];
+        if (typeResolved) {
+            if (isAutoAddress || isLocal) {
+                generateAutoAddress(sym);
+                hasAddress = true;
+                isAutoAddress = true;
+                sym->isAutoAddress = true;
+                int j = 0;
+                while (sym->address[j] && j < 31) {
+                    address[j] = sym->address[j];
+                    j++;
+                }
+                address[j] = '\0';
+            } else if (hasAddress) {
+                if (!parseAddress(sym, address)) return;
             }
-            sizeBuf[si] = '\0';
-            emit(sizeBuf);
-            emit("]");
-        } else if (array_size > 0) {
-            emit("[");
-            char sizeBuf[16];
-            int si = 0;
-            MY_PTR_t s = array_size;
-            if (s == 0) sizeBuf[si++] = '0';
-            else {
-                char temp[16];
-                int ti = 0;
-                while (s > 0) { temp[ti++] = '0' + (s % 10); s /= 10; }
-                while (ti > 0) sizeBuf[si++] = temp[--ti];
-            }
-            sizeBuf[si] = '\0';
-            emit(sizeBuf);
-            emit("]");
-        }
-        if (hasAddress) {
-            emit(" @ ");
-            emit(address);
-            if (isLocal) {
-                emit(" (local)");
-            } else if (isAutoAddress) {
-                emit(" (auto)");
-            }
-        }
-        emit("\n");
-        
-        // String initialization: emit str.init to set capacity
-        if (varType == PSTYPE_STR8 || varType == PSTYPE_STR16) {
-            const char* strType = (varType == PSTYPE_STR8) ? "str" : "str16";
-            u16 cap = sym->stringCapacity;
             
-            // Emit: u16.const <capacity>; str.init <addr>
-            emit("u16.const ");
-            char capBuf[16];
-            int ci = 0;
-            if (cap == 0) capBuf[ci++] = '0';
-            else {
-                char temp[16];
-                int ti = 0;
-                while (cap > 0) { temp[ti++] = '0' + (cap % 10); cap /= 10; }
-                while (ti > 0) capBuf[ci++] = temp[--ti];
+            // Register shared symbols
+            if (hasAddress && varType == PSTYPE_STRUCT && structTypeIdx >= 0) {
+                const char* structTypeName = structTypes[structTypeIdx].name;
+                addSharedSymbol(name, structTypeName, sym->memoryOffset, 0, false, structTypes[structTypeIdx].totalSize, array_size);
+            } else if (hasAddress && (varType == PSTYPE_STR8 || varType == PSTYPE_STR16)) {
+                u32 str_size = sym->stringSizeInBytes();
+                addSharedSymbol(name, varTypeToPlcasm(varType), sym->memoryOffset, 0, false, (u8)str_size, 0);
+            } else if (hasAddress && array_size > 0) {
+                u8 elem_size = (u8)getTypeSize(varType);
+                addSharedSymbol(name, varTypeToPlcasm(varType), sym->memoryOffset, 0, false, elem_size, array_size);
             }
-            capBuf[ci] = '\0';
-            emit(capBuf);
+            
+            // Emit comment
+            emit("// ");
+            emit(isConst ? "const " : "let ");
+            emit(name);
+            emit(": ");
+            emit(varTypeToPlcasm(varType));
+            if (string_capacity > 0) {
+                emit("[");
+                char sizeBuf[16];
+                int si = 0;
+                u16 s = string_capacity;
+                if (s == 0) sizeBuf[si++] = '0';
+                else {
+                    char temp[16];
+                    int ti = 0;
+                    while (s > 0) { temp[ti++] = '0' + (s % 10); s /= 10; }
+                    while (ti > 0) sizeBuf[si++] = temp[--ti];
+                }
+                sizeBuf[si] = '\0';
+                emit(sizeBuf);
+                emit("]");
+            } else if (array_size > 0) {
+                emit("[");
+                char sizeBuf[16];
+                int si = 0;
+                MY_PTR_t s = array_size;
+                if (s == 0) sizeBuf[si++] = '0';
+                else {
+                    char temp[16];
+                    int ti = 0;
+                    while (s > 0) { temp[ti++] = '0' + (s % 10); s /= 10; }
+                    while (ti > 0) sizeBuf[si++] = temp[--ti];
+                }
+                sizeBuf[si] = '\0';
+                emit(sizeBuf);
+                emit("]");
+            }
+            if (hasAddress) {
+                emit(" @ ");
+                emit(address);
+                if (isLocal) {
+                    emit(" (local)");
+                } else if (isAutoAddress) {
+                    emit(" (auto)");
+                }
+            }
+            if (isTypeInferred) {
+                emit(" [inferred]");
+            }
             emit("\n");
-            emit(strType);
-            emit(".init ");
-            emit(sym->address);
-            emit("\n");
+            
+            // String initialization: emit str.init to set capacity
+            if (varType == PSTYPE_STR8 || varType == PSTYPE_STR16) {
+                const char* strType = (varType == PSTYPE_STR8) ? "str" : "str16";
+                u16 cap = sym->stringCapacity;
+                
+                emit("u16.const ");
+                char capBuf[16];
+                int ci = 0;
+                if (cap == 0) capBuf[ci++] = '0';
+                else {
+                    char temp[16];
+                    int ti = 0;
+                    while (cap > 0) { temp[ti++] = '0' + (cap % 10); cap /= 10; }
+                    while (ti > 0) capBuf[ci++] = temp[--ti];
+                }
+                capBuf[ci] = '\0';
+                emit(capBuf);
+                emit("\n");
+                emit(strType);
+                emit(".init ");
+                emit(sym->address);
+                emit("\n");
+            }
         }
+        // else: type is still AUTO - will be resolved by the initializer below
         
         // Initializer: "= expression"
         if (match(PSTOK_EQ)) {
             // Set target type hint for expression parsing
             PLCScriptVarType savedTarget = targetType;
-            targetType = varType;
+            // If type is resolved, use it as hint; if AUTO, use VOID (let expression determine type)
+            targetType = typeResolved ? varType : PSTYPE_VOID;
             
             // Reset string context tracking
             lastStringSymbol = nullptr;
@@ -3344,6 +3389,66 @@ public:
             // Generate expression code
             PLCScriptVarType exprType = parseExpression();
             targetType = savedTarget;
+            
+            // --- Deferred type inference from expression ---
+            if (!typeResolved) {
+                // Resolve type from expression result
+                if (exprType == PSTYPE_VOID || exprType == PSTYPE_AUTO) {
+                    varType = PSTYPE_I32; // fallback
+                } else if (isStringType(exprType)) {
+                    setError("String variables require explicit type annotation with capacity");
+                    return;
+                } else if (exprType == PSTYPE_STRUCT) {
+                    setError("Struct variables require explicit type annotation");
+                    return;
+                } else {
+                    varType = exprType;
+                }
+                sym->type = varType;
+                sym->isTypeInferred = true;
+                isTypeInferred = true;
+                typeResolved = true;
+                
+                // NOW generate auto address (deferred until type was resolved)
+                if (isAutoAddress || isLocal) {
+                    generateAutoAddress(sym);
+                    hasAddress = true;
+                    isAutoAddress = true;
+                    sym->isAutoAddress = true;
+                    int j = 0;
+                    while (sym->address[j] && j < 31) {
+                        address[j] = sym->address[j];
+                        j++;
+                    }
+                    address[j] = '\0';
+                }
+                
+                // Register shared symbols
+                if (hasAddress && array_size > 0) {
+                    u8 elem_size = (u8)getTypeSize(varType);
+                    addSharedSymbol(name, varTypeToPlcasm(varType), sym->memoryOffset, 0, false, elem_size, array_size);
+                }
+                
+                // Emit comment (after expression code, before store)
+                emit("// ");
+                emit(isConst ? "const " : "let ");
+                emit(name);
+                emit(": ");
+                emit(varTypeToPlcasm(varType));
+                if (hasAddress) {
+                    emit(" @ ");
+                    emit(address);
+                    if (isLocal) {
+                        emit(" (local)");
+                    } else if (isAutoAddress) {
+                        emit(" (auto)");
+                    }
+                }
+                if (isTypeInferred) {
+                    emit(" [inferred]");
+                }
+                emit("\n");
+            }
             
             // Handle string type initialization specially
             if (varType == PSTYPE_STR8 || varType == PSTYPE_STR16) {
@@ -3414,6 +3519,46 @@ public:
             // const requires an initializer
             setError("Constant declaration requires an initializer");
             return;
+        } else if (!typeResolved) {
+            // No initializer and no explicit type - fall back to i32
+            varType = PSTYPE_I32;
+            sym->type = varType;
+            sym->isTypeInferred = true;
+            isTypeInferred = true;
+            
+            // Generate auto address
+            if (isAutoAddress || isLocal) {
+                generateAutoAddress(sym);
+                hasAddress = true;
+                isAutoAddress = true;
+                sym->isAutoAddress = true;
+                int j = 0;
+                while (sym->address[j] && j < 31) {
+                    address[j] = sym->address[j];
+                    j++;
+                }
+                address[j] = '\0';
+            }
+            
+            // Emit comment
+            emit("// ");
+            emit(isConst ? "const " : "let ");
+            emit(name);
+            emit(": ");
+            emit(varTypeToPlcasm(varType));
+            if (hasAddress) {
+                emit(" @ ");
+                emit(address);
+                if (isLocal) {
+                    emit(" (local)");
+                } else if (isAutoAddress) {
+                    emit(" (auto)");
+                }
+            }
+            if (isTypeInferred) {
+                emit(" [inferred]");
+            }
+            emit("\n");
         }
         
         // Semicolon is optional
@@ -5138,7 +5283,7 @@ public:
             int64_t val = currentToken.intValue;
             nextToken();
             // Use targetType hint if set, otherwise default to i32
-            PLCScriptVarType constType = (targetType != PSTYPE_VOID && targetType != PSTYPE_F32 && targetType != PSTYPE_F64) 
+            PLCScriptVarType constType = (targetType != PSTYPE_VOID && targetType != PSTYPE_AUTO && targetType != PSTYPE_F32 && targetType != PSTYPE_F64) 
                                          ? targetType : PSTYPE_I32;
             // Check if value fits in target type
             bool fits = true;

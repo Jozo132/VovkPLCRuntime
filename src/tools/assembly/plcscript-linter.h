@@ -117,9 +117,17 @@ public:
 
     // Lint the source code (compile to collect errors but optionally don't generate code)
     bool lint() {
+        // Save source pointer before reset (reset() clears source)
+        char* savedSource = source;
+        int savedSourceLength = sourceLength;
+        
         // Reset state
         clearProblems();
         reset();
+        
+        // Restore source
+        source = savedSource;
+        sourceLength = savedSourceLength;
         
         // Set source if not already set
         if (!source || sourceLength == 0) {
@@ -226,6 +234,75 @@ WASM_EXPORT const char* plcscript_linter_getOutput() {
 // Get output length
 WASM_EXPORT int plcscript_linter_getOutputLength() {
     return __standalone_plcscript_linter__.outputLength;
+}
+
+// ============================================================================
+// WASM Exports for PLCScript Symbol Table
+// ============================================================================
+
+// Get the number of resolved symbols in the symbol table
+WASM_EXPORT int plcscript_linter_getSymbolCount() {
+    return __standalone_plcscript_linter__.symbolCount;
+}
+
+// Get symbol name by index
+WASM_EXPORT const char* plcscript_linter_getSymbolName(int index) {
+    if (index < 0 || index >= __standalone_plcscript_linter__.symbolCount) return "";
+    return __standalone_plcscript_linter__.symbols[index].name;
+}
+
+// Get symbol type as string (e.g., "i32", "u8", "bool", "f32", etc.)
+WASM_EXPORT const char* plcscript_linter_getSymbolType(int index) {
+    if (index < 0 || index >= __standalone_plcscript_linter__.symbolCount) return "";
+    return __standalone_plcscript_linter__.varTypeToPlcasm(__standalone_plcscript_linter__.symbols[index].type);
+}
+
+// Get symbol address string
+WASM_EXPORT const char* plcscript_linter_getSymbolAddress(int index) {
+    if (index < 0 || index >= __standalone_plcscript_linter__.symbolCount) return "";
+    return __standalone_plcscript_linter__.symbols[index].address;
+}
+
+// Get symbol declaration line
+WASM_EXPORT int plcscript_linter_getSymbolLine(int index) {
+    if (index < 0 || index >= __standalone_plcscript_linter__.symbolCount) return 0;
+    return __standalone_plcscript_linter__.symbols[index].declarationLine;
+}
+
+// Get symbol declaration column
+WASM_EXPORT int plcscript_linter_getSymbolColumn(int index) {
+    if (index < 0 || index >= __standalone_plcscript_linter__.symbolCount) return 0;
+    return __standalone_plcscript_linter__.symbols[index].declarationColumn;
+}
+
+// Check if symbol is a local variable
+WASM_EXPORT bool plcscript_linter_getSymbolIsLocal(int index) {
+    if (index < 0 || index >= __standalone_plcscript_linter__.symbolCount) return false;
+    return __standalone_plcscript_linter__.symbols[index].isLocal;
+}
+
+// Check if symbol is a constant
+WASM_EXPORT bool plcscript_linter_getSymbolIsConst(int index) {
+    if (index < 0 || index >= __standalone_plcscript_linter__.symbolCount) return false;
+    return __standalone_plcscript_linter__.symbols[index].isConst;
+}
+
+// Check if symbol type was inferred (not explicitly annotated)
+WASM_EXPORT bool plcscript_linter_getSymbolIsInferred(int index) {
+    if (index < 0 || index >= __standalone_plcscript_linter__.symbolCount) return false;
+    return __standalone_plcscript_linter__.symbols[index].isTypeInferred;
+}
+
+// Get symbol scope level
+WASM_EXPORT int plcscript_linter_getSymbolScopeLevel(int index) {
+    if (index < 0 || index >= __standalone_plcscript_linter__.symbolCount) return 0;
+    return __standalone_plcscript_linter__.symbols[index].scopeLevel;
+}
+
+// Get symbol memory offset
+WASM_EXPORT int plcscript_linter_getSymbolMemoryOffset(int index) {
+    if (index < 0 || index >= __standalone_plcscript_linter__.symbolCount) return 0;
+    return (int)__standalone_plcscript_linter__.symbols[index].memoryOffset;
 }
 
 #endif // __WASM__
