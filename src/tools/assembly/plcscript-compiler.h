@@ -3099,6 +3099,8 @@ public:
     
     void parseVariableDeclaration() {
         bool isConst = check(PSTOK_CONST);
+        int letLine = currentLine;
+        int letCol = currentColumn;
         nextToken(); // consume 'let' or 'const'
         
         // Variable name
@@ -3107,7 +3109,7 @@ public:
             return;
         }
         if (!check(PSTOK_IDENTIFIER)) {
-            setError("Expected variable name");
+            setErrorAt("Expected variable name after 'let'", letLine, letCol);
             return;
         }
         char name[PLCSCRIPT_MAX_IDENTIFIER_LEN];
