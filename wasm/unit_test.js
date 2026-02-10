@@ -39,6 +39,7 @@ import { runTests as runPLCScriptValidationTests } from './node-test/plcscript-t
 import { runTests as runSTValidationTests } from './node-test/st-tests/test_st_validation.js'
 import { runTests as runTypeInferenceTests } from './node-test/plcscript-tests/test_plcscript_type_inference.js'
 import { runTests as runDataBlockTests } from './node-test/plcasm-tests/test_datablock_plcasm.js'
+import { runTests as runDBDeclarationTests } from './node-test/plcasm-tests/test_db_declaration.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -177,6 +178,11 @@ const testSuites = [
         name: 'DataBlock PLCASM Tests',
         shortName: 'datablock',
         run: runDataBlockTests
+    },
+    {
+        name: 'DB Declaration Tests',
+        shortName: 'db-decl',
+        run: runDBDeclarationTests
     },
     {
         name: 'Memory Leak Detection',

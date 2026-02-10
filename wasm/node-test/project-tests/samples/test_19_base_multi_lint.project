@@ -39,12 +39,12 @@ i16.add
 i16.move_to counter
     END_BLOCK
 
-    BLOCK LANG=STL Network 2 - STL sample block
+    BLOCK LANG=STL Network 2 - STL sample block with a syntax error (motorn instead of motor)
 A stop_btn
 R motorn
     END_BLOCK
 
-    BLOCK LANG=LADDER Network 3 - Ladder sample block
+    BLOCK LANG=LADDER Network 3 - Ladder sample block with a syntax error (stop_btnn instead of stop_btn)
 {
   "comment": "Network 1",
   "nodes": [

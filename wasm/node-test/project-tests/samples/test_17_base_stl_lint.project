@@ -18,7 +18,7 @@ END_FLASH
 
 SYMBOLS
     start_btn : bit : X0.0
-    stop_btn : bit : X0.1 = 1
+    stop_btn : bit : X0.1
     motor : bit : Y0.0
     error_led : bit : Y0.1
     counter : i16 : M0 = 10
@@ -39,7 +39,7 @@ i16.add
 i16.move_to counter
     END_BLOCK
 
-    BLOCK LANG=STL Network 2 - STL sample block
+    BLOCK LANG=STL Network 2 - STL sample block with a syntax error (motorn instead of motor)
 A stop_btn
 R motorn
     END_BLOCK

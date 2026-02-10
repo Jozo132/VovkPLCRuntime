@@ -12,6 +12,6 @@
   "flash": { "size": 0, "used": 0 },
   "execution": { "steps": 0, "stackSize": 0 },
   "problems": [
-    { "severity": "error", "message": "unexpected token, expected bit representation", "line": 3, "column": 16, "file": "main", "block": "Network 2 - STL sample block", "language": "STL", "token": "Motorn" }
+    { "severity": "error", "message": "unexpected token, expected bit representation", "line": 3, "column": 16, "file": "main", "block": "Network 2 - STL sample block with a syntax error (motorn instea", "language": "STL", "token": "Motorn" }
   ]
 }

@@ -1,40 +1,20 @@
 {
-  "success": 1,
+  "success": 0,
   "project": { "name": "PropertyAccessTest", "version": "1.0" },
-  "bytecode": "FD 02 18 05 C0 01 10 05 09 19 09 C0 00 FD 02 18 05 C0 01 19 05 00 00 FD 02 18 05 C9 01 10 05 09 19 09 C4 00 FD 02 18 05 C9 01 19 05 04 00 FD 01 18 05 C0 01 19 05 C8 00 18 05 C9 01 19 05 CC 00 FD 01 18 05 C0 01 19 05 D0 00 18 05 C9 01 19 05 D4 00 FD 08 18 05 C0 01 19 05 D8 00 18 05 C9 01 19 05 DC 00 FF FD 03 58 40 00 14 03 E2 77 00 18 05 C0 01 19 05 20 00 14 03 E2 84 00 18 05 C9 01 19 05 24 00 60 80 00 FF",
-  "bytecodeLength": 136,
-  "checksum": 207,
-  "files": [
-    { "path": "main", "firstBlockIndex": 0, "blockCount": 8, "executionOrder": 0 }
-  ],
-  "blocks": [
-    { "file": "main", "name": "DirectTimerAccess", "language": "STL", "offset": 0, "size": 13 },
-    { "file": "main", "name": "SymbolicTimerAccess", "language": "STL", "offset": 13, "size": 10 },
-    { "file": "main", "name": "DirectCounterAccess", "language": "STL", "offset": 23, "size": 13 },
-    { "file": "main", "name": "SymbolicCounterAccess", "language": "STL", "offset": 36, "size": 10 },
-    { "file": "main", "name": "PlcasmDirectAccess", "language": "PLCASM", "offset": 46, "size": 18 },
-    { "file": "main", "name": "PlcasmSymbolicAccess", "language": "PLCASM", "offset": 64, "size": 18 },
-    { "file": "main", "name": "PlcScriptAccess", "language": "UNKNOWN", "offset": 82, "size": 19 },
-    { "file": "main", "name": "LadderPropertyAccess", "language": "LADDER", "offset": 101, "size": 34 }
-  ],
-  "symbols": [
-    { "name": "my_timer", "type": "timer", "address": "0" },
-    { "name": "my_counter", "type": "counter", "address": "0" },
-    { "name": "timer_et", "type": "u32", "address": "0" },
-    { "name": "counter_cv", "type": "u32", "address": "4" },
-    { "name": "ladder_timer_et", "type": "u32", "address": "32" },
-    { "name": "ladder_counter_cv", "type": "u32", "address": "36" }
-  ],
-  "memoryAreas": [
-    { "name": "S", "start": 0, "end": 63 },
-    { "name": "X", "start": 64, "end": 127 },
-    { "name": "Y", "start": 128, "end": 191 },
-    { "name": "M", "start": 192, "end": 447 },
-    { "name": "T", "start": 448, "end": 456 },
-    { "name": "C", "start": 457, "end": 461 }
-  ],
-  "memory": { "available": 1024, "used": 192 },
-  "flash": { "size": 32768, "used": 136 },
-  "execution": { "steps": 30, "stackSize": 0 },
-  "problems": []
+  "bytecode": "",
+  "bytecodeLength": 0,
+  "checksum": 0,
+  "files": [],
+  "blocks": [],
+  "symbols": [],
+  "memoryAreas": [],
+  "memory": { "available": 0, "used": 0 },
+  "flash": { "size": 0, "used": 0 },
+  "execution": { "steps": 0, "stackSize": 0 },
+  "problems": [
+    { "severity": "error", "message": "write to read-only memory area (system/input region below Q0.0)", "line": 2, "column": 13, "file": "main", "block": "DirectTimerAccess", "language": "STL", "token": "timer_et" },
+    { "severity": "error", "message": "write to read-only memory area (system/input region below Q0.0)", "line": 2, "column": 13, "file": "main", "block": "DirectCounterAccess", "language": "STL", "token": "counter_cv" },
+    { "severity": "error", "message": "write to read-only memory area (system/input region below Q0.0)", "line": 8, "column": 13, "file": "main", "block": "PlcScriptAccess", "language": "UNKNOWN", "token": "ladder_timer_et" },
+    { "severity": "error", "message": "write to read-only memory area (system/input region below Q0.0)", "line": 88, "column": 13, "file": "main", "block": "PlcScriptAccess", "language": "UNKNOWN", "token": "ladder_counter_cv" }
+  ]
 }

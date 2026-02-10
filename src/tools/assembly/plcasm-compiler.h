@@ -898,6 +898,7 @@ public:
     PLCASM_DBDecl db_decls[PLCASM_MAX_DB_DECLS];
     int db_decl_count = 0;
     bool db_config_emitted = false; // Track whether CONFIG_DB was emitted in current build pass
+    int db_brace_depth = 0; // Track brace nesting during tokenization to suppress label registration inside DB blocks
 
 #define MAX_DOWNLOADED_PROGRAM_SIZE 64535
     u8 downloaded_program[MAX_DOWNLOADED_PROGRAM_SIZE];
@@ -1039,28 +1040,24 @@ public:
 
         int idx = start_idx + 1;
 
-        // Parse optional alias: "AliasName"
-        // Expect: " AliasName "  (three tokens: quote, name, quote)
-        if (idx + 2 < token_count && tokens[idx] == "\"") {
-            Token& alias_tok = tokens[idx + 1];
-            Token& close_quote = tokens[idx + 2];
-            if (close_quote == "\"") {
-                int alen = alias_tok.string.length < 31 ? alias_tok.string.length : 31;
-                for (int j = 0; j < alen; j++) decl.alias[j] = alias_tok.string.data[j];
-                decl.alias[alen] = '\0';
+        // Parse optional alias: TOKEN_STRING (tokenizer converts "Alias" into a single TOKEN_STRING)
+        if (idx < token_count && tokens[idx].type == TOKEN_STRING) {
+            Token& alias_tok = tokens[idx];
+            int alen = alias_tok.string.length < 31 ? alias_tok.string.length : 31;
+            for (int j = 0; j < alen; j++) decl.alias[j] = alias_tok.string.data[j];
+            decl.alias[alen] = '\0';
 
-                // Check for duplicate alias
-                for (int d = 0; d < db_decl_count; d++) {
-                    if (db_decls[d].alias[0] != '\0' && sharedStrEqI(db_decls[d].alias, decl.alias)) {
-                        Serial.print(F("Error: duplicate DB alias '"));
-                        Serial.print(decl.alias);
-                        Serial.print(F("' at ")); Serial.print(directive.line);
-                        Serial.print(F(":")); Serial.println(directive.column);
-                        return -1;
-                    }
+            // Check for duplicate alias
+            for (int d = 0; d < db_decl_count; d++) {
+                if (db_decls[d].alias[0] != '\0' && sharedStrEqI(db_decls[d].alias, decl.alias)) {
+                    Serial.print(F("Error: duplicate DB alias '"));
+                    Serial.print(decl.alias);
+                    Serial.print(F("' at ")); Serial.print(directive.line);
+                    Serial.print(F(":")); Serial.println(directive.column);
+                    return -1;
                 }
-                idx += 3; // skip quote, alias, quote
             }
+            idx++; // skip alias string token
         }
 
         // Expect opening brace {   (the = is consumed by the tokenizer)
@@ -1089,22 +1086,18 @@ public:
                 return -1;
             }
 
-            // Field name
+            // Field name — tokenizer converts "name:" into TOKEN_LABEL (colon is consumed)
             Token& field_name_tok = tokens[idx];
-            if (field_name_tok.type != TOKEN_KEYWORD) {
+            if (field_name_tok.type != TOKEN_LABEL && field_name_tok.type != TOKEN_KEYWORD) {
                 Serial.print(F("Error: expected field name in DB at "));
                 Serial.print(field_name_tok.line); Serial.print(F(":")); Serial.println(field_name_tok.column);
                 return -1;
             }
             idx++;
 
-            // Colon separator
-            if (idx >= token_count || !(tokens[idx] == ":")) {
-                Serial.print(F("Error: expected ':' after field name in DB at "));
-                Serial.print(field_name_tok.line); Serial.print(F(":")); Serial.println(field_name_tok.column);
-                return -1;
-            }
-            idx++;
+            // Note: The colon separator after field name is consumed by the tokenizer's
+            // label detection logic (keyword + ":" → TOKEN_LABEL, ":" not added).
+            // The next token is the type name directly.
 
             // Type name
             if (idx >= token_count) {
@@ -1139,28 +1132,31 @@ public:
 
             // Check for optional default value (the '=' was already consumed by tokenizer)
             // The next token would be a literal value or negative sign
+            // Note: The colon is consumed by the tokenizer's label detection,
+            // so the next field name appears as TOKEN_LABEL, not TOKEN_KEYWORD + ":"
             field.has_default = false;
             field.default_value.int_val = 0;
 
-            if (idx < token_count && !(tokens[idx] == "}") && !(tokens[idx] == ":")) {
-                // Check if next token looks like a value (not a field name followed by colon)
-                // Peek ahead to see if token after next is ':'  — if so, this is a new field
+            if (idx < token_count && !(tokens[idx] == "}")) {
+                // Check if next token looks like a value (not a field name for the next field)
                 bool is_value = false;
                 if (tokens[idx].type == TOKEN_INTEGER || tokens[idx].type == TOKEN_REAL) {
                     is_value = true;
                 } else if (tokens[idx] == "-" && idx + 1 < token_count &&
                            (tokens[idx + 1].type == TOKEN_INTEGER || tokens[idx + 1].type == TOKEN_REAL)) {
                     is_value = true;
+                } else if (tokens[idx].type == TOKEN_LABEL) {
+                    // TOKEN_LABEL means it's the next field name (tokenizer consumed the colon)
+                    is_value = false;
                 } else if (tokens[idx].type == TOKEN_KEYWORD) {
-                    // Could be a field name for the next field — check if colon follows
-                    if (idx + 1 < token_count && tokens[idx + 1] == ":") {
-                        is_value = false; // It's the next field name
-                    }
+                    // Could be a field name for the next field — but since tokenizer
+                    // converts keyword+colon to label, a keyword here is likely a value
+                    is_value = false;
                 }
 
                 if (is_value) {
                     bool is_negative = false;
-                    if (tokens[idx] == "-") {
+                    if (tokens[idx].type == TOKEN_OPERATOR && tokens[idx] == "-") {
                         is_negative = true;
                         idx++;
                     }
@@ -1928,6 +1924,9 @@ public:
                 return false;  // Don't add the closing quote
             }
         }
+        // Track brace depth for DB declaration blocks
+        if (token.type == TOKEN_OPERATOR && token == "{") db_brace_depth++;
+        if (token.type == TOKEN_OPERATOR && token == "}") { if (db_brace_depth > 0) db_brace_depth--; }
         if (token_count_temp >= 1) {
             Token& p1_token = tokens[token_count_temp - 1];
             TokenType p1_type = p1_token.type;
@@ -1935,8 +1934,11 @@ public:
             if (p1_type == TOKEN_KEYWORD) {
                 if (token.type == TOKEN_OPERATOR && token == ":") {
                     p1_token.type = TOKEN_LABEL;
-                    bool error = add_label(p1_token, token_count_temp - 1);
-                    if (error) return error;
+                    // Skip global label registration inside DB declaration blocks (field names are local)
+                    if (db_brace_depth == 0) {
+                        bool error = add_label(p1_token, token_count_temp - 1);
+                        if (error) return error;
+                    }
                     return false;
                 }
             }
@@ -1954,6 +1956,7 @@ public:
         token_count = 0; // Fix: Reset token count
         LUT_label_count = 0;
         LUT_const_count = 0;
+        db_brace_depth = 0; // Reset brace depth tracking
         char* token_start = assembly_string;
         int token_length = 0;
         int assembly_string_length = string_len(assembly_string);
@@ -2562,6 +2565,12 @@ public:
     bool buildErrorSizeLimit(Token token) { return buildError(token, "program size limit reached"); }
     bool buildErrorUnknownToken(Token token) { return buildError(token, "unknown token"); }
     bool buildErrorExpectedInt(Token token) { return buildError(token, "unexpected token, expected integer"); }
+    bool buildErrorReadOnlyWrite(Token& token, int address) {
+        if (address >= 0 && (u32)address < plcasm_output_offset) {
+            return buildError(token, "write to read-only memory area (system/input region below Q0.0)");
+        }
+        return false;
+    }
     bool buildErrorExpectedIntSameLine(Token& current, Token& next, bool& rewind) {
         if (next.line != current.line) {
             rewind = true;
@@ -2828,6 +2837,26 @@ public:
                 if (!db_config_emitted && db_decl_count > 0) {
                     db_config_emitted = true;
 
+                    // Helper macro: copy a ProgramLine to built_bytecode without 'continue'
+                    // (unlike _line_push which contains continue; and would skip subsequent emissions)
+                    #define _db_line_emit(line_ref) do { \
+                        u8 _sz = (line_ref).size; \
+                        if (_sz > MAX_PROGRAM_LINE_SIZE) { buildError(token, "instruction too large"); return true; } \
+                        int _end = built_bytecode_length + _sz; \
+                        if (_end >= PLCRUNTIME_MAX_PROGRAM_SIZE) { buildErrorSizeLimit(token); return true; } \
+                        if (!lintMode) { \
+                            for (int _j = 0; _j < _sz; _j++) { \
+                                built_bytecode[built_bytecode_length + _j] = (line_ref).code[_j]; \
+                                crc8_simple(built_bytecode_checksum, (line_ref).code[_j]); \
+                            } \
+                        } \
+                        if (finalPass && !lintMode) { \
+                            addIRSimple(built_bytecode_length, token, _sz, (line_ref).code[0]); \
+                        } \
+                        programLineCount++; \
+                        built_bytecode_length = _end; \
+                    } while(0)
+
                     // Emit CONFIG_DB bytecode for all declared DBs
                     {
                         ProgramLine& line = programLines[programLineCount];
@@ -2844,7 +2873,7 @@ public:
                             offset += 2;
                         }
                         line.size = offset;
-                        _line_push;
+                        _db_line_emit(line);
                     }
 
                     // Emit default value writes for each field that has a default
@@ -2884,10 +2913,11 @@ public:
                             // Skip 8-byte types for now (f64/i64 defaults are rare)
                             if (offset > 0) {
                                 line.size = offset;
-                                _line_push;
+                                _db_line_emit(line);
                             }
                         }
                     }
+                    #undef _db_line_emit
                 }
                 continue;
             }
@@ -3740,6 +3770,11 @@ public:
                                 }
                                 i++;
                                 if (bit < 0 || bit > 7) { if (buildError(token_p1, "bit value out of range for 8-bit type")) return true; }
+                                // Check for write to read-only area (writeBit variants only, not readBit)
+                                // Only check when address was successfully resolved
+                                bool is_write_bit = (mem_bit_task == WRITE_X8_B0 || mem_bit_task == WRITE_S_X8_B0 ||
+                                                     mem_bit_task == WRITE_R_X8_B0 || mem_bit_task == WRITE_INV_X8_B0);
+                                if (!e_membit && is_write_bit && buildErrorReadOnlyWrite(token_p1, address)) return true;
                                 mem_bit_task = (PLCRuntimeInstructionSet) ((int) mem_bit_task + bit);
                                 line.size = InstructionCompiler::push_InstructionWithPointer(bytecode, mem_bit_task, address); _line_push;
                             }
@@ -3876,6 +3911,7 @@ public:
                                 if (buildErrorExpectedIntSameLine(token, token_p1, rewind)) return true;
                                 if (rewind) continue;
                             }
+                            if (!e_addr && buildErrorReadOnlyWrite(token_p1, address_value)) return true;
                             i++; line.size = InstructionCompiler::push_move_to(bytecode, type, address_value); _line_push;
                         }
                         if (hasNext && token.endsWithNoCase(".inc")) {
@@ -3886,6 +3922,7 @@ public:
                                 if (buildErrorExpectedIntSameLine(token, token_p1, rewind)) return true;
                                 if (rewind) continue;
                             }
+                            if (!e_addr && buildErrorReadOnlyWrite(token_p1, address_value)) return true;
                             i++; line.size = InstructionCompiler::push_inc(bytecode, type, address_value); _line_push;
                         }
                         if (hasNext && token.endsWithNoCase(".dec")) {
@@ -3896,6 +3933,7 @@ public:
                                 if (buildErrorExpectedIntSameLine(token, token_p1, rewind)) return true;
                                 if (rewind) continue;
                             }
+                            if (!e_addr && buildErrorReadOnlyWrite(token_p1, address_value)) return true;
                             i++; line.size = InstructionCompiler::push_dec(bytecode, type, address_value); _line_push;
                         }
                         // if (hasNext && token.endsWithNoCase(".load")) { if (e_int) return buildErrorExpectedInt(token_p1); i++; line.size = InstructionCompiler::pushGET(bytecode, value_int, type); _line_push; }
@@ -4241,6 +4279,7 @@ WASM_EXPORT void logBytecode() {
 }
 
 WASM_EXPORT bool compileAssembly(bool debug = true) {
+    resetUserStructTypes();
     return defaultCompiler.compileAssembly(debug, false);
 }
 
