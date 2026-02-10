@@ -424,6 +424,16 @@ async function main() {
     if (totalFailed > 0) {
         console.log()
         console.log(`  ${RED}${totalFailed} test(s) failed${RESET}`)
+        // Grep-friendly failure summary: each line starts with "FAIL:" for easy filtering
+        console.log()
+        for (const suite of results) {
+            if (suite.failed === 0) continue
+            for (const test of suite.tests) {
+                if (test.passed) continue
+                const err = test.error ? ` — ${test.error}` : ''
+                console.log(`  FAIL: [${suite.name}] ${test.name}${err}`)
+            }
+        }
     }
     
     console.log()
