@@ -1774,6 +1774,75 @@ class VovkPLC_class {
         return result
     }
 
+    /** @type {Record<number, string>} */
+    static LANG_MAP = {
+        0: 'UNKNOWN',
+        1: 'PLCASM',
+        2: 'STL',
+        3: 'LADDER',
+        4: 'FBD',
+        5: 'SFC',
+        6: 'ST',
+        7: 'IL',
+        8: 'PLCSCRIPT',
+    }
+
+    /**
+     * Reads all accumulated project problems from WASM memory.
+     * @returns {ProjectCompileProblem[]}
+     */
+    _readProjectProblems = () => {
+        const count = this.wasm_exports.project_getProblemCount ? this.wasm_exports.project_getProblemCount() : 0
+        if (count === 0) return []
+        const pointer = this.wasm_exports.project_getProblems ? this.wasm_exports.project_getProblems() : 0
+        if (!pointer) return []
+
+        const struct_size = 344
+        const view = new DataView(this.wasm_exports.memory.buffer)
+        /** @type {ProjectCompileProblem[]} */
+        const problems = []
+
+        for (let i = 0; i < count; i++) {
+            const offset = pointer + i * struct_size
+            const type_int = view.getUint32(offset + 0, true)
+            const line = view.getUint32(offset + 4, true)
+            const column = view.getUint32(offset + 8, true)
+            const length = view.getUint32(offset + 12, true)
+
+            const readFixedStr = (start, maxLen) => {
+                let s = ''
+                for (let j = 0; j < maxLen; j++) {
+                    const c = view.getUint8(offset + start + j)
+                    if (c === 0) break
+                    s += String.fromCharCode(c)
+                }
+                return s
+            }
+
+            const message = readFixedStr(16, 128)
+            const block = readFixedStr(144, 64)
+            const program = readFixedStr(208, 64)
+            const lang = view.getUint32(offset + 272, true)
+            const token = readFixedStr(276, 64)
+            const langName = VovkPLC_class.LANG_MAP[lang] || 'UNKNOWN'
+
+            problems.push({
+                type: type_int === 2 ? 'error' : type_int === 1 ? 'warning' : 'info',
+                message,
+                line,
+                column,
+                length,
+                program: program || undefined,
+                block: block || undefined,
+                lang,
+                compiler: langName,
+                token: token || undefined,
+            })
+        }
+
+        return problems
+    }
+
     /**
      * @typedef {{
      *     type: 'error' | 'warning' | 'info',
@@ -1799,7 +1868,7 @@ class VovkPLC_class {
      */
 
     /**
-     * @typedef {{ bytecode: string, compileTime: number, problem: null, output: ProjectCompileOutput } | { bytecode: null, compileTime: number, problem: ProjectCompileProblem, output: null }} ProjectCompileResult
+     * @typedef {{ bytecode: string, compileTime: number, problem: null, warnings: ProjectCompileProblem[], output: ProjectCompileOutput } | { bytecode: null, compileTime: number, problem: ProjectCompileProblem, warnings: ProjectCompileProblem[], output: null }} ProjectCompileResult
      */
 
     /**
@@ -1889,6 +1958,7 @@ class VovkPLC_class {
                     line: 0,
                     column: 0,
                 },
+                warnings: [],
                 output: null,
             }
         }
@@ -1898,83 +1968,18 @@ class VovkPLC_class {
 
         // Check for errors using accumulated problems API
         if (!success || this.wasm_exports.project_hasError()) {
-            const count = this.wasm_exports.project_getProblemCount ? this.wasm_exports.project_getProblemCount() : 0
+            const allProblems = this._readProjectProblems()
+            const warnings = allProblems.filter(p => p.type !== 'error')
 
-            if (count > 0 && this.wasm_exports.project_getProblems) {
-                const pointer = this.wasm_exports.project_getProblems()
-                // Struct size = 344 bytes (4+4+4+4+128+64+64+4+64+4)
-                const struct_size = 344
-
-                const memory = new Uint8Array(this.wasm_exports.memory.buffer)
-                const view = new DataView(this.wasm_exports.memory.buffer)
-
-                // Read first problem (most relevant for compile result)
-                const offset = pointer
-                const type_int = view.getUint32(offset + 0, true)
-                const line = view.getUint32(offset + 4, true)
-                const column = view.getUint32(offset + 8, true)
-                const length = view.getUint32(offset + 12, true)
-
-                // message is 128 bytes at offset 16
-                let message = ''
-                for (let j = 0; j < 128; j++) {
-                    const charCode = view.getUint8(offset + 16 + j)
-                    if (charCode === 0) break
-                    message += String.fromCharCode(charCode)
-                }
-
-                // block is 64 bytes at offset 144
-                let block = ''
-                for (let j = 0; j < 64; j++) {
-                    const charCode = view.getUint8(offset + 144 + j)
-                    if (charCode === 0) break
-                    block += String.fromCharCode(charCode)
-                }
-
-                // program is 64 bytes at offset 208
-                let program = ''
-                for (let j = 0; j < 64; j++) {
-                    const charCode = view.getUint8(offset + 208 + j)
-                    if (charCode === 0) break
-                    program += String.fromCharCode(charCode)
-                }
-
-                // lang is 4 bytes at offset 272
-                const lang = view.getUint32(offset + 272, true)
-
-                // token_buf is 64 bytes at offset 276
-                let token = ''
-                for (let j = 0; j < 64; j++) {
-                    const charCode = view.getUint8(offset + 276 + j)
-                    if (charCode === 0) break
-                    token += String.fromCharCode(charCode)
-                }
-
-                // Map integer language ID to string name
-                /** @type {Record<number, string>} */
-                const LANG_MAP = {
-                    0: 'UNKNOWN',
-                    1: 'PLCASM',
-                    2: 'STL',
-                    3: 'LADDER',
-                }
-                const langName = LANG_MAP[lang] || 'UNKNOWN'
+            if (allProblems.length > 0) {
+                // Find first error, or fall back to first problem
+                const firstError = allProblems.find(p => p.type === 'error') || allProblems[0]
 
                 return {
                     bytecode: null,
                     compileTime: +(performance.now() - startTime).toFixed(1),
-                    problem: {
-                        type: type_int === 2 ? 'error' : type_int === 1 ? 'warning' : 'info',
-                        message: message || 'Unknown compilation error',
-                        line,
-                        column,
-                        length,
-                        ...(program && {program}),
-                        ...(block && {block}),
-                        lang,
-                        compiler: langName,
-                        ...(token && {token}),
-                    },
+                    problem: firstError,
+                    warnings,
                     output: null,
                 }
             }
@@ -2036,6 +2041,7 @@ class VovkPLC_class {
                     ...(block && {block}),
                     ...(compiler && {compiler}),
                 },
+                warnings: [],
                 output: null,
             }
         }
@@ -2054,6 +2060,7 @@ class VovkPLC_class {
                     line: 0,
                     column: 0,
                 },
+                warnings: [],
                 output: null,
             }
         }
@@ -2112,10 +2119,15 @@ class VovkPLC_class {
             stackSize = this.wasm_exports.getStackSize ? this.wasm_exports.getStackSize() || 0 : 0
         }
 
+        // Collect any accumulated warnings/info from compilation (e.g. from sub-compilers)
+        const allProblems = this._readProjectProblems()
+        const warnings = allProblems.filter(p => p.type !== 'error')
+
         return {
             bytecode: hex,
             compileTime: +(performance.now() - startTime).toFixed(1),
             problem: null,
+            warnings,
             output: {
                 memory: { used: memUsed, available: memAvailable },
                 memory_map: memoryMap,
@@ -2664,98 +2676,9 @@ class VovkPLC_class {
         // Compile the project (reads from stream buffer)
         const success = this.wasm_exports.project_compile(false)
 
-        // Check for accumulated problems first
-        const count = this.wasm_exports.project_getProblemCount()
+        // Read all accumulated problems
         /** @type {ProjectLinterProblem[]} */
-        const problems = []
-
-        if (count > 0) {
-            const pointer = this.wasm_exports.project_getProblems()
-            // Struct size = 344 bytes (4+4+4+4+128+64+64+4+64+4)
-            const struct_size = 344
-
-            const memory = new Uint8Array(this.wasm_exports.memory.buffer)
-            const view = new DataView(this.wasm_exports.memory.buffer)
-
-            // Helper to read C string from memory
-            const readString = (ptr = 0, maxLen = 512) => {
-                if (!ptr) return undefined
-                let str = ''
-                let i = ptr
-                while (memory[i] !== 0 && i < memory.length && str.length < maxLen) {
-                    str += String.fromCharCode(memory[i])
-                    i++
-                }
-                return str
-            }
-
-            for (let i = 0; i < count; i++) {
-                const offset = pointer + i * struct_size
-                const type_int = view.getUint32(offset + 0, true)
-                const line = view.getUint32(offset + 4, true)
-                const column = view.getUint32(offset + 8, true)
-                const length = view.getUint32(offset + 12, true)
-
-                // message is 128 bytes at offset 16
-                let message = ''
-                for (let j = 0; j < 128; j++) {
-                    const charCode = view.getUint8(offset + 16 + j)
-                    if (charCode === 0) break
-                    message += String.fromCharCode(charCode)
-                }
-
-                // block is 64 bytes at offset 144
-                let block = ''
-                for (let j = 0; j < 64; j++) {
-                    const charCode = view.getUint8(offset + 144 + j)
-                    if (charCode === 0) break
-                    block += String.fromCharCode(charCode)
-                }
-
-                // program is 64 bytes at offset 208
-                let program = ''
-                for (let j = 0; j < 64; j++) {
-                    const charCode = view.getUint8(offset + 208 + j)
-                    if (charCode === 0) break
-                    program += String.fromCharCode(charCode)
-                }
-
-                // lang is 4 bytes at offset 272
-                const lang = view.getUint32(offset + 272, true)
-
-                // token_buf is 64 bytes at offset 276 (stable copy of token text)
-                let token = ''
-                for (let j = 0; j < 64; j++) {
-                    const charCode = view.getUint8(offset + 276 + j)
-                    if (charCode === 0) break
-                    token += String.fromCharCode(charCode)
-                }
-                // Note: token_text pointer at offset 340 is no longer used since we read from token_buf directly
-
-                // Map integer language ID to string name if possible
-                /** @type {Record<number, string>} */
-                const LANG_MAP = {
-                    0: 'UNKNOWN',
-                    1: 'PLCASM',
-                    2: 'STL',
-                    3: 'LADDER',
-                }
-                const langName = LANG_MAP[lang] || 'UNKNOWN'
-
-                problems.push({
-                    type: type_int === 2 ? 'error' : type_int === 1 ? 'warning' : 'info',
-                    message: message,
-                    line: line,
-                    column: column,
-                    length: length,
-                    program: program || undefined,
-                    block: block || undefined,
-                    lang: lang,
-                    compiler: langName,
-                    token: token,
-                })
-            }
-        }
+        const problems = this._readProjectProblems()
 
         // If compile failed but no problems recorded (e.g. fatal parser error not using addProblem), fallback to old error method
         if ((!success || this.wasm_exports.project_hasError()) && problems.length === 0) {

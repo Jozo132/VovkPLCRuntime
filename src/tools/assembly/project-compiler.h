@@ -503,6 +503,35 @@ public:
         p.message[i] = '\0';
     }
 
+    // Copy all problems (warnings, errors, info) from STL linter to project's problem list
+    void copySTLProblems() {
+        for (int i = 0; i < stl_compiler.problem_count && problem_count < MAX_LINT_PROBLEMS; i++) {
+            LinterProblem& src = stl_compiler.problems[i];
+            LinterProblem& dest = problems[problem_count++];
+            dest.type = src.type;
+            dest.line = src.line;
+            dest.column = src.column;
+            dest.length = src.length;
+            dest.lang = LANG_STL;
+            // Copy message
+            int mi = 0;
+            while (src.message[mi] && mi < 127) { dest.message[mi] = src.message[mi]; mi++; }
+            dest.message[mi] = '\0';
+            // Copy token
+            int ti = 0;
+            while (src.token_buf[ti] && ti < 63) { dest.token_buf[ti] = src.token_buf[ti]; ti++; }
+            dest.token_buf[ti] = '\0';
+            dest.token_text = dest.token_buf;
+            // Copy program and block names
+            int pi = 0;
+            while (current_file[pi] && pi < 63) { dest.program[pi] = current_file[pi]; pi++; }
+            dest.program[pi] = '\0';
+            int bi = 0;
+            while (current_block[bi] && bi < 63) { dest.block[bi] = current_block[bi]; bi++; }
+            dest.block[bi] = '\0';
+        }
+    }
+
     // Copy all problems (warnings, errors, info) from ladder compiler to project's problem list
     void copyLadderProblems() {
         for (int i = 0; i < ladder_compiler.problem_count && problem_count < MAX_LINT_PROBLEMS; i++) {
@@ -3083,13 +3112,25 @@ public:
 
         bool success = stl_compiler.compile();
 
+        // Always copy problems (warnings, info, errors) from STL compiler
+        if (stl_compiler.problem_count > 0) {
+            copySTLProblems();
+        }
+
         if (!success || stl_compiler.has_error) {
             if (stl_compiler.problem_count > 0) {
-                LinterProblem& prob = stl_compiler.problems[0];
-                // Set error with full details including token
-                setErrorFull("STL Compiler", prob.message, prob.line, prob.column,
-                    block_source, source_len,
-                    prob.token_text, prob.length);
+                // Problems already copied above, also set main error from first error problem
+                LinterProblem* firstError = nullptr;
+                for (int i = 0; i < stl_compiler.problem_count; i++) {
+                    if (stl_compiler.problems[i].type == LINT_ERROR) { firstError = &stl_compiler.problems[i]; break; }
+                }
+                if (firstError) {
+                    setErrorFull("STL Compiler", firstError->message, firstError->line, firstError->column,
+                        block_source, source_len,
+                        firstError->token_text, firstError->length);
+                } else {
+                    has_error = true;
+                }
             } else if (stl_compiler.error_message[0]) {
                 setErrorFull("STL Compiler", stl_compiler.error_message,
                     stl_compiler.error_line, stl_compiler.error_column,
