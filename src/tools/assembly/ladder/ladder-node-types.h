@@ -173,9 +173,8 @@ inline bool ladderIsRawAddress(const char* addr) {
     // Memory area prefixes
     if (first == 'M' || first == 'm' || first == 'X' || first == 'x' ||
         first == 'Y' || first == 'y' || first == 'I' || first == 'i' ||
-        first == 'Q' || first == 'q' || first == 'K' || first == 'k' ||
-        first == 'S' || first == 's' || first == 'T' || first == 't' ||
-        first == 'C' || first == 'c') {
+        first == 'Q' || first == 'q' || first == 'S' || first == 's' ||
+        first == 'T' || first == 't' || first == 'C' || first == 'c') {
         // Check if next char is a digit (raw address) or not (could be symbol)
         if (addr[1] >= '0' && addr[1] <= '9') return true;
     }

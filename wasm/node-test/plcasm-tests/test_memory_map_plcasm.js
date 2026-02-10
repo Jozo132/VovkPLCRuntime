@@ -54,7 +54,7 @@ const run = async () => {
         if (timerOutput) console.log('Timer output:', timerOutput)
 
         // Test counter address parsing
-        // K0 should be at counter offset, K1 at +5, K2 at +10
+        // C0 should be at counter offset, C1 at +5, C2 at +10
         console.log('\nTesting Counter addresses with struct size multiplier (5 bytes):')
         
         const counterTest = `
