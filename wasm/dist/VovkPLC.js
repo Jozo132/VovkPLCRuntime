@@ -265,6 +265,37 @@ const MEMORY_LAYOUT = {
  *     get_out_buffer_ptr?: () => number, // Returns a pointer to the output buffer.
  *     get_out_index?: () => number, // Returns the current output buffer index/length.
  *     flush_out_buffer?: () => void, // Clears the output buffer.
+ *     db_getSlotCount?: () => number, // Returns the number of DB slots available.
+ *     db_getTableOffset?: () => number, // Returns the start address of the DB lookup table in memory.
+ *     db_getActiveCount?: () => number, // Returns the number of active (non-empty) DB entries.
+ *     db_getFreeSpace?: () => number, // Returns free bytes between user area and lowest DB data.
+ *     db_getEntryDB?: (slot: number) => number, // Returns the DB number for a slot (0 = unused).
+ *     db_getEntryOffset?: (slot: number) => number, // Returns the absolute memory offset for a slot.
+ *     db_getEntrySize?: (slot: number) => number, // Returns the byte size for a slot.
+ *     db_declare?: (db_number: number, size: number) => number, // Declares a new DB. Returns slot index or -1.
+ *     db_remove?: (db_number: number) => number, // Removes a DB. Returns 1 on success, 0 on failure.
+ *     db_migrate?: (db_number: number, target_offset: number) => number, // Migrates DB data. Returns 1/0.
+ *     db_compact?: () => number, // Compacts all DBs. Returns new lowest address.
+ *     db_resolveAddress?: (db_number: number, db_offset: number) => number, // Resolves DB-relative to absolute address. 0xFFFF on error.
+ *     db_format?: () => void, // Clears all DB entries.
+ *     db_setSlotCount?: (count: number) => void, // Re-initializes DB manager with new slot count.
+ *     db_getLowestAddress?: () => number, // Returns the lowest allocated DB data address.
+ *     db_getTotalDataUsed?: () => number, // Returns total bytes used by all active DBs.
+ *     db_read?: (db_number: number, db_offset: number, count: number, dest_addr: number) => number, // Reads bytes from DB to memory. Returns 1/0.
+ *     db_write?: (db_number: number, db_offset: number, count: number, src_addr: number) => number, // Writes bytes from memory to DB. Returns 1/0.
+ *     db_getDeclCount?: () => number, // Returns the number of compiler-declared DB definitions.
+ *     db_getDeclDBNumber?: (index: number) => number, // Returns the DB number for a declaration.
+ *     db_getDeclAlias?: (index: number) => number, // Returns pointer to alias string.
+ *     db_getDeclFieldCount?: (index: number) => number, // Returns field count for a declaration.
+ *     db_getDeclTotalSize?: (index: number) => number, // Returns total byte size for a declaration.
+ *     db_getDeclComputedOffset?: (index: number) => number, // Returns computed memory offset.
+ *     db_getDeclFieldName?: (db_index: number, field_index: number) => number, // Returns pointer to field name.
+ *     db_getDeclFieldTypeName?: (db_index: number, field_index: number) => number, // Returns pointer to field type name.
+ *     db_getDeclFieldTypeSize?: (db_index: number, field_index: number) => number, // Returns field type size in bytes.
+ *     db_getDeclFieldOffset?: (db_index: number, field_index: number) => number, // Returns field byte offset within DB.
+ *     db_getDeclFieldHasDefault?: (db_index: number, field_index: number) => number, // Returns 1 if field has default.
+ *     db_getDeclFieldDefaultInt?: (db_index: number, field_index: number) => number, // Returns default value as i32.
+ *     db_getDeclFieldDefaultFloat?: (db_index: number, field_index: number) => number, // Returns default value as f32.
  * }} VovkPLCExportTypes
  */
 
@@ -1271,8 +1302,57 @@ class VovkPLC_class {
                 memory: +parts[8],
                 program: +parts[9],
             }
+            if (parts.length >= 29) {
+                // New format with DB info + flags: ...counter_struct,db_table_offset,db_slot_count,db_entry_size,flags,device
+                return {
+                    ...base,
+                    system_offset: +parts[10],
+                    system_size: +parts[11],
+                    input_offset: +parts[12],
+                    input_size: +parts[13],
+                    output_offset: +parts[14],
+                    output_size: +parts[15],
+                    marker_offset: +parts[16],
+                    marker_size: +parts[17],
+                    timer_offset: +parts[18],
+                    timer_count: +parts[19],
+                    timer_struct_size: +parts[20],
+                    counter_offset: +parts[21],
+                    counter_count: +parts[22],
+                    counter_struct_size: +parts[23],
+                    db_table_offset: +parts[24],
+                    db_slot_count: +parts[25],
+                    db_entry_size: +parts[26],
+                    flags: parseInt(parts[27], 16),
+                    device: parts[28],
+                }
+            }
+            if (parts.length >= 28) {
+                // DB info without flags: ...counter_struct,db_table_offset,db_slot_count,db_entry_size,device
+                return {
+                    ...base,
+                    system_offset: +parts[10],
+                    system_size: +parts[11],
+                    input_offset: +parts[12],
+                    input_size: +parts[13],
+                    output_offset: +parts[14],
+                    output_size: +parts[15],
+                    marker_offset: +parts[16],
+                    marker_size: +parts[17],
+                    timer_offset: +parts[18],
+                    timer_count: +parts[19],
+                    timer_struct_size: +parts[20],
+                    counter_offset: +parts[21],
+                    counter_count: +parts[22],
+                    counter_struct_size: +parts[23],
+                    db_table_offset: +parts[24],
+                    db_slot_count: +parts[25],
+                    db_entry_size: +parts[26],
+                    device: parts[27],
+                }
+            }
             if (parts.length >= 26) {
-                // New format with timer/counter info and runtime flags
+                // Legacy format with flags but no DB info
                 return {
                     ...base,
                     system_offset: +parts[10],
@@ -1382,7 +1462,11 @@ class VovkPLC_class {
      *     timer_struct_size: number,
      *     counter_offset: number,
      *     counter_count: number,
-     *     counter_struct_size: number
+     *     counter_struct_size: number,
+     *     db_table_offset: number,
+     *     db_slot_count: number,
+     *     db_entry_size: number,
+     *     flags: number,
      * }} RuntimeInfo
      */
 
@@ -3135,6 +3219,450 @@ class VovkPLC_class {
     }
 
     // ========================================================================
+    // DataBlock Methods
+    // ========================================================================
+
+    /**
+     * @typedef {{
+     *     db_number: number,
+     *     alias: string,
+     *     totalSize: number,
+     *     computedOffset: number,
+     *     fields: DataBlockFieldInfo[]
+     * }} DataBlockDeclInfo
+     */
+
+    /**
+     * @typedef {{
+     *     name: string,
+     *     typeName: string,
+     *     typeSize: number,
+     *     offset: number,
+     *     hasDefault: boolean,
+     *     defaultValue: number
+     * }} DataBlockFieldInfo
+     */
+
+    /**
+     * @typedef {{
+     *     slot: number,
+     *     db_number: number,
+     *     offset: number,
+     *     size: number
+     * }} DataBlockEntry
+     */
+
+    /**
+     * Returns the number of DB slots available in the runtime.
+     * @returns {number}
+     */
+    dbGetSlotCount = () => {
+        if (!this.wasm_exports?.db_getSlotCount) throw new Error('db_getSlotCount not available')
+        return this.wasm_exports.db_getSlotCount()
+    }
+
+    /**
+     * Returns the start address of the DB lookup table in memory.
+     * @returns {number}
+     */
+    dbGetTableOffset = () => {
+        if (!this.wasm_exports?.db_getTableOffset) throw new Error('db_getTableOffset not available')
+        return this.wasm_exports.db_getTableOffset()
+    }
+
+    /**
+     * Returns the number of active (allocated) DataBlocks.
+     * @returns {number}
+     */
+    dbGetActiveCount = () => {
+        if (!this.wasm_exports?.db_getActiveCount) throw new Error('db_getActiveCount not available')
+        return this.wasm_exports.db_getActiveCount()
+    }
+
+    /**
+     * Returns free memory bytes between the user area end and the lowest DB data.
+     * @returns {number}
+     */
+    dbGetFreeSpace = () => {
+        if (!this.wasm_exports?.db_getFreeSpace) throw new Error('db_getFreeSpace not available')
+        return this.wasm_exports.db_getFreeSpace()
+    }
+
+    /**
+     * Returns the lowest allocated DB data address (watermark).
+     * @returns {number}
+     */
+    dbGetLowestAddress = () => {
+        if (!this.wasm_exports?.db_getLowestAddress) throw new Error('db_getLowestAddress not available')
+        return this.wasm_exports.db_getLowestAddress()
+    }
+
+    /**
+     * Returns total bytes used by all active DataBlocks.
+     * @returns {number}
+     */
+    dbGetTotalDataUsed = () => {
+        if (!this.wasm_exports?.db_getTotalDataUsed) throw new Error('db_getTotalDataUsed not available')
+        return this.wasm_exports.db_getTotalDataUsed()
+    }
+
+    /**
+     * Gets information about a DB slot by its slot index.
+     * @param {number} slot - Slot index (0-based).
+     * @returns {DataBlockEntry} - Entry info (db_number=0 means unused).
+     */
+    dbGetEntry = (slot) => {
+        if (!this.wasm_exports?.db_getEntryDB) throw new Error('db_getEntryDB not available')
+        return {
+            slot,
+            db_number: this.wasm_exports.db_getEntryDB(slot),
+            offset: this.wasm_exports.db_getEntryOffset(slot),
+            size: this.wasm_exports.db_getEntrySize(slot),
+        }
+    }
+
+    /**
+     * Returns all active DB entries.
+     * @returns {DataBlockEntry[]}
+     */
+    dbGetActiveEntries = () => {
+        const count = this.dbGetSlotCount()
+        const entries = []
+        for (let i = 0; i < count; i++) {
+            const entry = this.dbGetEntry(i)
+            if (entry.db_number !== 0) entries.push(entry)
+        }
+        return entries
+    }
+
+    /**
+     * Declares a new DataBlock in the runtime.
+     * Allocates memory for the DB and adds it to the lookup table.
+     *
+     * @param {number} dbNumber - The DB number (1-based).
+     * @param {number} size - Size in bytes to allocate.
+     * @returns {number} - Slot index on success, -1 on failure.
+     */
+    dbDeclare = (dbNumber, size) => {
+        if (!this.wasm_exports?.db_declare) throw new Error('db_declare not available')
+        return this.wasm_exports.db_declare(dbNumber, size)
+    }
+
+    /**
+     * Removes a DataBlock from the runtime by DB number.
+     *
+     * @param {number} dbNumber - The DB number to remove.
+     * @returns {boolean} - True on success.
+     */
+    dbRemove = (dbNumber) => {
+        if (!this.wasm_exports?.db_remove) throw new Error('db_remove not available')
+        return this.wasm_exports.db_remove(dbNumber) === 1
+    }
+
+    /**
+     * Migrates a DataBlock to a new absolute memory offset.
+     *
+     * @param {number} dbNumber - The DB number to migrate.
+     * @param {number} targetOffset - New absolute memory address.
+     * @returns {boolean} - True on success.
+     */
+    dbMigrate = (dbNumber, targetOffset) => {
+        if (!this.wasm_exports?.db_migrate) throw new Error('db_migrate not available')
+        return this.wasm_exports.db_migrate(dbNumber, targetOffset) === 1
+    }
+
+    /**
+     * Compacts all DataBlocks, packing them tightly against the lookup table.
+     *
+     * @returns {number} - New lowest allocated address.
+     */
+    dbCompact = () => {
+        if (!this.wasm_exports?.db_compact) throw new Error('db_compact not available')
+        return this.wasm_exports.db_compact()
+    }
+
+    /**
+     * Resolves a DB-relative address to an absolute memory address.
+     *
+     * @param {number} dbNumber - The DB number.
+     * @param {number} dbOffset - Byte offset within the DB.
+     * @returns {number} - Absolute address, or 0xFFFF on error.
+     */
+    dbResolveAddress = (dbNumber, dbOffset) => {
+        if (!this.wasm_exports?.db_resolveAddress) throw new Error('db_resolveAddress not available')
+        return this.wasm_exports.db_resolveAddress(dbNumber, dbOffset)
+    }
+
+    /**
+     * Clears all DataBlock entries (formats the DB table).
+     */
+    dbFormat = () => {
+        if (!this.wasm_exports?.db_format) throw new Error('db_format not available')
+        this.wasm_exports.db_format()
+    }
+
+    /**
+     * Re-initializes the DB manager with a new slot count.
+     * Must be called before any dbDeclare calls.
+     *
+     * @param {number} count - Number of DB slots (1-256).
+     */
+    dbSetSlotCount = (count) => {
+        if (!this.wasm_exports?.db_setSlotCount) throw new Error('db_setSlotCount not available')
+        this.wasm_exports.db_setSlotCount(count)
+    }
+
+    /**
+     * Reads a typed value from a DataBlock.
+     * Resolves the DB-relative address and reads from WASM memory using the correct endianness.
+     *
+     * @param {number} dbNumber - The DB number.
+     * @param {number} dbOffset - Byte offset within the DB.
+     * @param {'u8' | 'i8' | 'u16' | 'i16' | 'u32' | 'i32' | 'f32' | 'f64'} type - Data type.
+     * @returns {number} - The value read.
+     * @throws {Error} If the DB or offset is invalid.
+     */
+    dbRead = (dbNumber, dbOffset, type = 'u8') => {
+        if (!this.wasm_exports?.db_resolveAddress) throw new Error('db_resolveAddress not available')
+        if (!this.wasm_exports?.memory) throw new Error('WASM memory not available')
+        if (!this.wasm_exports?.getMemoryLocation) throw new Error('getMemoryLocation not available')
+        const absAddr = this.wasm_exports.db_resolveAddress(dbNumber, dbOffset)
+        if (absAddr === 0xFFFF) throw new Error(`Invalid DB${dbNumber} offset ${dbOffset}`)
+        const memBase = this.wasm_exports.getMemoryLocation()
+        const view = new DataView(this.wasm_exports.memory.buffer)
+        const addr = memBase + absAddr
+        const le = this.isLittleEndian
+        switch (type) {
+            case 'u8':  return view.getUint8(addr)
+            case 'i8':  return view.getInt8(addr)
+            case 'u16': return view.getUint16(addr, le)
+            case 'i16': return view.getInt16(addr, le)
+            case 'u32': return view.getUint32(addr, le)
+            case 'i32': return view.getInt32(addr, le)
+            case 'f32': return view.getFloat32(addr, le)
+            case 'f64': return view.getFloat64(addr, le)
+            default: throw new Error(`Unknown type: ${type}`)
+        }
+    }
+
+    /**
+     * Writes a typed value to a DataBlock.
+     * Resolves the DB-relative address and writes to WASM memory using the correct endianness.
+     *
+     * @param {number} dbNumber - The DB number.
+     * @param {number} dbOffset - Byte offset within the DB.
+     * @param {number} value - The value to write.
+     * @param {'u8' | 'i8' | 'u16' | 'i16' | 'u32' | 'i32' | 'f32' | 'f64'} type - Data type.
+     * @throws {Error} If the DB or offset is invalid.
+     */
+    dbWrite = (dbNumber, dbOffset, value, type = 'u8') => {
+        if (!this.wasm_exports?.db_resolveAddress) throw new Error('db_resolveAddress not available')
+        if (!this.wasm_exports?.memory) throw new Error('WASM memory not available')
+        if (!this.wasm_exports?.getMemoryLocation) throw new Error('getMemoryLocation not available')
+        const absAddr = this.wasm_exports.db_resolveAddress(dbNumber, dbOffset)
+        if (absAddr === 0xFFFF) throw new Error(`Invalid DB${dbNumber} offset ${dbOffset}`)
+        const memBase = this.wasm_exports.getMemoryLocation()
+        const view = new DataView(this.wasm_exports.memory.buffer)
+        const addr = memBase + absAddr
+        const le = this.isLittleEndian
+        switch (type) {
+            case 'u8':  view.setUint8(addr, value); break
+            case 'i8':  view.setInt8(addr, value); break
+            case 'u16': view.setUint16(addr, value, le); break
+            case 'i16': view.setInt16(addr, value, le); break
+            case 'u32': view.setUint32(addr, value, le); break
+            case 'i32': view.setInt32(addr, value, le); break
+            case 'f32': view.setFloat32(addr, value, le); break
+            case 'f64': view.setFloat64(addr, value, le); break
+            default: throw new Error(`Unknown type: ${type}`)
+        }
+    }
+
+    /**
+     * Reads an entire DataBlock's raw data as a Uint8Array.
+     *
+     * @param {number} dbNumber - The DB number.
+     * @returns {{ data: Uint8Array, offset: number, size: number }} - The raw bytes, absolute offset, and size.
+     * @throws {Error} If the DB is not found.
+     */
+    dbReadAll = (dbNumber) => {
+        if (!this.wasm_exports?.memory) throw new Error('WASM memory not available')
+        if (!this.wasm_exports?.getMemoryLocation) throw new Error('getMemoryLocation not available')
+        // Find the entry
+        const count = this.dbGetSlotCount()
+        for (let i = 0; i < count; i++) {
+            const entry = this.dbGetEntry(i)
+            if (entry.db_number === dbNumber) {
+                const memBase = this.wasm_exports.getMemoryLocation()
+                const data = new Uint8Array(this.wasm_exports.memory.buffer, memBase + entry.offset, entry.size)
+                return { data: new Uint8Array(data), offset: entry.offset, size: entry.size }
+            }
+        }
+        throw new Error(`DB${dbNumber} not found`)
+    }
+
+    /**
+     * Returns the number of DB declarations from the last compilation.
+     * These declarations contain field metadata (names, types, offsets).
+     *
+     * @returns {number}
+     */
+    dbGetDeclCount = () => {
+        if (!this.wasm_exports?.db_getDeclCount) throw new Error('db_getDeclCount not available')
+        return this.wasm_exports.db_getDeclCount()
+    }
+
+    /**
+     * Returns full declaration info for a compiler-declared DataBlock by index.
+     * Includes field names, types, offsets, and default values.
+     *
+     * @param {number} index - Declaration index (0-based, up to dbGetDeclCount()-1).
+     * @returns {DataBlockDeclInfo}
+     */
+    dbGetDecl = (index) => {
+        if (!this.wasm_exports?.db_getDeclDBNumber) throw new Error('db_getDeclDBNumber not available')
+        const db_number = this.wasm_exports.db_getDeclDBNumber(index)
+        const aliasPtr = this.wasm_exports.db_getDeclAlias(index)
+        const alias = aliasPtr ? this.readCString(aliasPtr) : ''
+        const fieldCount = this.wasm_exports.db_getDeclFieldCount(index)
+        const totalSize = this.wasm_exports.db_getDeclTotalSize(index)
+        const computedOffset = this.wasm_exports.db_getDeclComputedOffset(index)
+        const fields = []
+        for (let f = 0; f < fieldCount; f++) {
+            const namePtr = this.wasm_exports.db_getDeclFieldName(index, f)
+            const typeNamePtr = this.wasm_exports.db_getDeclFieldTypeName(index, f)
+            const typeSize = this.wasm_exports.db_getDeclFieldTypeSize(index, f)
+            const offset = this.wasm_exports.db_getDeclFieldOffset(index, f)
+            const hasDefault = this.wasm_exports.db_getDeclFieldHasDefault(index, f) === 1
+            const isFloat = typeNamePtr ? this.readCString(typeNamePtr) === 'f32' : false
+            const defaultValue = hasDefault
+                ? (isFloat ? this.wasm_exports.db_getDeclFieldDefaultFloat(index, f) : this.wasm_exports.db_getDeclFieldDefaultInt(index, f))
+                : 0
+            fields.push({
+                name: namePtr ? this.readCString(namePtr) : '',
+                typeName: typeNamePtr ? this.readCString(typeNamePtr) : '',
+                typeSize,
+                offset,
+                hasDefault,
+                defaultValue,
+            })
+        }
+        return { db_number, alias, totalSize, computedOffset, fields }
+    }
+
+    /**
+     * Returns all compiler-declared DataBlock definitions.
+     * Available after compilation of a project with DATABLOCKS section.
+     *
+     * @returns {DataBlockDeclInfo[]}
+     */
+    dbGetAllDecls = () => {
+        const count = this.dbGetDeclCount()
+        const decls = []
+        for (let i = 0; i < count; i++) {
+            decls.push(this.dbGetDecl(i))
+        }
+        return decls
+    }
+
+    /**
+     * Reads a named field from a DataBlock using compiler metadata.
+     * Looks up the field by name in the compiler's declaration registry,
+     * then reads the value using the correct type and offset.
+     *
+     * @param {number} dbNumber - The DB number.
+     * @param {string} fieldName - The field name (e.g., "speed", "position").
+     * @returns {number} - The field value.
+     * @throws {Error} If the DB or field is not found.
+     *
+     * @example
+     * const speed = plc.dbReadField(1, 'speed');
+     * const position = plc.dbReadField(1, 'position');
+     */
+    dbReadField = (dbNumber, fieldName) => {
+        const decl = this._findDBDecl(dbNumber)
+        const field = decl.fields.find(f => f.name === fieldName)
+        if (!field) throw new Error(`Field '${fieldName}' not found in DB${dbNumber}`)
+        return this.dbRead(dbNumber, field.offset, /** @type {any} */ (field.typeName))
+    }
+
+    /**
+     * Writes a named field to a DataBlock using compiler metadata.
+     * Looks up the field by name in the compiler's declaration registry,
+     * then writes the value using the correct type and offset.
+     *
+     * @param {number} dbNumber - The DB number.
+     * @param {string} fieldName - The field name (e.g., "speed", "position").
+     * @param {number} value - The value to write.
+     * @throws {Error} If the DB or field is not found.
+     *
+     * @example
+     * plc.dbWriteField(1, 'speed', 1500);
+     * plc.dbWriteField(1, 'position', 3.14);
+     */
+    dbWriteField = (dbNumber, fieldName, value) => {
+        const decl = this._findDBDecl(dbNumber)
+        const field = decl.fields.find(f => f.name === fieldName)
+        if (!field) throw new Error(`Field '${fieldName}' not found in DB${dbNumber}`)
+        this.dbWrite(dbNumber, field.offset, value, /** @type {any} */ (field.typeName))
+    }
+
+    /**
+     * Reads all fields of a DataBlock as a key-value object.
+     * Uses compiler metadata to resolve field names and types.
+     *
+     * @param {number} dbNumber - The DB number.
+     * @returns {Record<string, number>} - Object mapping field names to their current values.
+     *
+     * @example
+     * const motor = plc.dbReadFields(1);
+     * // { speed: 1500, position: 3.14, status: 1 }
+     */
+    dbReadFields = (dbNumber) => {
+        const decl = this._findDBDecl(dbNumber)
+        /** @type {Record<string, number>} */
+        const result = {}
+        for (const field of decl.fields) {
+            result[field.name] = this.dbRead(dbNumber, field.offset, /** @type {any} */ (field.typeName))
+        }
+        return result
+    }
+
+    /**
+     * Writes multiple fields to a DataBlock from a key-value object.
+     * Only writes fields present in the provided object.
+     *
+     * @param {number} dbNumber - The DB number.
+     * @param {Record<string, number>} values - Object mapping field names to values.
+     *
+     * @example
+     * plc.dbWriteFields(1, { speed: 1500, status: 1 });
+     */
+    dbWriteFields = (dbNumber, values) => {
+        const decl = this._findDBDecl(dbNumber)
+        for (const [name, value] of Object.entries(values)) {
+            const field = decl.fields.find(f => f.name === name)
+            if (!field) throw new Error(`Field '${name}' not found in DB${dbNumber}`)
+            this.dbWrite(dbNumber, field.offset, value, /** @type {any} */ (field.typeName))
+        }
+    }
+
+    /**
+     * Finds a DB declaration by DB number from compiler metadata.
+     * @private
+     * @param {number} dbNumber
+     * @returns {DataBlockDeclInfo}
+     */
+    _findDBDecl = (dbNumber) => {
+        const count = this.dbGetDeclCount()
+        for (let i = 0; i < count; i++) {
+            const decl = this.dbGetDecl(i)
+            if (decl.db_number === dbNumber) return decl
+        }
+        throw new Error(`DB${dbNumber} declaration not found (was the project compiled with DATABLOCKS?)`)
+    }
+
+    // ========================================================================
     // FFI (Foreign Function Interface) Methods
     // ========================================================================
 
@@ -3678,6 +4206,30 @@ class VovkPLC_class {
             const checksum_hex = checksum.toString(16).padStart(2, '0')
             const command = cmd + timer_hex_u16 + counter_hex_u16 + checksum_hex
             return command
+        },
+
+        /** Request DataBlock info from device (DA command) * @returns { string } */
+        dbInfo: () => {
+            const cmd = 'DA'
+            const cmd_hex = this.stringToHex(cmd)
+            const checksum = this.crc8(this.parseHex(cmd_hex))
+            const checksum_hex = checksum.toString(16).padStart(2, '0')
+            return cmd + checksum_hex
+        },
+
+        /**
+         * Read a DataBlock from device memory (DR command)
+         * @param { number } dbNumber - The DB number to read
+         * @returns { string }
+         */
+        dbRead: (dbNumber) => {
+            const cmd = 'DR'
+            const cmd_hex = this.stringToHex(cmd)
+            const db_hex_u16 = dbNumber.toString(16).padStart(4, '0')
+            let checksum = this.crc8(this.parseHex(cmd_hex))
+            checksum = this.crc8(this.parseHex(db_hex_u16), checksum)
+            const checksum_hex = checksum.toString(16).padStart(2, '0')
+            return cmd + db_hex_u16 + checksum_hex
         },
     }
 }

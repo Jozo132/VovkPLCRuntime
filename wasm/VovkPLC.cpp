@@ -489,6 +489,119 @@ WASM_EXPORT void db_setSlotCount(u16 count) {
     runtime.dataBlocks.format();
 }
 
+// Get lowest allocated address (watermark)
+WASM_EXPORT u16 db_getLowestAddress() {
+    return runtime.dataBlocks.lowestAllocatedAddress();
+}
+
+// Get total data bytes used by all active DBs
+WASM_EXPORT u16 db_getTotalDataUsed() {
+    return runtime.dataBlocks.totalDataUsed();
+}
+
+// Read bytes from a DataBlock. Returns 1 on success, 0 on failure.
+// Data is written to runtime.memory at dest_addr for the caller to read.
+WASM_EXPORT u8 db_read(u16 db_number, u16 db_offset, u16 count, u16 dest_addr) {
+    return runtime.dataBlocks.readDB(db_number, db_offset, &runtime.memory[dest_addr], count) ? 1 : 0;
+}
+
+// Write bytes to a DataBlock. Returns 1 on success, 0 on failure.
+// Data is read from runtime.memory at src_addr.
+WASM_EXPORT u8 db_write(u16 db_number, u16 db_offset, u16 count, u16 src_addr) {
+    return runtime.dataBlocks.writeDB(db_number, db_offset, &runtime.memory[src_addr], count) ? 1 : 0;
+}
+
+// ============================================================================
+// DataBlock Compiler Metadata WASM Exports
+// ============================================================================
+// These expose the GlobalDBDecl registry populated during compilation.
+// This allows JS to query field names, types, offsets after compiling
+// a project that contains DATABLOCKS declarations.
+
+// Number of DB declarations registered by the compiler
+WASM_EXPORT u16 db_getDeclCount() {
+    return (u16)globalDBDeclCount;
+}
+
+// DB number for declaration at index
+WASM_EXPORT u16 db_getDeclDBNumber(u16 index) {
+    if (index >= (u16)globalDBDeclCount) return 0;
+    return globalDBDecls[index].db_number;
+}
+
+// Pointer to alias string for declaration at index
+WASM_EXPORT u32 db_getDeclAlias(u16 index) {
+    if (index >= (u16)globalDBDeclCount) return 0;
+    return (u32)(const char*)globalDBDecls[index].alias;
+}
+
+// Number of fields in declaration at index
+WASM_EXPORT u16 db_getDeclFieldCount(u16 index) {
+    if (index >= (u16)globalDBDeclCount) return 0;
+    return (u16)globalDBDecls[index].field_count;
+}
+
+// Total byte size of declaration at index
+WASM_EXPORT u16 db_getDeclTotalSize(u16 index) {
+    if (index >= (u16)globalDBDeclCount) return 0;
+    return globalDBDecls[index].total_size;
+}
+
+// Computed absolute memory offset (filled during bytecode emission)
+WASM_EXPORT u16 db_getDeclComputedOffset(u16 index) {
+    if (index >= (u16)globalDBDeclCount) return 0xFFFF;
+    return globalDBDecls[index].computed_offset;
+}
+
+// Pointer to field name string
+WASM_EXPORT u32 db_getDeclFieldName(u16 db_index, u16 field_index) {
+    if (db_index >= (u16)globalDBDeclCount) return 0;
+    if (field_index >= (u16)globalDBDecls[db_index].field_count) return 0;
+    return (u32)(const char*)globalDBDecls[db_index].fields[field_index].name;
+}
+
+// Pointer to field type name string (e.g. "i16", "f32")
+WASM_EXPORT u32 db_getDeclFieldTypeName(u16 db_index, u16 field_index) {
+    if (db_index >= (u16)globalDBDeclCount) return 0;
+    if (field_index >= (u16)globalDBDecls[db_index].field_count) return 0;
+    return (u32)(const char*)globalDBDecls[db_index].fields[field_index].type_name;
+}
+
+// Field type size in bytes (1, 2, 4, 8)
+WASM_EXPORT u8 db_getDeclFieldTypeSize(u16 db_index, u16 field_index) {
+    if (db_index >= (u16)globalDBDeclCount) return 0;
+    if (field_index >= (u16)globalDBDecls[db_index].field_count) return 0;
+    return globalDBDecls[db_index].fields[field_index].type_size;
+}
+
+// Field byte offset within the DB
+WASM_EXPORT u16 db_getDeclFieldOffset(u16 db_index, u16 field_index) {
+    if (db_index >= (u16)globalDBDeclCount) return 0xFFFF;
+    if (field_index >= (u16)globalDBDecls[db_index].field_count) return 0xFFFF;
+    return globalDBDecls[db_index].fields[field_index].offset;
+}
+
+// Whether the field has a default value
+WASM_EXPORT u8 db_getDeclFieldHasDefault(u16 db_index, u16 field_index) {
+    if (db_index >= (u16)globalDBDeclCount) return 0;
+    if (field_index >= (u16)globalDBDecls[db_index].field_count) return 0;
+    return globalDBDecls[db_index].fields[field_index].has_default ? 1 : 0;
+}
+
+// Default value as i32 (valid for integer types)
+WASM_EXPORT i32 db_getDeclFieldDefaultInt(u16 db_index, u16 field_index) {
+    if (db_index >= (u16)globalDBDeclCount) return 0;
+    if (field_index >= (u16)globalDBDecls[db_index].field_count) return 0;
+    return globalDBDecls[db_index].fields[field_index].default_value.int_val;
+}
+
+// Default value as f32 (valid for float types)
+WASM_EXPORT float db_getDeclFieldDefaultFloat(u16 db_index, u16 field_index) {
+    if (db_index >= (u16)globalDBDeclCount) return 0.0f;
+    if (field_index >= (u16)globalDBDecls[db_index].field_count) return 0.0f;
+    return globalDBDecls[db_index].fields[field_index].default_value.float_val;
+}
+
 // ============================================================================
 // FFI (Foreign Function Interface) WASM Exports
 // ============================================================================
