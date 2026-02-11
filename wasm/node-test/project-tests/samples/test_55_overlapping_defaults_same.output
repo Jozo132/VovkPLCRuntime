@@ -19,6 +19,7 @@
     { "name": "flag2", "type": "bool", "address": "212.0" },
     { "name": "counter", "type": "i16", "address": "222" }
   ],
+  "datablocks": [],
   "memoryAreas": [
     { "name": "S", "start": 0, "end": 63 },
     { "name": "X", "start": 64, "end": 127 },

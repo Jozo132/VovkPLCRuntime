@@ -19,6 +19,7 @@
     { "name": "error_led", "type": "bit", "address": "128.1" },
     { "name": "counter", "type": "i16", "address": "192" }
   ],
+  "datablocks": [],
   "memoryAreas": [
     { "name": "S", "start": 0, "end": 63 },
     { "name": "X", "start": 64, "end": 127 },
@@ -30,4 +31,3 @@
   "execution": { "steps": 25, "stackSize": 0 },
   "problems": []
 }
-

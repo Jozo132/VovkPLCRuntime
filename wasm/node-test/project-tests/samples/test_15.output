@@ -11,6 +11,7 @@
     { "file": "main", "name": "Network 1 - BitOps", "language": "PLCASM", "offset": 12, "size": 9 }
   ],
   "symbols": [],
+  "datablocks": [],
   "memoryAreas": [
     { "name": "S", "start": 0, "end": 63 },
     { "name": "X", "start": 64, "end": 127 },

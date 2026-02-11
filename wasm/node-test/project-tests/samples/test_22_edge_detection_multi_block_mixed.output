@@ -25,6 +25,7 @@
     { "name": "out3", "type": "bit", "address": "128.2" },
     { "name": "out4", "type": "bit", "address": "128.3" }
   ],
+  "datablocks": [],
   "memoryAreas": [
     { "name": "S", "start": 0, "end": 63 },
     { "name": "X", "start": 64, "end": 127 },

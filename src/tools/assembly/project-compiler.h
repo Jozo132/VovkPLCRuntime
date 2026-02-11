@@ -2432,35 +2432,58 @@ public:
                         return false;
                     }
 
-                    bool is_float_type = strEqI(field.type_name, "f32") || strEqI(field.type_name, "f64");
-                    if (is_float_type) {
-                        // Parse float
-                        float fval = 0;
-                        int vi = 0;
-                        // Simple float parser: integer part
-                        while (valBuf[vi] >= '0' && valBuf[vi] <= '9') {
-                            fval = fval * 10 + (valBuf[vi] - '0');
-                            vi++;
-                        }
-                        if (valBuf[vi] == '.') {
-                            vi++;
-                            float frac = 0.1f;
+                    // Check for boolean keywords
+                    if (strEqI(valBuf, "true") || strEqI(valBuf, "TRUE") || strEqI(valBuf, "1")) {
+                        field.default_value.int_val = 1;
+                    } else if (strEqI(valBuf, "false") || strEqI(valBuf, "FALSE") || strEqI(valBuf, "0")) {
+                        field.default_value.int_val = 0;
+                    } else {
+                        bool is_float_type = strEqI(field.type_name, "f32") || strEqI(field.type_name, "f64");
+                        if (is_float_type) {
+                            // Parse float
+                            float fval = 0;
+                            int vi = 0;
+                            // Simple float parser: integer part
                             while (valBuf[vi] >= '0' && valBuf[vi] <= '9') {
-                                fval += (valBuf[vi] - '0') * frac;
-                                frac *= 0.1f;
+                                fval = fval * 10 + (valBuf[vi] - '0');
                                 vi++;
                             }
+                            if (valBuf[vi] == '.') {
+                                vi++;
+                                float frac = 0.1f;
+                                while (valBuf[vi] >= '0' && valBuf[vi] <= '9') {
+                                    fval += (valBuf[vi] - '0') * frac;
+                                    frac *= 0.1f;
+                                    vi++;
+                                }
+                            }
+                            field.default_value.float_val = is_negative ? -fval : fval;
+                        } else {
+                            // Parse integer (decimal or hex)
+                            int ival = 0;
+                            int vi = 0;
+                            
+                            // Check for hex prefix (0x or 0X)
+                            if (valBuf[0] == '0' && (valBuf[1] == 'x' || valBuf[1] == 'X')) {
+                                vi = 2;
+                                while (valBuf[vi]) {
+                                    char c = valBuf[vi];
+                                    int digit = 0;
+                                    if (c >= '0' && c <= '9') digit = c - '0';
+                                    else if (c >= 'a' && c <= 'f') digit = 10 + (c - 'a');
+                                    else if (c >= 'A' && c <= 'F') digit = 10 + (c - 'A');
+                                    else break;
+                                    ival = ival * 16 + digit;
+                                    vi++;
+                                }
+                            } else {
+                                while (valBuf[vi] >= '0' && valBuf[vi] <= '9') {
+                                    ival = ival * 10 + (valBuf[vi] - '0');
+                                    vi++;
+                                }
+                            }
+                            field.default_value.int_val = is_negative ? -ival : ival;
                         }
-                        field.default_value.float_val = is_negative ? -fval : fval;
-                    } else {
-                        // Parse integer
-                        int ival = 0;
-                        int vi = 0;
-                        while (valBuf[vi] >= '0' && valBuf[vi] <= '9') {
-                            ival = ival * 10 + (valBuf[vi] - '0');
-                            vi++;
-                        }
-                        field.default_value.int_val = is_negative ? -ival : ival;
                     }
                 }
 
@@ -3527,32 +3550,46 @@ public:
         }
 
         // Generate project-level DataBlock declarations as .db<N> PLCASM directives
-        // The PLCASM compiler handles: CONFIG_DB, memory allocation, defaults, and property access
+        // Note: DataBlocks are already registered in globalDBDecls from DATABLOCKS parsing.
+        // The PLCASM compiler can access them via DB<N>.field syntax without needing .db directives.
+        // We just emit a comment showing the DB definitions for debugging purposes.
         if (globalDBDeclCount > 0) {
-            appendToCombinedPLCASM("// Project-level DataBlock declarations\n");
+            appendToCombinedPLCASM("// Project-level DataBlock declarations (already registered)\n");
             for (int d = 0; d < globalDBDeclCount; d++) {
                 const GlobalDBDecl& decl = globalDBDecls[d];
 
-                // Emit: .db<N> ["Alias"] = { field: type [= default] ... }
-                appendToCombinedPLCASM(".db");
+                // Emit comment showing the DB definition
+                appendToCombinedPLCASM("// DB");
                 appendCombinedPLCASMInt(decl.db_number);
 
-                // Emit alias if present
                 if (decl.alias[0] != '\0') {
                     appendToCombinedPLCASM(" \"");
                     appendToCombinedPLCASM(decl.alias);
                     appendToCombinedPLCASM("\"");
                 }
 
+                if (decl.directory[0] != '\0') {
+                    appendToCombinedPLCASM(" PATH=\"");
+                    appendToCombinedPLCASM(decl.directory);
+                    appendToCombinedPLCASM("\"");
+                }
+
+                appendToCombinedPLCASM(" offset=");
+                appendCombinedPLCASMInt(decl.computed_offset);
+                appendToCombinedPLCASM(" size=");
+                appendCombinedPLCASMInt(decl.total_size);
                 appendToCombinedPLCASM(" {\n");
 
-                // Emit fields
+                // Emit field comments
                 for (int f = 0; f < decl.field_count; f++) {
                     const GlobalDBField& field = decl.fields[f];
-                    appendToCombinedPLCASM("  ");
+                    appendToCombinedPLCASM("//   ");
                     appendToCombinedPLCASM(field.name);
                     appendToCombinedPLCASM(": ");
                     appendToCombinedPLCASM(field.type_name);
+                    appendToCombinedPLCASM(" (offset=");
+                    appendCombinedPLCASMInt(field.offset);
+                    appendToCombinedPLCASM(")");
 
                     if (field.has_default) {
                         appendToCombinedPLCASM(" = ");
@@ -3567,7 +3604,7 @@ public:
                     appendToCombinedPLCASM("\n");
                 }
 
-                appendToCombinedPLCASM("}\n\n");
+                appendToCombinedPLCASM("// }\n\n");
             }
         }
 
@@ -5428,6 +5465,92 @@ extern "C" {
             return 0;
         }
         return project_compiler.symbols[index].type_size;
+    }
+
+    // ========== DataBlock accessor functions ==========
+    // These expose the global DB declarations parsed from DATABLOCKS section
+
+    WASM_EXPORT int project_getDatablockCount() {
+        return globalDBDeclCount;
+    }
+
+    WASM_EXPORT u16 project_getDatablockNumber(int index) {
+        if (index < 0 || index >= globalDBDeclCount) return 0;
+        return globalDBDecls[index].db_number;
+    }
+
+    WASM_EXPORT const char* project_getDatablockAlias(int index) {
+        if (index < 0 || index >= globalDBDeclCount) return "";
+        return globalDBDecls[index].alias;
+    }
+
+    WASM_EXPORT const char* project_getDatablockDirectory(int index) {
+        if (index < 0 || index >= globalDBDeclCount) return "";
+        return globalDBDecls[index].directory;
+    }
+
+    WASM_EXPORT u16 project_getDatablockOffset(int index) {
+        if (index < 0 || index >= globalDBDeclCount) return 0;
+        return globalDBDecls[index].computed_offset;
+    }
+
+    WASM_EXPORT u16 project_getDatablockSize(int index) {
+        if (index < 0 || index >= globalDBDeclCount) return 0;
+        return globalDBDecls[index].total_size;
+    }
+
+    WASM_EXPORT int project_getDatablockFieldCount(int index) {
+        if (index < 0 || index >= globalDBDeclCount) return 0;
+        return globalDBDecls[index].field_count;
+    }
+
+    WASM_EXPORT const char* project_getDatablockFieldName(int dbIndex, int fieldIndex) {
+        if (dbIndex < 0 || dbIndex >= globalDBDeclCount) return "";
+        GlobalDBDecl& db = globalDBDecls[dbIndex];
+        if (fieldIndex < 0 || fieldIndex >= db.field_count) return "";
+        return db.fields[fieldIndex].name;
+    }
+
+    WASM_EXPORT const char* project_getDatablockFieldType(int dbIndex, int fieldIndex) {
+        if (dbIndex < 0 || dbIndex >= globalDBDeclCount) return "";
+        GlobalDBDecl& db = globalDBDecls[dbIndex];
+        if (fieldIndex < 0 || fieldIndex >= db.field_count) return "";
+        return db.fields[fieldIndex].type_name;
+    }
+
+    WASM_EXPORT u8 project_getDatablockFieldTypeSize(int dbIndex, int fieldIndex) {
+        if (dbIndex < 0 || dbIndex >= globalDBDeclCount) return 0;
+        GlobalDBDecl& db = globalDBDecls[dbIndex];
+        if (fieldIndex < 0 || fieldIndex >= db.field_count) return 0;
+        return db.fields[fieldIndex].type_size;
+    }
+
+    WASM_EXPORT u16 project_getDatablockFieldOffset(int dbIndex, int fieldIndex) {
+        if (dbIndex < 0 || dbIndex >= globalDBDeclCount) return 0;
+        GlobalDBDecl& db = globalDBDecls[dbIndex];
+        if (fieldIndex < 0 || fieldIndex >= db.field_count) return 0;
+        return db.fields[fieldIndex].offset;
+    }
+
+    WASM_EXPORT bool project_getDatablockFieldHasDefault(int dbIndex, int fieldIndex) {
+        if (dbIndex < 0 || dbIndex >= globalDBDeclCount) return false;
+        GlobalDBDecl& db = globalDBDecls[dbIndex];
+        if (fieldIndex < 0 || fieldIndex >= db.field_count) return false;
+        return db.fields[fieldIndex].has_default;
+    }
+
+    WASM_EXPORT i32 project_getDatablockFieldDefaultInt(int dbIndex, int fieldIndex) {
+        if (dbIndex < 0 || dbIndex >= globalDBDeclCount) return 0;
+        GlobalDBDecl& db = globalDBDecls[dbIndex];
+        if (fieldIndex < 0 || fieldIndex >= db.field_count) return 0;
+        return db.fields[fieldIndex].default_value.int_val;
+    }
+
+    WASM_EXPORT float project_getDatablockFieldDefaultFloat(int dbIndex, int fieldIndex) {
+        if (dbIndex < 0 || dbIndex >= globalDBDeclCount) return 0.0f;
+        GlobalDBDecl& db = globalDBDecls[dbIndex];
+        if (fieldIndex < 0 || fieldIndex >= db.field_count) return 0.0f;
+        return db.fields[fieldIndex].default_value.float_val;
     }
 
     // Load compiled project into runtime

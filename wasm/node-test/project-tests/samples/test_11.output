@@ -13,6 +13,7 @@
     { "file": "test_program_2", "name": "Network 1 - Process", "language": "STL", "offset": 19, "size": 8 }
   ],
   "symbols": [],
+  "datablocks": [],
   "memoryAreas": [
     { "name": "S", "start": 0, "end": 63 },
     { "name": "X", "start": 64, "end": 127 },

@@ -14,6 +14,17 @@
     { "name": "Input1", "type": "bool", "address": "64.0" },
     { "name": "Output1", "type": "bool", "address": "128.0" }
   ],
+  "datablocks": [
+    {
+      "number": 1,
+      "offset": 65438,
+      "size": 2,
+      "fields": [
+        { "name": "speed", "type": "i16", "size": 2, "offset": 0, "default": 100 }
+      ],
+      "alias": "Motor"
+    }
+  ],
   "memoryAreas": [
     { "name": "S", "start": 0, "end": 63 },
     { "name": "X", "start": 64, "end": 127 },

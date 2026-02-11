@@ -15,6 +15,7 @@
     { "name": "input2", "type": "bit", "address": "64.1" },
     { "name": "output1", "type": "bit", "address": "128.0" }
   ],
+  "datablocks": [],
   "memoryAreas": [
     { "name": "S", "start": 0, "end": 63 },
     { "name": "X", "start": 64, "end": 127 },

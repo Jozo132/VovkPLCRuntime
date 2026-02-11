@@ -17,6 +17,7 @@
     { "name": "my_counter1", "type": "counter", "address": "3" },
     { "name": "my_counter2", "type": "counter", "address": "0" }
   ],
+  "datablocks": [],
   "memoryAreas": [
     { "name": "S", "start": 0, "end": 63 },
     { "name": "X", "start": 64, "end": 127 },

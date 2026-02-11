@@ -1,0 +1,50 @@
+VOVKPLCPROJECT DatablockInfoTest
+VERSION 1.0
+
+MEMORY
+    OFFSET 0
+    AVAILABLE 2048
+    S 64
+    X 64
+    Y 64
+    M 512
+END_MEMORY
+
+FLASH SIZE 8192 END_FLASH
+
+DATABLOCKS
+    DB1 "Motor" PATH="/drives" {
+        speed:    i16 = 100
+        position: f32 = 0.0
+        status:   u8 = 0
+    }
+
+    DB2 "Sensor" PATH="/io/analog" {
+        value:     f32 = 3.14
+        threshold: i16 = 500
+        enabled:   bool = true
+    }
+END_DATABLOCKS
+
+SYMBOLS
+    motor_spd : i16 : M0
+    motor_pos : f32 : M2
+    sensor_val : f32 : M6
+END_SYMBOLS
+
+PROGRAM main
+    BLOCK LANG=PLCASM ReadMotor
+    // Read motor speed from DB1
+    i16.load_from DB1.speed
+    i16.move_to motor_spd
+    // Read motor position
+    f32.load_from Motor.position
+    f32.move_to motor_pos
+    END_BLOCK
+
+    BLOCK LANG=PLCASM ReadSensor
+    // Read sensor value from DB2
+    f32.load_from Sensor.value
+    f32.move_to sensor_val
+    END_BLOCK
+END_PROGRAM

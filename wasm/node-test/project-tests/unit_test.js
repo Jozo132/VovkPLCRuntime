@@ -235,6 +235,65 @@ function getMemoryAreas(runtime) {
     return areas
 }
 
+// Get datablocks info
+/** @type { (runtime: VovkPLC) => any[] } */
+function getDatablocks(runtime) {
+    const wasm = runtime.wasm_exports
+    if (!wasm.project_getDatablockCount) return []
+    
+    const count = wasm.project_getDatablockCount()
+    const datablocks = []
+
+    for (let i = 0; i < count; i++) {
+        const number = wasm.project_getDatablockNumber(i)
+        const alias = getString(runtime, wasm.project_getDatablockAlias(i))
+        const directory = getString(runtime, wasm.project_getDatablockDirectory(i))
+        const offset = wasm.project_getDatablockOffset(i)
+        const size = wasm.project_getDatablockSize(i)
+        const fieldCount = wasm.project_getDatablockFieldCount(i)
+        
+        const fields = []
+        for (let j = 0; j < fieldCount; j++) {
+            const fieldName = getString(runtime, wasm.project_getDatablockFieldName(i, j))
+            const fieldType = getString(runtime, wasm.project_getDatablockFieldType(i, j))
+            const fieldTypeSize = wasm.project_getDatablockFieldTypeSize(i, j)
+            const fieldOffset = wasm.project_getDatablockFieldOffset(i, j)
+            const hasDefault = wasm.project_getDatablockFieldHasDefault(i, j)
+            
+            const field = {
+                name: fieldName,
+                type: fieldType,
+                size: fieldTypeSize,
+                offset: fieldOffset,
+            }
+            
+            if (hasDefault) {
+                // Check if it's a float type
+                if (fieldType === 'f32' || fieldType === 'f64') {
+                    field.default = wasm.project_getDatablockFieldDefaultFloat(i, j)
+                } else {
+                    field.default = wasm.project_getDatablockFieldDefaultInt(i, j)
+                }
+            }
+            
+            fields.push(field)
+        }
+        
+        const db = {
+            number,
+            offset,
+            size,
+            fields,
+        }
+        if (alias) db.alias = alias
+        if (directory) db.directory = directory
+        
+        datablocks.push(db)
+    }
+
+    return datablocks
+}
+
 // Get memory usage info
 /** @type { (runtime: VovkPLC) => {available: number, used: number} } */
 function getMemoryUsage(runtime) {
@@ -308,6 +367,7 @@ function generateOutput(runtime, success, error = null) {
      *    files: any[],
      *    blocks: any[],
      *    symbols: any[],
+     *    datablocks: any[],
      *    memoryAreas: any[],
      *    memory: { available: number, used: number },
      *    flash: { size: number, used: number },
@@ -327,6 +387,7 @@ function generateOutput(runtime, success, error = null) {
         files: [],
         blocks: [],
         symbols: [],
+        datablocks: [],
         memoryAreas: [],
         memory: { available: 0, used: 0 },
         flash: { size: 0, used: 0 },
@@ -442,6 +503,7 @@ function generateOutput(runtime, success, error = null) {
     output.files = getFiles(runtime)
     output.blocks = getBlocks(runtime)
     output.symbols = getSymbols(runtime)
+    output.datablocks = getDatablocks(runtime)
     output.memoryAreas = getMemoryAreas(runtime)
     output.memory = getMemoryUsage(runtime)
     output.flash = getFlashUsage(runtime)

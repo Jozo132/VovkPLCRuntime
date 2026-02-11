@@ -17,6 +17,7 @@
     { "name": "actuator1", "type": "bit", "address": "128.0" },
     { "name": "actuator2", "type": "bit", "address": "128.1" }
   ],
+  "datablocks": [],
   "memoryAreas": [
     { "name": "S", "start": 0, "end": 63 },
     { "name": "X", "start": 64, "end": 127 },

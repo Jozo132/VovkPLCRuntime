@@ -7,14 +7,15 @@
   "files": [],
   "blocks": [],
   "symbols": [],
+  "datablocks": [],
   "memoryAreas": [],
   "memory": { "available": 0, "used": 0 },
   "flash": { "size": 0, "used": 0 },
   "execution": { "steps": 0, "stackSize": 0 },
   "problems": [
-    { "severity": "error", "message": "write to read-only memory area (system/input region below Q0.0)", "line": 2, "column": 13, "file": "main", "block": "DirectTimerAccess", "language": "STL", "token": "timer_et" },
-    { "severity": "error", "message": "write to read-only memory area (system/input region below Q0.0)", "line": 2, "column": 13, "file": "main", "block": "DirectCounterAccess", "language": "STL", "token": "counter_cv" },
-    { "severity": "error", "message": "write to read-only memory area (system/input region below Q0.0)", "line": 8, "column": 13, "file": "main", "block": "PlcScriptAccess", "language": "UNKNOWN", "token": "ladder_timer_et" },
-    { "severity": "error", "message": "write to read-only memory area (system/input region below Q0.0)", "line": 88, "column": 13, "file": "main", "block": "PlcScriptAccess", "language": "UNKNOWN", "token": "ladder_counter_cv" }
+    { "severity": "error", "message": "write to read-only memory area (system/input region below Q0.0)", "line": 3, "column": 13, "file": "main", "block": "SymbolicTimerAccess", "language": "STL", "token": "timer_et" },
+    { "severity": "error", "message": "write to read-only memory area (system/input region below Q0.0)", "line": 3, "column": 13, "file": "main", "block": "SymbolicCounterAccess", "language": "STL", "token": "counter_cv" },
+    { "severity": "error", "message": "write to read-only memory area (system/input region below Q0.0)", "line": 5, "column": 13, "file": "main", "block": "LadderPropertyAccess", "language": "LADDER", "token": "ladder_timer_et" },
+    { "severity": "error", "message": "write to read-only memory area (system/input region below Q0.0)", "line": 10, "column": 13, "file": "main", "block": "LadderPropertyAccess", "language": "LADDER", "token": "ladder_counter_cv" }
   ]
 }

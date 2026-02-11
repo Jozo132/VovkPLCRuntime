@@ -21,6 +21,7 @@
     { "name": "motor", "type": "bit", "address": "128.0" },
     { "name": "counter_val", "type": "i16", "address": "192" }
   ],
+  "datablocks": [],
   "memoryAreas": [
     { "name": "S", "start": 0, "end": 63 },
     { "name": "X", "start": 64, "end": 127 },
