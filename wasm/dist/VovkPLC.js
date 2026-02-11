@@ -744,6 +744,7 @@ class VovkPLC_class {
             const problems = pointer ? this._readLinterProblems(pointer, count) : []
 
             // 4. Get generated PLCASM output
+            this.flushOutBuffer() // Clear any previous output
             this.wasm_exports.stl_lint_get_output()
             const output = this.readOutBuffer()
 
@@ -945,6 +946,7 @@ class VovkPLC_class {
             }
 
             // 5. Get generated PLCASM output
+            this.flushOutBuffer() // Clear any previous output
             this.wasm_exports.st_lint_get_output()
             const output = this.readOutBuffer()
 
@@ -1681,6 +1683,7 @@ class VovkPLC_class {
         // Get the generated PLCASM via stream buffer
         let plcasmCode = ''
         if (this.wasm_exports.stl_output_to_stream) {
+            this.flushOutBuffer() // Clear any previous output
             this.wasm_exports.stl_output_to_stream()
             plcasmCode = this.readOutBuffer()
         }
@@ -1812,6 +1815,7 @@ class VovkPLC_class {
         // Get the generated PLCASM output
         let plcasmCode = ''
         if (this.wasm_exports.plcscript_output_to_stream) {
+            this.flushOutBuffer() // Clear any previous output
             this.wasm_exports.plcscript_output_to_stream()
             plcasmCode = this.readOutBuffer()
         } else if (this.wasm_exports.plcscript_getOutput && this.wasm_exports.plcscript_getOutputLength) {
@@ -1875,6 +1879,7 @@ class VovkPLC_class {
         // Get the generated PLCScript output
         let plcscriptCode = ''
         if (this.wasm_exports.st_compiler_output_to_stream) {
+            this.flushOutBuffer() // Clear any previous output
             this.wasm_exports.st_compiler_output_to_stream()
             plcscriptCode = this.readOutBuffer()
         } else if (this.wasm_exports.st_compiler_get_output && this.wasm_exports.st_compiler_get_output_length) {
