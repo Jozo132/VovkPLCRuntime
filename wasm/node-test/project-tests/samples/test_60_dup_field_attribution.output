@@ -1,6 +1,6 @@
 {
   "success": 0,
-  "project": { "name": "DuplicateFieldCaseTest", "version": "1.0" },
+  "project": { "name": "DuplicateFieldTest2", "version": "1.0" },
   "bytecode": "",
   "bytecodeLength": 0,
   "checksum": 0,
@@ -13,6 +13,6 @@
   "flash": { "size": 0, "used": 0 },
   "execution": { "steps": 0, "stackSize": 0 },
   "problems": [
-    { "severity": "error", "message": "Duplicate field name in DB1: speed", "line": 18, "column": 10, "block": "DATABLOCKS", "language": "UNKNOWN", "db": 1 }
+    { "severity": "error", "message": "Duplicate field name in DB1: field8", "line": 25, "column": 15, "block": "DATABLOCKS", "language": "UNKNOWN", "db": 1 }
   ]
 }

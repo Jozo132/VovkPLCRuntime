@@ -662,7 +662,7 @@ class VovkPLC_class {
      * @returns {{ type: string, line: number, column: number, length: number, message: string, token_text: string }[]}
      */
     _readLinterProblems = (pointer, count) => {
-        const struct_size = 344
+        const struct_size = 348
         const view = new DataView(this.wasm_exports.memory.buffer)
         const problems = []
 
@@ -1020,11 +1020,11 @@ class VovkPLC_class {
                 const view = new DataView(memoryBuffer)
                 const mem = new Uint8Array(memoryBuffer)
 
-                // LinterProblem struct layout (344 bytes):
+                // LinterProblem struct layout (348 bytes):
                 // u32 type (4), u32 line (4), u32 column (4), u32 length (4)
                 // char message[128], char block[64], char program[64], u32 lang (4)
-                // char token_buf[64], char* token_text (4)
-                const STRUCT_SIZE = 344
+                // char token_buf[64], char* token_text (4), i32 db_number (4)
+                const STRUCT_SIZE = 348
 
                 /** @type {(offset: number, maxLen: number) => string} */
                 const readString = (offset, maxLen) => {
@@ -1994,7 +1994,7 @@ class VovkPLC_class {
         const pointer = this.wasm_exports.project_getProblems ? this.wasm_exports.project_getProblems() : 0
         if (!pointer) return []
 
-        const struct_size = 344
+        const struct_size = 348
         const view = new DataView(this.wasm_exports.memory.buffer)
         /** @type {ProjectCompileProblem[]} */
         const problems = []
@@ -2021,6 +2021,7 @@ class VovkPLC_class {
             const program = readFixedStr(208, 64)
             const lang = view.getUint32(offset + 272, true)
             const token = readFixedStr(276, 64)
+            const db_number = view.getInt32(offset + 344, true)
             const langName = VovkPLC_class.LANG_MAP[lang] || 'UNKNOWN'
 
             problems.push({
@@ -2034,6 +2035,7 @@ class VovkPLC_class {
                 lang,
                 compiler: langName,
                 token: token || undefined,
+                db: db_number >= 0 ? db_number : undefined,
             })
         }
 
@@ -2051,7 +2053,8 @@ class VovkPLC_class {
      *     block?: string,
      *     lang?: number,
      *     compiler?: string,
-     *     token?: string
+     *     token?: string,
+     *     db?: number
      * }} ProjectCompileProblem
      */
 
@@ -2791,7 +2794,8 @@ class VovkPLC_class {
      *     lang: number,
      *     compiler?: string,
      *     token?: string,
-     *     sourceLine?: string
+     *     sourceLine?: string,
+     *     db?: number
      * }} ProjectLinterProblem
      */
 
@@ -2940,7 +2944,56 @@ class VovkPLC_class {
     }
 
     /**
-     * Downloads pre-compiled bytecode to the PLC.
+     * Lint only the project metadata sections (MEMORY, FLASH, FLAGS, TYPES, DATABLOCKS, SYMBOLS)
+     * without parsing or compiling program blocks. Fast enough to call on every keystroke
+     * when editing those sections.
+     *
+     * Returns an array of `ProjectLinterProblem` objects (same format as `lintProject`).
+     * Each problem from a metadata section will have `block` set to the section name
+     * (e.g. "DATABLOCKS", "SYMBOLS") so the front-end can display it correctly.
+     *
+     * @param {string} projectSource - The full project source text.
+     * @returns {ProjectLinterProblem[]} Array of problems found in metadata sections.
+     *
+     * @example
+     * // Call when the user edits DATABLOCKS or SYMBOLS
+     * const problems = runtime.lintProjectMetadata(projectSource);
+     * for (const p of problems) {
+     *     console.log(`[${p.block}] ${p.type} at line ${p.line}: ${p.message}`);
+     * }
+     */
+    lintProjectMetadata = (projectSource) => {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        if (!this.wasm_exports.project_lintMetadata) throw new Error("'project_lintMetadata' function not found - update VovkPLC.wasm")
+        if (!this.wasm_exports.project_getProblemCount) throw new Error("'project_getProblemCount' function not found")
+        if (!this.wasm_exports.project_getProblems) throw new Error("'project_getProblems' function not found")
+
+        // Clear any stale data in the stream buffer first
+        if (this.wasm_exports.streamClear) this.wasm_exports.streamClear()
+
+        // Stream project source
+        let ok = true
+        for (let i = 0; i < projectSource.length && ok; i++) {
+            ok = this.wasm_exports.streamIn(projectSource.charCodeAt(i))
+        }
+        if (!ok) {
+            return [{
+                type: 'error',
+                message: 'Failed to stream project source - buffer overflow',
+                line: 0,
+                column: 0,
+                length: 0,
+            }]
+        }
+
+        // Lint metadata sections only (no block compilation)
+        this.wasm_exports.project_lintMetadata()
+
+        // Read accumulated problems
+        return this._readProjectProblems()
+    }
+
+    /**
      * Verifies size and CRC checksum during upload.
      *
      * @param {string | number[]} program - Bytecode as a hex string or array of bytes.
@@ -4909,6 +4962,8 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
     compileProject = (projectSource, options = {}) => this.call('compileProject', projectSource, options)
     /** @type { (projectSource: string, options?: ProjectCompileOptions) => Promise<ProjectLinterProblem[]> } */
     lintProject = (projectSource, options = {}) => this.call('lintProject', projectSource, options)
+    /** @type { (projectSource: string) => Promise<ProjectLinterProblem[]> } */
+    lintProjectMetadata = (projectSource) => this.call('lintProjectMetadata', projectSource)
     /** @type { (program: string | number[]) => Promise<any> } */
     downloadBytecode = program => this.call('downloadBytecode', program)
     /** @type { () => Promise<any> } */

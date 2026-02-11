@@ -356,7 +356,7 @@ function runProgram(runtime) {
 function generateOutput(runtime, success, error = null) {
     const wasm = runtime.wasm_exports
 
-    /** @typedef { {severity: string, message: string, line: number, column: number, file?: string, block?: string, language?: string, token?: string, sourceLine?: string} } Problem */
+    /** @typedef { {severity: string, message: string, line: number, column: number, file?: string, block?: string, language?: string, token?: string, sourceLine?: string, db?: number} } Problem */
     /**
      * @type {{
      *    success: boolean,
@@ -399,8 +399,8 @@ function generateOutput(runtime, success, error = null) {
     const problemCount = wasm.project_getProblemCount ? wasm.project_getProblemCount() : 0
     if (problemCount > 0 && wasm.project_getProblems) {
         const pointer = wasm.project_getProblems()
-        // Struct size = 344 bytes (4+4+4+4+128+64+64+4+64+4)
-        const struct_size = 344
+        // Struct size = 348 bytes (4+4+4+4+128+64+64+4+64+4+4)
+        const struct_size = 348
         const memory = new Uint8Array(wasm.memory.buffer)
         const view = new DataView(wasm.memory.buffer)
         const langNames = ['UNKNOWN', 'PLCASM', 'STL', 'LADDER', 'FBD', 'SFC', 'ST', 'IL']
@@ -447,6 +447,9 @@ function generateOutput(runtime, success, error = null) {
                 token += String.fromCharCode(charCode)
             }
 
+            // db_number is 4 bytes at offset 344
+            const db_number = view.getInt32(offset + 344, true)
+
             /** @type { Problem } */
             const problem = {
                 severity: type_int === 2 ? 'error' : type_int === 1 ? 'warning' : 'info',
@@ -460,6 +463,7 @@ function generateOutput(runtime, success, error = null) {
                 problem.language = langNames[lang] || 'UNKNOWN'
             }
             if (token) problem.token = token
+            if (db_number >= 0) problem.db = db_number
             output.problems.push(problem)
         }
     }

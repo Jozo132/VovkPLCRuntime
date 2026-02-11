@@ -1,0 +1,33 @@
+VOVKPLCPROJECT DuplicateFieldTest2
+VERSION 1.0
+
+MEMORY
+    OFFSET 0
+    AVAILABLE 672
+    S 64
+    X 64
+    Y 64
+    M 256
+    T 144
+    C 80
+END_MEMORY
+
+DATABLOCKS
+    DB1 DataBlock1 {
+        field0: BYTE
+        field1: BYTE
+        field2: BYTE
+        field8: BYTE
+        field9: BYTE
+        field5: BYTE
+        field6: BYTE
+        field7: BYTE
+        field8: BYTE
+    }
+END_DATABLOCKS
+
+PROGRAM main
+    BLOCK LANG=LADDER Network 1
+{"comment":"Network 1","nodes":[],"connections":[]}
+    END_BLOCK
+END_PROGRAM

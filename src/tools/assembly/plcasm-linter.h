@@ -25,6 +25,7 @@ struct LinterProblem {
     uint32_t lang;      // Language ID (optional)
     char token_buf[64]; // Token text buffer (copied, stable storage)
     char* token_text;   // Pointer to token_buf for compatibility
+    int32_t db_number;  // DB number if error relates to a datablock (-1 = N/A)
 };
 
 #define MAX_LINT_PROBLEMS 100

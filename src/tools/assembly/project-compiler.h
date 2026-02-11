@@ -559,6 +559,7 @@ public:
             p.token_buf[tlen] = '\0';
         }
         p.token_text = p.token_buf;  // Point to our stable buffer
+        p.db_number = -1;  // No DB association by default
 
         // Copy current context
         copyString(p.block, current_block, 64);
@@ -2368,14 +2369,23 @@ public:
                 // Check for duplicate field names in this datablock
                 for (int fi = 0; fi < decl.field_count; fi++) {
                     if (strEqI(decl.fields[fi].name, field.name)) {
-                        char err[64];
+                        char err[80];
                         int ei = 0;
-                        const char* msg = "Duplicate field name in DB: ";
+                        const char* msg = "Duplicate field name in DB";
                         while (*msg && ei < 40) err[ei++] = *msg++;
+                        // Append DB number
+                        int db_num = decl.db_number;
+                        if (db_num >= 100) { err[ei++] = '0' + (db_num / 100) % 10; }
+                        if (db_num >= 10)  { err[ei++] = '0' + (db_num / 10) % 10; }
+                        err[ei++] = '0' + db_num % 10;
+                        err[ei++] = ':';
+                        err[ei++] = ' ';
                         int fn = 0;
-                        while (field.name[fn] && ei < 60) err[ei++] = field.name[fn++];
+                        while (field.name[fn] && ei < 76) err[ei++] = field.name[fn++];
                         err[ei] = '\0';
                         setError(err);
+                        // Tag last problem with DB number
+                        if (problem_count > 0) problems[problem_count - 1].db_number = decl.db_number;
                         return false;
                     }
                 }
@@ -4700,6 +4710,88 @@ public:
         return true;
     }
 
+    // ============ Project Section Parsing ============
+
+    // Parse project header and all declaration sections (MEMORY, FLASH, FLAGS, TYPES, DATABLOCKS, SYMBOLS)
+    // Sets current_block context on each section so errors are properly attributed to the section, not a program block.
+    // Used by both compile() and lintMetadata().
+    bool parseProjectSections() {
+        // Parse required project header
+        copyString(current_block, "PROJECT", PROJECT_MAX_NAME_LEN);
+        if (!parseProject()) return false;
+
+        // Parse required memory layout
+        copyString(current_block, "MEMORY", PROJECT_MAX_NAME_LEN);
+        if (!parseMemory()) return false;
+        current_block[0] = '\0';
+
+        // Parse optional sections in any order (FLASH, FLAGS, TYPES, DATABLOCKS, SYMBOLS)
+        // Loop until no section keyword matches, then proceed to PROGRAM blocks
+        bool parsed_flash = false;
+        bool parsed_flags = false;
+        bool parsed_types = false;
+        bool parsed_datablocks = false;
+        bool parsed_symbols = false;
+
+        while (pos < source_length && !has_error) {
+            skipComments();
+            if (pos >= source_length) break;
+
+            int save_pos = pos;
+            int save_line = line;
+            int save_col = column;
+
+            // Try each optional section
+            if (!parsed_flash && matchKeyword("FLASH")) {
+                pos = save_pos; line = save_line; column = save_col;
+                copyString(current_block, "FLASH", PROJECT_MAX_NAME_LEN);
+                if (!parseFlash()) return false;
+                current_block[0] = '\0';
+                parsed_flash = true;
+                continue;
+            }
+            if (!parsed_flags && matchKeyword("FLAGS")) {
+                pos = save_pos; line = save_line; column = save_col;
+                copyString(current_block, "FLAGS", PROJECT_MAX_NAME_LEN);
+                if (!parseFlags()) return false;
+                current_block[0] = '\0';
+                parsed_flags = true;
+                continue;
+            }
+            if (!parsed_types && matchKeyword("TYPES")) {
+                pos = save_pos; line = save_line; column = save_col;
+                copyString(current_block, "TYPES", PROJECT_MAX_NAME_LEN);
+                if (!parseTypes()) return false;
+                current_block[0] = '\0';
+                parsed_types = true;
+                continue;
+            }
+            if (!parsed_datablocks && matchKeyword("DATABLOCKS")) {
+                pos = save_pos; line = save_line; column = save_col;
+                copyString(current_block, "DATABLOCKS", PROJECT_MAX_NAME_LEN);
+                if (!parseDatablocks()) return false;
+                current_block[0] = '\0';
+                parsed_datablocks = true;
+                continue;
+            }
+            if (!parsed_symbols && matchKeyword("SYMBOLS")) {
+                pos = save_pos; line = save_line; column = save_col;
+                copyString(current_block, "SYMBOLS", PROJECT_MAX_NAME_LEN);
+                if (!parseSymbols()) return false;
+                current_block[0] = '\0';
+                parsed_symbols = true;
+                continue;
+            }
+
+            // No optional section matched - restore position and exit loop
+            pos = save_pos; line = save_line; column = save_col;
+            break;
+        }
+
+        current_block[0] = '\0';
+        return !has_error;
+    }
+
     // ============ Main Compilation Entry Point ============
 
     bool compile(const char* project_source, int length, bool debug = false) {
@@ -4713,62 +4805,8 @@ public:
             Serial.println(F("=== Project Compiler ==="));
         }
 
-        // Parse project structure
-        if (!parseProject()) return false;
-        if (!parseMemory()) return false;
-        
-        // Parse optional sections in any order (FLASH, FLAGS, TYPES, DATABLOCKS, SYMBOLS)
-        // Loop until no section keyword matches, then proceed to PROGRAM blocks
-        bool parsed_flash = false;
-        bool parsed_flags = false;
-        bool parsed_types = false;
-        bool parsed_datablocks = false;
-        bool parsed_symbols = false;
-        
-        while (pos < source_length && !has_error) {
-            skipComments();
-            if (pos >= source_length) break;
-            
-            int save_pos = pos;
-            int save_line = line;
-            int save_col = column;
-            
-            // Try each optional section
-            if (!parsed_flash && matchKeyword("FLASH")) {
-                pos = save_pos; line = save_line; column = save_col;
-                if (!parseFlash()) return false;
-                parsed_flash = true;
-                continue;
-            }
-            if (!parsed_flags && matchKeyword("FLAGS")) {
-                pos = save_pos; line = save_line; column = save_col;
-                if (!parseFlags()) return false;
-                parsed_flags = true;
-                continue;
-            }
-            if (!parsed_types && matchKeyword("TYPES")) {
-                pos = save_pos; line = save_line; column = save_col;
-                if (!parseTypes()) return false;
-                parsed_types = true;
-                continue;
-            }
-            if (!parsed_datablocks && matchKeyword("DATABLOCKS")) {
-                pos = save_pos; line = save_line; column = save_col;
-                if (!parseDatablocks()) return false;
-                parsed_datablocks = true;
-                continue;
-            }
-            if (!parsed_symbols && matchKeyword("SYMBOLS")) {
-                pos = save_pos; line = save_line; column = save_col;
-                if (!parseSymbols()) return false;
-                parsed_symbols = true;
-                continue;
-            }
-            
-            // No optional section matched - restore position and exit loop
-            pos = save_pos; line = save_line; column = save_col;
-            break;
-        }
+        // Parse project structure (header, memory, and optional sections)
+        if (!parseProjectSections()) return false;
         
         // Scan source for T/C references before parsing blocks
         // This catches direct T0, T1, C0, C1 references in ladder/STL code
@@ -4898,6 +4936,21 @@ public:
         }
 
         return !has_error;
+    }
+
+    // ============ Metadata-only Lint ============
+
+    // Lint project metadata sections (MEMORY, FLASH, FLAGS, TYPES, DATABLOCKS, SYMBOLS)
+    // without parsing or compiling program blocks. Fast enough to call on every keystroke
+    // when editing those sections. Returns true if no errors found.
+    bool lintMetadata(const char* project_source, int length) {
+        reset();
+
+        source = project_source;
+        source_length = length;
+        debug_mode = false;
+
+        return parseProjectSections();
     }
 
     // Calculate actual memory usage based on K, X, Y (100%) + accessed addresses in S, M, T, C
@@ -5127,6 +5180,30 @@ extern "C" {
     // Compile project from a direct string pointer (for internal use)
     WASM_EXPORT bool project_compileString(char* source, int length, bool debug = false) {
         return project_compiler.compile(source, length, debug);
+    }
+
+    // Lint only the project metadata sections (MEMORY, FLASH, FLAGS, TYPES, DATABLOCKS, SYMBOLS)
+    // without parsing or compiling program blocks. Fast validation for use while editing.
+    // Source is expected to be in the stream buffer. Returns true if no errors found.
+    // Use project_getProblemCount()/project_getProblems() to read accumulated problems.
+    WASM_EXPORT bool project_lintMetadata() {
+        int len = streamAvailable();
+        if (len <= 0) {
+            project_compiler.reset();
+            project_compiler.setError("No project source in stream buffer");
+            return false;
+        }
+
+        static char project_source[PROJECT_MAX_SOURCE_SIZE];
+        int i = 0;
+        while (i < len && i < PROJECT_MAX_SOURCE_SIZE - 1) {
+            project_source[i] = __streamInRead();
+            i++;
+        }
+        project_source[i] = '\0';
+        streamClear();
+
+        return project_compiler.lintMetadata(project_source, i);
     }
 
     // Get the combined PLCASM source (generated during compilation)
