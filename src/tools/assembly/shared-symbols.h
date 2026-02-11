@@ -534,6 +534,7 @@ struct GlobalDBField {
 struct GlobalDBDecl {
     u16  db_number;                             // DB number (1, 2, ...)
     char alias[32];                             // Optional alias name (e.g., "Motor")
+    char directory[128];                        // Directory path (e.g., "/", "/datablocks") - Unix absolute path
     GlobalDBField fields[GLOBAL_MAX_DB_FIELDS];
     int  field_count;                           // Number of fields
     u16  total_size;                            // Total size in bytes (sum of field sizes)
@@ -542,6 +543,7 @@ struct GlobalDBDecl {
     void reset() {
         db_number = 0;
         alias[0] = '\0';
+        directory[0] = '\0';
         field_count = 0;
         total_size = 0;
         computed_offset = 0;

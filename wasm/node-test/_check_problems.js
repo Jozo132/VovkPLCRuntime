@@ -17,12 +17,12 @@ MEMORY
   M 512
 END_MEMORY
 
-FILE main
+PROGRAM main
   BLOCK LANG=PLCSCRIPT Main
     let x: i32 = 42
     let y: i32 = x + undeclared_var
   END_BLOCK
-END_FILE
+END_PROGRAM
 `
 let result = await runtime.compileProject(projectWithError)
 console.log('Result keys:', Object.keys(result))
@@ -45,7 +45,7 @@ MEMORY
   M 512
 END_MEMORY
 
-FILE main
+PROGRAM main
   BLOCK LANG=PLCSCRIPT Main
     let x: i32 = 42
     if (x > 10) {
@@ -53,7 +53,7 @@ FILE main
     } else {
     }
   END_BLOCK
-END_FILE
+END_PROGRAM
 `
 result = await runtime.compileProject(projectWithWarning)
 console.log('Result keys:', Object.keys(result))

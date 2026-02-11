@@ -33,7 +33,7 @@ SYMBOLS
   EdgeResult : bool : M32.0
 END_SYMBOLS
 
-FILE main
+PROGRAM main
   BLOCK Main LANG=STL
     // Default values check happens automatically via startup block
     
@@ -43,7 +43,7 @@ FILE main
     FP EdgeMem
     = EdgeResult
   END_BLOCK
-END_FILE
+END_PROGRAM
 `
 
 // 1. Compile

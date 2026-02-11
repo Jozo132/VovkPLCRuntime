@@ -20,7 +20,7 @@ SYMBOLS
   flag : bool : M4.0
 END_SYMBOLS
 
-FILE main
+PROGRAM main
   BLOCK LANG=ST main_st
 VAR
     temp : INT;
@@ -39,4 +39,4 @@ IF counter < limit THEN
     END_IF;
 END_IF;
   END_BLOCK
-END_FILE
+END_PROGRAM

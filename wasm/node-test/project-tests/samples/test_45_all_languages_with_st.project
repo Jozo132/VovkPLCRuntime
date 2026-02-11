@@ -22,7 +22,7 @@ SYMBOLS
   st_result : i16 : M12
 END_SYMBOLS
 
-FILE main
+PROGRAM main
   BLOCK LANG=PLCASM init
 // Initialize plcasm_var
 u16.const 100
@@ -63,4 +63,4 @@ st_result := 42;
 local_temp := st_result + 8;
 st_result := local_temp;
   END_BLOCK
-END_FILE
+END_PROGRAM

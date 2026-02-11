@@ -190,11 +190,11 @@ MEMORY
     C 8
 END_MEMORY
 
-FILE main
+PROGRAM main
     BLOCK LANG=ST Main
 ${stCode}
     END_BLOCK
-END_FILE
+END_PROGRAM
 `
         const wasm = plc.wasm_exports
         wasm.project_reset()

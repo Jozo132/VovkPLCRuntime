@@ -176,6 +176,7 @@ const MEMORY_LAYOUT = {
  *     project_getVersion: () => number, // Returns a pointer to the project version string.
  *     project_getFileCount: () => number, // Returns the number of program files in the project.
  *     project_getFilePath: (index: number) => number, // Returns a pointer to the file path string at the given index.
+ *     project_getFileDirectory: (index: number) => number, // Returns a pointer to the file directory path string at the given index.
  *     project_getFileFirstBlockIndex: (index: number) => number, // Returns the first block index for the file at the given index.
  *     project_getFileBlockCount: (index: number) => number, // Returns the number of blocks in the file at the given index.
  *     project_getFileExecutionOrder: (index: number) => number, // Returns the execution order of the file at the given index.
@@ -2504,11 +2505,13 @@ class VovkPLC_class {
         const fileCount = wasm.project_getFileCount()
         for (let i = 0; i < fileCount; i++) {
             const filePath = getString(wasm.project_getFilePath(i))
+            const fileDirectory = wasm.project_getFileDirectory ? getString(wasm.project_getFileDirectory(i)) : '/'
             const firstBlockIndex = wasm.project_getFileFirstBlockIndex(i)
             const fileBlockCount = wasm.project_getFileBlockCount(i)
             const executionOrder = wasm.project_getFileExecutionOrder(i)
             files.push({
                 path: filePath,
+                directory: fileDirectory,
                 firstBlockIndex,
                 blockCount: fileBlockCount,
                 executionOrder,

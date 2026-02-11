@@ -54,7 +54,7 @@ FP M100.2
     END_BLOCK
 END_PROGRAM
 
-PROGRAM secondary
+PROGRAM secondary PATH=/
     BLOCK LANG=LADDER Network 4 - Ladder Rising Edge
 {
   "comment": "Ladder with rising edge contact - should use M100.3",

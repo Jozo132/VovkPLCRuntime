@@ -19,7 +19,7 @@ END_FLASH
 SYMBOLS
 END_SYMBOLS
 
-FILE main
+PROGRAM main
     BLOCK LANG=PLCSCRIPT Main - Basic PLCScript test
 // Simple PLCScript test - variable declarations with PLC addresses
 let counter: i16 @ MW10 = 100;
@@ -28,4 +28,4 @@ let output: bool @ Y0.0;
 // Simple assignment
 output = true;
     END_BLOCK
-END_FILE
+END_PROGRAM

@@ -1,0 +1,57 @@
+VOVKPLCPROJECT ProgramPathsTest
+VERSION 1.0
+
+MEMORY
+    OFFSET 0
+    AVAILABLE 1024
+    S 64
+    X 64
+    Y 64
+    M 256
+    T 90
+    C 40
+END_MEMORY
+
+FLASH
+    SIZE 32768
+END_FLASH
+
+SYMBOLS
+    start_btn : bit : X0.0
+    motor : bit : Y0.0
+    counter_val : i16 : M0
+END_SYMBOLS
+
+// main has no path (special case)
+PROGRAM main
+    BLOCK LANG=STL Network 1 - Main Logic
+LD start_btn
+= motor
+    END_BLOCK
+END_PROGRAM
+
+// Simple name with root path
+PROGRAM motor_control PATH=/
+    BLOCK LANG=STL Network 1 - Motor Control
+LD start_btn
+= motor
+    END_BLOCK
+END_PROGRAM
+
+// Simple name with subdirectory path
+PROGRAM counter_logic PATH=/modules
+    BLOCK LANG=PLCASM Network 1 - Counter
+i16.load_from counter_val
+i16.const 1
+i16.add
+i16.move_to counter_val
+    END_BLOCK
+END_PROGRAM
+
+// Program in a deeper path
+PROGRAM safety_check PATH=/modules/safety
+    BLOCK LANG=STL Network 1 - Safety
+LD start_btn
+= motor
+    END_BLOCK
+END_PROGRAM

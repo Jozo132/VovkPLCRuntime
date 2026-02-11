@@ -242,7 +242,7 @@ END_PROGRAM
     }
     
     // Project keywords as symbols
-    for (const k of ['MEMORY', 'FLASH', 'SYMBOLS', 'FILE', 'auto']) {
+    for (const k of ['MEMORY', 'FLASH', 'SYMBOLS', 'auto']) {
         test(`Symbol '${k}' (project kw) rejected`, symbolProject(k), true, 'reserved')
     }
     

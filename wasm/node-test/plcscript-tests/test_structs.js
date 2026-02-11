@@ -76,11 +76,11 @@ END_FLASH
 SYMBOLS
 END_SYMBOLS
 
-FILE main
+PROGRAM main
     BLOCK LANG=PLCSCRIPT Main
 ${code}
     END_BLOCK
-END_FILE
+END_PROGRAM
 `;
         
         const result = plc.compileProject(project);
@@ -171,8 +171,8 @@ END_FLASH
 SYMBOLS
 END_SYMBOLS
 
-FILE main
-${blocksStr}END_FILE
+PROGRAM main
+${blocksStr}END_PROGRAM
 `;
         
         const result = plc.compileProject(project);
@@ -607,8 +607,8 @@ END_TYPES
 SYMBOLS
 END_SYMBOLS
 
-FILE main
-${blocksStr}END_FILE
+PROGRAM main
+${blocksStr}END_PROGRAM
 `;
         
         const result = plc.compileProject(project);

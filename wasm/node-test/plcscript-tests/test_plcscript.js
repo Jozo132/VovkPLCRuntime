@@ -66,11 +66,11 @@ MEMORY
     C 8
 END_MEMORY
 
-FILE main
+PROGRAM main
     BLOCK LANG=PLCSCRIPT Main
 ${script}
     END_BLOCK
-END_FILE
+END_PROGRAM
 `;
     
     await plc.downloadAssembly(project);
@@ -116,11 +116,11 @@ MEMORY
     C 8
 END_MEMORY
 
-FILE main
+PROGRAM main
     BLOCK LANG=PLCSCRIPT Main
 ${script}
     END_BLOCK
-END_FILE
+END_PROGRAM
 `;
     
     await plc.downloadAssembly(project);
@@ -162,11 +162,11 @@ MEMORY
     C 8
 END_MEMORY
 
-FILE main
+PROGRAM main
     BLOCK LANG=PLCSCRIPT Main
 ${script}
     END_BLOCK
-END_FILE
+END_PROGRAM
 `;
     
     await plc.downloadAssembly(project);
@@ -210,11 +210,11 @@ MEMORY
     C 8
 END_MEMORY
 
-FILE main
+PROGRAM main
     BLOCK LANG=PLCSCRIPT Main
 ${script}
     END_BLOCK
-END_FILE
+END_PROGRAM
 `;
     
     await plc.downloadAssembly(project);
@@ -262,11 +262,11 @@ MEMORY
     C 8
 END_MEMORY
 
-FILE main
+PROGRAM main
     BLOCK LANG=PLCSCRIPT Main
 ${script}
     END_BLOCK
-END_FILE
+END_PROGRAM
 `;
     
     await plc.downloadAssembly(project);
@@ -315,11 +315,11 @@ MEMORY
     C 8
 END_MEMORY
 
-FILE main
+PROGRAM main
     BLOCK LANG=PLCSCRIPT Main
 ${script}
     END_BLOCK
-END_FILE
+END_PROGRAM
 `;
     
     await plc.downloadAssembly(project);
@@ -364,11 +364,11 @@ MEMORY
     C 8
 END_MEMORY
 
-FILE main
+PROGRAM main
     BLOCK LANG=PLCSCRIPT Main
 ${script}
     END_BLOCK
-END_FILE
+END_PROGRAM
 `;
     
     await plc.downloadAssembly(project);
@@ -411,11 +411,11 @@ MEMORY
     C 8
 END_MEMORY
 
-FILE main
+PROGRAM main
     BLOCK LANG=PLCSCRIPT Main
 ${script}
     END_BLOCK
-END_FILE
+END_PROGRAM
 `;
     
     await plc.downloadAssembly(project);
@@ -460,11 +460,11 @@ MEMORY
     C 8
 END_MEMORY
 
-FILE main
+PROGRAM main
     BLOCK LANG=PLCSCRIPT Main
 ${script}
     END_BLOCK
-END_FILE
+END_PROGRAM
 `;
     
     await plc.downloadAssembly(project);
@@ -507,11 +507,11 @@ MEMORY
     C 8
 END_MEMORY
 
-FILE main
+PROGRAM main
     BLOCK LANG=PLCSCRIPT Main
 ${script}
     END_BLOCK
-END_FILE
+END_PROGRAM
 `;
     
     await plc.downloadAssembly(project);
@@ -558,11 +558,11 @@ MEMORY
     C 8
 END_MEMORY
 
-FILE main
+PROGRAM main
     BLOCK LANG=PLCSCRIPT Main
 ${script}
     END_BLOCK
-END_FILE
+END_PROGRAM
 `;
     
     await plc.downloadAssembly(project);
@@ -602,11 +602,11 @@ MEMORY
     C 8
 END_MEMORY
 
-FILE main
+PROGRAM main
     BLOCK LANG=PLCSCRIPT Main
 ${script}
     END_BLOCK
-END_FILE
+END_PROGRAM
 `;
     
     await plc.downloadAssembly(project);

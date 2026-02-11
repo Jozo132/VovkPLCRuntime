@@ -1,5 +1,5 @@
-VOVKPLCPROJECT MultiProgram
-VERSION 2.0
+VOVKPLCPROJECT MissingPathTest
+VERSION 1.0
 
 MEMORY
     OFFSET 0
@@ -17,16 +17,16 @@ FLASH
 END_FLASH
 
 PROGRAM main
-    BLOCK LANG=PLCASM Network 1 - Initialize
-u8.const 1
-u8.drop
-exit
+    BLOCK LANG=STL Network 1
+LD X0.0
+= Y0.0
     END_BLOCK
 END_PROGRAM
 
-PROGRAM test_program_2 PATH=/
-    BLOCK LANG=STL Network 1 - Process
-A X0.0
+// This should fail: non-main program without PATH=
+PROGRAM utils
+    BLOCK LANG=STL Network 1
+LD X0.0
 = Y0.0
     END_BLOCK
 END_PROGRAM

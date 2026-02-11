@@ -189,11 +189,11 @@ MEMORY
     C 8
 END_MEMORY
 
-FILE main
+PROGRAM main
     BLOCK LANG=PLCSCRIPT Main
 ${script}
     END_BLOCK
-END_FILE
+END_PROGRAM
 `
         const wasm = plc.wasm_exports
         wasm.project_reset()
@@ -506,11 +506,11 @@ SYMBOLS
     M0 : i32 : M0
 END_SYMBOLS
 
-FILE main
+PROGRAM main
     BLOCK LANG=PLCSCRIPT Main
 let x: i32 @ M4 = 0;
     END_BLOCK
-END_FILE
+END_PROGRAM
 `
         const wasm = plc.wasm_exports
         wasm.project_reset()
@@ -540,11 +540,11 @@ SYMBOLS
     ADD : i32 : M0
 END_SYMBOLS
 
-FILE main
+PROGRAM main
     BLOCK LANG=PLCSCRIPT Main
 let x: i32 @ M4 = 0;
     END_BLOCK
-END_FILE
+END_PROGRAM
 `
         const wasm = plc.wasm_exports
         wasm.project_reset()

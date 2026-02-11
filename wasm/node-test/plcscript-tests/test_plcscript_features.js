@@ -131,11 +131,11 @@ MEMORY
     M 512
 END_MEMORY
 
-FILE main
+PROGRAM main
     BLOCK LANG=PLCSCRIPT Main
 ${script}
     END_BLOCK
-END_FILE
+END_PROGRAM
 `
     const wasm = plc.wasm_exports
     

@@ -1,0 +1,17 @@
+{
+  "success": 0,
+  "project": { "name": "MissingPathTest", "version": "1.0" },
+  "bytecode": "",
+  "bytecodeLength": 0,
+  "checksum": 0,
+  "files": [],
+  "blocks": [],
+  "symbols": [],
+  "memoryAreas": [],
+  "memory": { "available": 0, "used": 0 },
+  "flash": { "size": 0, "used": 0 },
+  "execution": { "steps": 0, "stackSize": 0 },
+  "problems": [
+    { "severity": "error", "message": "Non-main PROGRAM 'utils' requires PATH= (e.g., PATH=/ or PATH=/modules)", "line": 27, "column": 15, "file": "main" }
+  ]
+}

@@ -69,21 +69,38 @@
 //
 // SYMBOLS
 //   <name> : <type> : <address> [= <default_value>]
-//   // Timer/Counter symbols support 'auto' for automatic index assignment:
-//   //   my_timer : timer : auto      // Auto-assigns T0, T1, etc.
-//   //   my_counter : counter : auto  // Auto-assigns C0, C1, etc.
-//   // Explicit indices are scanned first, then 'auto' fills remaining slots.
 //   ...
 // END_SYMBOLS
 //
-// FILE <path>                    // 'main' is always executed first, others alphabetically
+// DATABLOCKS                    // Optional: project-level DataBlock declarations
+//   DB<N> ["Alias"] [PATH=<dir>] {   // PATH= is optional, defaults to "/"
+//     <field>: <type> [= <default>]
+//     ...
+//   }
+// END_DATABLOCKS
+//
+// PROGRAM <name> [PATH=<dir>]   // 'main' has no path (PATH= ignored if provided)
 //   BLOCK LANG=<language> <block name>   // block name can have spaces
 //     <source code>
 //   END_BLOCK
 //   ... (more BLOCK entries)
-// END_FILE
+// END_PROGRAM
 //
-// ... (more FILE blocks)
+// ... (more PROGRAM blocks)
+//
+// Program names:
+//   - Unquoted: [a-zA-Z_][a-zA-Z0-9_-]* (standard identifiers)
+//   - Quoted: "..." allows spaces, dots, special chars (but not /, \, ", or control chars)
+//   - Names must be unique (case-insensitive) — same name in different paths is invalid
+//   - 'main' is special: always executed first, PATH= is ignored
+//
+// PATH= rules:
+//   - Must start with '/' (Unix absolute path, directory only — not including file name)
+//   - File name is the program name itself
+//   - Required for all programs except 'main'
+//   - Supports quoted paths: PATH="/my modules/subfolder"
+//   - Rejects: backslash \, ".." segments, control chars
+//   - Normalized: // collapsed, trailing / stripped
 //
 // Supported languages: PLCASM, STL, LADDER (JSON), PLCSCRIPT, ST
 //
@@ -157,7 +174,8 @@ struct ProgramBlock {
 
 // Program file definition (contains blocks)
 struct ProgramFile {
-    char path[PROJECT_MAX_PATH_LEN];          // File path (e.g., "main", "utils/helpers")
+    char path[PROJECT_MAX_PATH_LEN];          // Program name (e.g., "main", "motor_control")
+    char directory[PROJECT_MAX_PATH_LEN];     // Directory path (e.g., "/", "/modules") - Unix absolute path
     int first_block_index;                     // Index of first block in program_blocks array
     int block_count;                           // Number of blocks in this file
     int execution_order;                       // Execution order (0 = main, then alphabetical)
@@ -165,6 +183,7 @@ struct ProgramFile {
 
     void reset() {
         path[0] = '\0';
+        directory[0] = '\0';
         first_block_index = -1;
         block_count = 0;
         execution_order = 0;
@@ -932,7 +951,7 @@ public:
             // Project file keywords
             "memory", "end_memory", "flash", "end_flash",
             "symbols", "end_symbols", "types", "end_types",
-            "file", "end_file", "block", "end_block",
+            "block", "end_block",
             "vovkplcproject", "version", "size", "offset", "available", "db",
             "plcasm", "stl", "ladder", "st", "plcscript",
             "auto",
@@ -1006,6 +1025,182 @@ public:
             buf[--i] = '\0';
         }
         return i > 0;
+    }
+
+    // Read a quoted or plain identifier.
+    // Quoted: "..." — allows any char except ", /, \, null, and control chars (0x00-0x1F, 0x7F).
+    // Unquoted: [a-zA-Z_][a-zA-Z0-9_-]* — standard identifier.
+    // Returns true if a non-empty identifier was read.
+    bool readQuotedOrPlainIdentifier(char* buf, int maxLen) {
+        skipWhitespaceNotNewline();
+        if (pos >= source_length) return false;
+
+        if (peek() == '"') {
+            // Quoted identifier
+            advance(); // skip opening "
+            int i = 0;
+            while (pos < source_length && i < maxLen - 1) {
+                char c = peek();
+                if (c == '"') {
+                    advance(); // skip closing "
+                    buf[i] = '\0';
+                    return i > 0;
+                }
+                if (c == '\n' || c == '\r') {
+                    setError("Unterminated quoted identifier - missing closing '\"'");
+                    buf[i] = '\0';
+                    return false;
+                }
+                // Reject invalid chars in identifiers: /, \, null, control chars
+                if (c == '/' || c == '\\') {
+                    char err[128];
+                    int ei = 0;
+                    const char* msg = "Invalid character '";
+                    while (*msg && ei < 60) err[ei++] = *msg++;
+                    err[ei++] = c;
+                    const char* msg2 = "' in quoted identifier (use PATH= for directory)";
+                    while (*msg2 && ei < 120) err[ei++] = *msg2++;
+                    err[ei] = '\0';
+                    setError(err);
+                    buf[i] = '\0';
+                    return false;
+                }
+                if (c < 0x20 || c == 0x7F) {
+                    setError("Control characters not allowed in identifier");
+                    buf[i] = '\0';
+                    return false;
+                }
+                buf[i++] = advance();
+            }
+            setError("Unterminated quoted identifier - missing closing '\"'");
+            buf[i] = '\0';
+            return false;
+        }
+
+        // Unquoted identifier: [a-zA-Z_][a-zA-Z0-9_-]*
+        int i = 0;
+        char c = peek();
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_')) return false;
+        buf[i++] = advance();
+        while (pos < source_length && i < maxLen - 1) {
+            c = peek();
+            if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-') {
+                buf[i++] = advance();
+            } else {
+                break;
+            }
+        }
+        buf[i] = '\0';
+        return i > 0;
+    }
+
+    // Check if a character is valid in a Unix path segment (unquoted)
+    static bool isValidUnquotedPathChar(char c) {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+               (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.';
+    }
+
+    // Read and validate a PATH= value.
+    // Must start with '/'. Each segment is either quoted "..." or unquoted [a-zA-Z0-9_-.]+
+    // Quoted segments allow any char except ", /, \, null, and control chars.
+    // Returns true if a valid path was read. Result always starts with '/'.
+    // Normalizes: collapses //, strips trailing /, rejects \ and ..
+    bool readPathValue(char* buf, int maxLen) {
+        skipWhitespaceNotNewline();
+        if (pos >= source_length) return false;
+
+        // Check for quoted path (entire value quoted)
+        if (peek() == '"') {
+            advance(); // skip opening "
+            int i = 0;
+            while (pos < source_length && i < maxLen - 1) {
+                char c = peek();
+                if (c == '"') {
+                    advance(); // skip closing "
+                    break;
+                }
+                if (c == '\n' || c == '\r') {
+                    setError("Unterminated quoted PATH value - missing closing '\"'");
+                    buf[0] = '\0';
+                    return false;
+                }
+                if (c == '\\') {
+                    setError("Backslash '\\' not allowed in PATH (use Unix '/' separator)");
+                    buf[0] = '\0';
+                    return false;
+                }
+                if (c < 0x20 || c == 0x7F) {
+                    setError("Control characters not allowed in PATH");
+                    buf[0] = '\0';
+                    return false;
+                }
+                buf[i++] = advance();
+            }
+            buf[i] = '\0';
+        } else {
+            // Unquoted path: [a-zA-Z0-9_-.\/]+
+            int i = 0;
+            while (pos < source_length && i < maxLen - 1) {
+                char c = peek();
+                if (c == '/' || isValidUnquotedPathChar(c)) {
+                    buf[i++] = advance();
+                } else if (c == '\\') {
+                    setError("Backslash '\\' not allowed in PATH (use Unix '/' separator)");
+                    buf[0] = '\0';
+                    return false;
+                } else if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+                    break; // end of unquoted path
+                } else {
+                    char err[128];
+                    int ei = 0;
+                    const char* msg = "Invalid character '";
+                    while (*msg && ei < 60) err[ei++] = *msg++;
+                    err[ei++] = c;
+                    const char* msg2 = "' in unquoted PATH (use \"...\" to escape)";
+                    while (*msg2 && ei < 120) err[ei++] = *msg2++;
+                    err[ei] = '\0';
+                    setError(err);
+                    buf[0] = '\0';
+                    return false;
+                }
+            }
+            buf[i] = '\0';
+        }
+
+        int len = 0;
+        while (buf[len]) len++;
+        if (len == 0) return false;
+
+        // Must start with '/'
+        if (buf[0] != '/') {
+            setError("PATH must start with '/'");
+            return false;
+        }
+
+        // Normalize: collapse // -> /
+        int write = 0;
+        for (int read = 0; buf[read]; read++) {
+            if (buf[read] == '/' && write > 0 && buf[write - 1] == '/') continue;
+            buf[write++] = buf[read];
+        }
+        buf[write] = '\0';
+
+        // Strip trailing / (but keep root "/")
+        while (write > 1 && buf[write - 1] == '/') {
+            buf[--write] = '\0';
+        }
+
+        // Reject ".." segments (security)
+        for (int j = 0; buf[j]; j++) {
+            if (buf[j] == '.' && buf[j + 1] == '.') {
+                if ((j == 0 || buf[j - 1] == '/') && (buf[j + 2] == '/' || buf[j + 2] == '\0')) {
+                    setError("'..' path segments not allowed in PATH");
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     // Read an integer
@@ -2023,6 +2218,42 @@ public:
                 }
             }
 
+            // Parse optional PATH= attribute for datablock directory
+            skipWhitespaceNotNewline();
+            if (pos < source_length && peek() != '{' && peek() != '\n' && peek() != '\r') {
+                char attr[PROJECT_MAX_PATH_LEN + 8];
+                int save_pos = pos;
+                int save_line = line;
+                int save_col = column;
+
+                if (readWord(attr, sizeof(attr)) && strncmpI(attr, "PATH=", 5)) {
+                    // Found PATH= — rewind and parse properly
+                    pos = save_pos;
+                    line = save_line;
+                    column = save_col;
+
+                    // Skip "PATH="
+                    for (int skip = 0; skip < 5; skip++) advance();
+
+                    // Read and validate path value
+                    if (!readPathValue(decl.directory, sizeof(decl.directory))) {
+                        if (!has_error) setError("Expected path value after PATH=");
+                        return false;
+                    }
+                } else {
+                    // Not PATH= — rewind
+                    pos = save_pos;
+                    line = save_line;
+                    column = save_col;
+                }
+            }
+
+            // If no PATH= provided, require it (datablocks need explicit path)
+            if (decl.directory[0] == '\0') {
+                // Default to root "/" for datablocks (backwards compatible)
+                copyString(decl.directory, "/", sizeof(decl.directory));
+            }
+
             // Expect opening brace {
             skipWhitespaceNotNewline();
             if (peek() != '{') {
@@ -2705,11 +2936,8 @@ public:
 
             if (pos >= source_length) break;
 
-            // Accept both FILE and PROGRAM keywords for backwards compatibility
-            bool isFile = matchKeyword("FILE");
-            bool isProgram = !isFile && matchKeyword("PROGRAM");
-
-            if (!isFile && !isProgram) {
+            // PROGRAM keyword only
+            if (!matchKeyword("PROGRAM")) {
                 // Check for unexpected content
                 char word[64];
                 if (readWord(word, sizeof(word))) {
@@ -2732,13 +2960,90 @@ public:
                 return false;
             }
 
-            // Read FILE/PROGRAM path
+            // Read PROGRAM name (supports quoted identifiers with spaces)
             ProgramFile& file = program_files[program_file_count];
             file.reset();
 
-            if (!readLineUntil(file.path, PROJECT_MAX_PATH_LEN, '/')) {
-                setError(isFile ? "Expected FILE path" : "Expected PROGRAM name");
+            // PROGRAM keyword: read quoted or plain identifier as program name
+            if (!readQuotedOrPlainIdentifier(file.path, PROJECT_MAX_PATH_LEN)) {
+                setError("Expected PROGRAM name (use \"...\" for names with spaces)");
                 return false;
+            }
+
+            bool isMain = strEqI(file.path, "main");
+
+            // Check for PATH= attribute (optional for main, required for others)
+            skipWhitespaceNotNewline();
+            char attr[PROJECT_MAX_PATH_LEN + 8]; // "PATH=" + path
+            int save_pos = pos;
+            int save_line = line;
+            int save_col = column;
+            bool has_path = false;
+
+            if (pos < source_length && peek() != '\n' && peek() != '\r') {
+                if (readWord(attr, sizeof(attr)) && strncmpI(attr, "PATH=", 5)) {
+                    // Found PATH= — rewind and parse properly
+                    pos = save_pos;
+                    line = save_line;
+                    column = save_col;
+
+                    // Skip "PATH="
+                    for (int skip = 0; skip < 5; skip++) advance();
+
+                    // Read and validate path value
+                    if (!readPathValue(file.directory, PROJECT_MAX_PATH_LEN)) {
+                        if (!has_error) setError("Expected path value after PATH=");
+                        return false;
+                    }
+                    has_path = true;
+
+                    if (isMain) {
+                        // main: silently ignore PATH= (set to empty, main has no path)
+                        file.directory[0] = '\0';
+                    }
+                } else {
+                    // Not PATH= — rewind
+                    pos = save_pos;
+                    line = save_line;
+                    column = save_col;
+                }
+            }
+
+            if (!has_path) {
+                if (isMain) {
+                    // main: no path required
+                    file.directory[0] = '\0';
+                } else {
+                    // Non-main programs require PATH=
+                    char err[256];
+                    int ei = 0;
+                    const char* msg = "Non-main PROGRAM '";
+                    while (*msg && ei < 60) err[ei++] = *msg++;
+                    int ni = 0;
+                    while (file.path[ni] && ei < 140) err[ei++] = file.path[ni++];
+                    const char* msg2 = "' requires PATH= (e.g., PATH=/ or PATH=/modules)";
+                    while (*msg2 && ei < 250) err[ei++] = *msg2++;
+                    err[ei] = '\0';
+                    setError(err);
+                    return false;
+                }
+            }
+
+            // Check for duplicate program name (case-insensitive)
+            for (int i = 0; i < program_file_count; i++) {
+                if (program_files[i].used && strEqI(program_files[i].path, file.path)) {
+                    char err[256];
+                    int ei = 0;
+                    const char* msg = "Duplicate program name '";
+                    while (*msg && ei < 60) err[ei++] = *msg++;
+                    int ni = 0;
+                    while (file.path[ni] && ei < 140) err[ei++] = file.path[ni++];
+                    const char* msg2 = "' (program names must be unique)";
+                    while (*msg2 && ei < 250) err[ei++] = *msg2++;
+                    err[ei] = '\0';
+                    setError(err);
+                    return false;
+                }
             }
 
             // Set current file context for error tracking
@@ -2759,13 +3064,12 @@ public:
 
             skipLine();
 
-            // Parse BLOCKs within this FILE/PROGRAM
+            // Parse BLOCKs within this PROGRAM
             while (pos < source_length && !has_error) {
                 skipComments();
 
-                if ((isFile && matchKeyword("END_FILE")) ||
-                    (!isFile && matchKeyword("END_PROGRAM"))) {
-                    break;  // End of this FILE/PROGRAM
+                if (matchKeyword("END_PROGRAM")) {
+                    break;  // End of this PROGRAM
                 }
 
                 if (!matchKeyword("BLOCK")) {
@@ -2773,8 +3077,7 @@ public:
                     if (readLineUntil(word, sizeof(word), '/')) {
                         char err[128];
                         int ei = 0;
-                        const char* msg = isFile ? "Expected BLOCK or END_FILE, got: "
-                            : "Expected BLOCK or END_PROGRAM, got: ";
+                        const char* msg = "Expected BLOCK or END_PROGRAM, got: ";
                         while (*msg) err[ei++] = *msg++;
                         int wi = 0;
                         while (word[wi] && ei < 120) err[ei++] = word[wi++];
@@ -4199,6 +4502,14 @@ extern "C" {
             return "";
         }
         return project_compiler.program_files[index].path;
+    }
+
+    // Get file directory by index (Unix absolute path, e.g., "/" or "/modules")
+    WASM_EXPORT const char* project_getFileDirectory(int index) {
+        if (index < 0 || index >= project_compiler.program_file_count) {
+            return "";
+        }
+        return project_compiler.program_files[index].directory;
     }
 
     // Get file's first block index
