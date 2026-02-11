@@ -1,15 +1,15 @@
 {
   "success": 1,
   "project": { "name": "STLComplex", "version": "1.0" },
-  "bytecode": "FD 02 58 40 00 59 40 00 C1 5A 40 00 C3 C0 60 80 00 FD 02 58 41 00 60 81 00 FF",
-  "bytecodeLength": 26,
-  "checksum": 32,
+  "bytecode": "58 14 00 E2 0C 00 1E 00 80 00 40 01 FD 02 58 40 00 59 40 00 C1 5A 40 00 C3 C0 60 80 00 FD 02 58 41 00 60 81 00 FF",
+  "bytecodeLength": 38,
+  "checksum": 107,
   "files": [
     { "path": "main", "firstBlockIndex": 0, "blockCount": 2, "executionOrder": 0 }
   ],
   "blocks": [
-    { "file": "main", "name": "Network 1 - Network1", "language": "STL", "offset": 0, "size": 17 },
-    { "file": "main", "name": "Network 2 - Network2", "language": "STL", "offset": 17, "size": 8 }
+    { "file": "main", "name": "Network 1 - Network1", "language": "STL", "offset": 12, "size": 17 },
+    { "file": "main", "name": "Network 2 - Network2", "language": "STL", "offset": 29, "size": 8 }
   ],
   "symbols": [],
   "memoryAreas": [
@@ -19,7 +19,7 @@
     { "name": "M", "start": 192, "end": 447 }
   ],
   "memory": { "available": 1024, "used": 192 },
-  "flash": { "size": 32768, "used": 26 },
-  "execution": { "steps": 12, "stackSize": 0 },
+  "flash": { "size": 32768, "used": 38 },
+  "execution": { "steps": 15, "stackSize": 0 },
   "problems": []
 }

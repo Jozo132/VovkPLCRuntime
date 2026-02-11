@@ -348,6 +348,26 @@ public:
 
     // Project-level DataBlock declarations use global registry (globalDBDecls in shared-symbols.h)
 
+    // Memory default tracking for optimized initialization
+    // Tracks defaults at each byte address in writable memory (Y, M areas)
+    static const int MEM_DEFAULT_MAP_SIZE = 4096;  // Max writable memory size to track
+    static const u8 MEM_NO_DEFAULT = 0x00;         // Marker for "no explicit default" (0 anyway)
+    static const u8 MEM_HAS_DEFAULT = 0x01;        // Flag: byte has explicit default
+    
+    // Byte-level defaults: value, has_explicit flag, source symbol for errors
+    u8 mem_default_values[MEM_DEFAULT_MAP_SIZE];   // Default byte values
+    u8 mem_default_flags[MEM_DEFAULT_MAP_SIZE];    // 0=no default, 1=has default
+    char mem_default_source[MEM_DEFAULT_MAP_SIZE][32]; // Source symbol name for conflict reporting
+    
+    // Bit-level defaults: track which bits to SET (after zeroing all memory)
+    // bit_set_mask[addr] -> bits that should be 1
+    // bit_sources[addr][bit] -> source symbol for that bit
+    u8 bit_set_mask[MEM_DEFAULT_MAP_SIZE];
+    char bit_sources[MEM_DEFAULT_MAP_SIZE][8][32]; // [addr][bit][symbol_name]
+    
+    u32 mem_default_base;  // Base address (Y area start)
+    u32 mem_default_end;   // End address (M area end)
+
     // Problems array for multiple error tracking
     LinterProblem problems[MAX_LINT_PROBLEMS];
     int problem_count = 0;
@@ -494,6 +514,17 @@ public:
             db_entries[i].size = 0;
         }
         db_count = 0;
+
+        // Reset memory default tracking
+        for (int i = 0; i < MEM_DEFAULT_MAP_SIZE; i++) {
+            mem_default_values[i] = 0;
+            mem_default_flags[i] = 0;
+            mem_default_source[i][0] = '\0';
+            bit_set_mask[i] = 0;
+            for (int b = 0; b < 8; b++) bit_sources[i][b][0] = '\0';
+        }
+        mem_default_base = 0;
+        mem_default_end = 0;
 
         // Reset global DataBlock declarations (shared across all compilers)
         resetGlobalDBDecls();
@@ -3237,6 +3268,208 @@ public:
         return !has_error;
     }
 
+    // ============ Memory Default Mapping Helpers ============
+    
+    // Set a byte default value. Returns false and sets error on conflict.
+    bool setByteDefault(u32 addr, u8 value, const char* source_symbol) {
+        if (addr < mem_default_base || addr > mem_default_end) return true; // Out of range, ignore
+        u32 idx = addr - mem_default_base;
+        if (idx >= MEM_DEFAULT_MAP_SIZE) return true; // Safety check
+        
+        if (mem_default_flags[idx]) {
+            // Already has a default - check for conflict
+            if (mem_default_values[idx] != value) {
+                // Conflict! Different defaults for same address
+                char err[256];
+                err[0] = '\0';
+                int pos = 0;
+                const char* msg1 = "Conflicting default values at address ";
+                while (msg1[pos]) { err[pos] = msg1[pos]; pos++; }
+                // Append address
+                char addr_buf[16];
+                int ai = 0;
+                u32 tmp = addr;
+                do { addr_buf[ai++] = '0' + (tmp % 10); tmp /= 10; } while (tmp);
+                while (ai > 0) err[pos++] = addr_buf[--ai];
+                const char* msg2 = ": '";
+                for (int i = 0; msg2[i]; i++) err[pos++] = msg2[i];
+                for (int i = 0; mem_default_source[idx][i] && i < 30; i++) err[pos++] = mem_default_source[idx][i];
+                const char* msg3 = "' vs '";
+                for (int i = 0; msg3[i]; i++) err[pos++] = msg3[i];
+                for (int i = 0; source_symbol[i] && i < 30; i++) err[pos++] = source_symbol[i];
+                err[pos++] = '\'';
+                err[pos] = '\0';
+                setError(err);
+                return false;
+            }
+            // Same value - duplicate is OK, ignore
+            return true;
+        }
+        
+        mem_default_values[idx] = value;
+        mem_default_flags[idx] = MEM_HAS_DEFAULT;
+        int si = 0;
+        while (source_symbol[si] && si < 31) { mem_default_source[idx][si] = source_symbol[si]; si++; }
+        mem_default_source[idx][si] = '\0';
+        return true;
+    }
+    
+    // Set multiple consecutive byte defaults (for multi-byte types)
+    bool setMultiByteDefault(u32 addr, const u8* bytes, int count, const char* source_symbol) {
+        for (int i = 0; i < count; i++) {
+            if (!setByteDefault(addr + i, bytes[i], source_symbol)) return false;
+        }
+        return true;
+    }
+    
+    // Set a bit default. Returns false and sets error on conflict.
+    bool setBitDefault(u32 byte_addr, u8 bit, bool value, const char* source_symbol) {
+        if (byte_addr < mem_default_base || byte_addr > mem_default_end) return true;
+        u32 idx = byte_addr - mem_default_base;
+        if (idx >= MEM_DEFAULT_MAP_SIZE || bit > 7) return true;
+        
+        u8 mask = (1 << bit);
+        bool already_set = (bit_set_mask[idx] & mask) != 0;
+        
+        if (already_set) {
+            // Check for conflict
+            bool existing_value = true; // If mask is set, value was true
+            if (existing_value != value) {
+                char err[256];
+                int pos = 0;
+                const char* msg1 = "Conflicting bit default at address ";
+                while (msg1[pos]) { err[pos] = msg1[pos]; pos++; }
+                // Append address.bit
+                char addr_buf[16];
+                int ai = 0;
+                u32 tmp = byte_addr;
+                do { addr_buf[ai++] = '0' + (tmp % 10); tmp /= 10; } while (tmp);
+                while (ai > 0) err[pos++] = addr_buf[--ai];
+                err[pos++] = '.';
+                err[pos++] = '0' + bit;
+                const char* msg2 = ": '";
+                for (int i = 0; msg2[i]; i++) err[pos++] = msg2[i];
+                for (int i = 0; bit_sources[idx][bit][i] && i < 30; i++) err[pos++] = bit_sources[idx][bit][i];
+                const char* msg3 = "' vs '";
+                for (int i = 0; msg3[i]; i++) err[pos++] = msg3[i];
+                for (int i = 0; source_symbol[i] && i < 30; i++) err[pos++] = source_symbol[i];
+                err[pos++] = '\'';
+                err[pos] = '\0';
+                setError(err);
+                return false;
+            }
+            // Same value - duplicate is OK
+            return true;
+        }
+        
+        if (value) {
+            bit_set_mask[idx] |= mask;
+        }
+        // Note: if value is false, we don't need to do anything since memory starts zeroed
+        
+        // Record source
+        int si = 0;
+        while (source_symbol[si] && si < 31) { bit_sources[idx][bit][si] = source_symbol[si]; si++; }
+        bit_sources[idx][bit][si] = '\0';
+        return true;
+    }
+    
+    // Parse a default value string and convert to bytes for the given type
+    // Returns number of bytes written, or -1 on parse error
+    int parseDefaultToBytes(const char* default_value, const char* type_name, u8 type_size, u8* out_bytes) {
+        if (strEqI(type_name, "f32") || strEqI(type_name, "real")) {
+            // Parse as float
+            float val = 0.0f;
+            bool neg = false;
+            int i = 0;
+            if (default_value[i] == '-') { neg = true; i++; }
+            else if (default_value[i] == '+') i++;
+            
+            // Integer part
+            while (default_value[i] >= '0' && default_value[i] <= '9') {
+                val = val * 10.0f + (default_value[i] - '0');
+                i++;
+            }
+            // Decimal part
+            if (default_value[i] == '.') {
+                i++;
+                float frac = 0.1f;
+                while (default_value[i] >= '0' && default_value[i] <= '9') {
+                    val += (default_value[i] - '0') * frac;
+                    frac *= 0.1f;
+                    i++;
+                }
+            }
+            if (neg) val = -val;
+            
+            // Copy bytes
+            u8* vp = (u8*)&val;
+            for (int j = 0; j < 4; j++) out_bytes[j] = vp[j];
+            return 4;
+        }
+        
+        if (strEqI(type_name, "f64") || strEqI(type_name, "lreal")) {
+            // Parse as double - simplified parsing
+            double val = 0.0;
+            bool neg = false;
+            int i = 0;
+            if (default_value[i] == '-') { neg = true; i++; }
+            else if (default_value[i] == '+') i++;
+            
+            while (default_value[i] >= '0' && default_value[i] <= '9') {
+                val = val * 10.0 + (default_value[i] - '0');
+                i++;
+            }
+            if (default_value[i] == '.') {
+                i++;
+                double frac = 0.1;
+                while (default_value[i] >= '0' && default_value[i] <= '9') {
+                    val += (default_value[i] - '0') * frac;
+                    frac *= 0.1;
+                    i++;
+                }
+            }
+            if (neg) val = -val;
+            
+            u8* vp = (u8*)&val;
+            for (int j = 0; j < 8; j++) out_bytes[j] = vp[j];
+            return 8;
+        }
+        
+        // Integer type
+        i64 val = 0;
+        bool neg = false;
+        int i = 0;
+        if (default_value[i] == '-') { neg = true; i++; }
+        else if (default_value[i] == '+') i++;
+        
+        // Check for hex
+        if (default_value[i] == '0' && (default_value[i+1] == 'x' || default_value[i+1] == 'X')) {
+            i += 2;
+            while (1) {
+                char c = default_value[i];
+                if (c >= '0' && c <= '9') val = (val << 4) | (c - '0');
+                else if (c >= 'a' && c <= 'f') val = (val << 4) | (c - 'a' + 10);
+                else if (c >= 'A' && c <= 'F') val = (val << 4) | (c - 'A' + 10);
+                else break;
+                i++;
+            }
+        } else {
+            while (default_value[i] >= '0' && default_value[i] <= '9') {
+                val = val * 10 + (default_value[i] - '0');
+                i++;
+            }
+        }
+        if (neg) val = -val;
+        
+        // Copy bytes (little-endian)
+        for (int j = 0; j < type_size && j < 8; j++) {
+            out_bytes[j] = (u8)(val & 0xFF);
+            val >>= 8;
+        }
+        return type_size;
+    }
+
     // Generate startup block for default values and initialization
     void generateStartupBlock() {
         // Opening banner for the full PLCASM assembly (always shown)
@@ -3338,70 +3571,203 @@ public:
             }
         }
 
-        appendToCombinedPLCASM("// Write default values\n");
+        appendToCombinedPLCASM("// Memory initialization with conflict checking\n");
 
-        bool has_content = false;
-
-        for (int i = 0; i < symbol_count; i++) {
-            ProjectSymbol& sym = symbols[i];
-            if (sym.has_default) {
-                has_content = true;
-                // Generate write instruction
-                // "u8.const <val> \n ptr.const <addr> \n u8.store \n"
-                // Need to handle types?
-                // For now assuming u8/basic numeric types that parse directly or bit writes
-
+        // Phase 1: Determine writable memory range (Y/Q through M areas)
+        u32 y_start = 0;
+        u32 m_end = 0;
+        bool found_y = false, found_m = false;
+        for (int i = 0; i < memory_area_count; i++) {
+            if (strEqI(memory_areas[i].name, "Y") || strEqI(memory_areas[i].name, "Q")) {
+                y_start = memory_areas[i].start;
+                found_y = true;
+            }
+            if (strEqI(memory_areas[i].name, "M")) {
+                m_end = memory_areas[i].end;
+                found_m = true;
+            }
+        }
+        
+        if (!found_y || !found_m || m_end < y_start) {
+            // Fallback: skip advanced initialization
+            appendToCombinedPLCASM("// No writable memory areas found\n");
+        } else {
+            // Initialize memory default tracking
+            mem_default_base = y_start;
+            mem_default_end = m_end;
+            u32 mem_size = m_end - y_start + 1;
+            if (mem_size > MEM_DEFAULT_MAP_SIZE) mem_size = MEM_DEFAULT_MAP_SIZE;
+            
+            // Reset tracking arrays for the relevant range
+            for (u32 i = 0; i < mem_size; i++) {
+                mem_default_values[i] = 0;
+                mem_default_flags[i] = 0;
+                mem_default_source[i][0] = '\0';
+                bit_set_mask[i] = 0;
+                for (int b = 0; b < 8; b++) bit_sources[i][b][0] = '\0';
+            }
+            
+            // Phase 2: Collect defaults from all symbols (check for conflicts)
+            for (int i = 0; i < symbol_count; i++) {
+                ProjectSymbol& sym = symbols[i];
+                
                 if (sym.is_bit) {
-                    // Bit write
-                    if (sym.default_value[0] == '1' || sym.default_value[0] == 't' || sym.default_value[0] == 'T') {
-                        appendToCombinedPLCASM("u8.writeBitOn ");
-                    } else {
-                        appendToCombinedPLCASM("u8.writeBitOff ");
+                    // Bit-level default
+                    if (sym.has_default) {
+                        const char* dv = sym.default_value;
+                        bool bit_val = (dv[0] == '1' || dv[0] == 't' || dv[0] == 'T');
+                        if (!setBitDefault(sym.address, sym.bit, bit_val, sym.name)) {
+                            return; // Error already set
+                        }
                     }
-
-                    // Use original address string if available, otherwise computed address
-                    if (sym.address_str[0] != '\0') {
-                        appendToCombinedPLCASM(sym.address_str);
-                    } else {
-                        appendCombinedPLCASMInt(sym.address);
-                        appendToCombinedPLCASM(".");
-                        appendCombinedPLCASMInt(sym.bit);
-                    }
-                    appendToCombinedPLCASM("\n");
+                    // If no default, bit remains 0 (memory is zeroed)
                 } else {
-                    // Byte/Word write
-                    // Check type size
-                    // If f32/u32, need different store? 
-                    // PLCASM usually has specific store instructions or just typed stores.
-                    // Let's use simple stores for now assuming standard types
-                    const char* type_prefix = "u8";
-                    if (sym.type_size == 2) type_prefix = "u16";
-                    else if (sym.type_size == 4) type_prefix = "u32"; // or f32? PLCASM usually distinguishes
-                    else if (sym.type_size == 8) type_prefix = "u64";
-
-                    if (strEqI(sym.type, "f32")) type_prefix = "f32";
-                    else if (strEqI(sym.type, "f64")) type_prefix = "f64";
-
-                    // Value
-                    appendToCombinedPLCASM(type_prefix);
-                    appendToCombinedPLCASM(".const ");
-                    appendToCombinedPLCASM(sym.default_value);
-                    appendToCombinedPLCASM("\n");
-
-                    // Store (move_to)
-                    appendToCombinedPLCASM(type_prefix);
-                    appendToCombinedPLCASM(".move_to ");
-
-                    // Use original address string if available, otherwise computed address
-                    if (sym.address_str[0] != '\0') {
-                        appendToCombinedPLCASM(sym.address_str);
-                    } else {
-                        appendCombinedPLCASMInt(sym.address);
+                    // Byte-level default
+                    if (sym.has_default) {
+                        u8 bytes[8];
+                        int byte_count = parseDefaultToBytes(sym.default_value, sym.type, sym.type_size, bytes);
+                        if (byte_count > 0) {
+                            if (!setMultiByteDefault(sym.address, bytes, byte_count, sym.name)) {
+                                return; // Error already set
+                            }
+                        }
                     }
+                    // If no default, bytes remain 0 (memory is zeroed)
+                }
+            }
+            
+            // Phase 3: Collect defaults from DataBlock fields
+            // (DataBlocks are configured separately via .db directives, but their computed_offset
+            // tells us where they live in memory for conflict checking)
+            // Note: DB defaults are handled by the PLCASM .db directive, so we skip them here
+            // to avoid duplicate initialization. The .db directive emits its own defaults.
+            
+            // Phase 4: Generate optimized initialization code
+            
+            // Step 4a: Zero all writable memory with mem.fill
+            appendToCombinedPLCASM("// Zero writable memory (Y, M areas)\n");
+            appendToCombinedPLCASM("mem.fill 0 ");
+            appendCombinedPLCASMInt(y_start);
+            appendToCombinedPLCASM(" ");
+            appendCombinedPLCASMInt(mem_size);
+            appendToCombinedPLCASM("\n\n");
+            
+            // Step 4b: Find and emit mem.fill for runs of 4+ consecutive same non-zero values
+            appendToCombinedPLCASM("// Non-zero default patterns\n");
+            u32 idx = 0;
+            while (idx < mem_size) {
+                // Skip bytes with no explicit default or zero default
+                if (!mem_default_flags[idx] || mem_default_values[idx] == 0) {
+                    idx++;
+                    continue;
+                }
+                
+                // Found a non-zero default - check for consecutive run
+                u8 pattern = mem_default_values[idx];
+                u32 run_start = idx;
+                u32 run_len = 1;
+                
+                while (idx + run_len < mem_size && 
+                       mem_default_flags[idx + run_len] && 
+                       mem_default_values[idx + run_len] == pattern) {
+                    run_len++;
+                }
+                
+                if (run_len >= 4) {
+                    // Use mem.fill for this run
+                    appendToCombinedPLCASM("mem.fill ");
+                    appendCombinedPLCASMInt(pattern);
+                    appendToCombinedPLCASM(" ");
+                    appendCombinedPLCASMInt(y_start + run_start);
+                    appendToCombinedPLCASM(" ");
+                    appendCombinedPLCASMInt(run_len);
                     appendToCombinedPLCASM("\n");
+                    
+                    // Clear flags so we don't emit individual writes
+                    for (u32 j = 0; j < run_len; j++) {
+                        mem_default_flags[run_start + j] = 0;
+                    }
+                }
+                
+                idx = run_start + run_len;
+            }
+            
+            // Step 4c: Emit individual writes for remaining non-zero defaults
+            // Group by type size when possible for efficiency
+            appendToCombinedPLCASM("// Individual non-zero defaults\n");
+            for (u32 i = 0; i < mem_size; i++) {
+                if (!mem_default_flags[i] || mem_default_values[i] == 0) continue;
+                
+                // Check if we can emit a larger write (u16, u32)
+                // Try u32 (4 bytes aligned)
+                if (i + 3 < mem_size && (i % 4) == 0 &&
+                    mem_default_flags[i+1] && mem_default_flags[i+2] && mem_default_flags[i+3]) {
+                    u32 val = mem_default_values[i] | 
+                              ((u32)mem_default_values[i+1] << 8) |
+                              ((u32)mem_default_values[i+2] << 16) |
+                              ((u32)mem_default_values[i+3] << 24);
+                    if (val != 0) {
+                        appendToCombinedPLCASM("u32.const ");
+                        appendCombinedPLCASMInt((i32)val);
+                        appendToCombinedPLCASM("\nu32.move_to ");
+                        appendCombinedPLCASMInt(y_start + i);
+                        appendToCombinedPLCASM("\n");
+                        mem_default_flags[i] = 0;
+                        mem_default_flags[i+1] = 0;
+                        mem_default_flags[i+2] = 0;
+                        mem_default_flags[i+3] = 0;
+                        continue;
+                    }
+                }
+                
+                // Try u16 (2 bytes aligned)
+                if (i + 1 < mem_size && (i % 2) == 0 && mem_default_flags[i+1]) {
+                    u16 val = mem_default_values[i] | ((u16)mem_default_values[i+1] << 8);
+                    if (val != 0) {
+                        appendToCombinedPLCASM("u16.const ");
+                        appendCombinedPLCASMInt((i16)val);
+                        appendToCombinedPLCASM("\nu16.move_to ");
+                        appendCombinedPLCASMInt(y_start + i);
+                        appendToCombinedPLCASM("\n");
+                        mem_default_flags[i] = 0;
+                        mem_default_flags[i+1] = 0;
+                        continue;
+                    }
+                }
+                
+                // Single byte write
+                if (mem_default_flags[i] && mem_default_values[i] != 0) {
+                    appendToCombinedPLCASM("u8.const ");
+                    appendCombinedPLCASMInt(mem_default_values[i]);
+                    appendToCombinedPLCASM("\nu8.move_to ");
+                    appendCombinedPLCASMInt(y_start + i);
+                    appendToCombinedPLCASM("\n");
+                    mem_default_flags[i] = 0;
+                }
+            }
+            
+            // Step 4d: Emit bit set operations for bits that should be 1
+            // Group consecutive bytes with bit masks when possible
+            appendToCombinedPLCASM("// Bit-level defaults (set to 1)\n");
+            for (u32 i = 0; i < mem_size; i++) {
+                if (bit_set_mask[i] == 0) continue;
+                
+                // For each bit that needs to be set
+                for (int b = 0; b < 8; b++) {
+                    if (bit_set_mask[i] & (1 << b)) {
+                        appendToCombinedPLCASM("u8.writeBitOn ");
+                        appendCombinedPLCASMInt(y_start + i);
+                        appendToCombinedPLCASM(".");
+                        appendCombinedPLCASMInt(b);
+                        appendToCombinedPLCASM("\n");
+                    }
                 }
             }
         }
+        
+        // Track whether any initialization content was generated
+        // (always true now since we zero memory with mem.fill)
+        bool has_content = found_y && found_m;
 
         appendToCombinedPLCASM("\n// Initialize Differentiation Bits (Safety Skip)\n");
         // Scan for edge detections in raw source or parsed blocks?

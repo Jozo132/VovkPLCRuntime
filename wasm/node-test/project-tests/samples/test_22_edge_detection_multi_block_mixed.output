@@ -1,20 +1,20 @@
 {
   "success": 1,
   "project": { "name": "EdgeDetectionMultiBlock", "version": "1.0" },
-  "bytecode": "FD 02 58 40 00 8C 24 01 00 60 80 00 FD 02 59 40 00 8D 24 01 01 61 80 00 FD 02 5A 40 00 8C 24 01 02 62 80 00 FD 03 58 40 00 8C 24 01 00 63 80 00 FD 03 59 40 00 8D 24 01 01 64 80 00 FD 03 5A 40 00 8C 24 01 02 65 80 00 FF",
-  "bytecodeLength": 73,
-  "checksum": 250,
+  "bytecode": "58 14 00 E2 0C 00 1E 00 80 00 40 01 FD 02 58 40 00 8C 24 01 00 60 80 00 FD 02 59 40 00 8D 24 01 01 61 80 00 FD 02 5A 40 00 8C 24 01 02 62 80 00 FD 03 58 40 00 8C 24 01 00 63 80 00 FD 03 59 40 00 8D 24 01 01 64 80 00 FD 03 5A 40 00 8C 24 01 02 65 80 00 FF",
+  "bytecodeLength": 85,
+  "checksum": 54,
   "files": [
     { "path": "main", "firstBlockIndex": 0, "blockCount": 3, "executionOrder": 0 },
     { "path": "secondary", "firstBlockIndex": 3, "blockCount": 3, "executionOrder": 1 }
   ],
   "blocks": [
-    { "file": "main", "name": "Network 1 - Rising Edge Block 1", "language": "STL", "offset": 0, "size": 12 },
-    { "file": "main", "name": "Network 2 - Falling Edge Block 2", "language": "STL", "offset": 12, "size": 12 },
-    { "file": "main", "name": "Network 3 - Rising Edge Block 3", "language": "STL", "offset": 24, "size": 12 },
-    { "file": "secondary", "name": "Network 4 - Ladder Rising Edge", "language": "LADDER", "offset": 36, "size": 12 },
-    { "file": "secondary", "name": "Network 5 - Ladder Falling Edge", "language": "LADDER", "offset": 48, "size": 12 },
-    { "file": "secondary", "name": "Network 6 - Another Rising Edge", "language": "LADDER", "offset": 60, "size": 12 }
+    { "file": "main", "name": "Network 1 - Rising Edge Block 1", "language": "STL", "offset": 12, "size": 12 },
+    { "file": "main", "name": "Network 2 - Falling Edge Block 2", "language": "STL", "offset": 24, "size": 12 },
+    { "file": "main", "name": "Network 3 - Rising Edge Block 3", "language": "STL", "offset": 36, "size": 12 },
+    { "file": "secondary", "name": "Network 4 - Ladder Rising Edge", "language": "LADDER", "offset": 48, "size": 12 },
+    { "file": "secondary", "name": "Network 5 - Ladder Falling Edge", "language": "LADDER", "offset": 60, "size": 12 },
+    { "file": "secondary", "name": "Network 6 - Another Rising Edge", "language": "LADDER", "offset": 72, "size": 12 }
   ],
   "symbols": [
     { "name": "btn1", "type": "bit", "address": "64.0" },
@@ -32,7 +32,7 @@
     { "name": "M", "start": 192, "end": 447 }
   ],
   "memory": { "available": 1024, "used": 192 },
-  "flash": { "size": 32768, "used": 73 },
-  "execution": { "steps": 25, "stackSize": 0 },
+  "flash": { "size": 32768, "used": 85 },
+  "execution": { "steps": 28, "stackSize": 0 },
   "problems": []
 }

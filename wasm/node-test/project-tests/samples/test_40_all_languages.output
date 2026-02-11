@@ -1,19 +1,19 @@
 {
   "success": 1,
   "project": { "name": "AllLanguagesComprehensiveTest", "version": "3.0" },
-  "bytecode": "FD 01 58 40 00 59 40 00 C3 C0 60 C0 00 5D 40 00 E2 1C 00 70 C0 00 71 C0 00 6B C0 00 18 08 CA 00 08 01 00 20 08 19 08 CA 00 FD 02 58 40 00 58 80 00 C1 59 40 00 C3 C0 5D 40 00 C3 C0 60 80 00 5A 40 00 5B 40 00 C0 5C 40 00 C0 61 80 00 58 80 00 59 80 00 C1 63 80 00 5B C0 00 62 80 00 FD 03 5D 40 00 8D 24 01 00 EB 03 00 75 80 00 5A 40 00 5B 40 00 C0 32 C9 02 D0 07 00 00 EB 03 00 6D 80 00 58 40 00 8C 24 01 01 59 40 00 C3 C0 30 C0 02 88 13 00 00 18 08 D2 00 18 08 D0 00 D4 08 C0 64 80 00 FD 08 E0 09 01 19 08 80 04 19 08 82 04 19 08 84 04 18 08 84 04 18 08 82 04 D3 08 E2 C4 00 18 08 82 04 E6 18 08 84 04 18 08 80 04 D2 08 E2 D6 00 18 08 80 04 E6 18 08 84 04 E6 08 00 00 E6 19 09 94 04 19 09 98 04 19 09 9C 04 18 09 9C 04 18 09 98 04 20 09 18 09 94 04 20 09 09 03 00 00 00 23 09 E6 09 00 00 00 00 E6 08 00 00 19 08 FC 00 08 00 00 19 08 FE 00 08 00 00 19 08 00 01 08 F4 01 14 08 19 08 FC 00 16 08 18 08 FC 00 08 0A 00 23 08 14 08 19 08 FE 00 16 08 18 08 FE 00 08 00 00 08 64 00 E3 A6 00 14 08 19 08 FE 00 16 08 18 08 FE 00 19 08 D2 00 08 4B 00 14 08 19 08 D0 00 16 08 18 08 D0 00 18 08 D2 00 21 08 14 08 19 08 00 01 16 08 18 08 00 01 19 08 D4 00 18 09 CC 00 09 01 00 00 00 20 09 14 09 19 09 CC 00 16 09 18 08 00 01 08 F6 FF D3 08 18 08 00 01 08 0A 00 D2 08 C1 E2 AD 01 03 01 63 C0 00 E0 B2 01 03 00 63 C0 00 09 00 00 00 00 19 09 E8 00 09 00 00 00 00 19 09 EC 00 18 09 EC 00 09 05 00 00 00 D3 09 E2 07 02 E0 EB 01 18 09 EC 00 09 01 00 00 00 20 09 14 09 19 09 EC 00 16 09 E0 C4 01 18 09 E8 00 18 09 EC 00 09 02 00 00 00 22 09 20 09 14 09 19 09 E8 00 16 09 E0 D5 01 08 0A 00 19 08 F0 00 18 08 F0 00 08 00 00 D2 08 E2 2E 02 18 08 F0 00 08 01 00 21 08 14 08 19 08 F0 00 16 08 E0 0E 02 0B 00 00 CC 41 19 0B D8 00 0B 66 A6 CA 42 19 0B DC 00 18 0B D8 00 0B CD CC CC 3D 22 0B 18 0B DC 00 0B 0A D7 23 3C 22 0B 20 0B 14 0B 19 0B E0 00 16 0B 09 0A 00 00 00 09 14 00 00 00 09 1E 00 00 00 E3 DF 00 14 09 19 09 F2 00 16 09 08 FF 00 19 08 F6 00 08 0F 00 19 08 F8 00 18 08 F6 00 18 08 F8 00 A1 14 08 19 08 FA 00 16 08 18 08 FA 00 08 10 00 A5 14 08 19 08 FA 00 16 08 18 08 FA 00 08 05 00 A9 14 08 19 08 FA 00 16 08 FF FD 02 18 08 CA 00 18 03 02 00 22 08 19 08 CA 00 18 08 D2 00 18 08 D0 00 21 08 18 03 14 00 D3 08 E1 E3 02 EB 03 00 6A 80 00 FD 01 58 C0 00 60 80 00 59 C0 00 61 80 00 5B C0 00 C3 62 C0 00 FF",
-  "bytecodeLength": 761,
-  "checksum": 18,
+  "bytecode": "58 14 00 E2 13 00 FC C0 02 02 D2 02 00 1E 00 80 00 40 02 FD 01 58 40 00 59 40 00 C3 C0 60 C0 00 5D 40 00 E2 2F 00 70 C0 00 71 C0 00 6B C0 00 18 08 CA 00 08 01 00 20 08 19 08 CA 00 FD 02 58 40 00 58 80 00 C1 59 40 00 C3 C0 5D 40 00 C3 C0 60 80 00 5A 40 00 5B 40 00 C0 5C 40 00 C0 61 80 00 58 80 00 59 80 00 C1 63 80 00 5B C0 00 62 80 00 FD 03 5D 40 00 8D 24 01 00 EB 03 00 75 80 00 5A 40 00 5B 40 00 C0 32 C9 02 D0 07 00 00 EB 03 00 6D 80 00 58 40 00 8C 24 01 01 59 40 00 C3 C0 30 C0 02 88 13 00 00 18 08 D2 00 18 08 D0 00 D4 08 C0 64 80 00 FD 08 E0 1C 01 19 08 80 04 19 08 82 04 19 08 84 04 18 08 84 04 18 08 82 04 D3 08 E2 D7 00 18 08 82 04 E6 18 08 84 04 18 08 80 04 D2 08 E2 E9 00 18 08 80 04 E6 18 08 84 04 E6 08 00 00 E6 19 09 94 04 19 09 98 04 19 09 9C 04 18 09 9C 04 18 09 98 04 20 09 18 09 94 04 20 09 09 03 00 00 00 23 09 E6 09 00 00 00 00 E6 08 00 00 19 08 FC 00 08 00 00 19 08 FE 00 08 00 00 19 08 00 01 08 F4 01 14 08 19 08 FC 00 16 08 18 08 FC 00 08 0A 00 23 08 14 08 19 08 FE 00 16 08 18 08 FE 00 08 00 00 08 64 00 E3 B9 00 14 08 19 08 FE 00 16 08 18 08 FE 00 19 08 D2 00 08 4B 00 14 08 19 08 D0 00 16 08 18 08 D0 00 18 08 D2 00 21 08 14 08 19 08 00 01 16 08 18 08 00 01 19 08 D4 00 18 09 CC 00 09 01 00 00 00 20 09 14 09 19 09 CC 00 16 09 18 08 00 01 08 F6 FF D3 08 18 08 00 01 08 0A 00 D2 08 C1 E2 C0 01 03 01 63 C0 00 E0 C5 01 03 00 63 C0 00 09 00 00 00 00 19 09 E8 00 09 00 00 00 00 19 09 EC 00 18 09 EC 00 09 05 00 00 00 D3 09 E2 1A 02 E0 FE 01 18 09 EC 00 09 01 00 00 00 20 09 14 09 19 09 EC 00 16 09 E0 D7 01 18 09 E8 00 18 09 EC 00 09 02 00 00 00 22 09 20 09 14 09 19 09 E8 00 16 09 E0 E8 01 08 0A 00 19 08 F0 00 18 08 F0 00 08 00 00 D2 08 E2 41 02 18 08 F0 00 08 01 00 21 08 14 08 19 08 F0 00 16 08 E0 21 02 0B 00 00 CC 41 19 0B D8 00 0B 66 A6 CA 42 19 0B DC 00 18 0B D8 00 0B CD CC CC 3D 22 0B 18 0B DC 00 0B 0A D7 23 3C 22 0B 20 0B 14 0B 19 0B E0 00 16 0B 09 0A 00 00 00 09 14 00 00 00 09 1E 00 00 00 E3 F2 00 14 09 19 09 F2 00 16 09 08 FF 00 19 08 F6 00 08 0F 00 19 08 F8 00 18 08 F6 00 18 08 F8 00 A1 14 08 19 08 FA 00 16 08 18 08 FA 00 08 10 00 A5 14 08 19 08 FA 00 16 08 18 08 FA 00 08 05 00 A9 14 08 19 08 FA 00 16 08 FF FD 02 18 08 CA 00 18 03 02 00 22 08 19 08 CA 00 18 08 D2 00 18 08 D0 00 21 08 18 03 14 00 D3 08 E1 F6 02 EB 03 00 6A 80 00 FD 01 58 C0 00 60 80 00 59 C0 00 61 80 00 5B C0 00 C3 62 C0 00 FF",
+  "bytecodeLength": 780,
+  "checksum": 76,
   "files": [
     { "path": "main", "firstBlockIndex": 0, "blockCount": 6, "executionOrder": 0 }
   ],
   "blocks": [
-    { "file": "main", "name": "Network_1_PLCASM_Initialization", "language": "PLCASM", "offset": 0, "size": 41 },
-    { "file": "main", "name": "Network_2_STL_Motor_Control", "language": "STL", "offset": 41, "size": 52 },
-    { "file": "main", "name": "Network_3_Ladder_Process_Control", "language": "LADDER", "offset": 93, "size": 68 },
-    { "file": "main", "name": "Network_4_PLCScript_Calculations", "language": "UNKNOWN", "offset": 161, "size": 537 },
-    { "file": "main", "name": "Network_5_STL_Math_Operations", "language": "STL", "offset": 698, "size": 41 },
-    { "file": "main", "name": "Network_6_PLCASM_Output_Mapping", "language": "PLCASM", "offset": 739, "size": 21 }
+    { "file": "main", "name": "Network_1_PLCASM_Initialization", "language": "PLCASM", "offset": 19, "size": 41 },
+    { "file": "main", "name": "Network_2_STL_Motor_Control", "language": "STL", "offset": 60, "size": 52 },
+    { "file": "main", "name": "Network_3_Ladder_Process_Control", "language": "LADDER", "offset": 112, "size": 68 },
+    { "file": "main", "name": "Network_4_PLCScript_Calculations", "language": "UNKNOWN", "offset": 180, "size": 537 },
+    { "file": "main", "name": "Network_5_STL_Math_Operations", "language": "STL", "offset": 717, "size": 41 },
+    { "file": "main", "name": "Network_6_PLCASM_Output_Mapping", "language": "PLCASM", "offset": 758, "size": 21 }
   ],
   "symbols": [
     { "name": "start_btn", "type": "bit", "address": "64.0" },
@@ -51,7 +51,7 @@
     { "name": "T", "start": 704, "end": 721 }
   ],
   "memory": { "available": 2048, "used": 232 },
-  "flash": { "size": 65536, "used": 761 },
-  "execution": { "steps": 408, "stackSize": 0 },
+  "flash": { "size": 65536, "used": 780 },
+  "execution": { "steps": 412, "stackSize": 0 },
   "problems": []
 }

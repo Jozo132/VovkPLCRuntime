@@ -1,0 +1,32 @@
+{
+  "success": 1,
+  "project": { "name": "OverlappingSameDefaults", "version": "1.0" },
+  "bytecode": "58 14 00 E2 23 00 1E 00 80 00 40 01 03 2A 19 03 C0 00 04 34 12 19 04 CA 00 04 64 00 19 04 DE 00 68 D4 00 FD 01 18 08 DE 00 08 01 00 20 08 19 08 DE 00 FF",
+  "bytecodeLength": 51,
+  "checksum": 115,
+  "files": [
+    { "path": "main", "firstBlockIndex": 0, "blockCount": 1, "executionOrder": 0 }
+  ],
+  "blocks": [
+    { "file": "main", "name": "TestBlock", "language": "PLCASM", "offset": 35, "size": 15 }
+  ],
+  "symbols": [
+    { "name": "alias1", "type": "u8", "address": "192" },
+    { "name": "alias2", "type": "u8", "address": "192" },
+    { "name": "word1", "type": "u16", "address": "202" },
+    { "name": "word2", "type": "u16", "address": "202" },
+    { "name": "flag1", "type": "bool", "address": "212.0" },
+    { "name": "flag2", "type": "bool", "address": "212.0" },
+    { "name": "counter", "type": "i16", "address": "222" }
+  ],
+  "memoryAreas": [
+    { "name": "S", "start": 0, "end": 63 },
+    { "name": "X", "start": 64, "end": 127 },
+    { "name": "Y", "start": 128, "end": 191 },
+    { "name": "M", "start": 192, "end": 447 }
+  ],
+  "memory": { "available": 1024, "used": 224 },
+  "flash": { "size": 4096, "used": 51 },
+  "execution": { "steps": 16, "stackSize": 0 },
+  "problems": []
+}

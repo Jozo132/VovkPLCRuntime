@@ -1,0 +1,25 @@
+VOVKPLCPROJECT OverlappingConflictDefaults
+VERSION 1.0
+
+MEMORY
+    OFFSET 0
+    AVAILABLE 1024
+    S 64
+    X 64
+    Y 64
+    M 256
+END_MEMORY
+
+FLASH SIZE 4096 END_FLASH
+
+SYMBOLS
+    // Two symbols at same address with DIFFERENT defaults - should ERROR
+    value_a : u8 : M0 = 10
+    value_b : u8 : M0 = 20
+END_SYMBOLS
+
+PROGRAM main
+    BLOCK LANG=PLCASM TestBlock
+    nop
+    END_BLOCK
+END_PROGRAM

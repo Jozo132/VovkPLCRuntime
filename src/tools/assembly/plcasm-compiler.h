@@ -3181,6 +3181,11 @@ public:
                             if (buildError(tok_value, "fill value must be 0-255")) return true;
                         }
                         
+                        // Sanity check: prevent writes to read-only memory (S and X areas)
+                        if (address_value < (int)plcasm_output_offset) {
+                            if (buildError(tok_addr, "mem.fill address is in read-only memory area (below output offset)")) return true;
+                        }
+                        
                         line.size = InstructionCompiler::push_mem_fill(bytecode, (u8)fill_value, (MY_PTR_t)address_value, (MY_PTR_t)length_value);
                         _line_push;
                     }

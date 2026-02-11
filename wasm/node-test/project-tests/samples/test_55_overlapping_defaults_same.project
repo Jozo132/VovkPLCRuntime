@@ -1,0 +1,40 @@
+VOVKPLCPROJECT OverlappingSameDefaults
+VERSION 1.0
+
+MEMORY
+    OFFSET 0
+    AVAILABLE 1024
+    S 64
+    X 64
+    Y 64
+    M 256
+END_MEMORY
+
+FLASH SIZE 4096 END_FLASH
+
+SYMBOLS
+    // Two symbols at same address with same default - should be allowed
+    alias1 : u8 : M0 = 42
+    alias2 : u8 : M0 = 42
+    
+    // Multi-byte overlap with same value
+    word1 : u16 : M10 = 0x1234
+    word2 : u16 : M10 = 0x1234
+    
+    // Bit-level overlap with same default
+    flag1 : bool : M20.0 = 1
+    flag2 : bool : M20.0 = 1
+    
+    // Another variable for testing
+    counter : i16 : M30 = 100
+END_SYMBOLS
+
+PROGRAM main
+    BLOCK LANG=PLCASM TestBlock
+    // Simple test - read and increment counter
+    i16.load_from counter
+    i16.const 1
+    i16.add
+    i16.move_to counter
+    END_BLOCK
+END_PROGRAM

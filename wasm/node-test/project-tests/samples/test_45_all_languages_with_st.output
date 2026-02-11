@@ -1,34 +1,17 @@
 {
-  "success": 1,
+  "success": 0,
   "project": { "name": "all_languages_with_st", "version": "1.0.0" },
-  "bytecode": "FD 01 04 64 00 19 04 C0 00 FD 02 03 C8 10 03 04 19 04 C2 00 FD 03 58 40 00 60 A4 00 FD 08 09 00 00 00 00 19 09 68 01 18 09 68 01 09 01 00 00 00 20 09 14 09 19 09 68 01 16 09 FF FD 06 08 2A 00 14 08 19 08 7C 01 16 08 18 08 7C 01 08 08 00 20 08 14 08 19 08 80 04 16 08 18 08 80 04 14 08 19 08 7C 01 16 08 FF",
-  "bytecodeLength": 102,
-  "checksum": 76,
-  "files": [
-    { "path": "main", "firstBlockIndex": 0, "blockCount": 5, "executionOrder": 0 }
-  ],
-  "blocks": [
-    { "file": "main", "name": "init", "language": "PLCASM", "offset": 0, "size": 9 },
-    { "file": "main", "name": "process_stl", "language": "STL", "offset": 9, "size": 11 },
-    { "file": "main", "name": "ladder_logic", "language": "LADDER", "offset": 20, "size": 8 },
-    { "file": "main", "name": "script_block", "language": "UNKNOWN", "offset": 28, "size": 31 },
-    { "file": "main", "name": "st_block", "language": "ST", "offset": 59, "size": 42 }
-  ],
-  "symbols": [
-    { "name": "plcasm_var", "type": "u16", "address": "192" },
-    { "name": "stl_var", "type": "u16", "address": "194" },
-    { "name": "ladder_flag", "type": "bool", "address": "196.0" },
-    { "name": "plcscript_counter", "type": "i32", "address": "200" },
-    { "name": "st_result", "type": "i16", "address": "204" }
-  ],
-  "memoryAreas": [
-    { "name": "S", "start": 0, "end": 15 },
-    { "name": "X", "start": 16, "end": 23 },
-    { "name": "Y", "start": 24, "end": 31 },
-    { "name": "M", "start": 32, "end": 159 }
-  ],
-  "memory": { "available": 2048, "used": 65 },
-  "flash": { "size": 65536, "used": 102 },
-  "execution": { "steps": 20, "stackSize": 0 },
-  "problems": []
+  "bytecode": "",
+  "bytecodeLength": 0,
+  "checksum": 0,
+  "files": [],
+  "blocks": [],
+  "symbols": [],
+  "memoryAreas": [],
+  "memory": { "available": 0, "used": 0 },
+  "flash": { "size": 0, "used": 0 },
+  "execution": { "steps": 0, "stackSize": 0 },
+  "problems": [
+    { "severity": "error", "message": "mem.fill address is in read-only memory area (below output offs", "line": 14, "column": 12, "file": "main", "block": "st_block", "language": "ST", "token": "24" }
+  ]
 }

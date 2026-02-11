@@ -1,28 +1,17 @@
 {
-  "success": 1,
+  "success": 0,
   "project": { "name": "DataBlocksTest", "version": "1.0" },
-  "bytecode": "FD 01 18 08 99 FF 19 08 C0 00 FD 01 18 0B 9B FF 19 0B C2 00 FD 01 03 01 19 03 9F FF FD 01 18 0B 93 FF 19 0B C6 00 FD 01 18 08 97 FF 19 08 CA 00 FF",
-  "bytecodeLength": 49,
-  "checksum": 220,
-  "files": [
-    { "path": "main", "firstBlockIndex": 0, "blockCount": 5, "executionOrder": 0 }
-  ],
-  "blocks": [
-    { "file": "main", "name": "ReadMotorSpeed", "language": "PLCASM", "offset": 0, "size": 10 },
-    { "file": "main", "name": "ReadMotorPosition", "language": "PLCASM", "offset": 10, "size": 10 },
-    { "file": "main", "name": "WriteMotorStatus", "language": "PLCASM", "offset": 20, "size": 8 },
-    { "file": "main", "name": "ReadSensorValue", "language": "PLCASM", "offset": 28, "size": 10 },
-    { "file": "main", "name": "ReadSensorThreshold", "language": "PLCASM", "offset": 38, "size": 10 }
-  ],
+  "bytecode": "",
+  "bytecodeLength": 0,
+  "checksum": 0,
+  "files": [],
+  "blocks": [],
   "symbols": [],
-  "memoryAreas": [
-    { "name": "S", "start": 0, "end": 63 },
-    { "name": "X", "start": 64, "end": 127 },
-    { "name": "Y", "start": 128, "end": 191 },
-    { "name": "M", "start": 192, "end": 447 }
-  ],
-  "memory": { "available": 2048, "used": 192 },
-  "flash": { "size": 32768, "used": 49 },
-  "execution": { "steps": 16, "stackSize": 0 },
-  "problems": []
+  "memoryAreas": [],
+  "memory": { "available": 0, "used": 0 },
+  "flash": { "size": 0, "used": 0 },
+  "execution": { "steps": 0, "stackSize": 0 },
+  "problems": [
+    { "severity": "error", "message": "PLCASM compilation failed", "line": 57, "column": 1, "file": "main", "block": "ReadSensorThreshold", "language": "PLCASM" }
+  ]
 }

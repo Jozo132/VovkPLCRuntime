@@ -1,6 +1,6 @@
 {
   "success": 0,
-  "project": { "name": "iq_xy_equivalence", "version": "1.0.0" },
+  "project": { "name": "OverlappingConflictDefaults", "version": "1.0" },
   "bytecode": "",
   "bytecodeLength": 0,
   "checksum": 0,
@@ -12,6 +12,6 @@
   "flash": { "size": 0, "used": 0 },
   "execution": { "steps": 0, "stackSize": 0 },
   "problems": [
-    { "severity": "error", "message": "mem.fill address is in read-only memory area (below output offs", "line": 17, "column": 12, "file": "st_iq", "block": "st_iq_block", "language": "ST", "token": "24" }
+    { "severity": "error", "message": "Conflicting default values at address 192: 'value_a' vs 'value_b'", "line": 26, "column": 1, "file": "main" }
   ]
 }

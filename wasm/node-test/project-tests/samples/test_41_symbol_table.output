@@ -1,55 +1,17 @@
 {
-  "success": 1,
+  "success": 0,
   "project": { "name": "SymbolTableTest", "version": "3.0" },
-  "bytecode": "FD 01 58 40 00 59 40 00 C0 60 C0 00 58 C0 00 60 80 00 18 08 CA 00 08 01 00 20 08 19 08 CA 00 5A 40 00 5B 40 00 C3 C0 61 C0 00 18 09 DE 00 09 0A 00 00 00 20 09 19 09 DE 00 18 0B E8 00 0B 00 00 C0 3F 20 0B 19 0B E8 00 FD 02 58 40 00 59 40 00 C1 61 80 00 5A 40 00 C3 5B 40 00 C0 62 C0 00 18 08 CC 00 08 64 00 20 08 19 08 CC 00 18 08 CE 00 18 08 CC 00 21 08 19 08 D0 00 58 C0 00 63 80 00 FD 03 5C 40 00 C3 EB 03 00 6B C0 00 58 40 00 59 40 00 C0 62 80 00 FD 08 08 00 00 19 08 D2 00 08 00 00 19 08 D4 00 18 08 D2 00 08 05 00 20 08 14 08 19 08 D2 00 16 08 58 40 00 E2 CB 00 08 64 00 14 08 19 08 D4 00 16 08 E0 D6 00 08 00 00 14 08 19 08 D4 00 16 08 59 40 00 5A 40 00 C0 E2 F1 00 18 08 D2 00 08 0A 00 20 08 14 08 19 08 D2 00 16 08 08 00 00 19 08 D6 00 08 00 00 14 08 19 08 D6 00 16 08 18 08 D6 00 08 03 00 D3 08 E2 3B 01 E0 26 01 18 08 D6 00 08 01 00 20 08 14 08 19 08 D6 00 16 08 E0 03 01 18 08 D4 00 18 08 D6 00 20 08 14 08 19 08 D4 00 16 08 E0 12 01 03 01 14 02 62 C0 00 16 02 FF FD 03 18 08 CA 00 08 0A 00 D2 08 61 C0 00 FD 03 58 40 00 E2 68 01 18 08 D2 00 08 05 00 20 08 19 08 D4 00 FF",
-  "bytecodeLength": 361,
-  "checksum": 186,
-  "files": [
-    { "path": "main", "firstBlockIndex": 0, "blockCount": 6, "executionOrder": 0 }
-  ],
-  "blocks": [
-    { "file": "main", "name": "Network_1_PLCASM_Symbols", "language": "PLCASM", "offset": 0, "size": 72 },
-    { "file": "main", "name": "Network_2_STL_Symbols", "language": "STL", "offset": 72, "size": 56 },
-    { "file": "main", "name": "Network_3_Ladder_Symbols", "language": "LADDER", "offset": 128, "size": 22 },
-    { "file": "main", "name": "Network_4_PLCScript_Symbols", "language": "UNKNOWN", "offset": 150, "size": 175 },
-    { "file": "main", "name": "Network_5_Ladder_Comparator", "language": "LADDER", "offset": 325, "size": 14 },
-    { "file": "main", "name": "Network_6_Ladder_Math", "language": "LADDER", "offset": 339, "size": 21 }
-  ],
-  "symbols": [
-    { "name": "input_a", "type": "bit", "address": "64.0" },
-    { "name": "input_b", "type": "bit", "address": "64.1" },
-    { "name": "input_c", "type": "bit", "address": "64.2" },
-    { "name": "input_d", "type": "bit", "address": "64.3" },
-    { "name": "reset_btn", "type": "bit", "address": "64.4" },
-    { "name": "output_x", "type": "bit", "address": "128.0" },
-    { "name": "output_y", "type": "bit", "address": "128.1" },
-    { "name": "output_z", "type": "bit", "address": "128.2" },
-    { "name": "led_status", "type": "bit", "address": "128.3" },
-    { "name": "flag_running", "type": "bit", "address": "192.0" },
-    { "name": "flag_error", "type": "bit", "address": "192.1" },
-    { "name": "flag_complete", "type": "bit", "address": "192.2" },
-    { "name": "flag_ready", "type": "bit", "address": "192.3" },
-    { "name": "edge_mem_a", "type": "bit", "address": "192.4" },
-    { "name": "edge_mem_b", "type": "bit", "address": "192.5" },
-    { "name": "counter_value", "type": "i16", "address": "202" },
-    { "name": "set_point", "type": "i16", "address": "204" },
-    { "name": "actual_value", "type": "i16", "address": "206" },
-    { "name": "error_value", "type": "i16", "address": "208" },
-    { "name": "result_a", "type": "i16", "address": "210" },
-    { "name": "result_b", "type": "i16", "address": "212" },
-    { "name": "total_count", "type": "i32", "address": "222" },
-    { "name": "accumulated", "type": "i32", "address": "226" },
-    { "name": "temperature", "type": "f32", "address": "232" },
-    { "name": "coefficient", "type": "f32", "address": "236" }
-  ],
-  "memoryAreas": [
-    { "name": "S", "start": 0, "end": 31 },
-    { "name": "X", "start": 32, "end": 63 },
-    { "name": "Y", "start": 64, "end": 95 },
-    { "name": "M", "start": 96, "end": 351 }
-  ],
-  "memory": { "available": 1024, "used": 240 },
-  "flash": { "size": 32768, "used": 361 },
-  "execution": { "steps": 146, "stackSize": 0 },
-  "problems": []
+  "bytecode": "",
+  "bytecodeLength": 0,
+  "checksum": 0,
+  "files": [],
+  "blocks": [],
+  "symbols": [],
+  "memoryAreas": [],
+  "memory": { "available": 0, "used": 0 },
+  "flash": { "size": 0, "used": 0 },
+  "execution": { "steps": 0, "stackSize": 0 },
+  "problems": [
+    { "severity": "error", "message": "mem.fill address is in read-only memory area (below output offs", "line": 14, "column": 12, "file": "main", "block": "Network_6_Ladder_Math", "language": "LADDER", "token": "64" }
+  ]
 }
