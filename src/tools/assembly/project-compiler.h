@@ -2194,8 +2194,9 @@ public:
 
             skipWhitespaceNotNewline();
 
-            // Parse optional alias: quoted string "Alias"
+            // Parse optional alias: quoted string "Alias" or unquoted identifier
             if (peek() == '"') {
+                // Quoted alias
                 advance(); // skip opening quote
                 int ai = 0;
                 while (pos < source_length && peek() != '"' && ai < 31) {
@@ -2220,6 +2221,42 @@ public:
                         setError(err);
                         return false;
                     }
+                }
+            } else if (peek() != '{' && peek() != '\n' && peek() != '\r' && pos < source_length) {
+                // Try unquoted alias (must not be PATH= or other reserved word)
+                int save_pos = pos;
+                int save_line = line;
+                int save_col = column;
+                char word[64];
+                if (readWord(word, sizeof(word)) && word[0] != '\0') {
+                    // Check if it's PATH= (case-insensitive)
+                    if (strncmpI(word, "PATH=", 5)) {
+                        // It's PATH=, rewind
+                        pos = save_pos; line = save_line; column = save_col;
+                    } else {
+                        // Use as alias
+                        copyString(decl.alias, word, sizeof(decl.alias));
+                        skipWhitespaceNotNewline();
+                        
+                        // Check for duplicate alias
+                        for (int i = 0; i < globalDBDeclCount - 1; i++) {
+                            if (globalDBDecls[i].alias[0] != '\0' && strEqI(globalDBDecls[i].alias, decl.alias)) {
+                                char err[128];
+                                int ei = 0;
+                                const char* msg = "Duplicate DB alias '";
+                                while (*msg && ei < 60) err[ei++] = *msg++;
+                                int ni = 0;
+                                while (decl.alias[ni] && ei < 90) err[ei++] = decl.alias[ni++];
+                                err[ei++] = '\'';
+                                err[ei] = '\0';
+                                setError(err);
+                                return false;
+                            }
+                        }
+                    }
+                } else {
+                    // No word read, restore position
+                    pos = save_pos; line = save_line; column = save_col;
                 }
             }
 
@@ -4261,11 +4298,59 @@ public:
         // Parse project structure
         if (!parseProject()) return false;
         if (!parseMemory()) return false;
-        if (!parseFlash()) return false;
-        if (!parseFlags()) return false;   // Optional FLAGS section (fallback if no API flags)
-        if (!parseTypes()) return false;
-        if (!parseDatablocks()) return false; // Optional DATABLOCKS section (project-level DB declarations)
-        if (!parseSymbols()) return false;
+        
+        // Parse optional sections in any order (FLASH, FLAGS, TYPES, DATABLOCKS, SYMBOLS)
+        // Loop until no section keyword matches, then proceed to PROGRAM blocks
+        bool parsed_flash = false;
+        bool parsed_flags = false;
+        bool parsed_types = false;
+        bool parsed_datablocks = false;
+        bool parsed_symbols = false;
+        
+        while (pos < source_length && !has_error) {
+            skipComments();
+            if (pos >= source_length) break;
+            
+            int save_pos = pos;
+            int save_line = line;
+            int save_col = column;
+            
+            // Try each optional section
+            if (!parsed_flash && matchKeyword("FLASH")) {
+                pos = save_pos; line = save_line; column = save_col;
+                if (!parseFlash()) return false;
+                parsed_flash = true;
+                continue;
+            }
+            if (!parsed_flags && matchKeyword("FLAGS")) {
+                pos = save_pos; line = save_line; column = save_col;
+                if (!parseFlags()) return false;
+                parsed_flags = true;
+                continue;
+            }
+            if (!parsed_types && matchKeyword("TYPES")) {
+                pos = save_pos; line = save_line; column = save_col;
+                if (!parseTypes()) return false;
+                parsed_types = true;
+                continue;
+            }
+            if (!parsed_datablocks && matchKeyword("DATABLOCKS")) {
+                pos = save_pos; line = save_line; column = save_col;
+                if (!parseDatablocks()) return false;
+                parsed_datablocks = true;
+                continue;
+            }
+            if (!parsed_symbols && matchKeyword("SYMBOLS")) {
+                pos = save_pos; line = save_line; column = save_col;
+                if (!parseSymbols()) return false;
+                parsed_symbols = true;
+                continue;
+            }
+            
+            // No optional section matched - restore position and exit loop
+            pos = save_pos; line = save_line; column = save_col;
+            break;
+        }
         
         // Scan source for T/C references before parsing blocks
         // This catches direct T0, T1, C0, C1 references in ladder/STL code
