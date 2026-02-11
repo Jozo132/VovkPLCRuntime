@@ -1,0 +1,29 @@
+{
+  "success": 1,
+  "project": { "name": "InlineDBWarningTest", "version": "1.0" },
+  "bytecode": "FD 01 58 40 00 60 80 00 FF",
+  "bytecodeLength": 9,
+  "checksum": 214,
+  "files": [
+    { "path": "main", "firstBlockIndex": 0, "blockCount": 1, "executionOrder": 0 }
+  ],
+  "blocks": [
+    { "file": "main", "name": "Main", "language": "PLCASM", "offset": 0, "size": 8 }
+  ],
+  "symbols": [
+    { "name": "Input1", "type": "bool", "address": "64.0" },
+    { "name": "Output1", "type": "bool", "address": "128.0" }
+  ],
+  "memoryAreas": [
+    { "name": "S", "start": 0, "end": 63 },
+    { "name": "X", "start": 64, "end": 127 },
+    { "name": "Y", "start": 128, "end": 191 },
+    { "name": "M", "start": 192, "end": 447 }
+  ],
+  "memory": { "available": 1024, "used": 192 },
+  "flash": { "size": 32768, "used": 9 },
+  "execution": { "steps": 4, "stackSize": 0 },
+  "problems": [
+    { "severity": "warning", "message": "Inline .db declaration - use the DATABLOCKS section instead; the project handles CONFIG_DB in the P_First_Cycle startup block", "line": 2, "column": 1, "file": "main", "block": "Main", "language": "PLCASM", "token": ".db1" }
+  ]
+}

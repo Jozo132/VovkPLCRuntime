@@ -1,0 +1,33 @@
+{
+  "success": 1,
+  "project": { "name": "DataBlocksPathTest", "version": "1.0" },
+  "bytecode": "FD 01 18 08 9A FF 19 08 C0 00 18 0B 9C FF 19 0B C2 00 FD 01 18 0B 94 FF 19 0B C6 00 FD 01 18 04 91 FF 19 04 CA 00 FD 01 18 0B 8C FF 19 0B CC 00 FF",
+  "bytecodeLength": 49,
+  "checksum": 151,
+  "files": [
+    { "path": "main", "firstBlockIndex": 0, "blockCount": 4, "executionOrder": 0 }
+  ],
+  "blocks": [
+    { "file": "main", "name": "ReadMotor", "language": "PLCASM", "offset": 0, "size": 18 },
+    { "file": "main", "name": "ReadSensor", "language": "PLCASM", "offset": 18, "size": 10 },
+    { "file": "main", "name": "ReadActuator", "language": "PLCASM", "offset": 28, "size": 10 },
+    { "file": "main", "name": "ReadHeater", "language": "PLCASM", "offset": 38, "size": 10 }
+  ],
+  "symbols": [
+    { "name": "motor_spd", "type": "i16", "address": "192" },
+    { "name": "motor_pos", "type": "f32", "address": "194" },
+    { "name": "sensor_val", "type": "f32", "address": "198" },
+    { "name": "actuator_pwm", "type": "u16", "address": "202" },
+    { "name": "heater_sp", "type": "f32", "address": "204" }
+  ],
+  "memoryAreas": [
+    { "name": "S", "start": 0, "end": 63 },
+    { "name": "X", "start": 64, "end": 127 },
+    { "name": "Y", "start": 128, "end": 191 },
+    { "name": "M", "start": 192, "end": 447 }
+  ],
+  "memory": { "available": 2048, "used": 208 },
+  "flash": { "size": 8192, "used": 49 },
+  "execution": { "steps": 15, "stackSize": 0 },
+  "problems": []
+}

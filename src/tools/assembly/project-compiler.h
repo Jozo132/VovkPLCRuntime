@@ -1736,6 +1736,11 @@ public:
                     setError("Expected size value after SIZE");
                     return false;
                 }
+                // Check for single-line syntax: FLASH SIZE <n> END_FLASH
+                skipComments();
+                if (matchKeyword("END_FLASH")) {
+                    break;
+                }
                 skipLine();
                 continue;
             }
@@ -3760,9 +3765,11 @@ public:
 
         switch (block.language) {
             case LANG_PLCASM:
-                // PLCASM block - lint then append
+                // PLCASM block - lint then append (stripping inline directives)
                 if (!lintPLCASMBlock(block)) return false;
-                if (!appendToCombinedPLCASM(block_source)) return false;
+                // Append source, but strip .db<N>, .runtime_config, .runtime_config_db directives
+                // (they've already been parsed during linting and will be emitted via generateStartupBlock)
+                if (!appendPLCASMWithStrippedDirectives(block_source)) return false;
                 if (!appendCharToCombinedPLCASM('\n')) return false;
                 break;
 
@@ -3820,6 +3827,189 @@ public:
             return false;
         }
 
+        // Warn about inline directives that the project compiler handles automatically
+        // in the P_First_Cycle startup block (CONFIG_DB, CONFIG_TC, default values).
+        // These are redundant when compiling as part of a project.
+        warnInlinePLCASMDirectives(block_source, source_len);
+
+        return true;
+    }
+
+    // Scan PLCASM block source for inline directives that should be declared at
+    // the project level instead. The project compiler generates a P_First_Cycle
+    // startup block that runs CONFIG_TC, CONFIG_DB, and default value writes on
+    // PLC reset — inline .db<N>, .runtime_config, and .runtime_config_db directives
+    // inside user blocks are therefore redundant and may cause conflicts.
+    void warnInlinePLCASMDirectives(const char* src, int src_len) {
+        int ln = 1;
+        int col = 1;
+        int i = 0;
+        while (i < src_len) {
+            // Track line/column
+            if (src[i] == '\n') { ln++; col = 1; i++; continue; }
+
+            // Skip whitespace (not newline)
+            if (src[i] == ' ' || src[i] == '\t' || src[i] == '\r') { col++; i++; continue; }
+
+            // Skip single-line comments
+            if (src[i] == '/' && i + 1 < src_len && src[i + 1] == '/') {
+                while (i < src_len && src[i] != '\n') { i++; col++; }
+                continue;
+            }
+
+            // Check for .db<N> directive at start of token
+            if (src[i] == '.' && i + 3 < src_len) {
+                if ((src[i + 1] == 'd' || src[i + 1] == 'D') &&
+                    (src[i + 2] == 'b' || src[i + 2] == 'B') &&
+                    src[i + 3] >= '0' && src[i + 3] <= '9') {
+                    // Measure directive length for the token
+                    int start = i;
+                    int start_col = col;
+                    while (i < src_len && src[i] > ' ' && src[i] != '{') { i++; col++; }
+                    int tlen = i - start;
+                    addProblem(LINT_WARNING,
+                        "Inline .db declaration - use the DATABLOCKS section instead; "
+                        "the project handles CONFIG_DB in the P_First_Cycle startup block",
+                        ln, start_col, tlen, &src[start]);
+                    continue;
+                }
+
+                // Check for .runtime_config_db directive
+                if (i + 18 < src_len &&
+                    matchDirective(&src[i], ".runtime_config_db")) {
+                    int start = i;
+                    int start_col = col;
+                    int tlen = 18;
+                    i += tlen; col += tlen;
+                    addProblem(LINT_WARNING,
+                        "Inline .runtime_config_db - use the DATABLOCKS/MEMORY section instead; "
+                        "the project handles CONFIG_DB in the P_First_Cycle startup block",
+                        ln, start_col, tlen, &src[start]);
+                    continue;
+                }
+
+                // Check for .runtime_config directive (T/C configuration)
+                if (i + 15 < src_len &&
+                    matchDirective(&src[i], ".runtime_config")) {
+                    // Make sure it's not .runtime_config_db (already handled above)
+                    int start = i;
+                    int start_col = col;
+                    int tlen = 15;
+                    i += tlen; col += tlen;
+                    addProblem(LINT_WARNING,
+                        "Inline .runtime_config - use the MEMORY section instead; "
+                        "the project handles CONFIG_TC in the P_First_Cycle startup block",
+                        ln, start_col, tlen, &src[start]);
+                    continue;
+                }
+            }
+
+            // Skip to end of token
+            while (i < src_len && src[i] > ' ') { i++; col++; }
+        }
+    }
+
+    // Case-insensitive match of a directive name at the given position
+    static bool matchDirective(const char* src, const char* directive) {
+        int i = 0;
+        while (directive[i]) {
+            char a = src[i];
+            char b = directive[i];
+            // Lowercase both
+            if (a >= 'A' && a <= 'Z') a += 32;
+            if (b >= 'A' && b <= 'Z') b += 32;
+            if (a != b) return false;
+            i++;
+        }
+        // Must be followed by whitespace or end-of-string (not more identifier chars)
+        char next = src[i];
+        return next == '\0' || next == ' ' || next == '\t' || next == '\n' || next == '\r';
+    }
+
+    // Append PLCASM source to combined buffer, stripping inline directives that
+    // are handled by the project's P_First_Cycle startup block (.db<N>, .runtime_config).
+    // These directives were already parsed during linting and registered in globalDBDecls.
+    bool appendPLCASMWithStrippedDirectives(const char* src) {
+        int i = 0;
+        while (src[i]) {
+            // Skip whitespace and copy it
+            while (src[i] && (src[i] == ' ' || src[i] == '\t')) {
+                if (!appendCharToCombinedPLCASM(src[i])) return false;
+                i++;
+            }
+
+            if (!src[i]) break;
+
+            // Check for .db<N> directive at start of line token
+            if (src[i] == '.' && src[i + 1] && src[i + 2] && src[i + 3] &&
+                (src[i + 1] == 'd' || src[i + 1] == 'D') &&
+                (src[i + 2] == 'b' || src[i + 2] == 'B') &&
+                src[i + 3] >= '0' && src[i + 3] <= '9') {
+                // Skip entire directive until after closing '}'
+                // Emit a comment instead
+                if (!appendToCombinedPLCASM("// [stripped: ")) return false;
+                while (src[i] && src[i] != '{') {
+                    if (!appendCharToCombinedPLCASM(src[i])) return false;
+                    i++;
+                }
+                if (!appendToCombinedPLCASM("...")) return false;
+                // Skip to closing brace
+                int brace_depth = 0;
+                while (src[i]) {
+                    if (src[i] == '{') brace_depth++;
+                    else if (src[i] == '}') {
+                        brace_depth--;
+                        if (brace_depth <= 0) { i++; break; }
+                    }
+                    i++;
+                }
+                if (!appendToCombinedPLCASM("]")) return false;
+                // Copy newline if present
+                if (src[i] == '\n') {
+                    if (!appendCharToCombinedPLCASM(src[i])) return false;
+                    i++;
+                }
+                continue;
+            }
+
+            // Check for .runtime_config_db directive
+            if (src[i] == '.' &&
+                matchDirective(&src[i], ".runtime_config_db")) {
+                // Skip entire line
+                if (!appendToCombinedPLCASM("// [stripped: .runtime_config_db ...]")) return false;
+                while (src[i] && src[i] != '\n') i++;
+                if (src[i] == '\n') {
+                    if (!appendCharToCombinedPLCASM(src[i])) return false;
+                    i++;
+                }
+                continue;
+            }
+
+            // Check for .runtime_config directive (T/C)
+            if (src[i] == '.' &&
+                matchDirective(&src[i], ".runtime_config") &&
+                !matchDirective(&src[i], ".runtime_config_db")) {
+                // Skip entire line
+                if (!appendToCombinedPLCASM("// [stripped: .runtime_config ...]")) return false;
+                while (src[i] && src[i] != '\n') i++;
+                if (src[i] == '\n') {
+                    if (!appendCharToCombinedPLCASM(src[i])) return false;
+                    i++;
+                }
+                continue;
+            }
+
+            // Copy until end of line
+            while (src[i] && src[i] != '\n') {
+                if (!appendCharToCombinedPLCASM(src[i])) return false;
+                i++;
+            }
+            // Copy newline
+            if (src[i] == '\n') {
+                if (!appendCharToCombinedPLCASM(src[i])) return false;
+                i++;
+            }
+        }
         return true;
     }
 

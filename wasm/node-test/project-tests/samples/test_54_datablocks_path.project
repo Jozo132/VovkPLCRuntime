@@ -1,0 +1,76 @@
+VOVKPLCPROJECT DataBlocksPathTest
+VERSION 1.0
+
+MEMORY
+    OFFSET 0
+    AVAILABLE 2048
+    S 64
+    X 64
+    Y 64
+    M 256
+END_MEMORY
+
+FLASH SIZE 8192 END_FLASH
+
+DATABLOCKS
+    // DB with alias only (default path "/")
+    DB1 "Motor" {
+        speed:    i16 = 100
+        position: f32 = 0.0
+    }
+
+    // DB with explicit PATH=
+    DB2 "Sensor" PATH="/sensors" {
+        value:     f32 = 3.14
+        threshold: i16 = 500
+    }
+
+    // DB with no alias, explicit PATH=
+    DB3 PATH="/actuators" {
+        pwm:  u16 = 255
+        dir:  bool = false
+    }
+
+    // DB with alias and different path
+    DB4 "Heater" PATH="/thermal/zone1" {
+        setpoint: f32 = 25.0
+        output:   u8 = 0
+    }
+END_DATABLOCKS
+
+SYMBOLS
+    motor_spd  : i16 : M0
+    motor_pos  : f32 : M2
+    sensor_val : f32 : M6
+    actuator_pwm : u16 : M10
+    heater_sp  : f32 : M12
+END_SYMBOLS
+
+PROGRAM main
+    // Access DB1 by alias
+    BLOCK LANG=PLCASM ReadMotor
+        i16.load_from Motor.speed
+        i16.move_to M0
+        f32.load_from Motor.position
+        f32.move_to M2
+    END_BLOCK
+
+    // Access DB2 by number
+    BLOCK LANG=PLCASM ReadSensor
+        f32.load_from DB2.value
+        f32.move_to M6
+    END_BLOCK
+
+    // Access DB3 by number (no alias)
+    BLOCK LANG=PLCASM ReadActuator
+        u16.load_from DB3.pwm
+        u16.move_to M10
+    END_BLOCK
+
+    // Access DB4 by alias
+    BLOCK LANG=PLCASM ReadHeater
+        f32.load_from Heater.setpoint
+        f32.move_to M12
+        exit
+    END_BLOCK
+END_PROGRAM

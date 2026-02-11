@@ -1,0 +1,37 @@
+VOVKPLCPROJECT InlineDBWarningTest
+VERSION 1.0
+
+MEMORY
+    OFFSET 0
+    AVAILABLE 1024
+    S 64
+    X 64
+    Y 64
+    M 256
+    T 90
+    C 40
+END_MEMORY
+
+FLASH
+    SIZE 32768
+END_FLASH
+
+SYMBOLS
+    Input1 : bool : X0.0
+    Output1 : bool : Y0.0
+END_SYMBOLS
+
+// Test: Inline .db directive in PLCASM blocks should produce a warning
+// because the project compiler handles DB configuration in P_First_Cycle
+PROGRAM main
+    BLOCK LANG=PLCASM Main
+// This inline .db directive should produce a warning
+.db1 "Motor" {
+    speed: i16 = 100
+}
+
+// Simple logic
+u8.readBit X0.0
+u8.writeBit Y0.0
+    END_BLOCK
+END_PROGRAM
