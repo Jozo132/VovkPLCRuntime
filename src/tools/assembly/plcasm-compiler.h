@@ -1026,6 +1026,19 @@ public:
             for (int j = 0; j < nlen; j++) field.name[j] = field_name_tok.string.data[j];
             field.name[nlen] = '\0';
 
+            // Check for duplicate field names in this datablock
+            for (int fi = 0; fi < decl.field_count; fi++) {
+                if (sharedStrEqI(decl.fields[fi].name, field.name)) {
+                    Serial.print(F("Error: duplicate field name '"));
+                    Serial.print(field.name);
+                    Serial.print(F("' in DB"));
+                    Serial.print(decl.db_number);
+                    Serial.print(F(" at "));
+                    Serial.print(field_name_tok.line); Serial.print(F(":")); Serial.println(field_name_tok.column);
+                    return -1;
+                }
+            }
+
             int tlen = type_tok.string.length < 7 ? type_tok.string.length : 7;
             for (int j = 0; j < tlen; j++) field.type_name[j] = type_tok.string.data[j];
             field.type_name[tlen] = '\0';

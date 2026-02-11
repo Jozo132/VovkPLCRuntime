@@ -427,6 +427,28 @@ export async function runTests(options = {}) {
         if (val !== 100) return `expected 100, got ${val}`
     })
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // Duplicate field name detection
+    // ═══════════════════════════════════════════════════════════════════════
+
+    test('Duplicate field name in .db causes compile error', () => {
+        const err = compile(`.db1 "Motor" = {
+            speed: i16 = 100
+            speed: u32 = 200
+        }
+        exit`)
+        if (!err) return 'expected compile error for duplicate field name, but succeeded'
+    })
+
+    test('Duplicate field name case-insensitive in .db causes error', () => {
+        const err = compile(`.db1 "Motor" = {
+            Speed: i16 = 100
+            speed: u32 = 200
+        }
+        exit`)
+        if (!err) return 'expected compile error for case-insensitive duplicate field, but succeeded'
+    })
+
     return {
         name: 'DB Declaration Tests',
         passed,

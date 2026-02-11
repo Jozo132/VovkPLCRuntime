@@ -1,0 +1,18 @@
+{
+  "success": 0,
+  "project": { "name": "DuplicateFieldCaseTest", "version": "1.0" },
+  "bytecode": "",
+  "bytecodeLength": 0,
+  "checksum": 0,
+  "files": [],
+  "blocks": [],
+  "symbols": [],
+  "datablocks": [],
+  "memoryAreas": [],
+  "memory": { "available": 0, "used": 0 },
+  "flash": { "size": 0, "used": 0 },
+  "execution": { "steps": 0, "stackSize": 0 },
+  "problems": [
+    { "severity": "error", "message": "Duplicate field name in DB: speed", "line": 18, "column": 10 }
+  ]
+}

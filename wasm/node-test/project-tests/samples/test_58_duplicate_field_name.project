@@ -1,0 +1,24 @@
+VOVKPLCPROJECT DuplicateFieldTest
+VERSION 1.0
+
+MEMORY
+    OFFSET 0
+    AVAILABLE 1024
+    S 64
+    X 64
+    Y 64
+    M 256
+END_MEMORY
+
+FLASH SIZE 4096 END_FLASH
+
+DATABLOCKS
+DB1 {
+    value: u16
+    value: u32
+}
+END_DATABLOCKS
+
+MAIN main
+LD 0
+END_MAIN

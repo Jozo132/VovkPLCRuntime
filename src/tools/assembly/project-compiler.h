@@ -2365,6 +2365,21 @@ public:
                 while (fieldName[ni] && ni < 31) { field.name[ni] = fieldName[ni]; ni++; }
                 field.name[ni] = '\0';
 
+                // Check for duplicate field names in this datablock
+                for (int fi = 0; fi < decl.field_count; fi++) {
+                    if (strEqI(decl.fields[fi].name, field.name)) {
+                        char err[64];
+                        int ei = 0;
+                        const char* msg = "Duplicate field name in DB: ";
+                        while (*msg && ei < 40) err[ei++] = *msg++;
+                        int fn = 0;
+                        while (field.name[fn] && ei < 60) err[ei++] = field.name[fn++];
+                        err[ei] = '\0';
+                        setError(err);
+                        return false;
+                    }
+                }
+
                 // Expect ':'
                 skipWhitespaceNotNewline();
                 if (peek() != ':') {
