@@ -1009,4 +1009,33 @@ namespace PLCMethods {
         stack.clear();
         return STATUS_SUCCESS;
     }
+
+    // Fill memory with repeating byte pattern
+    // Format: [ MEM_FILL, u8 value, u16 address, u16 length ]
+    RuntimeError MEM_FILL(u8* memory, u8* program, u32 prog_size, u32& index) {
+        SAFE_BOUNDS_CHECK(index + 1 + MY_PTR_SIZE_BYTES + MY_PTR_SIZE_BYTES > prog_size, PROGRAM_POINTER_OUT_OF_BOUNDS);
+        
+        u8 fill_value = 0;
+        MY_PTR_t address = 0;
+        MY_PTR_t length = 0;
+        
+        extract_status = ProgramExtract.type_u8(program, prog_size, index, &fill_value);
+        if (extract_status != STATUS_SUCCESS) return extract_status;
+        
+        extract_status = ProgramExtract.type_pointer(program, prog_size, index, &address);
+        if (extract_status != STATUS_SUCCESS) return extract_status;
+        
+        extract_status = ProgramExtract.type_pointer(program, prog_size, index, &length);
+        if (extract_status != STATUS_SUCCESS) return extract_status;
+        
+        // Bounds check
+        if (address + length > PLCRUNTIME_MAX_MEMORY_SIZE) return INVALID_MEMORY_ADDRESS;
+        
+        // Fill memory with the pattern
+        for (MY_PTR_t i = 0; i < length; i++) {
+            memory[address + i] = fill_value;
+        }
+        
+        return STATUS_SUCCESS;
+    }
 }

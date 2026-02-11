@@ -141,6 +141,7 @@ bool OPCODE_EXISTS(PLCRuntimeInstructionSet opcode) {
         case PICK:
         case POKE:
 #endif // PLCRUNTIME_STACK_OPS_ENABLED
+        case MEM_FILL:
         case ADD:
         case SUB:
         case MUL:
@@ -412,6 +413,7 @@ const FSH* OPCODE_NAME(PLCRuntimeInstructionSet opcode) {
         case CLEAR: return F("CLEAR");
         case PICK: return F("PICK");
         case POKE: return F("POKE");
+        case MEM_FILL: return F("MEM_FILL");
         case ADD: return F("ADD");
         case SUB: return F("SUB");
         case MUL: return F("MUL");
@@ -673,6 +675,7 @@ u8 OPCODE_SIZE(PLCRuntimeInstructionSet opcode) {
         case CLEAR: return 1;
         case PICK: return 2 + MY_PTR_SIZE_BYTES;
         case POKE: return 2 + MY_PTR_SIZE_BYTES;
+        case MEM_FILL: return 1 + 1 + MY_PTR_SIZE_BYTES + MY_PTR_SIZE_BYTES; // opcode + value + address + length
         case ADD: return 2;
         case SUB: return 2;
         case MUL: return 2;

@@ -363,6 +363,16 @@ public:
         return 2 + sizeof(MY_PTR_t);
     }
 
+    // Fill memory with repeating byte pattern
+    // Format: [ MEM_FILL, u8 value, MY_PTR_t address, MY_PTR_t length ]
+    static u8 push_mem_fill(u8* location, u8 fill_value, MY_PTR_t address, MY_PTR_t length) {
+        location[0] = MEM_FILL;
+        location[1] = fill_value;
+        write_ptr(location + 2, address);
+        write_ptr(location + 2 + sizeof(MY_PTR_t), length);
+        return 2 + sizeof(MY_PTR_t) + sizeof(MY_PTR_t);
+    }
+
     // Make a duplica of the top of the stack
     static u8 push_copy(u8* location, PLCRuntimeInstructionSet type = type_u8) {
         location[0] = COPY;

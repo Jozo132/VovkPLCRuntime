@@ -172,6 +172,7 @@ enum PLCRuntimeInstructionSet {
     DEC_MEM,            // Decrement value in memory by 1. Example: [ u8 DEC_MEM, u8 type, u16 address ]
     PICK,               // Copy value from stack at byte depth to top. Example: [ u8 PICK, u8 type, u16 depth ]
     POKE,               // Write top value to stack at byte depth. Example: [ u8 POKE, u8 type, u16 depth ]
+    MEM_FILL,           // Fill memory with repeating byte pattern. Example: [ u8 MEM_FILL, u8 value, u16 address, u16 length ]
 
     // Arithmetic operations
     ADD = 0x20,         // Addition, requires data type as argument

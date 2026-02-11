@@ -3154,6 +3154,38 @@ public:
                     if (token == "br.clr") { line.size = InstructionCompiler::push_br_clr(bytecode); _line_push; }
                 }
 
+                { // Memory fill operation
+                    // Syntax: mem.fill <value> <address> <length>
+                    // Fills <length> bytes of memory starting at <address> with <value>
+                    if (token == "mem.fill") {
+                        if (i + 3 >= token_count) {
+                            if (buildError(token, "mem.fill requires 3 arguments: value address length")) return true;
+                        }
+                        Token& tok_value = tokens[++i];
+                        Token& tok_addr = tokens[++i];
+                        Token& tok_len = tokens[++i];
+                        
+                        int fill_value = 0;
+                        int address_value = 0;
+                        int length_value = 0;
+                        
+                        bool e_val = intFromToken(tok_value, fill_value);
+                        bool e_addr = addressFromToken(tok_addr, address_value);
+                        bool e_len = intFromToken(tok_len, length_value);
+                        
+                        if (e_val) { if (buildError(tok_value, "expected integer value for fill pattern")) return true; }
+                        if (e_addr) { if (buildError(tok_addr, "expected address for fill start")) return true; }
+                        if (e_len) { if (buildError(tok_len, "expected integer length for fill")) return true; }
+                        
+                        if (fill_value < 0 || fill_value > 255) {
+                            if (buildError(tok_value, "fill value must be 0-255")) return true;
+                        }
+                        
+                        line.size = InstructionCompiler::push_mem_fill(bytecode, (u8)fill_value, (MY_PTR_t)address_value, (MY_PTR_t)length_value);
+                        _line_push;
+                    }
+                }
+
                 { // String operations: str.<op> for str8, str16.<op> for str16
                     // Syntax: str.<op> <addr> [<addr2>]  or  str16.<op> <addr> [<addr2>]
                     // Single-address ops: len, cap, get, set, clear, char

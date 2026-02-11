@@ -2322,6 +2322,7 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
         case PICK: return PLCMethods::PICK(this->stack, program, prog_size, index);
         case POKE: return PLCMethods::POKE(this->stack, program, prog_size, index);
 #endif // PLCRUNTIME_STACK_OPS_ENABLED
+        case MEM_FILL: return PLCMethods::MEM_FILL(this->memory, program, prog_size, index);
         case JMP: return PLCMethods::handle_JMP(this->stack, program, prog_size, index);
         case JMP_IF: return PLCMethods::handle_JMP_IF(this->stack, program, prog_size, index);
         case JMP_IF_NOT: return PLCMethods::handle_JMP_IF_NOT(this->stack, program, prog_size, index);
