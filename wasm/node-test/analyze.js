@@ -252,22 +252,24 @@ const run = async () => {
             } else { readCapturedOutput() }
         }
 
-        // Step 2: Run WCET analysis
-        const report = runtime.analyzeWCET(analyzeSource, { print: !jsonOnly && !silent })
+        // Step 2: Run WCET analysis (without printing yet)
+        const report = runtime.analyzeWCET(analyzeSource, { print: false })
+        readCapturedOutput()
 
-        // Show the formatted report output if not --json
-        if (!jsonOnly && !silent) {
-            const printOutput = readCapturedOutput()
-            if (printOutput.trim()) console.log(printOutput.trimEnd())
-        }
-
-        // Step 3: Output JSON report
+        // Step 3: Output JSON report first
         if (jsonOnly) {
             console.log(JSON.stringify(report, null, 2))
         } else {
             console.log()
             console.log('JSON Report:')
             console.log(JSON.stringify(report, null, 2))
+
+            // Step 4: Print the human-readable table last
+            if (!silent) {
+                runtime.analyzeWCET(analyzeSource, { print: true })
+                const printOutput = readCapturedOutput()
+                if (printOutput.trim()) console.log('\n' + printOutput.trimEnd())
+            }
         }
 
     } catch (err) {

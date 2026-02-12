@@ -424,62 +424,62 @@ bool wcet_analyze(const u8* bytecode, u32 length, u32 max_stack_size) {
 // ============================================================================
 void wcet_print_report() {
     printf("\n");
-    printf("╔══════════════════════════════════════════════════════════════╗\n");
-    printf("║             WCET Analysis Report                           ║\n");
-    printf("╠══════════════════════════════════════════════════════════════╣\n");
+    printf("+--------------------------------------------------------------+\n");
+    printf("|             WCET Analysis Report                             |\n");
+    printf("+--------------------------------------------------------------+\n");
 
-    printf("║ Program Metrics                                            ║\n");
-    printf("║   Bytecode size:       %6u bytes                        ║\n", g_wcet_bytecode_size);
-    printf("║   Instructions:        %6u                              ║\n", g_wcet_rpt_instruction_count);
-    printf("║   Unique opcodes:      %6u                              ║\n", g_wcet_unique_opcodes);
-    printf("║   Basic blocks:        %6u                              ║\n", g_wcet_rpt_block_count);
-    printf("║   CFG edges:           %6u                              ║\n", g_wcet_rpt_edge_count);
-    printf("║   Loops detected:      %6u                              ║\n", g_wcet_rpt_loop_count);
-    printf("╠══════════════════════════════════════════════════════════════╣\n");
+    printf("| Program Metrics                                              |\n");
+    printf("|   Bytecode size:       %6u bytes                          |\n", g_wcet_bytecode_size);
+    printf("|   Instructions:        %6u                                |\n", g_wcet_rpt_instruction_count);
+    printf("|   Unique opcodes:      %6u                                |\n", g_wcet_unique_opcodes);
+    printf("|   Basic blocks:        %6u                                |\n", g_wcet_rpt_block_count);
+    printf("|   CFG edges:           %6u                                |\n", g_wcet_rpt_edge_count);
+    printf("|   Loops detected:      %6u                                |\n", g_wcet_rpt_loop_count);
+    printf("+--------------------------------------------------------------+\n");
 
-    printf("║ Timing Analysis (cycle units)                              ║\n");
-    printf("║   BCET (best case):    %6u CU  (%u instructions)       \n", g_wcet_bcet_cycles, g_wcet_bcet_instructions);
-    printf("║   WCET (worst case):   %6u CU  (%u instructions)       \n", g_wcet_wcet_cycles, g_wcet_wcet_instructions);
+    printf("| Timing Analysis (cycle units)                                |\n");
+    printf("|   BCET (best case):    %6u CU  (%u instructions)         \n", g_wcet_bcet_cycles, g_wcet_bcet_instructions);
+    printf("|   WCET (worst case):   %6u CU  (%u instructions)         \n", g_wcet_wcet_cycles, g_wcet_wcet_instructions);
     if (g_wcet_bcet_cycles > 0) {
         u32 ratio = (g_wcet_wcet_cycles * 100) / g_wcet_bcet_cycles;
-        printf("║   WCET/BCET ratio:     %3u.%02u%%                            \n", ratio / 100, ratio % 100);
+        printf("|   WCET/BCET ratio:     %3u.%02u%%                              \n", ratio / 100, ratio % 100);
     }
-    printf("╠══════════════════════════════════════════════════════════════╣\n");
+    printf("+--------------------------------------------------------------+\n");
 
-    printf("║ Stack Analysis                                             ║\n");
-    printf("║   Max stack depth:     %6d bytes                        ║\n", g_wcet_max_stack_depth);
-    printf("║   Stack at exit:       %6d bytes                        ║\n", g_wcet_stack_at_exit);
-    printf("║   Max call depth:      %6u                              ║\n", g_wcet_max_call_depth);
-    printf("╠══════════════════════════════════════════════════════════════╣\n");
+    printf("| Stack Analysis                                               |\n");
+    printf("|   Max stack depth:     %6d bytes                          |\n", g_wcet_max_stack_depth);
+    printf("|   Stack at exit:       %6d bytes                          |\n", g_wcet_stack_at_exit);
+    printf("|   Max call depth:      %6u                                |\n", g_wcet_max_call_depth);
+    printf("+--------------------------------------------------------------+\n");
 
-    printf("║ Path Analysis                                              ║\n");
-    printf("║   Execution paths:     %6u                              ║\n", g_wcet_total_paths);
-    printf("║   Shortest path:       %6u blocks                       ║\n", g_wcet_shortest_path);
-    printf("║   Longest path:        %6u blocks                       ║\n", g_wcet_longest_path);
-    printf("╠══════════════════════════════════════════════════════════════╣\n");
+    printf("| Path Analysis                                                |\n");
+    printf("|   Execution paths:     %6u                                |\n", g_wcet_total_paths);
+    printf("|   Shortest path:       %6u blocks                         |\n", g_wcet_shortest_path);
+    printf("|   Longest path:        %6u blocks                         |\n", g_wcet_longest_path);
+    printf("+--------------------------------------------------------------+\n");
 
     if (g_wcet_warn_dead_code || g_wcet_warn_infinite_loop || g_wcet_warn_stack_overflow ||
         g_wcet_warn_stack_underflow || g_wcet_warn_unbalanced || g_wcet_has_recursion) {
-        printf("║ ⚠ Warnings (%u)                                           \n", g_wcet_warning_count);
+        printf("| ! Warnings (%u)                                             \n", g_wcet_warning_count);
         if (g_wcet_warn_dead_code)
-            printf("║   DEAD_CODE: %u unreachable blocks (%u bytes)            \n",
+            printf("|   DEAD_CODE: %u unreachable blocks (%u bytes)              \n",
                    g_wcet_rpt_unreachable, g_wcet_rpt_dead_bytes);
         if (g_wcet_warn_infinite_loop)
-            printf("║   INFINITE_LOOP: Loop with no exit path detected          ║\n");
+            printf("|   INFINITE_LOOP: Loop with no exit path detected            |\n");
         if (g_wcet_warn_stack_overflow)
-            printf("║   STACK_OVERFLOW: Max depth %d may exceed limit           \n", g_wcet_max_stack_depth);
+            printf("|   STACK_OVERFLOW: Max depth %d may exceed limit             \n", g_wcet_max_stack_depth);
         if (g_wcet_warn_stack_underflow)
-            printf("║   STACK_UNDERFLOW: Stack depth may go negative            ║\n");
+            printf("|   STACK_UNDERFLOW: Stack depth may go negative              |\n");
         if (g_wcet_warn_unbalanced)
-            printf("║   UNBALANCED_STACK: Different depths at merge points      ║\n");
+            printf("|   UNBALANCED_STACK: Different depths at merge points        |\n");
         if (g_wcet_has_recursion)
-            printf("║   RECURSION: Recursive call pattern detected              ║\n");
+            printf("|   RECURSION: Recursive call pattern detected                |\n");
     } else {
-        printf("║ ✓ No warnings                                              ║\n");
+        printf("| No warnings                                                  |\n");
     }
-    printf("╠══════════════════════════════════════════════════════════════╣\n");
+    printf("+--------------------------------------------------------------+\n");
 
-    printf("║ Top Opcodes by WCET Contribution                           ║\n");
+    printf("| Top Opcodes by WCET Contribution                             |\n");
     u8 show_count = g_wcet_opcode_freq_count < 10 ? g_wcet_opcode_freq_count : 10;
     for (u8 i = 0; i < show_count; i++) {
         const WCETOpcodeFreq& f = g_wcet_opcode_freq[i];
@@ -489,10 +489,10 @@ void wcet_print_report() {
         int j = 0;
         if (name) { while (name[j] && j < 19) { name_buf[j] = name[j]; j++; } }
         name_buf[j] = '\0';
-        printf("║   %-16s  x%-4u  BCET:%5u  WCET:%5u              \n",
+        printf("|   %-16s  x%-4u  BCET:%5u  WCET:%5u                \n",
                name_buf, f.count, f.total_bcet, f.total_wcet);
     }
-    printf("╚══════════════════════════════════════════════════════════════╝\n\n");
+    printf("+--------------------------------------------------------------+\n\n");
 }
 
 #endif // __WASM__

@@ -40,6 +40,7 @@ import { runTests as runSTValidationTests } from './node-test/st-tests/test_st_v
 import { runTests as runTypeInferenceTests } from './node-test/plcscript-tests/test_plcscript_type_inference.js'
 import { runTests as runDataBlockTests } from './node-test/plcasm-tests/test_datablock_plcasm.js'
 import { runTests as runDBDeclarationTests } from './node-test/plcasm-tests/test_db_declaration.js'
+import { runTests as runWCETTests } from './node-test/test_wcet.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -183,6 +184,11 @@ const testSuites = [
         name: 'DB Declaration Tests',
         shortName: 'db-decl',
         run: runDBDeclarationTests
+    },
+    {
+        name: 'WCET Static Analysis',
+        shortName: 'wcet',
+        run: runWCETTests
     },
     {
         name: 'Memory Leak Detection',
