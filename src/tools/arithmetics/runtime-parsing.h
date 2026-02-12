@@ -34,7 +34,7 @@
     static RuntimeError type_##type(u8* bytecode, u32 bytecode_size, u32& index, type* value) {                 \
         u32 size = sizeof(type);                                                                                \
         SAFE_BOUNDS_CHECK(index + size > bytecode_size, PROGRAM_SIZE_EXCEEDED);                                 \
-        *value = *(type*)(bytecode + index);                                                                    \
+        memcpy(value, bytecode + index, size); /* unaligned-safe */                                             \
         index += size;                                                                                          \
         return STATUS_SUCCESS;                                                                                  \
     }
@@ -43,7 +43,7 @@
     static RuntimeError type_##type(u8* bytecode, u32 bytecode_size, u32& index, type* value) {                 \
         u32 size = sizeof(type);                                                                                \
         SAFE_BOUNDS_CHECK(index + size > bytecode_size, PROGRAM_SIZE_EXCEEDED);                                 \
-        *value = *(type*)(bytecode + index);                                                                    \
+        memcpy(value, bytecode + index, size); /* unaligned-safe */                                             \
         index += size;                                                                                          \
         return STATUS_SUCCESS;                                                                                  \
     }
@@ -52,7 +52,7 @@
     static RuntimeError type_##type(u8* bytecode, u32 bytecode_size, u32& index, type* value) {                 \
         u32 size = sizeof(type);                                                                                \
         SAFE_BOUNDS_CHECK(index + size > bytecode_size, PROGRAM_SIZE_EXCEEDED);                                 \
-        *value = *(type*)(bytecode + index);                                                                    \
+        memcpy(value, bytecode + index, size); /* unaligned-safe */                                             \
         index += size;                                                                                          \
         return STATUS_SUCCESS;                                                                                  \
     }
@@ -61,7 +61,7 @@
     static RuntimeError type_##type(u8* bytecode, u32 bytecode_size, u32& index, type* value) {                 \
         u32 size = sizeof(type);                                                                                \
         SAFE_BOUNDS_CHECK(index + size > bytecode_size, PROGRAM_SIZE_EXCEEDED);                                 \
-        *value = *(type*)(bytecode + index);                                                                    \
+        memcpy(value, bytecode + index, size); /* unaligned-safe */                                             \
         index += size;                                                                                          \
         return STATUS_SUCCESS;                                                                                  \
     }
@@ -70,7 +70,7 @@
     static RuntimeError type_##type(u8* bytecode, u32 bytecode_size, u32& index, type* value) {                 \
         u32 size = sizeof(type);                                                                                \
         SAFE_BOUNDS_CHECK(index + size > bytecode_size, PROGRAM_SIZE_EXCEEDED);                                 \
-        *value = *(type*)(bytecode + index);                                                                    \
+        memcpy(value, bytecode + index, size); /* unaligned-safe */                                             \
         index += size;                                                                                          \
         return STATUS_SUCCESS;                                                                                  \
     }

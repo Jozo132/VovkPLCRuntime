@@ -173,14 +173,14 @@ template<typename T> inline T ffi_read(u8* memory, u16 addr);
 template<> inline bool ffi_read<bool>(u8* memory, u16 addr) { return memory[addr] != 0; }
 template<> inline u8 ffi_read<u8>(u8* memory, u16 addr) { return memory[addr]; }
 template<> inline i8 ffi_read<i8>(u8* memory, u16 addr) { return (i8)memory[addr]; }
-template<> inline u16 ffi_read<u16>(u8* memory, u16 addr) { return *(u16*)&memory[addr]; }
-template<> inline i16 ffi_read<i16>(u8* memory, u16 addr) { return *(i16*)&memory[addr]; }
-template<> inline u32 ffi_read<u32>(u8* memory, u16 addr) { return *(u32*)&memory[addr]; }
-template<> inline i32 ffi_read<i32>(u8* memory, u16 addr) { return *(i32*)&memory[addr]; }
-template<> inline u64 ffi_read<u64>(u8* memory, u16 addr) { return *(u64*)&memory[addr]; }
-template<> inline i64 ffi_read<i64>(u8* memory, u16 addr) { return *(i64*)&memory[addr]; }
-template<> inline f32 ffi_read<f32>(u8* memory, u16 addr) { return *(f32*)&memory[addr]; }
-template<> inline f64 ffi_read<f64>(u8* memory, u16 addr) { return *(f64*)&memory[addr]; }
+template<> inline u16 ffi_read<u16>(u8* memory, u16 addr) { u16 v; memcpy(&v, &memory[addr], sizeof(v)); return v; }
+template<> inline i16 ffi_read<i16>(u8* memory, u16 addr) { i16 v; memcpy(&v, &memory[addr], sizeof(v)); return v; }
+template<> inline u32 ffi_read<u32>(u8* memory, u16 addr) { u32 v; memcpy(&v, &memory[addr], sizeof(v)); return v; }
+template<> inline i32 ffi_read<i32>(u8* memory, u16 addr) { i32 v; memcpy(&v, &memory[addr], sizeof(v)); return v; }
+template<> inline u64 ffi_read<u64>(u8* memory, u16 addr) { u64 v; memcpy(&v, &memory[addr], sizeof(v)); return v; }
+template<> inline i64 ffi_read<i64>(u8* memory, u16 addr) { i64 v; memcpy(&v, &memory[addr], sizeof(v)); return v; }
+template<> inline f32 ffi_read<f32>(u8* memory, u16 addr) { f32 v; memcpy(&v, &memory[addr], sizeof(v)); return v; }
+template<> inline f64 ffi_read<f64>(u8* memory, u16 addr) { f64 v; memcpy(&v, &memory[addr], sizeof(v)); return v; }
 // String types: read u16 address value, return struct with direct pointers into memory
 template<> inline str8 ffi_read<str8>(u8* memory, u16 addr) { 
     return str8::fromMemory(memory, *(u16*)&memory[addr]); 
@@ -194,14 +194,14 @@ template<typename T> inline void ffi_write(u8* memory, u16 addr, T value);
 template<> inline void ffi_write<bool>(u8* memory, u16 addr, bool v) { memory[addr] = v ? 1 : 0; }
 template<> inline void ffi_write<u8>(u8* memory, u16 addr, u8 v) { memory[addr] = v; }
 template<> inline void ffi_write<i8>(u8* memory, u16 addr, i8 v) { memory[addr] = (u8)v; }
-template<> inline void ffi_write<u16>(u8* memory, u16 addr, u16 v) { *(u16*)&memory[addr] = v; }
-template<> inline void ffi_write<i16>(u8* memory, u16 addr, i16 v) { *(i16*)&memory[addr] = v; }
-template<> inline void ffi_write<u32>(u8* memory, u16 addr, u32 v) { *(u32*)&memory[addr] = v; }
-template<> inline void ffi_write<i32>(u8* memory, u16 addr, i32 v) { *(i32*)&memory[addr] = v; }
-template<> inline void ffi_write<u64>(u8* memory, u16 addr, u64 v) { *(u64*)&memory[addr] = v; }
-template<> inline void ffi_write<i64>(u8* memory, u16 addr, i64 v) { *(i64*)&memory[addr] = v; }
-template<> inline void ffi_write<f32>(u8* memory, u16 addr, f32 v) { *(f32*)&memory[addr] = v; }
-template<> inline void ffi_write<f64>(u8* memory, u16 addr, f64 v) { *(f64*)&memory[addr] = v; }
+template<> inline void ffi_write<u16>(u8* memory, u16 addr, u16 v) { memcpy(&memory[addr], &v, sizeof(v)); }
+template<> inline void ffi_write<i16>(u8* memory, u16 addr, i16 v) { memcpy(&memory[addr], &v, sizeof(v)); }
+template<> inline void ffi_write<u32>(u8* memory, u16 addr, u32 v) { memcpy(&memory[addr], &v, sizeof(v)); }
+template<> inline void ffi_write<i32>(u8* memory, u16 addr, i32 v) { memcpy(&memory[addr], &v, sizeof(v)); }
+template<> inline void ffi_write<u64>(u8* memory, u16 addr, u64 v) { memcpy(&memory[addr], &v, sizeof(v)); }
+template<> inline void ffi_write<i64>(u8* memory, u16 addr, i64 v) { memcpy(&memory[addr], &v, sizeof(v)); }
+template<> inline void ffi_write<f32>(u8* memory, u16 addr, f32 v) { memcpy(&memory[addr], &v, sizeof(v)); }
+template<> inline void ffi_write<f64>(u8* memory, u16 addr, f64 v) { memcpy(&memory[addr], &v, sizeof(v)); }
 // String types: write the string address (u16) to memory - computed from capacity pointer
 template<> inline void ffi_write<str8>(u8* memory, u16 addr, str8 v) { 
     *(u16*)&memory[addr] = (u16)(v.capacity - memory); 
