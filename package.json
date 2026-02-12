@@ -8,6 +8,7 @@
     "build-safe": "node wasm/wasm_build.js --safe",
     "compile": "node --no-warnings wasm/node-test/compile.js",
     "explain": "node --no-warnings wasm/node-test/explain.js",
+    "analyze": "node --no-warnings wasm/node-test/analyze.js",
     "update": "git pull",
     "wasm_unit_test": "cd wasm/node-test && node unit_test.js",
     "test_timers": "cd wasm/node-test && node test_timers.js",
