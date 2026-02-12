@@ -4438,6 +4438,140 @@ public:
                 peekToken = savedPeek;
                 return parseTernary();
             }
+
+            // Check for global DataBlock field assignment (DB1.field = value)
+            if (check(PSTOK_DOT) && !sym) {
+                GlobalDBDecl* dbDecl = findGlobalDBDecl(varName);
+                if (dbDecl) {
+                    nextToken(); // consume dot
+
+                    if (!check(PSTOK_IDENTIFIER)) {
+                        setError("Expected field name after '.'");
+                        return PSTYPE_VOID;
+                    }
+
+                    char fieldName[32];
+                    int fi = 0;
+                    while (currentToken.text[fi] && fi < 31) {
+                        fieldName[fi] = currentToken.text[fi];
+                        fi++;
+                    }
+                    fieldName[fi] = '\0';
+                    nextToken();
+
+                    // Build canonical DB type name
+                    char db_type_name[16];
+                    db_type_name[0] = 'D'; db_type_name[1] = 'B';
+                    int tpos = 2;
+                    u16 dnum = dbDecl->db_number;
+                    char nbuf[6]; int nlen = 0;
+                    do { nbuf[nlen++] = '0' + (dnum % 10); dnum /= 10; } while (dnum > 0);
+                    for (int ni = nlen - 1; ni >= 0; ni--) db_type_name[tpos++] = nbuf[ni];
+                    db_type_name[tpos] = '\0';
+
+                    UserStructType* ust = findUserStructType(db_type_name);
+                    if (!ust) {
+                        setError("DataBlock type not found");
+                        return PSTYPE_VOID;
+                    }
+                    const StructProperty* field = ust->findField(fieldName);
+                    if (!field) {
+                        setError("Unknown DataBlock field");
+                        return PSTYPE_VOID;
+                    }
+
+                    // Build PLCASM address: DB<N>.fieldName
+                    PLCScriptSymbol fieldSym;
+                    memset(&fieldSym, 0, sizeof(fieldSym));
+                    fieldSym.isConst = false;
+                    int ai = 0;
+                    for (int k = 0; db_type_name[k] && ai < 30; k++) fieldSym.address[ai++] = db_type_name[k];
+                    fieldSym.address[ai++] = '.';
+                    for (int k = 0; fieldName[k] && ai < 63; k++) fieldSym.address[ai++] = fieldName[k];
+                    fieldSym.address[ai] = '\0';
+
+                    // Determine field type
+                    bool fieldIsBit = (field->bit_pos < 8 || field->type_size == 0);
+                    fieldSym.isBit = fieldIsBit;
+                    if (fieldIsBit) {
+                        fieldSym.type = PSTYPE_BOOL;
+                    } else {
+                        switch (field->type_size) {
+                            case 1: fieldSym.type = PSTYPE_U8; break;
+                            case 2: fieldSym.type = PSTYPE_U16; break;
+                            case 4: fieldSym.type = PSTYPE_U32; break;
+                            case 8: fieldSym.type = PSTYPE_U64; break;
+                            default: fieldSym.type = PSTYPE_U16; break;
+                        }
+                    }
+
+                    if (check(PSTOK_EQ)) {
+                        nextToken(); // consume '='
+                        PLCScriptVarType savedTarget = targetType;
+                        targetType = fieldSym.type;
+                        PLCScriptVarType rhsType = parseAssignment();
+                        targetType = savedTarget;
+                        if (rhsType != fieldSym.type && rhsType != PSTYPE_VOID) {
+                            emit("cvt ");
+                            emit(varTypeToPlcasm(rhsType));
+                            emit(" ");
+                            emit(varTypeToPlcasm(fieldSym.type));
+                            emit("\n");
+                        }
+                        emitCopy(fieldSym.type);
+                        emitStoreToAddress(&fieldSym);
+                        return fieldSym.type;
+                    }
+                    else if (check(PSTOK_PLUS_EQ) || check(PSTOK_MINUS_EQ) ||
+                             check(PSTOK_STAR_EQ) || check(PSTOK_SLASH_EQ)) {
+                        PLCScriptTokenType opType = currentToken.type;
+                        nextToken();
+                        emitLoadFromAddress(&fieldSym);
+                        PLCScriptVarType savedTarget = targetType;
+                        targetType = fieldSym.type;
+                        PLCScriptVarType rhsType = parseAssignment();
+                        targetType = savedTarget;
+                        if (rhsType != fieldSym.type && rhsType != PSTYPE_VOID) {
+                            emit("cvt ");
+                            emit(varTypeToPlcasm(rhsType));
+                            emit(" ");
+                            emit(varTypeToPlcasm(fieldSym.type));
+                            emit("\n");
+                        }
+                        const char* op = nullptr;
+                        switch (opType) {
+                            case PSTOK_PLUS_EQ: op = "add"; break;
+                            case PSTOK_MINUS_EQ: op = "sub"; break;
+                            case PSTOK_STAR_EQ: op = "mul"; break;
+                            case PSTOK_SLASH_EQ: op = "div"; break;
+                            default: break;
+                        }
+                        if (op) emitBinaryOp(op, fieldSym.type);
+                        emitCopy(fieldSym.type);
+                        emitStoreToAddress(&fieldSym);
+                        return fieldSym.type;
+                    }
+                    else if (check(PSTOK_PLUS_PLUS) || check(PSTOK_MINUS_MINUS)) {
+                        bool isIncr = check(PSTOK_PLUS_PLUS);
+                        nextToken();
+                        emitLoadFromAddress(&fieldSym);
+                        emitCopy(fieldSym.type);
+                        emitLoadConst(fieldSym.type, 1);
+                        emitBinaryOp(isIncr ? "add" : "sub", fieldSym.type);
+                        emitStoreToAddress(&fieldSym);
+                        return fieldSym.type;
+                    }
+
+                    // Not an assignment - restore and let expression parsing handle it
+                    pos = savedPos;
+                    currentLine = savedLine;
+                    currentColumn = savedCol;
+                    currentToken = savedToken;
+                    hasPeekToken = savedHasPeek;
+                    peekToken = savedPeek;
+                    return parseTernary();
+                }
+            }
             
             // Check for array element assignment (e.g., arr[0] = value, arr[i] = value)
             if (check(PSTOK_LBRACKET)) {
@@ -6193,6 +6327,56 @@ public:
                     }
                 }
                 
+                // Check for global DataBlock field access (DB1.field, alias.field)
+                if (!foundProperty) {
+                    GlobalDBDecl* dbDecl = findGlobalDBDecl(name);
+                    if (dbDecl) {
+                        // Build canonical DB type name for struct type lookup
+                        char db_type_name[16];
+                        db_type_name[0] = 'D'; db_type_name[1] = 'B';
+                        int tpos = 2;
+                        u16 dnum = dbDecl->db_number;
+                        char nbuf[6]; int nlen = 0;
+                        do { nbuf[nlen++] = '0' + (dnum % 10); dnum /= 10; } while (dnum > 0);
+                        for (int ni = nlen - 1; ni >= 0; ni--) db_type_name[tpos++] = nbuf[ni];
+                        db_type_name[tpos] = '\0';
+
+                        UserStructType* ust = findUserStructType(db_type_name);
+                        if (ust) {
+                            const StructProperty* field = ust->findField(propName);
+                            if (field) {
+                                foundProperty = true;
+                                // Build PLCASM address: DB<N>.fieldName
+                                char fullAddr[64];
+                                int ai = 0;
+                                for (int k = 0; db_type_name[k] && ai < 30; k++) fullAddr[ai++] = db_type_name[k];
+                                fullAddr[ai++] = '.';
+                                for (int k = 0; propName[k] && ai < 63; k++) fullAddr[ai++] = propName[k];
+                                fullAddr[ai] = '\0';
+
+                                // Emit load based on field type
+                                if (field->bit_pos < 8 || field->type_size == 0) {
+                                    emit("u8.readBit ");
+                                    emit(fullAddr);
+                                    emit("\n");
+                                    resultType = PSTYPE_BOOL;
+                                } else {
+                                    switch (field->type_size) {
+                                        case 1: emit("u8"); resultType = PSTYPE_U8; break;
+                                        case 2: emit("u16"); resultType = PSTYPE_U16; break;
+                                        case 4: emit("u32"); resultType = PSTYPE_U32; break;
+                                        case 8: emit("u64"); resultType = PSTYPE_U64; break;
+                                        default: emit("u16"); resultType = PSTYPE_U16; break;
+                                    }
+                                    emit(".load_from ");
+                                    emit(fullAddr);
+                                    emit("\n");
+                                }
+                            }
+                        }
+                    }
+                }
+
                 if (!foundProperty) {
                     setError("Unknown property");
                     return PSTYPE_VOID;
