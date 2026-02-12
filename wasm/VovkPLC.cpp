@@ -900,3 +900,160 @@ RuntimeError demo_raw_handler(u8* memory, u16* param_addrs, u8 param_count, u16 
 // Register a raw handler for testing
 WASM_EXPORT void ffi_registerRawDemo() {
     runtime.registerFFI("F_raw_add", "i32,i32->i32", "Raw handler demo", demo_raw_handler);}
+
+// ============================================================================
+// WCET (Worst-Case Execution Time) Analysis WASM Exports
+// ============================================================================
+// These exports provide static analysis of compiled bytecode.
+// Call wcet_analyze_compiled/project/runtime() to populate global report,
+// then read individual fields via the getter exports.
+// All state is stored in bare globals (no classes) for WASM safety.
+
+// Analyze bytecode currently loaded in the PLCASM compiler (defaultCompiler)
+WASM_EXPORT bool wcet_analyze_compiled() {
+    return wcet_analyze(
+        defaultCompiler.built_bytecode,
+        (u32)defaultCompiler.built_bytecode_length,
+        PLCRUNTIME_MAX_STACK_SIZE
+    );
+}
+
+// Analyze bytecode currently loaded in the project compiler
+WASM_EXPORT bool wcet_analyze_project() {
+    u8* bytecode = project_compiler.getBytecode();
+    int length = project_compiler.getBytecodeLength();
+    if (!bytecode || length <= 0) return false;
+    return wcet_analyze(bytecode, (u32)length, PLCRUNTIME_MAX_STACK_SIZE);
+}
+
+// Analyze bytecode currently loaded in the runtime program
+WASM_EXPORT bool wcet_analyze_runtime() {
+    if (runtime.program.prog_size == 0) return false;
+    return wcet_analyze(
+        runtime.program.program,
+        runtime.program.prog_size,
+        PLCRUNTIME_MAX_STACK_SIZE
+    );
+}
+
+// Print the full human-readable WCET report to stdout
+WASM_EXPORT void wcet_do_print_report() {
+    wcet_print_report();
+}
+
+// --- Report field getters (all read bare globals) ---
+
+// Program metrics
+WASM_EXPORT u32 wcet_get_bytecode_size()        { return g_wcet_bytecode_size; }
+WASM_EXPORT u32 wcet_get_instruction_count()     { return g_wcet_rpt_instruction_count; }
+WASM_EXPORT u32 wcet_get_unique_opcodes()        { return g_wcet_unique_opcodes; }
+
+// CFG metrics
+WASM_EXPORT u32 wcet_get_block_count()           { return g_wcet_rpt_block_count; }
+WASM_EXPORT u32 wcet_get_edge_count()            { return g_wcet_rpt_edge_count; }
+WASM_EXPORT u32 wcet_get_loop_count()            { return g_wcet_rpt_loop_count; }
+WASM_EXPORT u32 wcet_get_unreachable_blocks()    { return g_wcet_rpt_unreachable; }
+WASM_EXPORT u32 wcet_get_dead_code_bytes()       { return g_wcet_rpt_dead_bytes; }
+
+// BCET/WCET timing
+WASM_EXPORT u32 wcet_get_bcet_cycles()           { return g_wcet_bcet_cycles; }
+WASM_EXPORT u32 wcet_get_wcet_cycles()           { return g_wcet_wcet_cycles; }
+WASM_EXPORT u32 wcet_get_bcet_instructions()     { return g_wcet_bcet_instructions; }
+WASM_EXPORT u32 wcet_get_wcet_instructions()     { return g_wcet_wcet_instructions; }
+
+// Stack analysis
+WASM_EXPORT i32 wcet_get_max_stack_depth()       { return g_wcet_max_stack_depth; }
+WASM_EXPORT i32 wcet_get_min_stack_depth()       { return g_wcet_min_stack_depth; }
+WASM_EXPORT i32 wcet_get_stack_at_exit()         { return g_wcet_stack_at_exit; }
+WASM_EXPORT u32 wcet_get_max_call_depth()        { return g_wcet_max_call_depth; }
+WASM_EXPORT u8  wcet_get_has_recursion()         { return g_wcet_has_recursion; }
+
+// Path analysis
+WASM_EXPORT u32 wcet_get_total_paths()           { return g_wcet_total_paths; }
+WASM_EXPORT u32 wcet_get_shortest_path_blocks()  { return g_wcet_shortest_path; }
+WASM_EXPORT u32 wcet_get_longest_path_blocks()   { return g_wcet_longest_path; }
+
+// Warnings
+WASM_EXPORT u32 wcet_get_warning_count()         { return g_wcet_warning_count; }
+WASM_EXPORT u8  wcet_get_has_dead_code()         { return g_wcet_warn_dead_code; }
+WASM_EXPORT u8  wcet_get_has_infinite_loop()     { return g_wcet_warn_infinite_loop; }
+WASM_EXPORT u8  wcet_get_has_stack_overflow()    { return g_wcet_warn_stack_overflow; }
+WASM_EXPORT u8  wcet_get_has_stack_underflow()   { return g_wcet_warn_stack_underflow; }
+WASM_EXPORT u8  wcet_get_has_unbalanced_stack()  { return g_wcet_warn_unbalanced; }
+
+// Opcode frequency table
+WASM_EXPORT u8  wcet_get_opcode_freq_count()     { return g_wcet_opcode_freq_count; }
+WASM_EXPORT u8  wcet_get_opcode_freq_opcode(u8 i) {
+    if (i >= g_wcet_opcode_freq_count) return 0;
+    return g_wcet_opcode_freq[i].opcode;
+}
+WASM_EXPORT u16 wcet_get_opcode_freq_count_at(u8 i) {
+    if (i >= g_wcet_opcode_freq_count) return 0;
+    return g_wcet_opcode_freq[i].count;
+}
+WASM_EXPORT u32 wcet_get_opcode_freq_bcet(u8 i) {
+    if (i >= g_wcet_opcode_freq_count) return 0;
+    return g_wcet_opcode_freq[i].total_bcet;
+}
+WASM_EXPORT u32 wcet_get_opcode_freq_wcet(u8 i) {
+    if (i >= g_wcet_opcode_freq_count) return 0;
+    return g_wcet_opcode_freq[i].total_wcet;
+}
+
+// CFG basic block details (for visualization/debugging)
+WASM_EXPORT u32 wcet_get_cfg_block_start(u32 i) {
+    if (i >= g_wcet_block_count) return 0;
+    return g_wcet_blocks[i].start_offset;
+}
+WASM_EXPORT u32 wcet_get_cfg_block_end(u32 i) {
+    if (i >= g_wcet_block_count) return 0;
+    return g_wcet_blocks[i].end_offset;
+}
+WASM_EXPORT u32 wcet_get_cfg_block_bcet(u32 i) {
+    if (i >= g_wcet_block_count) return 0;
+    return g_wcet_blocks[i].bcet;
+}
+WASM_EXPORT u32 wcet_get_cfg_block_wcet(u32 i) {
+    if (i >= g_wcet_block_count) return 0;
+    return g_wcet_blocks[i].wcet;
+}
+WASM_EXPORT u8 wcet_get_cfg_block_is_unreachable(u32 i) {
+    if (i >= g_wcet_block_count) return 0;
+    return g_wcet_blocks[i].is_unreachable;
+}
+WASM_EXPORT i32 wcet_get_cfg_block_stack_delta(u32 i) {
+    if (i >= g_wcet_block_count) return 0;
+    return g_wcet_blocks[i].stack_delta;
+}
+
+// CFG edge details
+WASM_EXPORT u32 wcet_get_cfg_edge_from(u32 i) {
+    if (i >= g_wcet_edge_count) return 0;
+    return g_wcet_edges[i].from_block;
+}
+WASM_EXPORT u32 wcet_get_cfg_edge_to(u32 i) {
+    if (i >= g_wcet_edge_count) return 0;
+    return g_wcet_edges[i].to_block;
+}
+WASM_EXPORT u8 wcet_get_cfg_edge_type(u32 i) {
+    if (i >= g_wcet_edge_count) return 0;
+    return g_wcet_edges[i].type;
+}
+WASM_EXPORT u8 wcet_get_cfg_edge_is_back(u32 i) {
+    if (i >= g_wcet_edge_count) return 0;
+    return g_wcet_edges[i].is_back_edge;
+}
+
+// Loop details
+WASM_EXPORT u32 wcet_get_loop_header(u32 i) {
+    if (i >= g_wcet_loop_count) return 0;
+    return g_wcet_loops[i].header_block;
+}
+WASM_EXPORT u32 wcet_get_loop_back_edge(u32 i) {
+    if (i >= g_wcet_loop_count) return 0;
+    return g_wcet_loops[i].back_edge_block;
+}
+WASM_EXPORT u32 wcet_get_loop_max_iterations(u32 i) {
+    if (i >= g_wcet_loop_count) return 0;
+    return g_wcet_loops[i].estimated_max_iterations;
+}

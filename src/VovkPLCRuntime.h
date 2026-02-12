@@ -33,3 +33,4 @@
 #include "tools/assembly/st-compiler.h"
 #include "tools/assembly/st-linter.h"
 #include "tools/assembly/project-compiler.h"
+#include "tools/assembly/wcet-analysis.h"

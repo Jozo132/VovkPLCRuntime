@@ -311,6 +311,54 @@ const MEMORY_LAYOUT = {
  *     db_getDeclFieldHasDefault?: (db_index: number, field_index: number) => number, // Returns 1 if field has default.
  *     db_getDeclFieldDefaultInt?: (db_index: number, field_index: number) => number, // Returns default value as i32.
  *     db_getDeclFieldDefaultFloat?: (db_index: number, field_index: number) => number, // Returns default value as f32.
+ *     wcet_analyze_compiled?: () => boolean, // Analyze bytecode from PLCASM compiler. Returns true on success.
+ *     wcet_analyze_project?: () => boolean, // Analyze bytecode from project compiler. Returns true on success.
+ *     wcet_analyze_runtime?: () => boolean, // Analyze bytecode loaded in runtime. Returns true on success.
+ *     wcet_do_print_report?: () => void, // Print human-readable WCET report to stdout.
+ *     wcet_get_bytecode_size?: () => number, // Total bytecode size analyzed.
+ *     wcet_get_instruction_count?: () => number, // Total decoded instructions.
+ *     wcet_get_unique_opcodes?: () => number, // Number of distinct opcodes.
+ *     wcet_get_block_count?: () => number, // CFG basic block count.
+ *     wcet_get_edge_count?: () => number, // CFG edge count.
+ *     wcet_get_loop_count?: () => number, // Detected loop count.
+ *     wcet_get_unreachable_blocks?: () => number, // Unreachable block count.
+ *     wcet_get_dead_code_bytes?: () => number, // Dead code bytes.
+ *     wcet_get_bcet_cycles?: () => number, // Best-case execution time (cycle units).
+ *     wcet_get_wcet_cycles?: () => number, // Worst-case execution time (cycle units).
+ *     wcet_get_bcet_instructions?: () => number, // Best-case instruction count.
+ *     wcet_get_wcet_instructions?: () => number, // Worst-case instruction count.
+ *     wcet_get_max_stack_depth?: () => number, // Max possible stack depth (bytes).
+ *     wcet_get_min_stack_depth?: () => number, // Min stack depth.
+ *     wcet_get_stack_at_exit?: () => number, // Stack depth at exit.
+ *     wcet_get_max_call_depth?: () => number, // Max call nesting depth.
+ *     wcet_get_has_recursion?: () => number, // 1 if recursion detected.
+ *     wcet_get_total_paths?: () => number, // Number of unique execution paths.
+ *     wcet_get_shortest_path_blocks?: () => number, // Shortest path length (blocks).
+ *     wcet_get_longest_path_blocks?: () => number, // Longest path length (blocks).
+ *     wcet_get_warning_count?: () => number, // Total warnings.
+ *     wcet_get_has_dead_code?: () => number, // 1 if dead code detected.
+ *     wcet_get_has_infinite_loop?: () => number, // 1 if infinite loop detected.
+ *     wcet_get_has_stack_overflow?: () => number, // 1 if stack overflow risk.
+ *     wcet_get_has_stack_underflow?: () => number, // 1 if stack underflow risk.
+ *     wcet_get_has_unbalanced_stack?: () => number, // 1 if unbalanced stack at merge.
+ *     wcet_get_opcode_freq_count?: () => number, // Number of entries in opcode frequency table.
+ *     wcet_get_opcode_freq_opcode?: (i: number) => number, // Opcode at frequency index.
+ *     wcet_get_opcode_freq_count_at?: (i: number) => number, // Count at frequency index.
+ *     wcet_get_opcode_freq_bcet?: (i: number) => number, // Total BCET at frequency index.
+ *     wcet_get_opcode_freq_wcet?: (i: number) => number, // Total WCET at frequency index.
+ *     wcet_get_cfg_block_start?: (i: number) => number, // Block start offset.
+ *     wcet_get_cfg_block_end?: (i: number) => number, // Block end offset.
+ *     wcet_get_cfg_block_bcet?: (i: number) => number, // Block BCET.
+ *     wcet_get_cfg_block_wcet?: (i: number) => number, // Block WCET.
+ *     wcet_get_cfg_block_is_unreachable?: (i: number) => number, // 1 if block unreachable.
+ *     wcet_get_cfg_block_stack_delta?: (i: number) => number, // Block stack delta.
+ *     wcet_get_cfg_edge_from?: (i: number) => number, // Edge source block.
+ *     wcet_get_cfg_edge_to?: (i: number) => number, // Edge destination block.
+ *     wcet_get_cfg_edge_type?: (i: number) => number, // Edge type (0=fallthrough,1=jump,2=branch_true,3=branch_false,4=call,5=return).
+ *     wcet_get_cfg_edge_is_back?: (i: number) => number, // 1 if back edge (loop).
+ *     wcet_get_loop_header?: (i: number) => number, // Loop header block ID.
+ *     wcet_get_loop_back_edge?: (i: number) => number, // Loop back edge source block.
+ *     wcet_get_loop_max_iterations?: (i: number) => number, // Estimated max loop iterations.
  * }} VovkPLCExportTypes
  */
 
@@ -1636,6 +1684,208 @@ class VovkPLC_class {
             size: result.size,
             output: result.output,
         }
+    }
+
+    /**
+     * WCET (Worst-Case Execution Time) Analysis.
+     * Performs static analysis on compiled bytecode to determine:
+     * - Control Flow Graph (CFG) with basic blocks, edges, loops
+     * - Best/Worst case execution time in cycle units
+     * - Stack depth analysis (max/min/exit depth)
+     * - Dead code and unreachable block detection
+     * - Loop detection and infinite loop warnings
+     * - Opcode frequency and cost breakdown
+     *
+     * @param {'compiled' | 'project' | 'runtime'} [source='compiled'] - Which bytecode to analyze:
+     *   - 'compiled': PLCASM compiler output (after compilePLCASM)
+     *   - 'project': Project compiler output (after compileProject)
+     *   - 'runtime': Currently loaded runtime program
+     * @param {{ print?: boolean }} [options={}] - Options. print: also print report to stdout.
+     * @returns {WCETReport} The full analysis report.
+     * @throws {Error} If analysis fails or no bytecode available.
+     *
+     * @typedef {{
+     *     bytecode_size: number,
+     *     instruction_count: number,
+     *     unique_opcodes: number,
+     *     block_count: number,
+     *     edge_count: number,
+     *     loop_count: number,
+     *     unreachable_blocks: number,
+     *     dead_code_bytes: number,
+     *     bcet_cycles: number,
+     *     wcet_cycles: number,
+     *     bcet_instructions: number,
+     *     wcet_instructions: number,
+     *     max_stack_depth: number,
+     *     min_stack_depth: number,
+     *     stack_at_exit: number,
+     *     max_call_depth: number,
+     *     has_recursion: boolean,
+     *     total_paths: number,
+     *     shortest_path_blocks: number,
+     *     longest_path_blocks: number,
+     *     warning_count: number,
+     *     warnings: {
+     *         dead_code: boolean,
+     *         infinite_loop: boolean,
+     *         stack_overflow: boolean,
+     *         stack_underflow: boolean,
+     *         unbalanced_stack: boolean,
+     *     },
+     *     opcode_frequency: Array<{
+     *         opcode: number,
+     *         name: string,
+     *         count: number,
+     *         total_bcet: number,
+     *         total_wcet: number,
+     *     }>,
+     *     cfg: {
+     *         blocks: Array<{ start: number, end: number, bcet: number, wcet: number, unreachable: boolean, stack_delta: number }>,
+     *         edges: Array<{ from: number, to: number, type: string, is_back_edge: boolean }>,
+     *         loops: Array<{ header: number, back_edge: number, max_iterations: number }>,
+     *     },
+     * }} WCETReport
+     */
+    analyzeWCET(source = 'compiled', options = {}) {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        const wasm = this.wasm_exports
+
+        // Run the appropriate analysis
+        let ok = false
+        if (source === 'compiled' && wasm.wcet_analyze_compiled) {
+            ok = wasm.wcet_analyze_compiled()
+        } else if (source === 'project' && wasm.wcet_analyze_project) {
+            ok = wasm.wcet_analyze_project()
+        } else if (source === 'runtime' && wasm.wcet_analyze_runtime) {
+            ok = wasm.wcet_analyze_runtime()
+        } else {
+            throw new Error(`WCET analysis not available for source '${source}'`)
+        }
+        if (!ok) throw new Error(`WCET analysis failed for source '${source}' — no bytecode available?`)
+
+        // Optionally print the report to stdout
+        if (options.print && wasm.wcet_do_print_report) wasm.wcet_do_print_report()
+
+        // Edge type name lookup
+        const edgeTypeNames = ['fallthrough', 'jump', 'branch_true', 'branch_false', 'call', 'return']
+
+        // Read opcode frequency table
+        const opcodeFrequency = []
+        const freqCount = wasm.wcet_get_opcode_freq_count ? wasm.wcet_get_opcode_freq_count() : 0
+        for (let i = 0; i < freqCount; i++) {
+            const opcode = wasm.wcet_get_opcode_freq_opcode(i)
+            opcodeFrequency.push({
+                opcode,
+                name: this._getOpcodeName(opcode),
+                count: wasm.wcet_get_opcode_freq_count_at(i),
+                total_bcet: wasm.wcet_get_opcode_freq_bcet(i),
+                total_wcet: wasm.wcet_get_opcode_freq_wcet(i),
+            })
+        }
+
+        // Read CFG blocks
+        const blockCount = wasm.wcet_get_block_count ? wasm.wcet_get_block_count() : 0
+        const cfgBlocks = []
+        for (let i = 0; i < blockCount; i++) {
+            cfgBlocks.push({
+                start: wasm.wcet_get_cfg_block_start(i),
+                end: wasm.wcet_get_cfg_block_end(i),
+                bcet: wasm.wcet_get_cfg_block_bcet(i),
+                wcet: wasm.wcet_get_cfg_block_wcet(i),
+                unreachable: !!wasm.wcet_get_cfg_block_is_unreachable(i),
+                stack_delta: wasm.wcet_get_cfg_block_stack_delta(i),
+            })
+        }
+
+        // Read CFG edges
+        const edgeCount = wasm.wcet_get_edge_count ? wasm.wcet_get_edge_count() : 0
+        const cfgEdges = []
+        for (let i = 0; i < edgeCount; i++) {
+            const typeId = wasm.wcet_get_cfg_edge_type(i)
+            cfgEdges.push({
+                from: wasm.wcet_get_cfg_edge_from(i),
+                to: wasm.wcet_get_cfg_edge_to(i),
+                type: edgeTypeNames[typeId] || `unknown(${typeId})`,
+                is_back_edge: !!wasm.wcet_get_cfg_edge_is_back(i),
+            })
+        }
+
+        // Read loops
+        const loopCount = wasm.wcet_get_loop_count ? wasm.wcet_get_loop_count() : 0
+        const cfgLoops = []
+        for (let i = 0; i < loopCount; i++) {
+            cfgLoops.push({
+                header: wasm.wcet_get_loop_header(i),
+                back_edge: wasm.wcet_get_loop_back_edge(i),
+                max_iterations: wasm.wcet_get_loop_max_iterations(i),
+            })
+        }
+
+        return {
+            bytecode_size: wasm.wcet_get_bytecode_size(),
+            instruction_count: wasm.wcet_get_instruction_count(),
+            unique_opcodes: wasm.wcet_get_unique_opcodes(),
+            block_count: blockCount,
+            edge_count: edgeCount,
+            loop_count: loopCount,
+            unreachable_blocks: wasm.wcet_get_unreachable_blocks(),
+            dead_code_bytes: wasm.wcet_get_dead_code_bytes(),
+            bcet_cycles: wasm.wcet_get_bcet_cycles(),
+            wcet_cycles: wasm.wcet_get_wcet_cycles(),
+            bcet_instructions: wasm.wcet_get_bcet_instructions(),
+            wcet_instructions: wasm.wcet_get_wcet_instructions(),
+            max_stack_depth: wasm.wcet_get_max_stack_depth(),
+            min_stack_depth: wasm.wcet_get_min_stack_depth(),
+            stack_at_exit: wasm.wcet_get_stack_at_exit(),
+            max_call_depth: wasm.wcet_get_max_call_depth(),
+            has_recursion: !!wasm.wcet_get_has_recursion(),
+            total_paths: wasm.wcet_get_total_paths(),
+            shortest_path_blocks: wasm.wcet_get_shortest_path_blocks(),
+            longest_path_blocks: wasm.wcet_get_longest_path_blocks(),
+            warning_count: wasm.wcet_get_warning_count(),
+            warnings: {
+                dead_code: !!wasm.wcet_get_has_dead_code(),
+                infinite_loop: !!wasm.wcet_get_has_infinite_loop(),
+                stack_overflow: !!wasm.wcet_get_has_stack_overflow(),
+                stack_underflow: !!wasm.wcet_get_has_stack_underflow(),
+                unbalanced_stack: !!wasm.wcet_get_has_unbalanced_stack(),
+            },
+            opcode_frequency: opcodeFrequency,
+            cfg: {
+                blocks: cfgBlocks,
+                edges: cfgEdges,
+                loops: cfgLoops,
+            },
+        }
+    }
+
+    /** @private Helper to get opcode name string (best-effort) */
+    _getOpcodeName(opcode) {
+        const names = {
+            0x00: 'NOP', 0x01: 'PTR', 0x02: 'BOOL', 0x03: 'U8', 0x04: 'U16', 0x05: 'U32', 0x06: 'U64',
+            0x07: 'I8', 0x08: 'I16', 0x09: 'I32', 0x0A: 'I64', 0x0B: 'F32', 0x0C: 'F64', 0x0D: 'CHAR',
+            0x10: 'CVT', 0x11: 'LOAD', 0x12: 'MOVE', 0x13: 'MOVE_COPY',
+            0x14: 'COPY', 0x15: 'SWAP', 0x16: 'DROP', 0x17: 'CLEAR',
+            0x18: 'LOAD_FROM', 0x19: 'MOVE_TO', 0x1A: 'INC_MEM', 0x1B: 'DEC_MEM',
+            0x1C: 'PICK', 0x1D: 'POKE', 0x1E: 'MEM_FILL',
+            0x20: 'ADD', 0x21: 'SUB', 0x22: 'MUL', 0x23: 'DIV', 0x24: 'MOD',
+            0x25: 'POW', 0x26: 'SQRT', 0x27: 'NEG', 0x29: 'ABS', 0x2A: 'SIN', 0x2B: 'COS',
+            0x30: 'TON_CONST', 0x31: 'TON_MEM', 0x32: 'TOF_CONST', 0x33: 'TOF_MEM',
+            0x34: 'TP_CONST', 0x35: 'TP_MEM', 0x36: 'CTU_CONST', 0x37: 'CTU_MEM',
+            0x38: 'CTD_CONST', 0x39: 'CTD_MEM',
+            0xC0: 'LOGIC_AND', 0xC1: 'LOGIC_OR', 0xC2: 'LOGIC_XOR', 0xC3: 'LOGIC_NOT',
+            0xD0: 'CMP_EQ', 0xD1: 'CMP_NEQ', 0xD2: 'CMP_GT', 0xD3: 'CMP_LT',
+            0xD4: 'CMP_GTE', 0xD5: 'CMP_LTE',
+            0xE0: 'JMP', 0xE1: 'JMP_IF', 0xE2: 'JMP_IF_NOT',
+            0xE3: 'CALL', 0xE4: 'CALL_IF', 0xE5: 'CALL_IF_NOT',
+            0xE6: 'RET', 0xE7: 'RET_IF', 0xE8: 'RET_IF_NOT',
+            0xE9: 'JMP_REL', 0xEA: 'JMP_IF_REL', 0xEB: 'JMP_IF_NOT_REL',
+            0xEC: 'CALL_REL', 0xED: 'CALL_IF_REL', 0xEE: 'CALL_IF_NOT_REL',
+            0xF0: 'FFI_CALL', 0xF1: 'FFI_CALL_STACK',
+            0xFD: 'LANG', 0xFE: 'COMMENT', 0xFF: 'EXIT',
+        }
+        return names[opcode] || `OP_0x${opcode.toString(16).toUpperCase().padStart(2, '0')}`
     }
 
     /**
@@ -4960,6 +5210,8 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
     compileAll = (source, language) => this.call('compileAll', source, language)
     /** @type { (projectSource: string, options?: ProjectCompileOptions) => Promise<ProjectCompileResult> } */
     compileProject = (projectSource, options = {}) => this.call('compileProject', projectSource, options)
+    /** @type { (source?: 'compiled' | 'project' | 'runtime', options?: { print?: boolean }) => Promise<WCETReport> } */
+    analyzeWCET = (source = 'compiled', options = {}) => this.call('analyzeWCET', source, options)
     /** @type { (projectSource: string, options?: ProjectCompileOptions) => Promise<ProjectLinterProblem[]> } */
     lintProject = (projectSource, options = {}) => this.call('lintProject', projectSource, options)
     /** @type { (projectSource: string) => Promise<ProjectLinterProblem[]> } */
