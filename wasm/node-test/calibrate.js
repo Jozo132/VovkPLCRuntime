@@ -49,6 +49,46 @@ import fs from 'fs'
 import { fileURLToPath } from 'url'
 import VovkPLC from '../dist/VovkPLC.js'
 
+// Runtime feature flags (matches runtime-types.h PLCRUNTIME_FLAG_* and VovkPLC.RUNTIME_FLAGS)
+const RUNTIME_FLAGS = {
+    LITTLE_ENDIAN: 0x0001,
+    STRINGS:       0x0002,
+    COUNTERS:      0x0004,
+    TIMERS:        0x0008,
+    FFI:           0x0010,
+    X64_OPS:       0x0020,
+    SAFE_MODE:     0x0040,
+    TRANSPORT:     0x0080,
+    FLOAT_OPS:     0x0100,
+    ADVANCED_MATH: 0x0200,
+    OPS_32BIT:     0x0400,
+    CVT:           0x0800,
+    STACK_OPS:     0x1000,
+    BITWISE_OPS:   0x2000,
+}
+
+/** Decode a hex flags string (e.g. '3FFF') into a feature-boolean object */
+function decodeRuntimeFlags(hexStr) {
+    const flags = parseInt(hexStr, 16) || 0
+    return {
+        raw: flags,
+        littleEndian: !!(flags & RUNTIME_FLAGS.LITTLE_ENDIAN),
+        strings:      !!(flags & RUNTIME_FLAGS.STRINGS),
+        counters:     !!(flags & RUNTIME_FLAGS.COUNTERS),
+        timers:       !!(flags & RUNTIME_FLAGS.TIMERS),
+        ffi:          !!(flags & RUNTIME_FLAGS.FFI),
+        x64Ops:       !!(flags & RUNTIME_FLAGS.X64_OPS),
+        safeMode:     !!(flags & RUNTIME_FLAGS.SAFE_MODE),
+        transport:    !!(flags & RUNTIME_FLAGS.TRANSPORT),
+        floatOps:     !!(flags & RUNTIME_FLAGS.FLOAT_OPS),
+        advancedMath: !!(flags & RUNTIME_FLAGS.ADVANCED_MATH),
+        ops32bit:     !!(flags & RUNTIME_FLAGS.OPS_32BIT),
+        cvt:          !!(flags & RUNTIME_FLAGS.CVT),
+        stackOps:     !!(flags & RUNTIME_FLAGS.STACK_OPS),
+        bitwiseOps:   !!(flags & RUNTIME_FLAGS.BITWISE_OPS),
+    }
+}
+
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
@@ -79,8 +119,21 @@ const getArg = (name) => {
 const showHelp = args.includes('--help') || args.includes('-h')
 const doUpload = args.includes('--upload')
 const doPatch = args.includes('--patch')
-const selectedPort = getArg('--port')
-const selectedEnv = getArg('--env')
+const doJson = args.includes('--json')
+
+// npm may strip --flag prefixes and pass values as bare positional args.
+// Detect positional args: COM ports match /^COM\d+$/i, env names are the rest.
+const positionalArgs = args.filter(a => !a.startsWith('-') && !args.some((b, i) => b.startsWith('--') && args[i + 1] === a))
+let selectedPort = getArg('--port')
+let selectedEnv = getArg('--env')
+if (!selectedPort || !selectedEnv) {
+    for (const arg of positionalArgs) {
+        if (!selectedPort && /^COM\d+$/i.test(arg)) { selectedPort = arg; continue }
+        if (!selectedEnv && !selectedPort && /^\d+$/.test(arg)) continue // skip bare numbers unless it's an env
+        if (!selectedEnv && arg.length > 2 && !arg.startsWith('-')) { selectedEnv = arg }
+    }
+}
+
 const baudRate = parseInt(getArg('--baud') || '115200', 10)
 const measureIterations = parseInt(getArg('--iterations') || '500', 10)
 
@@ -97,6 +150,7 @@ ${CYAN}Usage:${RESET}
   npm run calibrate -- --env stm32f401     Specify PlatformIO environment
   npm run calibrate -- --upload            Build & upload firmware before calibrating
   npm run calibrate -- --patch             Patch calibration results into wcet-targets.h
+  npm run calibrate -- --json              Output JSON profile and save to file
   npm run calibrate -- --baud 115200       Serial baud rate
   npm run calibrate -- --iterations 500    Measurement cycles per test
 
@@ -360,6 +414,11 @@ class PLCSerialClient {
         }
     }
 
+    /** Check if the serial port is connected and open */
+    get isConnected() {
+        return this.port != null && this.port.isOpen
+    }
+
     /** Drain the serial line queue and internal buffer */
     drain() {
         this.lineQueue.length = 0
@@ -541,6 +600,15 @@ async function initCompiler() {
     }
     plc = new VovkPLC()
     await plc.initialize(wasmPath, false, true) // debug=false, silent=true
+
+    // Register the same FFI functions that the firmware has so the PLCASM
+    // compiler can resolve `ffi F_add ...` instructions during compilation.
+    // The actual callbacks here are dummies — only the signature matters for
+    // bytecode generation (param count, types, return address).
+    plc.registerFFI('F_add',      'i32,i32->i32',      'Add two i32',        (a, b) => a + b)
+    plc.registerFFI('F_mul',      'i32,i32->i32',      'Multiply two i32',   (a, b) => a * b)
+    plc.registerFFI('F_lerp',     'f32,f32,f32->f32',  'Linear interpolate', (a, b, t) => a + (b - a) * t)
+    plc.registerFFI('F_in_range', 'i32,i32,i32->bool', 'Range check',        (v, lo, hi) => v >= lo && v <= hi)
 }
 
 /**
@@ -568,6 +636,7 @@ function compilePLCASM(source) {
  *   description: string,
  *   source: string,
  *   target_ops: number,
+ *   requires_flags?: number,
  * }} CalibrationProgramDef
  */
 
@@ -590,7 +659,7 @@ function generateCalibrationPrograms() {
         target_ops: 0,
     })
 
-    // ── Push u8 ────────────────────────────────────────────────────────
+    // ── PUSH_U8 ────────────────────────────────────────────────────────
     defs.push({
         name: 'push_u8',
         category: 'PUSH_U8',
@@ -605,7 +674,20 @@ function generateCalibrationPrograms() {
         target_ops: 8,
     })
 
-    // ── Push u32 ───────────────────────────────────────────────────────
+    // ── PUSH_U16 ───────────────────────────────────────────────────────
+    defs.push({
+        name: 'push_u16',
+        category: 'PUSH_U16',
+        description: 'u16.const × 4 + u16.drop × 4',
+        source: [
+            'u16.const 1000', 'u16.const 2000', 'u16.const 3000', 'u16.const 4000',
+            'u16.drop', 'u16.drop', 'u16.drop', 'u16.drop',
+            'exit',
+        ].join('\n'),
+        target_ops: 4,
+    })
+
+    // ── PUSH_U32 ───────────────────────────────────────────────────────
     defs.push({
         name: 'push_u32',
         category: 'PUSH_U32',
@@ -618,7 +700,7 @@ function generateCalibrationPrograms() {
         target_ops: 4,
     })
 
-    // ── Push f32 ───────────────────────────────────────────────────────
+    // ── PUSH_F32 ───────────────────────────────────────────────────────
     defs.push({
         name: 'push_f32',
         category: 'PUSH_F32',
@@ -631,7 +713,35 @@ function generateCalibrationPrograms() {
         target_ops: 4,
     })
 
-    // ── ADD u8 ─────────────────────────────────────────────────────────
+    // ── PUSH_U64 ───────────────────────────────────────────────────────
+    defs.push({
+        name: 'push_u64',
+        category: 'PUSH_U64',
+        description: 'u64.const × 2 + u64.drop × 2',
+        source: [
+            'u64.const 999999', 'u64.const 888888',
+            'u64.drop', 'u64.drop',
+            'exit',
+        ].join('\n'),
+        target_ops: 2,
+        requires_flags: RUNTIME_FLAGS.X64_OPS,
+    })
+
+    // ── PUSH_F64 ───────────────────────────────────────────────────────
+    defs.push({
+        name: 'push_f64',
+        category: 'PUSH_F64',
+        description: 'f64.const × 2 + f64.drop × 2',
+        source: [
+            'f64.const 3.14159', 'f64.const 2.71828',
+            'f64.drop', 'f64.drop',
+            'exit',
+        ].join('\n'),
+        target_ops: 2,
+        requires_flags: RUNTIME_FLAGS.X64_OPS,
+    })
+
+    // ── ADD_U8 ─────────────────────────────────────────────────────────
     defs.push({
         name: 'add_u8',
         category: 'ADD_U8',
@@ -647,7 +757,21 @@ function generateCalibrationPrograms() {
         target_ops: 4,
     })
 
-    // ── ADD u32 ────────────────────────────────────────────────────────
+    // ── ADD_U16 ────────────────────────────────────────────────────────
+    defs.push({
+        name: 'add_u16',
+        category: 'ADD_U16',
+        description: 'u16.const × 2 + u16.add × 2, then drop',
+        source: [
+            'u16.const 100', 'u16.const 200', 'u16.add',
+            'u16.const 300', 'u16.const 400', 'u16.add',
+            'u16.drop', 'u16.drop',
+            'exit',
+        ].join('\n'),
+        target_ops: 2,
+    })
+
+    // ── ADD_U32 ────────────────────────────────────────────────────────
     defs.push({
         name: 'add_u32',
         category: 'ADD_U32',
@@ -663,7 +787,7 @@ function generateCalibrationPrograms() {
         target_ops: 4,
     })
 
-    // ── ADD f32 ────────────────────────────────────────────────────────
+    // ── ADD_F32 ────────────────────────────────────────────────────────
     defs.push({
         name: 'add_f32',
         category: 'ADD_F32',
@@ -677,7 +801,36 @@ function generateCalibrationPrograms() {
         target_ops: 2,
     })
 
-    // ── MUL u32 ────────────────────────────────────────────────────────
+    // ── ADD_F64 ────────────────────────────────────────────────────────
+    defs.push({
+        name: 'add_f64',
+        category: 'ADD_F64',
+        description: 'f64.const × 2 + f64.add × 2, then drop',
+        source: [
+            'f64.const 10.0', 'f64.const 20.0', 'f64.add',
+            'f64.const 10.0', 'f64.const 20.0', 'f64.add',
+            'f64.drop', 'f64.drop',
+            'exit',
+        ].join('\n'),
+        target_ops: 2,
+        requires_flags: RUNTIME_FLAGS.X64_OPS,
+    })
+
+    // ── MUL_U8 ─────────────────────────────────────────────────────────
+    defs.push({
+        name: 'mul_u8',
+        category: 'MUL_U8',
+        description: 'u8.const × 2 + u8.mul × 2, then drop',
+        source: [
+            'u8.const 3', 'u8.const 5', 'u8.mul',
+            'u8.const 2', 'u8.const 7', 'u8.mul',
+            'u8.drop', 'u8.drop',
+            'exit',
+        ].join('\n'),
+        target_ops: 2,
+    })
+
+    // ── MUL_U32 ────────────────────────────────────────────────────────
     defs.push({
         name: 'mul_u32',
         category: 'MUL_U32',
@@ -691,7 +844,7 @@ function generateCalibrationPrograms() {
         target_ops: 2,
     })
 
-    // ── MUL f32 ────────────────────────────────────────────────────────
+    // ── MUL_F32 ────────────────────────────────────────────────────────
     defs.push({
         name: 'mul_f32',
         category: 'MUL_F32',
@@ -705,7 +858,36 @@ function generateCalibrationPrograms() {
         target_ops: 2,
     })
 
-    // ── DIV u32 ────────────────────────────────────────────────────────
+    // ── MUL_F64 ────────────────────────────────────────────────────────
+    defs.push({
+        name: 'mul_f64',
+        category: 'MUL_F64',
+        description: 'f64.const × 2 + f64.mul × 2, then drop',
+        source: [
+            'f64.const 10.0', 'f64.const 3.0', 'f64.mul',
+            'f64.const 10.0', 'f64.const 3.0', 'f64.mul',
+            'f64.drop', 'f64.drop',
+            'exit',
+        ].join('\n'),
+        target_ops: 2,
+        requires_flags: RUNTIME_FLAGS.X64_OPS,
+    })
+
+    // ── DIV_U8 ─────────────────────────────────────────────────────────
+    defs.push({
+        name: 'div_u8',
+        category: 'DIV_U8',
+        description: 'u8.const × 2 + u8.div × 2, then drop',
+        source: [
+            'u8.const 100', 'u8.const 7', 'u8.div',
+            'u8.const 50', 'u8.const 3', 'u8.div',
+            'u8.drop', 'u8.drop',
+            'exit',
+        ].join('\n'),
+        target_ops: 2,
+    })
+
+    // ── DIV_U32 ────────────────────────────────────────────────────────
     defs.push({
         name: 'div_u32',
         category: 'DIV_U32',
@@ -719,7 +901,7 @@ function generateCalibrationPrograms() {
         target_ops: 2,
     })
 
-    // ── DIV f32 ────────────────────────────────────────────────────────
+    // ── DIV_F32 ────────────────────────────────────────────────────────
     defs.push({
         name: 'div_f32',
         category: 'DIV_F32',
@@ -733,11 +915,26 @@ function generateCalibrationPrograms() {
         target_ops: 2,
     })
 
-    // ── CMP (compare u8) ──────────────────────────────────────────────
+    // ── DIV_F64 ────────────────────────────────────────────────────────
+    defs.push({
+        name: 'div_f64',
+        category: 'DIV_F64',
+        description: 'f64.const × 2 + f64.div × 2, then drop',
+        source: [
+            'f64.const 100.0', 'f64.const 7.0', 'f64.div',
+            'f64.const 50.0', 'f64.const 3.0', 'f64.div',
+            'f64.drop', 'f64.drop',
+            'exit',
+        ].join('\n'),
+        target_ops: 2,
+        requires_flags: RUNTIME_FLAGS.X64_OPS,
+    })
+
+    // ── CMP (compare) ─────────────────────────────────────────────────
     defs.push({
         name: 'cmp',
         category: 'CMP',
-        description: 'u8.const × 2 + u8.cmp_eq/gt/lt × 4, then drop',
+        description: 'u8.cmp_eq/gt/lt × 4, then drop',
         source: [
             'u8.const 10', 'u8.const 10', 'u8.cmp_eq',
             'u8.const 10', 'u8.const 20', 'u8.cmp_gt',
@@ -753,7 +950,7 @@ function generateCalibrationPrograms() {
     defs.push({
         name: 'logic',
         category: 'LOGIC',
-        description: 'u8.const + u8.and/u8.or × 4, then drop',
+        description: 'u8.and/u8.or × 4, then drop',
         source: [
             'u8.const 1', 'u8.const 1', 'u8.and',
             'u8.const 0', 'u8.or',
@@ -769,7 +966,7 @@ function generateCalibrationPrograms() {
     defs.push({
         name: 'bitwise',
         category: 'BITWISE',
-        description: 'u8.const + bw.and.x8/bw.or.x8 × 4, then drop',
+        description: 'bw.and.x8/bw.or.x8 × 4, then drop',
         source: [
             'u8.const 255', 'u8.const 15', 'bw.and.x8',
             'u8.const 240', 'bw.or.x8',
@@ -781,54 +978,294 @@ function generateCalibrationPrograms() {
         target_ops: 4,
     })
 
-    // ── JMP (unconditional forward jump) ───────────────────────────────
+    // ── JMP (unconditional) ────────────────────────────────────────────
     defs.push({
         name: 'jmp',
         category: 'JMP',
-        description: 'jmp forward to exit, skipping NOPs',
+        description: 'jmp forward × 4',
         source: [
-            'jmp end',
+            'jmp j1',
             'nop',
+            'j1: jmp j2',
             'nop',
-            'end:',
-            'exit',
+            'j2: jmp j3',
+            'nop',
+            'j3: jmp j4',
+            'nop',
+            'j4: exit',
         ].join('\n'),
-        target_ops: 1,
+        target_ops: 4,
     })
 
-    // ── LOAD/STORE memory ──────────────────────────────────────────────
+    // ── JMP_COND (conditional jump) ────────────────────────────────────
     defs.push({
-        name: 'load_store',
-        category: 'LOAD',
-        description: 'u8.load_from + u8.move_to × 2',
+        name: 'jmp_cond',
+        category: 'JMP_COND',
+        description: 'jmp_if × 2 + jmp_if_not × 2',
         source: [
-            'u8.load_from 192',   // Load from marker area
-            'u8.move_to 193',     // Store to adjacent
-            'u8.load_from 193',
-            'u8.move_to 194',
+            // jmp_if with true — takes the jump
+            'u8.const 1', 'jmp_if jc1',
+            'nop',
+            'jc1:',
+            // jmp_if_not with false — takes the jump
+            'u8.const 0', 'jmp_if_not jc2',
+            'nop',
+            'jc2:',
+            // jmp_if with false — doesn't jump (still executed)
+            'u8.const 0', 'jmp_if jc3',
+            'jc3:',
+            // jmp_if_not with true — doesn't jump (still executed)
+            'u8.const 1', 'jmp_if_not jc4',
+            'jc4:',
             'exit',
         ].join('\n'),
         target_ops: 4,
     })
 
-    // ── STACK ops (copy + drop) ────────────────────────────────────────
-    // Note: .swap is not available in PLCASM compiler — using copy + drop
+    // ── CALL (subroutine call) ─────────────────────────────────────────
+    defs.push({
+        name: 'call_ret',
+        category: 'CALL',
+        description: 'call sub × 4, sub does ret immediately',
+        source: [
+            'call sub',
+            'call sub',
+            'call sub',
+            'call sub',
+            'exit',
+            'sub: ret',
+        ].join('\n'),
+        target_ops: 4,
+    })
+
+    // ── RET (subroutine return) ────────────────────────────────────────
+    // Note: measures ret by calling a subroutine that does some work + ret
+    // The call overhead is subtracted by comparing against the CALL test
+    defs.push({
+        name: 'ret',
+        category: 'RET',
+        description: 'call + ret × 4 (ret cost isolated from call)',
+        source: [
+            'call sub',
+            'call sub',
+            'call sub',
+            'call sub',
+            'exit',
+            'sub: nop', // Extra NOP so ret cost is distinguishable
+            'ret',
+        ].join('\n'),
+        target_ops: 4,
+    })
+
+    // ── LOAD (memory read) ─────────────────────────────────────────────
+    defs.push({
+        name: 'load',
+        category: 'LOAD',
+        description: 'u8.load_from × 4, then drop',
+        source: [
+            'u8.load_from 192',
+            'u8.load_from 193',
+            'u8.load_from 194',
+            'u8.load_from 195',
+            'u8.drop', 'u8.drop', 'u8.drop', 'u8.drop',
+            'exit',
+        ].join('\n'),
+        target_ops: 4,
+    })
+
+    // ── STORE (memory write) ───────────────────────────────────────────
+    defs.push({
+        name: 'store',
+        category: 'STORE',
+        description: 'u8.const + u8.move_to × 4',
+        source: [
+            'u8.const 42', 'u8.move_to 192',
+            'u8.const 43', 'u8.move_to 193',
+            'u8.const 44', 'u8.move_to 194',
+            'u8.const 45', 'u8.move_to 195',
+            'exit',
+        ].join('\n'),
+        target_ops: 4,
+    })
+
+    // ── STACK_OP (copy + drop) ─────────────────────────────────────────
     defs.push({
         name: 'stack_ops',
         category: 'STACK_OP',
-        description: 'u8.const + u8.copy + u8.drop × 3 rounds',
+        description: 'u8.copy + u8.drop × 3 rounds',
         source: [
             'u8.const 42',
-            'u8.copy',       // DUP: stack = [42, 42]
-            'u8.drop',       // DROP: stack = [42]
-            'u8.copy',
+            'u8.copy', 'u8.drop',
+            'u8.copy', 'u8.drop',
+            'u8.copy', 'u8.drop',
             'u8.drop',
-            'u8.copy',
-            'u8.drop',
-            'u8.drop',       // Final cleanup
             'exit',
         ].join('\n'),
-        target_ops: 6,  // 3 copies + 3 drops (the working ones, not the final cleanup)
+        target_ops: 6,
+    })
+
+    // ── BIT_RW (bit read/write on memory) ──────────────────────────────
+    defs.push({
+        name: 'bit_rw',
+        category: 'BIT_RW',
+        description: 'u8.readBit + u8.writeBitOn/Off × 4',
+        source: [
+            'u8.readBit 192.0',    // read bit 0 of addr 192
+            'u8.drop',
+            'u8.writeBitOn 192.1', // set bit 1
+            'u8.writeBitOff 192.2', // reset bit 2
+            'u8.readBit 192.3',
+            'u8.drop',
+            'exit',
+        ].join('\n'),
+        target_ops: 4,
+    })
+
+    // ── TIMER (timer on-delay) ─────────────────────────────────────────
+    // Timers need a bool enable on stack and write to specific addresses.
+    // We use .runtime_config to set up timer/counter memory,
+    // then measure the timer instruction overhead (not actual timing).
+    defs.push({
+        name: 'timer',
+        category: 'TIMER',
+        description: 'ton × 2 (measures instruction overhead, not actual delay)',
+        source: [
+            '.runtime_config timer_offset 64 counter_offset 128',
+            'u8.const 0',   // enable = false (so timer doesn't actually run)
+            'ton 0 #1000',  // timer 0, preset 1000ms
+            'u8.drop',      // drop Q output
+            'u8.const 0',
+            'ton 1 #1000',
+            'u8.drop',
+            'exit',
+        ].join('\n'),
+        target_ops: 2,
+    })
+
+    // ── COUNTER (count up) ─────────────────────────────────────────────
+    defs.push({
+        name: 'counter',
+        category: 'COUNTER',
+        description: 'ctu × 2 (measures instruction overhead)',
+        source: [
+            '.runtime_config timer_offset 64 counter_offset 128',
+            'u8.const 0',   // CU = false
+            'u8.const 0',   // R = false
+            'ctu 0 #10',    // counter 0, preset 10
+            'u8.drop',      // drop Q output
+            'u8.const 0',
+            'u8.const 0',
+            'ctu 1 #10',
+            'u8.drop',
+            'exit',
+        ].join('\n'),
+        target_ops: 2,
+    })
+
+    // ── SQRT (square root) ─────────────────────────────────────────────
+    defs.push({
+        name: 'sqrt',
+        category: 'SQRT',
+        description: 'f32.sqrt × 4',
+        source: [
+            'f32.const 144.0', 'f32.sqrt',
+            'f32.const 256.0', 'f32.sqrt',
+            'f32.const 625.0', 'f32.sqrt',
+            'f32.const 10000.0', 'f32.sqrt',
+            'f32.drop', 'f32.drop', 'f32.drop', 'f32.drop',
+            'exit',
+        ].join('\n'),
+        target_ops: 4,
+    })
+
+    // ── TRIG (sin/cos) ─────────────────────────────────────────────────
+    defs.push({
+        name: 'trig',
+        category: 'TRIG',
+        description: 'f32.sin × 2 + f32.cos × 2',
+        source: [
+            'f32.const 1.0', 'f32.sin',
+            'f32.const 2.0', 'f32.cos',
+            'f32.const 0.5', 'f32.sin',
+            'f32.const 3.0', 'f32.cos',
+            'f32.drop', 'f32.drop', 'f32.drop', 'f32.drop',
+            'exit',
+        ].join('\n'),
+        target_ops: 4,
+    })
+
+    // ── CVT (type conversion) ──────────────────────────────────────────
+    defs.push({
+        name: 'cvt',
+        category: 'CVT',
+        description: 'cvt u8→u32, u32→f32, f32→u8, u8→f64 × 1 each',
+        source: [
+            'u8.const 42',
+            'cvt u8 u32',    // u8 → u32
+            'cvt u32 f32',   // u32 → f32
+            'cvt f32 u8',    // f32 → u8
+            'cvt u8 f64',    // u8 → f64
+            'f64.drop',
+            'exit',
+        ].join('\n'),
+        target_ops: 4,
+    })
+
+    // ── STR_OP (string operations) ─────────────────────────────────────
+    // Uses str.init + str.len + str.char + str.clear on a memory region
+    defs.push({
+        name: 'str_op',
+        category: 'STR_OP',
+        description: 'str.init + str.len + str.char + str.clear',
+        source: [
+            'u16.const 32',       // Capacity for str.init
+            'str.init 192',       // Init str8 at addr 192
+            'u8.const 65',        // 'A'
+            'str.char 192',       // Append char
+            'str.len 192',        // Get length → push u16
+            'u16.drop',
+            'str.clear 192',      // Clear
+            'exit',
+        ].join('\n'),
+        target_ops: 4,
+    })
+
+    // ── FFI (foreign function interface) ────────────────────────────────
+    // The firmware registers F_add, F_mul, F_lerp, F_in_range.
+    // We measure the full call + marshalling + return overhead.
+    // Memory layout: M(192+), i32 = 4 bytes, f32 = 4 bytes
+    defs.push({
+        name: 'ffi',
+        category: 'FFI',
+        description: 'ffi F_add × 2 + ffi F_mul × 2 (i32,i32→i32)',
+        source: [
+            // Set up params: M+0=10, M+4=20 (i32 values)
+            'i32.const 10', 'i32.move_to 192',
+            'i32.const 20', 'i32.move_to 196',
+            // Call F_add(M+192, M+196) → result at M+200
+            'ffi F_add 192 196 200',
+            'ffi F_add 192 196 200',
+            // Call F_mul(M+192, M+196) → result at M+200
+            'ffi F_mul 192 196 200',
+            'ffi F_mul 192 196 200',
+            'exit',
+        ].join('\n'),
+        target_ops: 4,
+    })
+
+    // ── EXIT ───────────────────────────────────────────────────────────
+    // EXIT is inherently measured by the baseline, but we isolate it
+    // more precisely with a program that has extra instructions before EXIT.
+    defs.push({
+        name: 'exit_cost',
+        category: 'EXIT',
+        description: 'nop + exit (EXIT cost = total - nop overhead)',
+        source: [
+            'nop',
+            'nop',
+            'exit',
+        ].join('\n'),
+        target_ops: 1,  // 1 EXIT, nops are ~0 cost
     })
 
     // ── Compile all programs ───────────────────────────────────────────
@@ -860,12 +1297,14 @@ function generateCalibrationPrograms() {
 // Calibration execution
 // ============================================================================
 
-const NUM_WARMUP_MS = 200         // Let program run this long before resetting health
-const SETTLE_TIME_MS = 200        // Wait between test cases for serial to flush
+const NUM_WARMUP_MS = 100         // Let program run this long before resetting health
+const SETTLE_TIME_MS = 50         // Wait between test cases for serial to flush
 
-async function runCalibration(client, deviceInfo) {
+async function runCalibration(client, deviceInfo, portPath) {
     const programs = generateCalibrationPrograms()
     const results = []
+    // Decode device feature flags from PI response
+    const deviceFlagsRaw = parseInt(deviceInfo?.flags || '0', 16) || 0
     // Compute measurement time from requested iterations:
     // Assuming ~1-50µs per cycle, N iterations take roughly N*50µs in worst case.
     // We use a generous delay to ensure enough cycles execute.
@@ -877,27 +1316,62 @@ async function runCalibration(client, deviceInfo) {
         const prog = programs[i]
         process.stdout.write(`  [${String(i + 1).padStart(2)}/${programs.length}] ${prog.name.padEnd(20)} `)
 
+        // Skip tests that require features the device doesn't support
+        if (prog.requires_flags && (deviceFlagsRaw & prog.requires_flags) !== prog.requires_flags) {
+            const missing = []
+            for (const [name, bit] of Object.entries(RUNTIME_FLAGS)) {
+                if ((prog.requires_flags & bit) && !(deviceFlagsRaw & bit)) missing.push(name)
+            }
+            console.log(`${YELLOW}SKIP (device lacks: ${missing.join(', ')})${RESET}`)
+            results.push({ ...prog, skipped: true, skip_reason: `Missing flags: ${missing.join(', ')}` })
+            continue
+        }
+
+        // Check if device is still connected — if not, try to reconnect
+        if (!client.isConnected) {
+            process.stdout.write(`${YELLOW}disconnected (port.isOpen=${client.port?.isOpen}, port=${!!client.port}) — reconnecting...${RESET} `)
+            try {
+                await client.close()
+            } catch (_) { /* ignore */ }
+            await delay(2000) // Wait for device to recover (watchdog/power cycle)
+            try {
+                client = new PLCSerialClient(portPath, baudRate)
+                await client.connect()
+                await client.resetHealth()
+                process.stdout.write(`${GREEN}OK${RESET} `)
+            } catch (_) {
+                console.log(`${RED}FAIL (reconnect failed — device may need power cycle)${RESET}`)
+                results.push({ ...prog, error: 'Device disconnected' })
+                continue
+            }
+        }
+
         // Stop any previously running program and let things settle
         await client.stopProgram()
-        await delay(150)
+        await delay(50)
         client.drain()
 
-        // Upload calibration program with retry
+        // Upload calibration program with retry + PLC reset on failure
         let uploaded = false
         for (let attempt = 0; attempt < 3; attempt++) {
+            if (!client.isConnected) break
             uploaded = await client.downloadProgram(prog.bytecode)
             if (uploaded) break
             process.stdout.write(`${YELLOW}retry${RESET} `)
-            await delay(300)
+            await client.plcReset()
+            await delay(200)
             client.drain()
         }
         if (!uploaded) {
-            console.log(`${RED}FAIL (upload)${RESET}`)
+            console.log(`${RED}FAIL (upload — device may have crashed)${RESET}`)
             results.push({ ...prog, error: 'Upload failed' })
+            // Try to recover for the next test
+            try { await client.plcReset() } catch (_) { /* ignore */ }
             await delay(200)
+            client.drain()
             continue
         }
-        await delay(100)
+        await delay(50)
 
         // Start program execution (sets is_running = true)
         const started = await client.startProgram()
@@ -981,10 +1455,24 @@ function computeProfile(results, deviceInfo, envName) {
     const dispatch_ns = baseline.min_ns
     console.log(`\n${CYAN}Baseline (dispatch + EXIT): ${dispatch_ns}ns${RESET}`)
 
+    /**
+     * Estimate a missing category from measured ones.
+     * Used when a test crashed the device (e.g. 64-bit ops on some MCUs).
+     */
+    function estimateCategory(cat, measured, dispatch) {
+        // 64-bit push/arithmetic — estimate from 32-bit counterpart × 2
+        if (cat === 'PUSH_U64') return Math.round((measured['PUSH_U32'] || dispatch) * 2)
+        if (cat === 'PUSH_F64') return Math.round((measured['PUSH_F32'] || dispatch) * 2.2)
+        if (cat === 'ADD_F64') return Math.round((measured['ADD_F32'] || dispatch) * 2.5)
+        if (cat === 'MUL_F64') return Math.round((measured['MUL_F32'] || dispatch) * 2.5)
+        if (cat === 'DIV_F64') return Math.round((measured['DIV_F32'] || dispatch) * 2.5)
+        return null
+    }
+
     // Compute per-category costs by subtracting baseline and dividing by target_ops
     const categories = {}
     for (const r of results) {
-        if (r.error) continue
+        if (r.error || r.skipped) continue
         if (r.name === 'baseline') {
             categories['DISPATCH'] = dispatch_ns
             continue
@@ -1011,29 +1499,13 @@ function computeProfile(results, deviceInfo, envName) {
 
     const ns_array = categoryOrder.map(cat => {
         if (categories[cat] !== undefined) return categories[cat]
-        // Estimate unmeasured categories from measured ones
-        if (cat === 'PUSH_U16') return Math.round((categories['PUSH_U8'] || 0) * 1.3)
-        if (cat === 'PUSH_U64') return Math.round((categories['PUSH_U32'] || 0) * 1.8)
-        if (cat === 'PUSH_F64') return Math.round((categories['PUSH_F32'] || 0) * 2.2)
-        if (cat === 'ADD_U16') return Math.round((categories['ADD_U8'] || 0) * 1.2)
-        if (cat === 'ADD_F64') return Math.round((categories['ADD_F32'] || 0) * 2.5)
-        if (cat === 'MUL_U8') return Math.round((categories['MUL_U32'] || 0) * 0.5)
-        if (cat === 'MUL_F64') return Math.round((categories['MUL_F32'] || 0) * 2.5)
-        if (cat === 'DIV_U8') return Math.round((categories['DIV_U32'] || 0) * 0.6)
-        if (cat === 'DIV_F64') return Math.round((categories['DIV_F32'] || 0) * 2.5)
-        if (cat === 'JMP_COND') return Math.round((categories['JMP'] || 0) * 1.5)
-        if (cat === 'CALL') return Math.round((categories['JMP'] || 0) * 2)
-        if (cat === 'RET') return Math.round((categories['JMP'] || 0) * 1.5)
-        if (cat === 'STORE') return categories['LOAD'] || 0
-        if (cat === 'BIT_RW') return Math.round((categories['LOAD'] || 0) * 0.8)
-        if (cat === 'TIMER') return Math.round((categories['LOAD'] || 0) * 3)
-        if (cat === 'COUNTER') return Math.round((categories['LOAD'] || 0) * 2.5)
-        if (cat === 'SQRT') return Math.round((categories['MUL_F32'] || 0) * 3)
-        if (cat === 'TRIG') return Math.round((categories['MUL_F32'] || 0) * 5)
-        if (cat === 'CVT') return Math.round(dispatch_ns * 2)
-        if (cat === 'STR_OP') return Math.round(dispatch_ns * 10)
-        if (cat === 'FFI') return Math.round(dispatch_ns * 8)
-        if (cat === 'EXIT') return Math.round(dispatch_ns * 0.5)
+        // Fallback estimation for categories that crashed the device (e.g. 64-bit on some MCUs)
+        const est = estimateCategory(cat, categories, dispatch_ns)
+        if (est !== null) {
+            console.warn(`  ${YELLOW}⚠ ${cat}: no measurement — estimated ${est}ns${RESET}`)
+            return est
+        }
+        console.warn(`  ${YELLOW}⚠ ${cat}: no measurement — defaulting to 0${RESET}`)
         return 0
     })
 
@@ -1129,8 +1601,10 @@ function generateCppEntry(profile) {
 function outputCppProfile(profile) {
     console.log(`\n${BOLD}═══ C++ Target Profile (paste into wcet-targets.h) ═══${RESET}\n`)
     console.log(generateCppEntry(profile))
-    console.log(`\n${BOLD}═══ JSON Profile ═══${RESET}\n`)
-    console.log(JSON.stringify(profile, null, 2))
+    if (doJson) {
+        console.log(`\n${BOLD}═══ JSON Profile ═══${RESET}\n`)
+        console.log(JSON.stringify(profile, null, 2))
+    }
 }
 
 // ============================================================================
@@ -1356,6 +1830,7 @@ async function main() {
     // Step 5: Get device info
     const deviceInfo = await client.getDeviceInfo()
     if (deviceInfo) {
+        const decodedFlags = decodeRuntimeFlags(deviceInfo.flags)
         console.log(`\n${BOLD}Device Info:${RESET}`)
         console.log(`  Runtime:    ${deviceInfo.runtime}`)
         console.log(`  Arch:       ${deviceInfo.arch}`)
@@ -1364,6 +1839,7 @@ async function main() {
         console.log(`  Program:    ${deviceInfo.program_size} bytes`)
         console.log(`  Stack:      ${deviceInfo.stack_size} bytes`)
         console.log(`  Markers:    offset=${deviceInfo.marker_offset} count=${deviceInfo.marker_count}`)
+        console.log(`  Flags:      0x${deviceInfo.flags} → ${Object.entries(decodedFlags).filter(([k, v]) => k !== 'raw' && v).map(([k]) => k).join(', ') || 'none'}`)
         console.log(`  Device:     ${deviceInfo.device_name}`)
     } else {
         console.log(`${YELLOW}Could not read device info (PI) — continuing anyway${RESET}`)
@@ -1376,7 +1852,7 @@ async function main() {
     }
 
     // Step 7: Run calibration
-    const results = await runCalibration(client, deviceInfo)
+    const results = await runCalibration(client, deviceInfo, portPath)
 
     // Step 8: Stop any remaining program
     await client.stopProgram()
@@ -1388,12 +1864,14 @@ async function main() {
     if (profile) {
         outputCppProfile(profile)
 
-        // Save JSON to file
-        const outDir = path.resolve(__dirname, 'calibration/results')
-        if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true })
-        const outPath = path.join(outDir, `${env.name}_profile.json`)
-        fs.writeFileSync(outPath, JSON.stringify(profile, null, 2))
-        console.log(`\n${GREEN}Profile saved to: ${outPath}${RESET}`)
+        // Save JSON to file (only with --json)
+        if (doJson) {
+            const outDir = path.resolve(__dirname, 'calibration/results')
+            if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true })
+            const outPath = path.join(outDir, `${env.name}_profile.json`)
+            fs.writeFileSync(outPath, JSON.stringify(profile, null, 2))
+            console.log(`\n${GREEN}Profile saved to: ${outPath}${RESET}`)
+        }
 
         // Patch wcet-targets.h if requested
         if (doPatch) {

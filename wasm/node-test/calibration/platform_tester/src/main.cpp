@@ -26,6 +26,9 @@
 // Runtime configuration — generous memory for calibration workloads
 #define PLCRUNTIME_SERIAL_ENABLED
 #define PLCRUNTIME_TRANSPORT
+#define PLCRUNTIME_FFI_ENABLED
+// #define PLCRUNTIME_SAFE_MODE
+#define USE_X64_OPS
 
 #define PLCRUNTIME_NUM_OF_INPUTS   64
 #define PLCRUNTIME_NUM_OF_OUTPUTS  64
@@ -47,6 +50,15 @@ u32& calib_cycle_us    = runtime.registerM<u32>(0,  "calib_cycle_us",   "Last ca
 u32& calib_iterations  = runtime.registerM<u32>(4,  "calib_iterations", "Calibration iteration counter");
 u32& calib_total_us    = runtime.registerM<u32>(8,  "calib_total_us",   "Total calibration time (us)");
 u32& calib_status      = runtime.registerM<u32>(12, "calib_status",     "Calibration status flags");
+
+// ── FFI calibration functions ──────────────────────────────────────
+// Simple functions registered so the calibration runner can measure
+// real FFI dispatch overhead (call + parameter marshalling + return).
+
+i32 ffi_add(i32 a, i32 b) { return a + b; }
+i32 ffi_mul(i32 a, i32 b) { return a * b; }
+f32 ffi_lerp(f32 a, f32 b, f32 t) { return a + (b - a) * t; }
+bool ffi_in_range(i32 val, i32 lo, i32 hi) { return val >= lo && val <= hi; }
 
 #ifdef LED_BUILTIN
   #define led_pin LED_BUILTIN
@@ -72,12 +84,13 @@ void setup() {
     if (led_pin >= 0) pinMode(led_pin, OUTPUT);
     Serial.begin(115200);
 
-    // Wait for serial connection (USB CDC devices need this)
-    #if defined(USBCON) || defined(ARDUINO_USB_CDC_ON_BOOT)
-    while (!Serial) { delay(10); }
-    #endif
-
     // Set up serial transport with no authentication for calibration
+    // Register FFI functions for calibration measurement
+    runtime.registerFFI("F_add",      "i32,i32->i32",       "Add two i32",        ffi_add);
+    runtime.registerFFI("F_mul",      "i32,i32->i32",       "Multiply two i32",   ffi_mul);
+    runtime.registerFFI("F_lerp",     "f32,f32,f32->f32",   "Linear interpolate", ffi_lerp);
+    runtime.registerFFI("F_in_range", "i32,i32,i32->bool",  "Range check",        ffi_in_range);
+
     runtime
         .addSerial(Serial, PLC_SEC_NONE)
         .addUser("admin", "admin", PERM_FULL);
@@ -107,10 +120,11 @@ void setup() {
 }
 
 void loop() {
-    // Toggle LED slowly to show we're alive
+    // Brief LED pulse to show we're alive (10ms on, 1s off)
     static u32 led_timer = 0;
     static bool led_state = false;
-    if (led_pin >= 0 && millis() - led_timer > 500) {
+    u32 led_duration = led_state ? 10 : 1000;
+    if (led_pin >= 0 && millis() - led_timer > led_duration) {
         led_timer = millis();
         led_state = !led_state;
         digitalWrite(led_pin, led_state ? LED_ON : LED_OFF);

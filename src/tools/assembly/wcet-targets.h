@@ -131,7 +131,7 @@ struct WCETTargetProfile {
     u8  arch_id;                            // WCET_ARCH_* constant
     u16 clock_mhz;                         // CPU clock frequency in MHz
     u8  capabilities;                       // WCET_CAP_* flags OR'd together
-    u16 ns_per_category[WCET_CAT_COUNT];   // Nanoseconds per opcode category (BCET)
+    u16 ns_per_category[WCET_CAT_COUNT];   // Nanoseconds per opcode category (BCET), max 65535ns
     //   Index 0 (DISPATCH) is added to every instruction
     //   Other indices are the opcode-specific cost ON TOP of dispatch
 };
@@ -162,19 +162,19 @@ static const WCETTargetProfile g_wcet_target_profiles[] = {
         WCET_CAP_HW_FPU_SP | WCET_CAP_HW_DIV | WCET_CAP_HW_MUL32,
         {
             // dispatch, pu8, pu16, pu32, pf32, pu64, pf64,
-            14000,  2375,  3088,  3750,  4000,  6750,  8800,
+            14000,  2375,  3500,  4000,  4000,  5000,  5000,
             // add8, add16, add32, addf32, addf64,
-             5250,  6300,  9500, 10000, 25000,
+             5250,  9000,  9500, 10000, 13000,
             // mul8, mul32, mulf32, mulf64,
-             4750,  9500, 10000, 25000,
+             5500,  9500, 10000, 13000,
             // div8, div32, divf32, divf64,
-             6000, 10000, 10000, 25000,
+             5500, 10000, 10000, 19500,
             // cmp, logic, bitwise, jmp, jmp_cond, call, ret,
-             5250,  3000,  3000,  1000,  1500,  2000,  1500,
+             5250,  3000,  3000,  1000,  2500,  2500,  3250,
             // load, store, stack_op, bit_rw, timer, counter,
-             2000,  2000,  1833,  1600,  6000,  5000,
+             3250,  3000,  1833,  2500,  5500,  7500,
             // sqrt, trig, cvt, str_op, ffi, exit
-            30000, 50000, 28000, 140000, 112000,  7000
+             7500,  8750,  4000,  3250,  4750,  2000
         }
     },
     // @WCET_PROFILE_END@
