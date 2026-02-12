@@ -1057,3 +1057,43 @@ WASM_EXPORT u32 wcet_get_loop_max_iterations(u32 i) {
     if (i >= g_wcet_loop_count) return 0;
     return g_wcet_loops[i].estimated_max_iterations;
 }
+
+// --- Target profile nanosecond estimates ---
+WASM_EXPORT u32 wcet_get_bcet_ns()               { return g_wcet_bcet_ns; }
+WASM_EXPORT u32 wcet_get_wcet_ns()               { return g_wcet_wcet_ns; }
+WASM_EXPORT u8  wcet_get_has_target()             { return g_wcet_has_target; }
+
+// --- Target profile selection and listing ---
+WASM_EXPORT u32 wcet_target_count()               { return wcet_get_target_count(); }
+WASM_EXPORT u8  wcet_target_select_by_index(u32 index) {
+    u32 count = wcet_get_target_count();
+    if (index >= count) return 0;
+    g_wcet_active_profile = &g_wcet_target_profiles[index];
+    g_wcet_target_match_quality = 3;
+    // Write reason
+    const char* name = g_wcet_active_profile->name;
+    int len = 0;
+    while (name[len] && len < 120) { g_wcet_target_match_reason[len] = name[len]; len++; }
+    g_wcet_target_match_reason[len] = '\0';
+    return 3;
+}
+WASM_EXPORT u8  wcet_target_select(u8 arch_id, u16 clock_mhz, u32 capabilities) {
+    return wcet_select_target(arch_id, clock_mhz, capabilities);
+}
+WASM_EXPORT void wcet_target_reset() {
+    g_wcet_active_profile = &g_wcet_default_profile;
+    g_wcet_target_match_quality = 0;
+    g_wcet_target_match_reason[0] = '\0';
+}
+WASM_EXPORT u8  wcet_target_get_match_quality()   { return g_wcet_target_match_quality; }
+WASM_EXPORT u32 wcet_target_get_match_reason()    { return (u32)(uintptr_t)g_wcet_target_match_reason; }
+WASM_EXPORT u32 wcet_target_get_active_name()     { return (u32)(uintptr_t)g_wcet_active_profile->name; }
+WASM_EXPORT u32 wcet_target_get_active_arch()     { return (u32)(uintptr_t)g_wcet_active_profile->arch_name; }
+WASM_EXPORT u16 wcet_target_get_active_clock()    { return g_wcet_active_profile->clock_mhz; }
+WASM_EXPORT u32 wcet_target_get_active_caps()     { return g_wcet_active_profile->capabilities; }
+
+// Target list accessors (return pointers to static string data)
+WASM_EXPORT u32 wcet_target_list_name(u32 i)      { return (u32)(uintptr_t)wcet_get_target_name(i); }
+WASM_EXPORT u32 wcet_target_list_arch(u32 i)      { return (u32)(uintptr_t)wcet_get_target_arch(i); }
+WASM_EXPORT u16 wcet_target_list_clock(u32 i)     { return wcet_get_target_clock(i); }
+WASM_EXPORT u32 wcet_target_list_caps(u32 i)      { return wcet_get_target_caps(i); }

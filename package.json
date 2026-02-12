@@ -9,6 +9,7 @@
     "compile": "node --no-warnings wasm/node-test/compile.js",
     "explain": "node --no-warnings wasm/node-test/explain.js",
     "analyze": "node --no-warnings wasm/node-test/analyze.js",
+    "calibrate": "node --no-warnings wasm/node-test/calibrate.js",
     "update": "git pull",
     "wasm_unit_test": "cd wasm/node-test && node unit_test.js",
     "test_timers": "cd wasm/node-test && node test_timers.js",
@@ -37,5 +38,8 @@
     "wasm"
   ],
   "author": "J.Vovk <jozo132@gmail.com>",
-  "license": "GPL-3.0-or-later"
+  "license": "GPL-3.0-or-later",
+  "devDependencies": {
+    "serialport": "^13.0.0"
+  }
 }

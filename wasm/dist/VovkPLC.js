@@ -359,6 +359,23 @@ const MEMORY_LAYOUT = {
  *     wcet_get_loop_header?: (i: number) => number, // Loop header block ID.
  *     wcet_get_loop_back_edge?: (i: number) => number, // Loop back edge source block.
  *     wcet_get_loop_max_iterations?: (i: number) => number, // Estimated max loop iterations.
+ *     wcet_get_bcet_ns?: () => number, // Best-case nanoseconds (0 if no target profile).
+ *     wcet_get_wcet_ns?: () => number, // Worst-case nanoseconds (0 if no target profile).
+ *     wcet_get_has_target?: () => number, // 1 if a calibrated target profile is active.
+ *     wcet_target_count?: () => number, // Number of available target profiles.
+ *     wcet_target_select_by_index?: (i: number) => number, // Select target by index. Returns match quality.
+ *     wcet_target_select?: (arch_id: number, clock_mhz: number, capabilities: number) => number, // Select target by arch/clock/caps.
+ *     wcet_target_reset?: () => void, // Reset to default (no target) profile.
+ *     wcet_target_get_match_quality?: () => number, // Match quality: 3=exact, 2=arch, 1=family, 0=default.
+ *     wcet_target_get_match_reason?: () => number, // Pointer to match reason string.
+ *     wcet_target_get_active_name?: () => number, // Pointer to active profile name.
+ *     wcet_target_get_active_arch?: () => number, // Pointer to active profile arch name.
+ *     wcet_target_get_active_clock?: () => number, // Active profile clock MHz.
+ *     wcet_target_get_active_caps?: () => number, // Active profile capability flags.
+ *     wcet_target_list_name?: (i: number) => number, // Pointer to profile name at index.
+ *     wcet_target_list_arch?: (i: number) => number, // Pointer to profile arch at index.
+ *     wcet_target_list_clock?: (i: number) => number, // Profile clock MHz at index.
+ *     wcet_target_list_caps?: (i: number) => number, // Profile capabilities at index.
  * }} VovkPLCExportTypes
  */
 
@@ -1700,7 +1717,9 @@ class VovkPLC_class {
      *   - 'compiled': PLCASM compiler output (after compilePLCASM)
      *   - 'project': Project compiler output (after compileProject)
      *   - 'runtime': Currently loaded runtime program
-     * @param {{ print?: boolean }} [options={}] - Options. print: also print report to stdout.
+     * @param {{ print?: boolean, target?: string }} [options={}] - Options.
+     *   print: also print report to stdout.
+     *   target: select a calibrated target profile by name (e.g., 'stm32f401') for ns estimates.
      * @returns {WCETReport} The full analysis report.
      * @throws {Error} If analysis fails or no bytecode available.
      *
@@ -1717,6 +1736,10 @@ class VovkPLC_class {
      *     wcet_cycles: number,
      *     bcet_instructions: number,
      *     wcet_instructions: number,
+     *     bcet_ns: number,
+     *     wcet_ns: number,
+     *     has_target: boolean,
+     *     target: { name: string, arch: string, clock_mhz: number, match_quality: number, match_reason: string } | null,
      *     max_stack_depth: number,
      *     min_stack_depth: number,
      *     stack_at_exit: number,
@@ -1750,6 +1773,27 @@ class VovkPLC_class {
     analyzeWCET(source = 'compiled', options = {}) {
         if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
         const wasm = this.wasm_exports
+
+        // Select target profile if specified
+        if (options.target && wasm.wcet_target_count) {
+            const targetLC = options.target.toLowerCase()
+            const count = wasm.wcet_target_count()
+            let matched = false
+            for (let i = 0; i < count; i++) {
+                const namePtr = wasm.wcet_target_list_name(i)
+                const archPtr = wasm.wcet_target_list_arch(i)
+                const name = namePtr ? this.readCString(namePtr) : ''
+                const arch = archPtr ? this.readCString(archPtr) : ''
+                if (name.toLowerCase().includes(targetLC) || arch.toLowerCase().includes(targetLC)) {
+                    wasm.wcet_target_select_by_index(i)
+                    matched = true
+                    break
+                }
+            }
+            if (!matched && wasm.wcet_target_reset) wasm.wcet_target_reset()
+        } else if (wasm.wcet_target_reset) {
+            wasm.wcet_target_reset()
+        }
 
         // Run the appropriate analysis
         let ok = false
@@ -1822,6 +1866,19 @@ class VovkPLC_class {
             })
         }
 
+        // Read target profile info
+        const hasTarget = wasm.wcet_get_has_target ? !!wasm.wcet_get_has_target() : false
+        let targetInfo = null
+        if (hasTarget) {
+            targetInfo = {
+                name: wasm.wcet_target_get_active_name ? this.readCString(wasm.wcet_target_get_active_name()) : '',
+                arch: wasm.wcet_target_get_active_arch ? this.readCString(wasm.wcet_target_get_active_arch()) : '',
+                clock_mhz: wasm.wcet_target_get_active_clock ? wasm.wcet_target_get_active_clock() : 0,
+                match_quality: wasm.wcet_target_get_match_quality ? wasm.wcet_target_get_match_quality() : 0,
+                match_reason: wasm.wcet_target_get_match_reason ? this.readCString(wasm.wcet_target_get_match_reason()) : '',
+            }
+        }
+
         return {
             bytecode_size: wasm.wcet_get_bytecode_size(),
             instruction_count: wasm.wcet_get_instruction_count(),
@@ -1835,6 +1892,10 @@ class VovkPLC_class {
             wcet_cycles: wasm.wcet_get_wcet_cycles(),
             bcet_instructions: wasm.wcet_get_bcet_instructions(),
             wcet_instructions: wasm.wcet_get_wcet_instructions(),
+            bcet_ns: wasm.wcet_get_bcet_ns ? wasm.wcet_get_bcet_ns() : 0,
+            wcet_ns: wasm.wcet_get_wcet_ns ? wasm.wcet_get_wcet_ns() : 0,
+            has_target: hasTarget,
+            target: targetInfo,
             max_stack_depth: wasm.wcet_get_max_stack_depth(),
             min_stack_depth: wasm.wcet_get_min_stack_depth(),
             stack_at_exit: wasm.wcet_get_stack_at_exit(),
@@ -1858,6 +1919,60 @@ class VovkPLC_class {
                 loops: cfgLoops,
             },
         }
+    }
+
+    /**
+     * Lists all available WCET target profiles for calibrated hardware timing estimates.
+     * @returns {Array<{ name: string, arch: string, clock_mhz: number, capabilities: number }>}
+     */
+    listWCETTargets() {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        const wasm = this.wasm_exports
+        if (!wasm.wcet_target_count) return []
+        const count = wasm.wcet_target_count()
+        const targets = []
+        for (let i = 0; i < count; i++) {
+            const namePtr = wasm.wcet_target_list_name(i)
+            const archPtr = wasm.wcet_target_list_arch(i)
+            targets.push({
+                name: namePtr ? this.readCString(namePtr) : '',
+                arch: archPtr ? this.readCString(archPtr) : '',
+                clock_mhz: wasm.wcet_target_list_clock ? wasm.wcet_target_list_clock(i) : 0,
+                capabilities: wasm.wcet_target_list_caps ? wasm.wcet_target_list_caps(i) : 0,
+            })
+        }
+        return targets
+    }
+
+    /**
+     * Selects a WCET target profile by name for subsequent analyzeWCET calls.
+     * @param {string} name - Target name or partial match (e.g., 'stm32f401', 'esp32').
+     * @returns {{ matched: boolean, name: string, arch: string, clock_mhz: number, quality: number }} Selection result.
+     */
+    selectWCETTarget(name) {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        const wasm = this.wasm_exports
+        if (!wasm.wcet_target_count) return { matched: false, name: '', arch: '', clock_mhz: 0, quality: 0 }
+        const targetLC = name.toLowerCase()
+        const count = wasm.wcet_target_count()
+        for (let i = 0; i < count; i++) {
+            const namePtr = wasm.wcet_target_list_name(i)
+            const archPtr = wasm.wcet_target_list_arch(i)
+            const tname = namePtr ? this.readCString(namePtr) : ''
+            const tarch = archPtr ? this.readCString(archPtr) : ''
+            if (tname.toLowerCase().includes(targetLC) || tarch.toLowerCase().includes(targetLC)) {
+                wasm.wcet_target_select_by_index(i)
+                return {
+                    matched: true,
+                    name: tname,
+                    arch: tarch,
+                    clock_mhz: wasm.wcet_target_list_clock ? wasm.wcet_target_list_clock(i) : 0,
+                    quality: 3,
+                }
+            }
+        }
+        if (wasm.wcet_target_reset) wasm.wcet_target_reset()
+        return { matched: false, name: '', arch: '', clock_mhz: 0, quality: 0 }
     }
 
     /** @private Helper to get opcode name string (best-effort) */

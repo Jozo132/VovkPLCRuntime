@@ -24,6 +24,7 @@
 #ifdef __WASM__
 
 #include "wcet-cfg.h"
+#include "wcet-targets.h"
 
 // ============================================================================
 // WCET Analysis Report — all fields are plain globals for WASM safety
@@ -67,6 +68,11 @@ u8   g_wcet_warn_unbalanced     = 0;
 WCETOpcodeFreq g_wcet_opcode_freq[32];
 u8   g_wcet_opcode_freq_count   = 0;
 
+// Target profile nanosecond estimates (populated when a target is active)
+u32  g_wcet_bcet_ns             = 0;  // Best-case nanoseconds (0 = no target)
+u32  g_wcet_wcet_ns             = 0;  // Worst-case nanoseconds (0 = no target)
+u8   g_wcet_has_target          = 0;  // 1 if a calibrated target profile is active
+
 // ============================================================================
 // Report reset
 // ============================================================================
@@ -98,6 +104,9 @@ void wcet_report_reset() {
     g_wcet_warn_stack_underflow = 0;
     g_wcet_warn_unbalanced = 0;
     g_wcet_opcode_freq_count = 0;
+    g_wcet_bcet_ns = 0;
+    g_wcet_wcet_ns = 0;
+    g_wcet_has_target = 0;
     for (int i = 0; i < 32; i++) {
         g_wcet_opcode_freq[i].opcode = 0;
         g_wcet_opcode_freq[i].count = 0;
@@ -416,6 +425,39 @@ bool wcet_analyze(const u8* bytecode, u32 length, u32 max_stack_size) {
     wcet_analyze_loop_termination();
     wcet_count_warnings();
 
+    // Compute nanosecond estimates if a calibrated target profile is active
+    if (g_wcet_active_profile->clock_mhz > 0) {
+        g_wcet_has_target = 1;
+
+        // Walk the BCET/WCET paths using per-instruction ns costs
+        // For simplicity, sum ns contributions across all instructions per block,
+        // then use the same path analysis results (bcet/wcet are proportional)
+        u32 total_wcet_ns = 0;
+
+        // Sum ns for each instruction in the program
+        for (u32 i = 0; i < g_wcet_instruction_count; i++) {
+            u8 opcode = g_wcet_instructions[i].opcode;
+            u8 type_arg = g_wcet_instructions[i].type_arg;
+            u32 ns = wcet_target_ns_for_opcode(opcode, type_arg);
+            // Track per-instruction ns (we'll scale by path ratio)
+            total_wcet_ns += ns;
+        }
+
+        // Use the ratio of WCET/BCET cycles to scale ns estimates
+        if (g_wcet_wcet_cycles > 0 && g_wcet_bcet_cycles > 0) {
+            // Total ns is for ALL instructions; scale by path coverage
+            u32 total_instructions = g_wcet_rpt_instruction_count;
+            if (total_instructions > 0) {
+                u32 ns_per_instruction_avg = total_wcet_ns / total_instructions;
+                g_wcet_bcet_ns = ns_per_instruction_avg * g_wcet_bcet_instructions;
+                g_wcet_wcet_ns = ns_per_instruction_avg * g_wcet_wcet_instructions;
+            }
+        } else if (g_wcet_wcet_instructions > 0) {
+            g_wcet_wcet_ns = total_wcet_ns;
+            g_wcet_bcet_ns = total_wcet_ns;
+        }
+    }
+
     return true;
 }
 
@@ -445,6 +487,16 @@ void wcet_print_report() {
         printf("|   WCET/BCET ratio:     %3u.%02u%%                              \n", ratio / 100, ratio % 100);
     }
     printf("+--------------------------------------------------------------+\n");
+
+    if (g_wcet_has_target) {
+        printf("| Target Profile: %-42s |\n", g_wcet_active_profile->name);
+        printf("|   Architecture:    %-40s |\n", g_wcet_active_profile->arch_name);
+        printf("|   Clock:           %6u MHz                                |\n", g_wcet_active_profile->clock_mhz);
+        printf("|   Match quality:   %6u (%s)\n", g_wcet_target_match_quality, g_wcet_target_match_reason);
+        printf("|   BCET (estimated): %6u ns  (%.3f us)                   \n", g_wcet_bcet_ns, (float)g_wcet_bcet_ns / 1000.0f);
+        printf("|   WCET (estimated): %6u ns  (%.3f us)                   \n", g_wcet_wcet_ns, (float)g_wcet_wcet_ns / 1000.0f);
+        printf("+--------------------------------------------------------------+\n");
+    }
 
     printf("| Stack Analysis                                               |\n");
     printf("|   Max stack depth:     %6d bytes                          |\n", g_wcet_max_stack_depth);
