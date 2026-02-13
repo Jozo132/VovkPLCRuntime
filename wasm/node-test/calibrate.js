@@ -654,9 +654,18 @@ function generateCalibrationPrograms() {
     defs.push({
         name: 'baseline',
         category: 'DISPATCH',
-        description: 'EXIT only — measures interpreter dispatch overhead',
+        description: 'EXIT only — per-cycle fixed overhead + exit cost',
         source: 'exit',
         target_ops: 0,
+    })
+
+    // ── Dispatch: NOP × 16 to measure per-instruction dispatch cost ────
+    defs.push({
+        name: 'dispatch_nop',
+        category: 'DISPATCH',
+        description: 'NOP × 16 — marginal per-instruction dispatch cost',
+        source: Array(16).fill('nop').concat(['exit']).join('\n'),
+        target_ops: 16,
     })
 
     // ── PUSH_U8 ────────────────────────────────────────────────────────
@@ -1280,6 +1289,7 @@ function generateCalibrationPrograms() {
                 description: def.description,
                 bytecode,
                 target_ops: def.target_ops,
+                requires_flags: def.requires_flags,
             })
             console.log(`  ${GREEN}✓${RESET} ${def.name.padEnd(14)} ${String(bytecode.length).padStart(3)} bytes  ${DIM}${def.description}${RESET}`)
         } catch (err) {
@@ -1445,48 +1455,220 @@ function delay(ms) {
 // ============================================================================
 
 function computeProfile(results, deviceInfo, envName) {
-    // Find baseline (dispatch overhead)
-    const baseline = results.find(r => r.name === 'baseline')
-    if (!baseline || baseline.error) {
+    // ── Helper: find a successful result by name ────────────────────────
+    const getResult = (name) => results.find(r => r.name === name && !r.error && !r.skipped)
+
+    const baseline = getResult('baseline')
+    if (!baseline) {
         console.error(`${RED}Baseline measurement failed — cannot compute profile${RESET}`)
         return null
     }
+    const B = baseline.min_ns  // Fixed per-cycle overhead + 1 dispatch + exit execution
+    console.log(`\n${CYAN}Baseline cycle: ${B}ns${RESET}`)
 
-    const dispatch_ns = baseline.min_ns
-    console.log(`\n${CYAN}Baseline (dispatch + EXIT): ${dispatch_ns}ns${RESET}`)
+    // ════════════════════════════════════════════════════════════════════
+    // Step 1: Compute D — marginal dispatch cost per instruction
+    // ════════════════════════════════════════════════════════════════════
+    // dispatch_nop test: 16 × NOP + exit = 17 instructions.
+    // NOP execution cost ≈ 0, so: nop_total - baseline = 16 × D.
+    const nopResult = getResult('dispatch_nop')
+    let D = 0
+    if (nopResult) {
+        D = Math.max(0, Math.round((nopResult.min_ns - B) / 16))
+    } else {
+        // Fallback: estimate from JMP test (gives D + C_jmp, slight overestimate)
+        const jmpResult = getResult('jmp')
+        if (jmpResult) D = Math.max(0, Math.round((jmpResult.min_ns - B) / 4))
+    }
+    console.log(`${CYAN}Dispatch per instruction (D): ${D}ns${RESET}`)
 
-    /**
-     * Estimate a missing category from measured ones.
-     * Used when a test crashed the device (e.g. 64-bit ops on some MCUs).
-     */
-    function estimateCategory(cat, measured, dispatch) {
-        // 64-bit push/arithmetic — estimate from 32-bit counterpart × 2
-        if (cat === 'PUSH_U64') return Math.round((measured['PUSH_U32'] || dispatch) * 2)
-        if (cat === 'PUSH_F64') return Math.round((measured['PUSH_F32'] || dispatch) * 2.2)
-        if (cat === 'ADD_F64') return Math.round((measured['ADD_F32'] || dispatch) * 2.5)
-        if (cat === 'MUL_F64') return Math.round((measured['MUL_F32'] || dispatch) * 2.5)
-        if (cat === 'DIV_F64') return Math.round((measured['DIV_F32'] || dispatch) * 2.5)
-        return null
+    // ════════════════════════════════════════════════════════════════════
+    // Helper: compute execution-only cost sum for all non-exit instructions
+    // ════════════════════════════════════════════════════════════════════
+    // For a program with N total executed instructions (including exit):
+    //   measured = F + N*D + sum(C_exec_i) for all instructions
+    //   baseline = F + 1*D + C_exit
+    //   adjusted = measured - baseline = (N-1)*D + sum(C_exec for non-exit)
+    //   execSum  = adjusted - (N-1)*D = sum(C_exec for non-exit)
+    function execSum(r, totalExecuted) {
+        if (!r) return null
+        const adjusted = r.min_ns - B
+        return Math.max(0, adjusted - (totalExecuted - 1) * D)
     }
 
-    // Compute per-category costs by subtracting baseline and dividing by target_ops
-    const categories = {}
-    for (const r of results) {
-        if (r.error || r.skipped) continue
-        if (r.name === 'baseline') {
-            categories['DISPATCH'] = dispatch_ns
-            continue
+    // ════════════════════════════════════════════════════════════════════
+    // Step 2: Solve PUSH_U8 + STACK_OP system of equations
+    // ════════════════════════════════════════════════════════════════════
+    // push_u8 test:   8×push + 8×drop + exit = 17 executed
+    //   execSum = 8*P + 8*S  ...(eq1)
+    // stack_ops test: 1×push + 3×copy + 4×drop + exit = 9 executed
+    //   execSum = 1*P + 7*S  ...(eq2, copy and drop both = STACK_OP)
+    // Solving: S = (eq2 - eq1/8) / 6,  P = eq1/8 - S
+    let P = 0, S = 0  // PUSH_U8 exec cost, STACK_OP exec cost
+    const pushU8R = getResult('push_u8')
+    const stackR  = getResult('stack_ops')
+    if (pushU8R && stackR) {
+        const eq1 = execSum(pushU8R, 17)  // 8P + 8S
+        const eq2 = execSum(stackR, 9)    // 1P + 7S
+        if (eq1 !== null && eq2 !== null) {
+            S = Math.max(0, Math.round((eq2 - eq1 / 8) / 6))
+            P = Math.max(0, Math.round(eq1 / 8 - S))
         }
+    } else if (pushU8R) {
+        // Fallback: assume push ≈ drop (< 3% error on Cortex-M)
+        const eq1 = execSum(pushU8R, 17)
+        if (eq1 !== null) { P = Math.round(eq1 / 16); S = P }
+    }
+    console.log(`${CYAN}PUSH_U8 exec: ${P}ns, STACK_OP exec: ${S}ns${RESET}`)
 
-        const total_ns = r.min_ns
-        // Subtract baseline for the EXIT instruction that's in every program
-        const adjusted_ns = Math.max(0, total_ns - dispatch_ns)
-        const per_op_ns = r.target_ops ? Math.round(adjusted_ns / r.target_ops) : adjusted_ns
+    // ════════════════════════════════════════════════════════════════════
+    // Step 3: Compute all categories
+    // ════════════════════════════════════════════════════════════════════
+    const C = {} // execution-only cost per category (used in ns_per_category)
+    C['DISPATCH'] = D
+    C['PUSH_U8']  = P
+    C['STACK_OP'] = S
 
-        categories[r.category] = per_op_ns
+    // Generic helper for tests with pattern: pushes + targets + drops + exit
+    // totalExec = pushCount + targetOps + dropCount + 1(exit) + extraExec
+    // C_target = (execSum - pushCount*C[pushCat] - dropCount*S) / targetOps
+    function computeCategory(resultName, pushCat, pushCount, dropCount, targetOps, extraExec = 0) {
+        const r = getResult(resultName)
+        if (!r) return null
+        const totalExec = pushCount + targetOps + dropCount + 1 + extraExec
+        const es = execSum(r, totalExec)
+        if (es === null) return null
+        const pushCost = pushCat ? (C[pushCat] || P) : 0
+        return Math.max(0, Math.round((es - pushCount * pushCost - dropCount * S) / targetOps))
     }
 
-    // Map to the C++ category array order
+    // ── Push categories: N×push + N×drop + exit ────────────────────────
+    // C_push = (execSum(2N+1) - N*S) / N
+    C['PUSH_U16'] = computeCategory('push_u16', null, 0, 4, 4) ?? P
+    C['PUSH_U32'] = computeCategory('push_u32', null, 0, 4, 4) ?? Math.round(P * 1.3)
+    C['PUSH_F32'] = computeCategory('push_f32', null, 0, 4, 4) ?? C['PUSH_U32']
+    C['PUSH_U64'] = computeCategory('push_u64', null, 0, 2, 2) ?? Math.round(C['PUSH_U32'] * 2)
+    C['PUSH_F64'] = computeCategory('push_f64', null, 0, 2, 2) ?? Math.round(C['PUSH_F32'] * 2.2)
+
+    // ── ADD categories ─────────────────────────────────────────────────
+    C['ADD_U8']  = computeCategory('add_u8',  'PUSH_U8',  8, 4, 4) ?? 0
+    C['ADD_U16'] = computeCategory('add_u16', 'PUSH_U16', 4, 2, 2) ?? C['ADD_U8']
+    C['ADD_U32'] = computeCategory('add_u32', 'PUSH_U32', 8, 4, 4) ?? C['ADD_U8']
+    C['ADD_F32'] = computeCategory('add_f32', 'PUSH_F32', 4, 2, 2) ?? C['ADD_U32']
+    C['ADD_F64'] = computeCategory('add_f64', 'PUSH_F64', 4, 2, 2) ?? Math.round((C['ADD_F32'] || 0) * 2.5)
+
+    // ── MUL categories ─────────────────────────────────────────────────
+    C['MUL_U8']  = computeCategory('mul_u8',  'PUSH_U8',  4, 2, 2) ?? 0
+    C['MUL_U32'] = computeCategory('mul_u32', 'PUSH_U32', 4, 2, 2) ?? C['MUL_U8']
+    C['MUL_F32'] = computeCategory('mul_f32', 'PUSH_F32', 4, 2, 2) ?? C['MUL_U32']
+    C['MUL_F64'] = computeCategory('mul_f64', 'PUSH_F64', 4, 2, 2) ?? Math.round((C['MUL_F32'] || 0) * 2.5)
+
+    // ── DIV categories ─────────────────────────────────────────────────
+    C['DIV_U8']  = computeCategory('div_u8',  'PUSH_U8',  4, 2, 2) ?? 0
+    C['DIV_U32'] = computeCategory('div_u32', 'PUSH_U32', 4, 2, 2) ?? C['DIV_U8']
+    C['DIV_F32'] = computeCategory('div_f32', 'PUSH_F32', 4, 2, 2) ?? C['DIV_U32']
+    C['DIV_F64'] = computeCategory('div_f64', 'PUSH_F64', 4, 2, 2) ?? Math.round((C['DIV_F32'] || 0) * 2.5)
+
+    // ── CMP: 8×push_u8 + 4×cmp + 4×drop + exit = 17 ──────────────────
+    C['CMP'] = computeCategory('cmp', 'PUSH_U8', 8, 4, 4) ?? 0
+
+    // ── LOGIC: 5×push_u8 + 4×logic + 1×drop + exit = 11 ──────────────
+    C['LOGIC'] = computeCategory('logic', 'PUSH_U8', 5, 1, 4) ?? 0
+
+    // ── BITWISE: 5×push_u8 + 4×bitwise + 1×drop + exit = 11 ──────────
+    C['BITWISE'] = computeCategory('bitwise', 'PUSH_U8', 5, 1, 4) ?? 0
+
+    // ── JMP: 4×jmp + exit = 5 executed (NOPs skipped) ─────────────────
+    {
+        const r = getResult('jmp')
+        if (r) {
+            C['JMP'] = Math.max(0, Math.round(execSum(r, 5) / 4))
+        } else {
+            C['JMP'] = 0
+        }
+    }
+
+    // ── JMP_COND: 4×push_u8 + 4×jmp_cond + exit = 9 (NOPs skipped) ───
+    C['JMP_COND'] = computeCategory('jmp_cond', 'PUSH_U8', 4, 0, 4) ?? Math.round((C['JMP'] || 0) * 1.5)
+
+    // ── CALL + RET: paired measurement ─────────────────────────────────
+    // call_ret: 4×call + 4×ret + exit = 9 → gives C_call + C_ret
+    // Split 55/45 (CALL pushes return address, slightly more expensive)
+    {
+        const r = getResult('call_ret')
+        if (r) {
+            const es = execSum(r, 9)
+            const pair = Math.max(0, Math.round(es / 4))  // C_call + C_ret
+            C['CALL'] = Math.round(pair * 0.55)
+            C['RET']  = Math.round(pair * 0.45)
+        } else {
+            C['CALL'] = Math.round((C['JMP'] || 0) * 2)
+            C['RET']  = Math.round((C['JMP'] || 0) * 1.5)
+        }
+        // Cross-check with ret test (4×call + 4×nop + 4×ret + exit = 13)
+        const retR = getResult('ret')
+        if (retR && r) {
+            const pairCheck = Math.max(0, Math.round(execSum(retR, 13) / 4))
+            console.log(`${DIM}  CALL+RET check: call_ret=${C['CALL'] + C['RET']}ns, ret_test=${pairCheck}ns${RESET}`)
+        }
+    }
+
+    // ── LOAD: 4×load + 4×drop + exit = 9 ──────────────────────────────
+    C['LOAD'] = computeCategory('load', null, 0, 4, 4) ?? 0
+
+    // ── STORE: 4×push_u8 + 4×store + exit = 9 ─────────────────────────
+    C['STORE'] = computeCategory('store', 'PUSH_U8', 4, 0, 4) ?? C['LOAD'] ?? 0
+
+    // ── BIT_RW: 4×bit_rw + 2×drop + exit = 7 ─────────────────────────
+    C['BIT_RW'] = computeCategory('bit_rw', null, 0, 2, 4) ?? Math.round((C['LOAD'] || 0) * 0.8)
+
+    // ── TIMER: config(1) + 2×push + 2×timer + 2×drop + exit = 8 ──────
+    // extraExec=1 for the config_tc instruction (NOP-like, ~0 execution)
+    C['TIMER'] = computeCategory('timer', 'PUSH_U8', 2, 2, 2, /*extraExec*/1) ?? Math.round((C['LOAD'] || 0) * 3)
+
+    // ── COUNTER: config(1) + 4×push + 2×ctu + 2×drop + exit = 10 ─────
+    C['COUNTER'] = computeCategory('counter', 'PUSH_U8', 4, 2, 2, /*extraExec*/1) ?? Math.round((C['LOAD'] || 0) * 2.5)
+
+    // ── SQRT: 4×push_f32 + 4×sqrt + 4×drop + exit = 13 ───────────────
+    C['SQRT'] = computeCategory('sqrt', 'PUSH_F32', 4, 4, 4) ?? Math.round((C['MUL_F32'] || 0) * 3)
+
+    // ── TRIG: 4×push_f32 + 4×trig + 4×drop + exit = 13 ───────────────
+    C['TRIG'] = computeCategory('trig', 'PUSH_F32', 4, 4, 4) ?? Math.round((C['MUL_F32'] || 0) * 5)
+
+    // ── CVT: 1×push_u8 + 4×cvt + 1×drop + exit = 7 ──────────────────
+    C['CVT'] = computeCategory('cvt', 'PUSH_U8', 1, 1, 4) ?? Math.round(D * 2)
+
+    // ── STR_OP: push_u16(1) + push_u8(1) + 4×str_op + drop(1) + exit = 8
+    {
+        const r = getResult('str_op')
+        if (r) {
+            const es = execSum(r, 8)
+            const overhead = (C['PUSH_U16'] || P) + P + S
+            C['STR_OP'] = Math.max(0, Math.round((es - overhead) / 4))
+        } else {
+            C['STR_OP'] = Math.round(D * 10)
+        }
+    }
+
+    // ── FFI: 2×push_u32 + 2×store + 4×ffi + exit = 9 ─────────────────
+    {
+        const r = getResult('ffi')
+        if (r) {
+            const es = execSum(r, 9)
+            const overhead = 2 * (C['PUSH_U32'] || P) + 2 * (C['STORE'] || 0)
+            C['FFI'] = Math.max(0, Math.round((es - overhead) / 4))
+        } else {
+            C['FFI'] = Math.round(D * 8)
+        }
+    }
+
+    // ── EXIT: absorbs fixed per-cycle overhead (F + C_exit = B - D) ───
+    // This ensures: model(baseline) = D + EXIT = D + (B - D) = B ✓
+    C['EXIT'] = Math.max(0, B - D)
+
+    // ════════════════════════════════════════════════════════════════════
+    // Build final profile
+    // ════════════════════════════════════════════════════════════════════
     const categoryOrder = [
         'DISPATCH', 'PUSH_U8', 'PUSH_U16', 'PUSH_U32', 'PUSH_F32', 'PUSH_U64', 'PUSH_F64',
         'ADD_U8', 'ADD_U16', 'ADD_U32', 'ADD_F32', 'ADD_F64',
@@ -1497,14 +1679,17 @@ function computeProfile(results, deviceInfo, envName) {
         'SQRT', 'TRIG', 'CVT', 'STR_OP', 'FFI', 'EXIT',
     ]
 
+    // Log all resolved categories
+    console.log(`\n${BOLD}Resolved per-category execution costs (ns, above dispatch):${RESET}`)
+    for (const cat of categoryOrder) {
+        const v = C[cat] ?? 0
+        const bar = '█'.repeat(Math.min(60, Math.round(v / 100)))
+        console.log(`  ${cat.padEnd(12)} ${String(v).padStart(6)}ns  ${DIM}${bar}${RESET}`)
+    }
+
     const ns_array = categoryOrder.map(cat => {
-        if (categories[cat] !== undefined) return categories[cat]
-        // Fallback estimation for categories that crashed the device (e.g. 64-bit on some MCUs)
-        const est = estimateCategory(cat, categories, dispatch_ns)
-        if (est !== null) {
-            console.warn(`  ${YELLOW}⚠ ${cat}: no measurement — estimated ${est}ns${RESET}`)
-            return est
-        }
+        const val = C[cat]
+        if (val !== undefined && val !== null) return val
         console.warn(`  ${YELLOW}⚠ ${cat}: no measurement — defaulting to 0${RESET}`)
         return 0
     })

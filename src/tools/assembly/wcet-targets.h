@@ -162,19 +162,19 @@ static const WCETTargetProfile g_wcet_target_profiles[] = {
         WCET_CAP_HW_FPU_SP | WCET_CAP_HW_DIV | WCET_CAP_HW_MUL32,
         {
             // dispatch, pu8, pu16, pu32, pf32, pu64, pf64,
-            14000,  2375,  3500,  4000,  4000,  5000,  5000,
+              750,   187,  1312,  1812,  1812,  2812,  2812,
             // add8, add16, add32, addf32, addf64,
-             5250,  9000,  9500, 10000, 13000,
+             1188,  2688,  2188,  2688,  3688,
             // mul8, mul32, mulf32, mulf64,
-             5500,  9500, 10000, 13000,
+             1438,  2188,  2688,  3688,
             // div8, div32, divf32, divf64,
-             5500, 10000, 10000, 19500,
+             1438,  2688,  2688, 10188,
             // cmp, logic, bitwise, jmp, jmp_cond, call, ret,
-             5250,  3000,  3000,  1000,  2500,  2500,  3250,
+             1188,   719,   719,   250,   813,   550,   450,
             // load, store, stack_op, bit_rw, timer, counter,
-             3250,  3000,  1833,  2500,  5500,  7500,
+             1062,  1313,   688,  1031,  2000,  3063,
             // sqrt, trig, cvt, str_op, ffi, exit
-             7500,  8750,  4000,  3250,  4750,  2000
+             2750,  4000,  2656,  1391,  1688, 13250
         }
     },
     // @WCET_PROFILE_END@
