@@ -34,6 +34,8 @@ const args = process.argv.slice(2)
 const jsonOnly = args.includes('--json')
 const silent = args.includes('--silent')
 const showHelp = args.includes('--help') || args.includes('-h')
+const targetIdx = args.findIndex(a => a === '--target')
+const targetName = targetIdx >= 0 && args[targetIdx + 1] ? args[targetIdx + 1] : null
 
 if (showHelp) {
     console.log(`
@@ -49,6 +51,7 @@ Usage:
 
 Options:
   --json         Output only JSON report (no human-readable report)
+  --target NAME  Select WCET target profile (e.g., 'stm32f401', 'esp32')
   --silent       Suppress compilation output
   --help         Show this help message
 `)
@@ -172,14 +175,30 @@ const run = async () => {
             analyzeSource = 'runtime'
 
         } else if (language === 'project') {
-            // Compile as project
+            // Compile as project using high-level API
             readCapturedOutput()
-            streamCode(runtime, input)
-            wasm.compileProject()
+            const result = runtime.compileProject(input)
             if (!silent && !jsonOnly) {
                 const out = readCapturedOutput()
                 if (out.trim()) console.log(out.trimEnd())
             } else { readCapturedOutput() }
+            if (result && result.problem) {
+                console.error(`Project compilation error: ${result.problem.message}`)
+                if (result.problem.line) console.error(`  at line ${result.problem.line}${result.problem.column ? ':' + result.problem.column : ''}`)
+                if (result.problem.block) console.error(`  in block: ${result.problem.block}`)
+                process.exit(1)
+            }
+            if (!result || !result.bytecode) {
+                console.error('Project compilation produced no bytecode')
+                process.exit(1)
+            }
+            if (!silent && !jsonOnly) {
+                console.log(`Project compiled: ${result.bytecode.split(' ').length} bytes`)
+                if (result.warnings && result.warnings.length > 0) {
+                    for (const w of result.warnings) console.log(`  Warning: ${w.message}`)
+                }
+            }
+            // Use 'project' source since project_compiler holds the bytecode
             analyzeSource = 'project'
 
         } else if (language === 'ladder-graph') {
@@ -253,7 +272,9 @@ const run = async () => {
         }
 
         // Step 2: Run WCET analysis (without printing yet)
-        const report = runtime.analyzeWCET(analyzeSource, { print: false })
+        const wcetOptions = { print: false }
+        if (targetName) wcetOptions.target = targetName
+        const report = runtime.analyzeWCET(analyzeSource, wcetOptions)
         readCapturedOutput()
 
         // Step 3: Output JSON report first
@@ -266,7 +287,9 @@ const run = async () => {
 
             // Step 4: Print the human-readable table last
             if (!silent) {
-                runtime.analyzeWCET(analyzeSource, { print: true })
+                const printOptions = { print: true }
+                if (targetName) printOptions.target = targetName
+                runtime.analyzeWCET(analyzeSource, printOptions)
                 const printOutput = readCapturedOutput()
                 if (printOutput.trim()) console.log('\n' + printOutput.trimEnd())
             }
