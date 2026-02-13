@@ -2254,6 +2254,718 @@ RuntimeError VovkPLCRuntime::run(u8* program, u32 prog_size) {
     u32 index = 0;
     u32 instruction_count = 0;
     RuntimeError status = STATUS_SUCCESS;
+
+#ifdef PLCRUNTIME_USE_COMPUTED_GOTO
+    // ========================================================================
+    // Threaded-code dispatch: each handler jumps directly to the next
+    // instruction via an indirect branch, eliminating the while-loop,
+    // step() function call, and switch overhead. ~3-6x faster dispatch.
+    // ========================================================================
+
+    // Dispatch table — 256 entries, one per possible opcode byte.
+    // Unhandled opcodes jump to _op_UNKNOWN which sets the error status.
+    #define _OP_LABEL(name) &&_op_##name
+    #define _OP_UNKNOWN &&_op_UNKNOWN
+
+    static const void* const dispatch_table[256] = {
+        /* 0x00 */ _OP_LABEL(NOP),
+        /* 0x01 */ _OP_LABEL(type_pointer),
+        /* 0x02 */ _OP_LABEL(type_bool),        // also type_bool
+        /* 0x03 */ _OP_LABEL(type_u8),
+        /* 0x04 */ _OP_LABEL(type_u16),
+        /* 0x05 */ _OP_LABEL(type_u32),
+        /* 0x06 */ _OP_LABEL(type_u64),
+        /* 0x07 */ _OP_LABEL(type_i8),
+        /* 0x08 */ _OP_LABEL(type_i16),
+        /* 0x09 */ _OP_LABEL(type_i32),
+        /* 0x0A */ _OP_LABEL(type_i64),
+        /* 0x0B */ _OP_LABEL(type_f32),
+        /* 0x0C */ _OP_LABEL(type_f64),
+        /* 0x0D */ _OP_UNKNOWN, // type_char
+        /* 0x0E */ _OP_UNKNOWN, // type_str8
+        /* 0x0F */ _OP_UNKNOWN, // type_str16
+        /* 0x10 */ _OP_LABEL(CVT),
+        /* 0x11 */ _OP_LABEL(LOAD),
+        /* 0x12 */ _OP_LABEL(MOVE),
+        /* 0x13 */ _OP_LABEL(MOVE_COPY),
+        /* 0x14 */ _OP_LABEL(COPY),
+        /* 0x15 */ _OP_LABEL(SWAP),
+        /* 0x16 */ _OP_LABEL(DROP),
+        /* 0x17 */ _OP_LABEL(CLEAR),
+        /* 0x18 */ _OP_LABEL(LOAD_FROM),
+        /* 0x19 */ _OP_LABEL(MOVE_TO),
+        /* 0x1A */ _OP_LABEL(INC_MEM),
+        /* 0x1B */ _OP_LABEL(DEC_MEM),
+        /* 0x1C */ _OP_LABEL(PICK),
+        /* 0x1D */ _OP_LABEL(POKE),
+        /* 0x1E */ _OP_LABEL(MEM_FILL),
+        /* 0x1F */ _OP_UNKNOWN,
+        /* 0x20 */ _OP_LABEL(ADD),
+        /* 0x21 */ _OP_LABEL(SUB),
+        /* 0x22 */ _OP_LABEL(MUL),
+        /* 0x23 */ _OP_LABEL(DIV),
+        /* 0x24 */ _OP_LABEL(MOD),
+        /* 0x25 */ _OP_LABEL(POW),
+        /* 0x26 */ _OP_LABEL(SQRT),
+        /* 0x27 */ _OP_LABEL(NEG),
+        /* 0x28 */ _OP_UNKNOWN, // reserved
+        /* 0x29 */ _OP_LABEL(ABS),
+        /* 0x2A */ _OP_UNKNOWN, // reserved
+        /* 0x2B */ _OP_UNKNOWN, // reserved
+        /* 0x2C */ _OP_UNKNOWN, // reserved
+        /* 0x2D */ _OP_UNKNOWN, // reserved
+        /* 0x2E */ _OP_LABEL(SIN),
+        /* 0x2F */ _OP_LABEL(COS),
+        /* 0x30 */ _OP_LABEL(TON_CONST),
+        /* 0x31 */ _OP_LABEL(TON_MEM),
+        /* 0x32 */ _OP_LABEL(TOF_CONST),
+        /* 0x33 */ _OP_LABEL(TOF_MEM),
+        /* 0x34 */ _OP_LABEL(TP_CONST),
+        /* 0x35 */ _OP_LABEL(TP_MEM),
+        /* 0x36 */ _OP_LABEL(CTU_CONST),
+        /* 0x37 */ _OP_LABEL(CTU_MEM),
+        /* 0x38 */ _OP_LABEL(CTD_CONST),
+        /* 0x39 */ _OP_LABEL(CTD_MEM),
+        /* 0x3A */ _OP_UNKNOWN,
+        /* 0x3B */ _OP_UNKNOWN,
+        /* 0x3C */ _OP_UNKNOWN,
+        /* 0x3D */ _OP_UNKNOWN,
+        /* 0x3E */ _OP_UNKNOWN,
+        /* 0x3F */ _OP_UNKNOWN,
+        /* 0x40 */ _OP_LABEL(GET_X8_B0),
+        /* 0x41 */ _OP_LABEL(GET_X8_B1),
+        /* 0x42 */ _OP_LABEL(GET_X8_B2),
+        /* 0x43 */ _OP_LABEL(GET_X8_B3),
+        /* 0x44 */ _OP_LABEL(GET_X8_B4),
+        /* 0x45 */ _OP_LABEL(GET_X8_B5),
+        /* 0x46 */ _OP_LABEL(GET_X8_B6),
+        /* 0x47 */ _OP_LABEL(GET_X8_B7),
+        /* 0x48 */ _OP_LABEL(SET_X8_B0),
+        /* 0x49 */ _OP_LABEL(SET_X8_B1),
+        /* 0x4A */ _OP_LABEL(SET_X8_B2),
+        /* 0x4B */ _OP_LABEL(SET_X8_B3),
+        /* 0x4C */ _OP_LABEL(SET_X8_B4),
+        /* 0x4D */ _OP_LABEL(SET_X8_B5),
+        /* 0x4E */ _OP_LABEL(SET_X8_B6),
+        /* 0x4F */ _OP_LABEL(SET_X8_B7),
+        /* 0x50 */ _OP_LABEL(RSET_X8_B0),
+        /* 0x51 */ _OP_LABEL(RSET_X8_B1),
+        /* 0x52 */ _OP_LABEL(RSET_X8_B2),
+        /* 0x53 */ _OP_LABEL(RSET_X8_B3),
+        /* 0x54 */ _OP_LABEL(RSET_X8_B4),
+        /* 0x55 */ _OP_LABEL(RSET_X8_B5),
+        /* 0x56 */ _OP_LABEL(RSET_X8_B6),
+        /* 0x57 */ _OP_LABEL(RSET_X8_B7),
+        /* 0x58 */ _OP_LABEL(READ_X8_B0),
+        /* 0x59 */ _OP_LABEL(READ_X8_B1),
+        /* 0x5A */ _OP_LABEL(READ_X8_B2),
+        /* 0x5B */ _OP_LABEL(READ_X8_B3),
+        /* 0x5C */ _OP_LABEL(READ_X8_B4),
+        /* 0x5D */ _OP_LABEL(READ_X8_B5),
+        /* 0x5E */ _OP_LABEL(READ_X8_B6),
+        /* 0x5F */ _OP_LABEL(READ_X8_B7),
+        /* 0x60 */ _OP_LABEL(WRITE_X8_B0),
+        /* 0x61 */ _OP_LABEL(WRITE_X8_B1),
+        /* 0x62 */ _OP_LABEL(WRITE_X8_B2),
+        /* 0x63 */ _OP_LABEL(WRITE_X8_B3),
+        /* 0x64 */ _OP_LABEL(WRITE_X8_B4),
+        /* 0x65 */ _OP_LABEL(WRITE_X8_B5),
+        /* 0x66 */ _OP_LABEL(WRITE_X8_B6),
+        /* 0x67 */ _OP_LABEL(WRITE_X8_B7),
+        /* 0x68 */ _OP_LABEL(WRITE_S_X8_B0),
+        /* 0x69 */ _OP_LABEL(WRITE_S_X8_B1),
+        /* 0x6A */ _OP_LABEL(WRITE_S_X8_B2),
+        /* 0x6B */ _OP_LABEL(WRITE_S_X8_B3),
+        /* 0x6C */ _OP_LABEL(WRITE_S_X8_B4),
+        /* 0x6D */ _OP_LABEL(WRITE_S_X8_B5),
+        /* 0x6E */ _OP_LABEL(WRITE_S_X8_B6),
+        /* 0x6F */ _OP_LABEL(WRITE_S_X8_B7),
+        /* 0x70 */ _OP_LABEL(WRITE_R_X8_B0),
+        /* 0x71 */ _OP_LABEL(WRITE_R_X8_B1),
+        /* 0x72 */ _OP_LABEL(WRITE_R_X8_B2),
+        /* 0x73 */ _OP_LABEL(WRITE_R_X8_B3),
+        /* 0x74 */ _OP_LABEL(WRITE_R_X8_B4),
+        /* 0x75 */ _OP_LABEL(WRITE_R_X8_B5),
+        /* 0x76 */ _OP_LABEL(WRITE_R_X8_B6),
+        /* 0x77 */ _OP_LABEL(WRITE_R_X8_B7),
+        /* 0x78 */ _OP_LABEL(WRITE_INV_X8_B0),
+        /* 0x79 */ _OP_LABEL(WRITE_INV_X8_B1),
+        /* 0x7A */ _OP_LABEL(WRITE_INV_X8_B2),
+        /* 0x7B */ _OP_LABEL(WRITE_INV_X8_B3),
+        /* 0x7C */ _OP_LABEL(WRITE_INV_X8_B4),
+        /* 0x7D */ _OP_LABEL(WRITE_INV_X8_B5),
+        /* 0x7E */ _OP_LABEL(WRITE_INV_X8_B6),
+        /* 0x7F */ _OP_LABEL(WRITE_INV_X8_B7),
+        /* 0x80 */ _OP_LABEL(READ_BIT_DU),
+        /* 0x81 */ _OP_LABEL(READ_BIT_DD),
+        /* 0x82 */ _OP_LABEL(READ_BIT_INV_DU),
+        /* 0x83 */ _OP_LABEL(READ_BIT_INV_DD),
+        /* 0x84 */ _OP_LABEL(WRITE_BIT_DU),
+        /* 0x85 */ _OP_LABEL(WRITE_BIT_DD),
+        /* 0x86 */ _OP_LABEL(WRITE_BIT_INV_DU),
+        /* 0x87 */ _OP_LABEL(WRITE_BIT_INV_DD),
+        /* 0x88 */ _OP_LABEL(WRITE_SET_DU),
+        /* 0x89 */ _OP_LABEL(WRITE_SET_DD),
+        /* 0x8A */ _OP_LABEL(WRITE_RSET_DU),
+        /* 0x8B */ _OP_LABEL(WRITE_RSET_DD),
+        /* 0x8C */ _OP_LABEL(STACK_DU),
+        /* 0x8D */ _OP_LABEL(STACK_DD),
+        /* 0x8E */ _OP_LABEL(STACK_DC),
+        /* 0x8F */ _OP_UNKNOWN,
+        /* 0x90 */ _OP_LABEL(BR_SAVE),
+        /* 0x91 */ _OP_LABEL(BR_READ),
+        /* 0x92 */ _OP_LABEL(BR_DROP),
+        /* 0x93 */ _OP_LABEL(BR_CLR),
+        /* 0x94 */ _OP_LABEL(STR_LEN),
+        /* 0x95 */ _OP_LABEL(STR_CAP),
+        /* 0x96 */ _OP_LABEL(STR_GET),
+        /* 0x97 */ _OP_LABEL(STR_SET),
+        /* 0x98 */ _OP_LABEL(STR_CLEAR),
+        /* 0x99 */ _OP_LABEL(STR_CMP),
+        /* 0x9A */ _OP_LABEL(STR_EQ),
+        /* 0x9B */ _OP_LABEL(STR_CONCAT),
+        /* 0x9C */ _OP_LABEL(STR_COPY),
+        /* 0x9D */ _OP_LABEL(STR_SUBSTR),
+        /* 0x9E */ _OP_LABEL(STR_FIND),
+        /* 0x9F */ _OP_LABEL(STR_CHAR),
+        /* 0xA0 */ _OP_LABEL(BW_AND_X8),
+        /* 0xA1 */ _OP_LABEL(BW_AND_X16),
+        /* 0xA2 */ _OP_LABEL(BW_AND_X32),
+        /* 0xA3 */ _OP_LABEL(BW_AND_X64),
+        /* 0xA4 */ _OP_LABEL(BW_OR_X8),
+        /* 0xA5 */ _OP_LABEL(BW_OR_X16),
+        /* 0xA6 */ _OP_LABEL(BW_OR_X32),
+        /* 0xA7 */ _OP_LABEL(BW_OR_X64),
+        /* 0xA8 */ _OP_LABEL(BW_XOR_X8),
+        /* 0xA9 */ _OP_LABEL(BW_XOR_X16),
+        /* 0xAA */ _OP_LABEL(BW_XOR_X32),
+        /* 0xAB */ _OP_LABEL(BW_XOR_X64),
+        /* 0xAC */ _OP_LABEL(BW_NOT_X8),
+        /* 0xAD */ _OP_LABEL(BW_NOT_X16),
+        /* 0xAE */ _OP_LABEL(BW_NOT_X32),
+        /* 0xAF */ _OP_LABEL(BW_NOT_X64),
+        /* 0xB0 */ _OP_LABEL(BW_LSHIFT_X8),
+        /* 0xB1 */ _OP_LABEL(BW_LSHIFT_X16),
+        /* 0xB2 */ _OP_LABEL(BW_LSHIFT_X32),
+        /* 0xB3 */ _OP_LABEL(BW_LSHIFT_X64),
+        /* 0xB4 */ _OP_LABEL(BW_RSHIFT_X8),
+        /* 0xB5 */ _OP_LABEL(BW_RSHIFT_X16),
+        /* 0xB6 */ _OP_LABEL(BW_RSHIFT_X32),
+        /* 0xB7 */ _OP_LABEL(BW_RSHIFT_X64),
+        /* 0xB8 */ _OP_UNKNOWN,
+        /* 0xB9 */ _OP_UNKNOWN,
+        /* 0xBA */ _OP_UNKNOWN,
+        /* 0xBB */ _OP_UNKNOWN,
+        /* 0xBC */ _OP_UNKNOWN,
+        /* 0xBD */ _OP_UNKNOWN,
+        /* 0xBE */ _OP_UNKNOWN,
+        /* 0xBF */ _OP_UNKNOWN,
+        /* 0xC0 */ _OP_LABEL(LOGIC_AND),
+        /* 0xC1 */ _OP_LABEL(LOGIC_OR),
+        /* 0xC2 */ _OP_LABEL(LOGIC_XOR),
+        /* 0xC3 */ _OP_LABEL(LOGIC_NOT),
+        /* 0xC4 */ _OP_UNKNOWN,
+        /* 0xC5 */ _OP_UNKNOWN,
+        /* 0xC6 */ _OP_UNKNOWN,
+        /* 0xC7 */ _OP_UNKNOWN,
+        /* 0xC8 */ _OP_UNKNOWN,
+        /* 0xC9 */ _OP_UNKNOWN,
+        /* 0xCA */ _OP_UNKNOWN,
+        /* 0xCB */ _OP_UNKNOWN,
+        /* 0xCC */ _OP_UNKNOWN,
+        /* 0xCD */ _OP_UNKNOWN,
+        /* 0xCE */ _OP_UNKNOWN,
+        /* 0xCF */ _OP_UNKNOWN,
+        /* 0xD0 */ _OP_LABEL(CMP_EQ),
+        /* 0xD1 */ _OP_LABEL(CMP_NEQ),
+        /* 0xD2 */ _OP_LABEL(CMP_GT),
+        /* 0xD3 */ _OP_LABEL(CMP_GTE),
+        /* 0xD4 */ _OP_LABEL(CMP_LT),
+        /* 0xD5 */ _OP_LABEL(CMP_LTE),
+        /* 0xD6 */ _OP_UNKNOWN,
+        /* 0xD7 */ _OP_UNKNOWN,
+        /* 0xD8 */ _OP_UNKNOWN,
+        /* 0xD9 */ _OP_UNKNOWN,
+        /* 0xDA */ _OP_UNKNOWN,
+        /* 0xDB */ _OP_UNKNOWN,
+        /* 0xDC */ _OP_UNKNOWN,
+        /* 0xDD */ _OP_UNKNOWN,
+        /* 0xDE */ _OP_UNKNOWN,
+        /* 0xDF */ _OP_UNKNOWN,
+        /* 0xE0 */ _OP_LABEL(JMP),
+        /* 0xE1 */ _OP_LABEL(JMP_IF),
+        /* 0xE2 */ _OP_LABEL(JMP_IF_NOT),
+        /* 0xE3 */ _OP_LABEL(CALL),
+        /* 0xE4 */ _OP_LABEL(CALL_IF),
+        /* 0xE5 */ _OP_LABEL(CALL_IF_NOT),
+        /* 0xE6 */ _OP_LABEL(RET),
+        /* 0xE7 */ _OP_LABEL(RET_IF),
+        /* 0xE8 */ _OP_LABEL(RET_IF_NOT),
+        /* 0xE9 */ _OP_LABEL(JMP_REL),
+        /* 0xEA */ _OP_LABEL(JMP_IF_REL),
+        /* 0xEB */ _OP_LABEL(JMP_IF_NOT_REL),
+        /* 0xEC */ _OP_LABEL(CALL_REL),
+        /* 0xED */ _OP_LABEL(CALL_IF_REL),
+        /* 0xEE */ _OP_LABEL(CALL_IF_NOT_REL),
+        /* 0xEF */ _OP_UNKNOWN,
+        /* 0xF0 */ _OP_LABEL(FFI_CALL),
+        /* 0xF1 */ _OP_LABEL(FFI_CALL_STACK),
+        /* 0xF2 */ _OP_LABEL(STR_TO_NUM),
+        /* 0xF3 */ _OP_LABEL(STR_FROM_NUM),
+        /* 0xF4 */ _OP_LABEL(STR_INIT),
+        /* 0xF5 */ _OP_LABEL(CSTR_LIT),
+        /* 0xF6 */ _OP_LABEL(CSTR_CPY),
+        /* 0xF7 */ _OP_LABEL(CSTR_EQ),
+        /* 0xF8 */ _OP_LABEL(CSTR_CAT),
+        /* 0xF9 */ _OP_UNKNOWN,
+        /* 0xFA */ _OP_UNKNOWN,
+        /* 0xFB */ _OP_LABEL(CONFIG_DB),
+        /* 0xFC */ _OP_LABEL(CONFIG_TC),
+        /* 0xFD */ _OP_LABEL(LANG),
+        /* 0xFE */ _OP_LABEL(COMMENT),
+        /* 0xFF */ _OP_LABEL(EXIT),
+    };
+
+    // DISPATCH: fetch next opcode, increment instruction count, jump to handler.
+    // Each handler calls DISPATCH() at the end to continue execution.
+    // Handlers that detect an error set `status` and goto `_op_done`.
+    #define DISPATCH() do { \
+        if (index >= prog_size) goto _op_done; \
+        instruction_count++; \
+        goto *dispatch_table[program[index++]]; \
+    } while (0)
+
+    // Helper: call a PLCMethods handler and check its return value
+    #define _OP_CALL(handler_expr) do { \
+        status = (handler_expr); \
+        if (status != STATUS_SUCCESS) goto _op_done; \
+        DISPATCH(); \
+    } while (0)
+
+    // --- Begin threaded dispatch ---
+    DISPATCH();
+
+    _op_NOP: DISPATCH();
+    _op_LOGIC_AND: _OP_CALL(PLCMethods::LOGIC_AND(this->stack));
+    _op_LOGIC_OR:  _OP_CALL(PLCMethods::LOGIC_OR(this->stack));
+    _op_LOGIC_NOT: _OP_CALL(PLCMethods::LOGIC_NOT(this->stack));
+    _op_LOGIC_XOR: _OP_CALL(PLCMethods::LOGIC_XOR(this->stack));
+
+#ifdef PLCRUNTIME_CVT_ENABLED
+    _op_CVT: _OP_CALL(PLCMethods::CVT(this->stack, program, prog_size, index));
+#else
+    _op_CVT: status = UNKNOWN_INSTRUCTION; goto _op_done;
+#endif
+
+    _op_LOAD:      _OP_CALL(PLCMethods::LOAD(this->stack, this->memory, program, prog_size, index));
+    _op_MOVE:      _OP_CALL(PLCMethods::MOVE(this->stack, this->memory, program, prog_size, index));
+    _op_MOVE_COPY: _OP_CALL(PLCMethods::MOVE_COPY(this->stack, this->memory, program, prog_size, index));
+    _op_LOAD_FROM: _OP_CALL(PLCMethods::LOAD_FROM(this->stack, this->memory, program, prog_size, index));
+    _op_MOVE_TO:   _OP_CALL(PLCMethods::MOVE_TO(this->stack, this->memory, program, prog_size, index));
+    _op_INC_MEM:   _OP_CALL(PLCMethods::INC_MEM(this->memory, program, prog_size, index));
+    _op_DEC_MEM:   _OP_CALL(PLCMethods::DEC_MEM(this->memory, program, prog_size, index));
+    _op_COPY:      _OP_CALL(PLCMethods::COPY(this->stack, program, prog_size, index));
+#ifdef PLCRUNTIME_STACK_OPS_ENABLED
+    _op_SWAP:      _OP_CALL(PLCMethods::SWAP(this->stack, program, prog_size, index));
+#else
+    _op_SWAP: status = UNKNOWN_INSTRUCTION; goto _op_done;
+#endif
+    _op_DROP:      _OP_CALL(PLCMethods::DROP(this->stack, program, prog_size, index));
+    _op_CLEAR:     _OP_CALL(PLCMethods::CLEAR(this->stack));
+#ifdef PLCRUNTIME_STACK_OPS_ENABLED
+    _op_PICK:      _OP_CALL(PLCMethods::PICK(this->stack, program, prog_size, index));
+    _op_POKE:      _OP_CALL(PLCMethods::POKE(this->stack, program, prog_size, index));
+#else
+    _op_PICK: status = UNKNOWN_INSTRUCTION; goto _op_done;
+    _op_POKE: status = UNKNOWN_INSTRUCTION; goto _op_done;
+#endif
+    _op_MEM_FILL:  _OP_CALL(PLCMethods::MEM_FILL(this->memory, program, prog_size, index));
+
+    _op_JMP:               _OP_CALL(PLCMethods::handle_JMP(this->stack, program, prog_size, index));
+    _op_JMP_IF:            _OP_CALL(PLCMethods::handle_JMP_IF(this->stack, program, prog_size, index));
+    _op_JMP_IF_NOT:        _OP_CALL(PLCMethods::handle_JMP_IF_NOT(this->stack, program, prog_size, index));
+    _op_CALL:              _OP_CALL(PLCMethods::handle_CALL(this->stack, program, prog_size, index));
+    _op_CALL_IF:           _OP_CALL(PLCMethods::handle_CALL_IF(this->stack, program, prog_size, index));
+    _op_CALL_IF_NOT:       _OP_CALL(PLCMethods::handle_CALL_IF_NOT(this->stack, program, prog_size, index));
+    _op_JMP_REL:           _OP_CALL(PLCMethods::handle_JMP_REL(this->stack, program, prog_size, index));
+    _op_JMP_IF_REL:        _OP_CALL(PLCMethods::handle_JMP_IF_REL(this->stack, program, prog_size, index));
+    _op_JMP_IF_NOT_REL:    _OP_CALL(PLCMethods::handle_JMP_IF_NOT_REL(this->stack, program, prog_size, index));
+    _op_CALL_REL:          _OP_CALL(PLCMethods::handle_CALL_REL(this->stack, program, prog_size, index));
+    _op_CALL_IF_REL:       _OP_CALL(PLCMethods::handle_CALL_IF_REL(this->stack, program, prog_size, index));
+    _op_CALL_IF_NOT_REL:   _OP_CALL(PLCMethods::handle_CALL_IF_NOT_REL(this->stack, program, prog_size, index));
+    _op_RET:               _OP_CALL(PLCMethods::handle_RET(this->stack, program, prog_size, index));
+    _op_RET_IF:            _OP_CALL(PLCMethods::handle_RET_IF(this->stack, program, prog_size, index));
+    _op_RET_IF_NOT:        _OP_CALL(PLCMethods::handle_RET_IF_NOT(this->stack, program, prog_size, index));
+
+    _op_type_pointer: _OP_CALL(PLCMethods::PUSH_pointer(this->stack, program, prog_size, index));
+    _op_type_bool:    _OP_CALL(PLCMethods::PUSH_bool(this->stack, program, prog_size, index));
+    _op_type_u8:      _OP_CALL(PLCMethods::push_u8(this->stack, program, prog_size, index));
+    _op_type_i8:      _OP_CALL(PLCMethods::push_i8(this->stack, program, prog_size, index));
+    _op_type_u16:     _OP_CALL(PLCMethods::push_u16(this->stack, program, prog_size, index));
+    _op_type_i16:     _OP_CALL(PLCMethods::push_i16(this->stack, program, prog_size, index));
+#ifdef PLCRUNTIME_32BIT_OPS_ENABLED
+    _op_type_u32:     _OP_CALL(PLCMethods::push_u32(this->stack, program, prog_size, index));
+    _op_type_i32:     _OP_CALL(PLCMethods::push_i32(this->stack, program, prog_size, index));
+#else
+    _op_type_u32: status = UNKNOWN_INSTRUCTION; goto _op_done;
+    _op_type_i32: status = UNKNOWN_INSTRUCTION; goto _op_done;
+#endif
+#ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
+    _op_type_f32:     _OP_CALL(PLCMethods::push_f32(this->stack, program, prog_size, index));
+#else
+    _op_type_f32: status = UNKNOWN_INSTRUCTION; goto _op_done;
+#endif
+#ifdef USE_X64_OPS
+    _op_type_u64:     _OP_CALL(PLCMethods::push_u64(this->stack, program, prog_size, index));
+    _op_type_i64:     _OP_CALL(PLCMethods::push_i64(this->stack, program, prog_size, index));
+    _op_type_f64:     _OP_CALL(PLCMethods::push_f64(this->stack, program, prog_size, index));
+#else
+    _op_type_u64: status = UNKNOWN_INSTRUCTION; goto _op_done;
+    _op_type_i64: status = UNKNOWN_INSTRUCTION; goto _op_done;
+    _op_type_f64: status = UNKNOWN_INSTRUCTION; goto _op_done;
+#endif
+
+    _op_ADD: _OP_CALL(PLCMethods::handle_ADD(this->stack, program, prog_size, index));
+    _op_SUB: _OP_CALL(PLCMethods::handle_SUB(this->stack, program, prog_size, index));
+    _op_MUL: _OP_CALL(PLCMethods::handle_MUL(this->stack, program, prog_size, index));
+    _op_DIV: _OP_CALL(PLCMethods::handle_DIV(this->stack, program, prog_size, index));
+    _op_MOD: _OP_CALL(PLCMethods::handle_MOD(this->stack, program, prog_size, index));
+#ifdef PLCRUNTIME_ADVANCED_MATH_ENABLED
+    _op_POW:  _OP_CALL(PLCMethods::handle_POW(this->stack, program, prog_size, index));
+    _op_SQRT: _OP_CALL(PLCMethods::handle_SQRT(this->stack, program, prog_size, index));
+    _op_SIN:  _OP_CALL(PLCMethods::handle_SIN(this->stack, program, prog_size, index));
+    _op_COS:  _OP_CALL(PLCMethods::handle_COS(this->stack, program, prog_size, index));
+#else
+    _op_POW:  status = UNKNOWN_INSTRUCTION; goto _op_done;
+    _op_SQRT: status = UNKNOWN_INSTRUCTION; goto _op_done;
+    _op_SIN:  status = UNKNOWN_INSTRUCTION; goto _op_done;
+    _op_COS:  status = UNKNOWN_INSTRUCTION; goto _op_done;
+#endif
+    _op_ABS: _OP_CALL(PLCMethods::handle_ABS(this->stack, program, prog_size, index));
+    _op_NEG: _OP_CALL(PLCMethods::handle_NEG(this->stack, program, prog_size, index));
+
+#ifdef PLCRUNTIME_TIMERS_ENABLED
+    _op_TON_CONST: _OP_CALL(PLCMethods::handle_TON_CONST(this->stack, this->memory, program, prog_size, index));
+    _op_TON_MEM:   _OP_CALL(PLCMethods::handle_TON_MEM(this->stack, this->memory, program, prog_size, index));
+    _op_TOF_CONST: _OP_CALL(PLCMethods::handle_TOF_CONST(this->stack, this->memory, program, prog_size, index));
+    _op_TOF_MEM:   _OP_CALL(PLCMethods::handle_TOF_MEM(this->stack, this->memory, program, prog_size, index));
+    _op_TP_CONST:  _OP_CALL(PLCMethods::handle_TP_CONST(this->stack, this->memory, program, prog_size, index));
+    _op_TP_MEM:    _OP_CALL(PLCMethods::handle_TP_MEM(this->stack, this->memory, program, prog_size, index));
+#else
+    _op_TON_CONST: status = UNKNOWN_INSTRUCTION; goto _op_done;
+    _op_TON_MEM:   status = UNKNOWN_INSTRUCTION; goto _op_done;
+    _op_TOF_CONST: status = UNKNOWN_INSTRUCTION; goto _op_done;
+    _op_TOF_MEM:   status = UNKNOWN_INSTRUCTION; goto _op_done;
+    _op_TP_CONST:  status = UNKNOWN_INSTRUCTION; goto _op_done;
+    _op_TP_MEM:    status = UNKNOWN_INSTRUCTION; goto _op_done;
+#endif
+
+#ifdef PLCRUNTIME_COUNTERS_ENABLED
+    _op_CTU_CONST: _OP_CALL(PLCMethods::handle_CTU_CONST(this->stack, this->memory, program, prog_size, index));
+    _op_CTU_MEM:   _OP_CALL(PLCMethods::handle_CTU_MEM(this->stack, this->memory, program, prog_size, index));
+    _op_CTD_CONST: _OP_CALL(PLCMethods::handle_CTD_CONST(this->stack, this->memory, program, prog_size, index));
+    _op_CTD_MEM:   _OP_CALL(PLCMethods::handle_CTD_MEM(this->stack, this->memory, program, prog_size, index));
+#else
+    _op_CTU_CONST: status = UNKNOWN_INSTRUCTION; goto _op_done;
+    _op_CTU_MEM:   status = UNKNOWN_INSTRUCTION; goto _op_done;
+    _op_CTD_CONST: status = UNKNOWN_INSTRUCTION; goto _op_done;
+    _op_CTD_MEM:   status = UNKNOWN_INSTRUCTION; goto _op_done;
+#endif
+
+    _op_GET_X8_B0: _OP_CALL(PLCMethods::handle_GET_X8_B0(this->stack));
+    _op_GET_X8_B1: _OP_CALL(PLCMethods::handle_GET_X8_B1(this->stack));
+    _op_GET_X8_B2: _OP_CALL(PLCMethods::handle_GET_X8_B2(this->stack));
+    _op_GET_X8_B3: _OP_CALL(PLCMethods::handle_GET_X8_B3(this->stack));
+    _op_GET_X8_B4: _OP_CALL(PLCMethods::handle_GET_X8_B4(this->stack));
+    _op_GET_X8_B5: _OP_CALL(PLCMethods::handle_GET_X8_B5(this->stack));
+    _op_GET_X8_B6: _OP_CALL(PLCMethods::handle_GET_X8_B6(this->stack));
+    _op_GET_X8_B7: _OP_CALL(PLCMethods::handle_GET_X8_B7(this->stack));
+    _op_SET_X8_B0: _OP_CALL(PLCMethods::handle_SET_X8_B0(this->stack));
+    _op_SET_X8_B1: _OP_CALL(PLCMethods::handle_SET_X8_B1(this->stack));
+    _op_SET_X8_B2: _OP_CALL(PLCMethods::handle_SET_X8_B2(this->stack));
+    _op_SET_X8_B3: _OP_CALL(PLCMethods::handle_SET_X8_B3(this->stack));
+    _op_SET_X8_B4: _OP_CALL(PLCMethods::handle_SET_X8_B4(this->stack));
+    _op_SET_X8_B5: _OP_CALL(PLCMethods::handle_SET_X8_B5(this->stack));
+    _op_SET_X8_B6: _OP_CALL(PLCMethods::handle_SET_X8_B6(this->stack));
+    _op_SET_X8_B7: _OP_CALL(PLCMethods::handle_SET_X8_B7(this->stack));
+    _op_RSET_X8_B0: _OP_CALL(PLCMethods::handle_RSET_X8_B0(this->stack));
+    _op_RSET_X8_B1: _OP_CALL(PLCMethods::handle_RSET_X8_B1(this->stack));
+    _op_RSET_X8_B2: _OP_CALL(PLCMethods::handle_RSET_X8_B2(this->stack));
+    _op_RSET_X8_B3: _OP_CALL(PLCMethods::handle_RSET_X8_B3(this->stack));
+    _op_RSET_X8_B4: _OP_CALL(PLCMethods::handle_RSET_X8_B4(this->stack));
+    _op_RSET_X8_B5: _OP_CALL(PLCMethods::handle_RSET_X8_B5(this->stack));
+    _op_RSET_X8_B6: _OP_CALL(PLCMethods::handle_RSET_X8_B6(this->stack));
+    _op_RSET_X8_B7: _OP_CALL(PLCMethods::handle_RSET_X8_B7(this->stack));
+    _op_READ_X8_B0: _OP_CALL(PLCMethods::handle_READ_X8_B0(this->stack, this->memory, program, prog_size, index));
+    _op_READ_X8_B1: _OP_CALL(PLCMethods::handle_READ_X8_B1(this->stack, this->memory, program, prog_size, index));
+    _op_READ_X8_B2: _OP_CALL(PLCMethods::handle_READ_X8_B2(this->stack, this->memory, program, prog_size, index));
+    _op_READ_X8_B3: _OP_CALL(PLCMethods::handle_READ_X8_B3(this->stack, this->memory, program, prog_size, index));
+    _op_READ_X8_B4: _OP_CALL(PLCMethods::handle_READ_X8_B4(this->stack, this->memory, program, prog_size, index));
+    _op_READ_X8_B5: _OP_CALL(PLCMethods::handle_READ_X8_B5(this->stack, this->memory, program, prog_size, index));
+    _op_READ_X8_B6: _OP_CALL(PLCMethods::handle_READ_X8_B6(this->stack, this->memory, program, prog_size, index));
+    _op_READ_X8_B7: _OP_CALL(PLCMethods::handle_READ_X8_B7(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_X8_B0: _OP_CALL(PLCMethods::handle_WRITE_X8_B0(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_X8_B1: _OP_CALL(PLCMethods::handle_WRITE_X8_B1(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_X8_B2: _OP_CALL(PLCMethods::handle_WRITE_X8_B2(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_X8_B3: _OP_CALL(PLCMethods::handle_WRITE_X8_B3(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_X8_B4: _OP_CALL(PLCMethods::handle_WRITE_X8_B4(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_X8_B5: _OP_CALL(PLCMethods::handle_WRITE_X8_B5(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_X8_B6: _OP_CALL(PLCMethods::handle_WRITE_X8_B6(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_X8_B7: _OP_CALL(PLCMethods::handle_WRITE_X8_B7(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_S_X8_B0: _OP_CALL(PLCMethods::handle_WRITE_S_X8_B0(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_S_X8_B1: _OP_CALL(PLCMethods::handle_WRITE_S_X8_B1(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_S_X8_B2: _OP_CALL(PLCMethods::handle_WRITE_S_X8_B2(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_S_X8_B3: _OP_CALL(PLCMethods::handle_WRITE_S_X8_B3(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_S_X8_B4: _OP_CALL(PLCMethods::handle_WRITE_S_X8_B4(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_S_X8_B5: _OP_CALL(PLCMethods::handle_WRITE_S_X8_B5(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_S_X8_B6: _OP_CALL(PLCMethods::handle_WRITE_S_X8_B6(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_S_X8_B7: _OP_CALL(PLCMethods::handle_WRITE_S_X8_B7(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_R_X8_B0: _OP_CALL(PLCMethods::handle_WRITE_R_X8_B0(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_R_X8_B1: _OP_CALL(PLCMethods::handle_WRITE_R_X8_B1(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_R_X8_B2: _OP_CALL(PLCMethods::handle_WRITE_R_X8_B2(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_R_X8_B3: _OP_CALL(PLCMethods::handle_WRITE_R_X8_B3(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_R_X8_B4: _OP_CALL(PLCMethods::handle_WRITE_R_X8_B4(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_R_X8_B5: _OP_CALL(PLCMethods::handle_WRITE_R_X8_B5(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_R_X8_B6: _OP_CALL(PLCMethods::handle_WRITE_R_X8_B6(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_R_X8_B7: _OP_CALL(PLCMethods::handle_WRITE_R_X8_B7(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_INV_X8_B0: _OP_CALL(PLCMethods::handle_WRITE_INV_X8_B0(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_INV_X8_B1: _OP_CALL(PLCMethods::handle_WRITE_INV_X8_B1(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_INV_X8_B2: _OP_CALL(PLCMethods::handle_WRITE_INV_X8_B2(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_INV_X8_B3: _OP_CALL(PLCMethods::handle_WRITE_INV_X8_B3(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_INV_X8_B4: _OP_CALL(PLCMethods::handle_WRITE_INV_X8_B4(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_INV_X8_B5: _OP_CALL(PLCMethods::handle_WRITE_INV_X8_B5(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_INV_X8_B6: _OP_CALL(PLCMethods::handle_WRITE_INV_X8_B6(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_INV_X8_B7: _OP_CALL(PLCMethods::handle_WRITE_INV_X8_B7(this->stack, this->memory, program, prog_size, index));
+
+    _op_READ_BIT_DU:      _OP_CALL(PLCMethods::handle_READ_BIT_DU(this->stack, this->memory, program, prog_size, index));
+    _op_READ_BIT_DD:      _OP_CALL(PLCMethods::handle_READ_BIT_DD(this->stack, this->memory, program, prog_size, index));
+    _op_READ_BIT_INV_DU:  _OP_CALL(PLCMethods::handle_READ_BIT_INV_DU(this->stack, this->memory, program, prog_size, index));
+    _op_READ_BIT_INV_DD:  _OP_CALL(PLCMethods::handle_READ_BIT_INV_DD(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_BIT_DU:     _OP_CALL(PLCMethods::handle_WRITE_BIT_DU(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_BIT_DD:     _OP_CALL(PLCMethods::handle_WRITE_BIT_DD(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_BIT_INV_DU: _OP_CALL(PLCMethods::handle_WRITE_BIT_INV_DU(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_BIT_INV_DD: _OP_CALL(PLCMethods::handle_WRITE_BIT_INV_DD(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_SET_DU:     _OP_CALL(PLCMethods::handle_WRITE_SET_DU(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_SET_DD:     _OP_CALL(PLCMethods::handle_WRITE_SET_DD(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_RSET_DU:    _OP_CALL(PLCMethods::handle_WRITE_RSET_DU(this->stack, this->memory, program, prog_size, index));
+    _op_WRITE_RSET_DD:    _OP_CALL(PLCMethods::handle_WRITE_RSET_DD(this->stack, this->memory, program, prog_size, index));
+    _op_STACK_DU:         _OP_CALL(PLCMethods::handle_STACK_DU(this->stack, this->memory, program, prog_size, index));
+    _op_STACK_DD:         _OP_CALL(PLCMethods::handle_STACK_DD(this->stack, this->memory, program, prog_size, index));
+    _op_STACK_DC:         _OP_CALL(PLCMethods::handle_STACK_DC(this->stack, this->memory, program, prog_size, index));
+
+    _op_BR_SAVE: {
+        u8 value = this->stack.pop_u8();
+        this->BR = (this->BR << 1) | (value ? 1 : 0);
+        DISPATCH();
+    }
+    _op_BR_READ: {
+        u8 value = (this->BR & 1) ? 1 : 0;
+        this->stack.push(value);
+        DISPATCH();
+    }
+    _op_BR_DROP: {
+        this->BR >>= 1;
+        DISPATCH();
+    }
+    _op_BR_CLR: {
+        this->BR = 0;
+        DISPATCH();
+    }
+
+#ifdef PLCRUNTIME_STRINGS_ENABLED
+    _op_STR_LEN:    _OP_CALL(PLCMethods::handle_STR_LEN(this->stack, this->memory, program, prog_size, index));
+    _op_STR_CAP:    _OP_CALL(PLCMethods::handle_STR_CAP(this->stack, this->memory, program, prog_size, index));
+    _op_STR_GET:    _OP_CALL(PLCMethods::handle_STR_GET(this->stack, this->memory, program, prog_size, index));
+    _op_STR_SET:    _OP_CALL(PLCMethods::handle_STR_SET(this->stack, this->memory, program, prog_size, index));
+    _op_STR_CLEAR:  _OP_CALL(PLCMethods::handle_STR_CLEAR(this->stack, this->memory, program, prog_size, index));
+    _op_STR_CMP:    _OP_CALL(PLCMethods::handle_STR_CMP(this->stack, this->memory, program, prog_size, index));
+    _op_STR_EQ:     _OP_CALL(PLCMethods::handle_STR_EQ(this->stack, this->memory, program, prog_size, index));
+    _op_STR_CONCAT: _OP_CALL(PLCMethods::handle_STR_CONCAT(this->stack, this->memory, program, prog_size, index));
+    _op_STR_COPY:   _OP_CALL(PLCMethods::handle_STR_COPY(this->stack, this->memory, program, prog_size, index));
+    _op_STR_SUBSTR: _OP_CALL(PLCMethods::handle_STR_SUBSTR(this->stack, this->memory, program, prog_size, index));
+    _op_STR_FIND:   _OP_CALL(PLCMethods::handle_STR_FIND(this->stack, this->memory, program, prog_size, index));
+    _op_STR_CHAR:   _OP_CALL(PLCMethods::handle_STR_CHAR(this->stack, this->memory, program, prog_size, index));
+    _op_STR_TO_NUM:   _OP_CALL(PLCMethods::handle_STR_TO_NUM(this->stack, this->memory, program, prog_size, index));
+    _op_STR_FROM_NUM: _OP_CALL(PLCMethods::handle_STR_FROM_NUM(this->stack, this->memory, program, prog_size, index));
+    _op_STR_INIT:     _OP_CALL(PLCMethods::handle_STR_INIT(this->stack, this->memory, program, prog_size, index));
+    _op_CSTR_LIT:     _OP_CALL(PLCMethods::handle_CSTR_LIT(this->stack, this->memory, program, prog_size, index));
+    _op_CSTR_CPY:     _OP_CALL(PLCMethods::handle_CSTR_CPY(this->stack, this->memory, program, prog_size, index));
+    _op_CSTR_EQ:      _OP_CALL(PLCMethods::handle_CSTR_EQ(this->stack, this->memory, program, prog_size, index));
+    _op_CSTR_CAT:     _OP_CALL(PLCMethods::handle_CSTR_CAT(this->stack, this->memory, program, prog_size, index));
+#else
+    _op_STR_LEN:    _op_STR_CAP:    _op_STR_GET:    _op_STR_SET:
+    _op_STR_CLEAR:  _op_STR_CMP:    _op_STR_EQ:     _op_STR_CONCAT:
+    _op_STR_COPY:   _op_STR_SUBSTR: _op_STR_FIND:   _op_STR_CHAR:
+    _op_STR_TO_NUM: _op_STR_FROM_NUM: _op_STR_INIT:
+    _op_CSTR_LIT:   _op_CSTR_CPY:   _op_CSTR_EQ:    _op_CSTR_CAT:
+        status = UNKNOWN_INSTRUCTION; goto _op_done;
+#endif
+
+#ifdef PLCRUNTIME_BITWISE_OPS_ENABLED
+    _op_BW_AND_X8:    _OP_CALL(PLCMethods::handle_BW_AND_X8(this->stack));
+    _op_BW_AND_X16:   _OP_CALL(PLCMethods::handle_BW_AND_X16(this->stack));
+    _op_BW_AND_X32:   _OP_CALL(PLCMethods::handle_BW_AND_X32(this->stack));
+    _op_BW_OR_X8:     _OP_CALL(PLCMethods::handle_BW_OR_X8(this->stack));
+    _op_BW_OR_X16:    _OP_CALL(PLCMethods::handle_BW_OR_X16(this->stack));
+    _op_BW_OR_X32:    _OP_CALL(PLCMethods::handle_BW_OR_X32(this->stack));
+    _op_BW_XOR_X8:    _OP_CALL(PLCMethods::handle_BW_XOR_X8(this->stack));
+    _op_BW_XOR_X16:   _OP_CALL(PLCMethods::handle_BW_XOR_X16(this->stack));
+    _op_BW_XOR_X32:   _OP_CALL(PLCMethods::handle_BW_XOR_X32(this->stack));
+    _op_BW_NOT_X8:    _OP_CALL(PLCMethods::handle_BW_NOT_X8(this->stack));
+    _op_BW_NOT_X16:   _OP_CALL(PLCMethods::handle_BW_NOT_X16(this->stack));
+    _op_BW_NOT_X32:   _OP_CALL(PLCMethods::handle_BW_NOT_X32(this->stack));
+    _op_BW_LSHIFT_X8:  _OP_CALL(PLCMethods::handle_BW_LSHIFT_X8(this->stack));
+    _op_BW_LSHIFT_X16: _OP_CALL(PLCMethods::handle_BW_LSHIFT_X16(this->stack));
+    _op_BW_LSHIFT_X32: _OP_CALL(PLCMethods::handle_BW_LSHIFT_X32(this->stack));
+    _op_BW_RSHIFT_X8:  _OP_CALL(PLCMethods::handle_BW_RSHIFT_X8(this->stack));
+    _op_BW_RSHIFT_X16: _OP_CALL(PLCMethods::handle_BW_RSHIFT_X16(this->stack));
+    _op_BW_RSHIFT_X32: _OP_CALL(PLCMethods::handle_BW_RSHIFT_X32(this->stack));
+#ifdef USE_X64_OPS
+    _op_BW_AND_X64:    _OP_CALL(PLCMethods::handle_BW_AND_X64(this->stack));
+    _op_BW_OR_X64:     _OP_CALL(PLCMethods::handle_BW_OR_X64(this->stack));
+    _op_BW_XOR_X64:    _OP_CALL(PLCMethods::handle_BW_XOR_X64(this->stack));
+    _op_BW_NOT_X64:    _OP_CALL(PLCMethods::handle_BW_NOT_X64(this->stack));
+    _op_BW_LSHIFT_X64: _OP_CALL(PLCMethods::handle_BW_LSHIFT_X64(this->stack));
+    _op_BW_RSHIFT_X64: _OP_CALL(PLCMethods::handle_BW_RSHIFT_X64(this->stack));
+#else
+    _op_BW_AND_X64:    _op_BW_OR_X64:     _op_BW_XOR_X64:
+    _op_BW_NOT_X64:    _op_BW_LSHIFT_X64: _op_BW_RSHIFT_X64:
+        status = UNKNOWN_INSTRUCTION; goto _op_done;
+#endif
+#else
+    _op_BW_AND_X8:   _op_BW_AND_X16:   _op_BW_AND_X32:   _op_BW_AND_X64:
+    _op_BW_OR_X8:    _op_BW_OR_X16:    _op_BW_OR_X32:    _op_BW_OR_X64:
+    _op_BW_XOR_X8:   _op_BW_XOR_X16:   _op_BW_XOR_X32:   _op_BW_XOR_X64:
+    _op_BW_NOT_X8:   _op_BW_NOT_X16:   _op_BW_NOT_X32:   _op_BW_NOT_X64:
+    _op_BW_LSHIFT_X8: _op_BW_LSHIFT_X16: _op_BW_LSHIFT_X32: _op_BW_LSHIFT_X64:
+    _op_BW_RSHIFT_X8: _op_BW_RSHIFT_X16: _op_BW_RSHIFT_X32: _op_BW_RSHIFT_X64:
+        status = UNKNOWN_INSTRUCTION; goto _op_done;
+#endif
+
+    _op_CMP_EQ:  _OP_CALL(PLCMethods::handle_CMP_EQ(this->stack, program, prog_size, index));
+    _op_CMP_NEQ: _OP_CALL(PLCMethods::handle_CMP_NEQ(this->stack, program, prog_size, index));
+    _op_CMP_GT:  _OP_CALL(PLCMethods::handle_CMP_GT(this->stack, program, prog_size, index));
+    _op_CMP_GTE: _OP_CALL(PLCMethods::handle_CMP_GTE(this->stack, program, prog_size, index));
+    _op_CMP_LT:  _OP_CALL(PLCMethods::handle_CMP_LT(this->stack, program, prog_size, index));
+    _op_CMP_LTE: _OP_CALL(PLCMethods::handle_CMP_LTE(this->stack, program, prog_size, index));
+
+#ifdef PLCRUNTIME_FFI_ENABLED
+    _op_FFI_CALL: {
+        if (index + 2 > prog_size) { status = PROGRAM_SIZE_EXCEEDED; goto _op_done; }
+        u8 ffi_index = program[index++];
+        u8 param_count = program[index++];
+        if (param_count > PLCRUNTIME_FFI_MAX_PARAMS) { status = FFI_INVALID_PARAMS; goto _op_done; }
+        u16 param_addrs[PLCRUNTIME_FFI_MAX_PARAMS];
+        for (u8 i = 0; i < param_count; i++) {
+            if (index + 2 > prog_size) { status = PROGRAM_SIZE_EXCEEDED; goto _op_done; }
+            param_addrs[i] = read_u16(program + index);
+            index += 2;
+        }
+        if (index + 2 > prog_size) { status = PROGRAM_SIZE_EXCEEDED; goto _op_done; }
+        u16 ret_addr = read_u16(program + index);
+        index += 2;
+        status = g_ffiRegistry.call(ffi_index, memory, param_addrs, param_count, ret_addr);
+        if (status != STATUS_SUCCESS) goto _op_done;
+        DISPATCH();
+    }
+    _op_FFI_CALL_STACK: {
+        if (index + 2 > prog_size) { status = PROGRAM_SIZE_EXCEEDED; goto _op_done; }
+        u8 ffi_index = program[index++];
+        u8 param_count = program[index++];
+        if (param_count > PLCRUNTIME_FFI_MAX_PARAMS) { status = FFI_INVALID_PARAMS; goto _op_done; }
+        const PLCFFIEntry* entry = g_ffiRegistry.getEntry(ffi_index);
+        if (!entry) { status = FFI_NOT_FOUND; goto _op_done; }
+        u8 param_types[PLCRUNTIME_FFI_MAX_PARAMS];
+        u8 sig_param_count = ffi_parseSignatureParams(entry->signature, param_types, PLCRUNTIME_FFI_MAX_PARAMS);
+        if (sig_param_count != param_count) { status = FFI_INVALID_PARAMS; goto _op_done; }
+        u16 temp_base = (u16)(((u32)PLCRUNTIME_MAX_MEMORY_SIZE) - 256);
+        u16 param_addrs[PLCRUNTIME_FFI_MAX_PARAMS];
+        u16 offset = 0;
+        for (i8 i = param_count - 1; i >= 0; i--) {
+            u8 sz = ffi_getTypeSize(param_types[(u8)i]);
+            param_addrs[(u8)i] = temp_base + offset;
+            for (u8 j = 0; j < sz; j++) {
+                if (stack.size() == 0) { status = STACK_UNDERFLOW; goto _op_done; }
+                memory[temp_base + offset + (sz - 1 - j)] = stack.pop();
+            }
+            offset += sz;
+        }
+        u8 ret_type = ffi_parseSignatureReturn(entry->signature);
+        u8 ret_size = ffi_getTypeSize(ret_type);
+        u16 ret_addr = temp_base + offset;
+        status = g_ffiRegistry.call(ffi_index, memory, param_addrs, param_count, ret_addr);
+        if (status != STATUS_SUCCESS) goto _op_done;
+        if (ret_size > 0) {
+            for (u8 j = 0; j < ret_size; j++) {
+                if (!stack.push(memory[ret_addr + j])) { status = STACK_OVERFLOW; goto _op_done; }
+            }
+        }
+        DISPATCH();
+    }
+#else
+    _op_FFI_CALL:
+    _op_FFI_CALL_STACK:
+        status = UNKNOWN_INSTRUCTION; goto _op_done;
+#endif
+
+    _op_CONFIG_DB: {
+        if (index >= prog_size) { status = PROGRAM_SIZE_EXCEEDED; goto _op_done; }
+        u8 db_count = program[index++];
+        if (index + (u32)db_count * 4 > prog_size) { status = PROGRAM_SIZE_EXCEEDED; goto _op_done; }
+        for (u8 di = 0; di < db_count; di++) {
+            u16 db_num = read_u16(program + index);
+            u16 db_sz = read_u16(program + index + 2);
+            index += 4;
+            if (dataBlocks.findSlot(db_num) < 0) {
+                dataBlocks.declare(db_num, db_sz);
+            }
+        }
+        DISPATCH();
+    }
+    _op_CONFIG_TC: {
+        if (index + 6 > prog_size) { status = PROGRAM_SIZE_EXCEEDED; goto _op_done; }
+        u16 t_offset = read_u16(program + index);
+        u8 t_count = program[index + 2];
+        u16 c_offset = read_u16(program + index + 3);
+        u8 c_count = program[index + 5];
+        index += 6;
+        this->timer_offset = t_offset;
+        this->counter_offset = c_offset;
+        (void)t_count; (void)c_count;
+        DISPATCH();
+    }
+    _op_LANG: {
+        index += 1;
+        DISPATCH();
+    }
+    _op_COMMENT: {
+        if (index >= prog_size) { status = PROGRAM_SIZE_EXCEEDED; goto _op_done; }
+        u32 comment_len = program[index];
+        u32 index_end = index + 1 + comment_len;
+        if (index_end >= prog_size) { status = PROGRAM_SIZE_EXCEEDED; goto _op_done; }
+        index = index_end;
+        DISPATCH();
+    }
+
+    _op_EXIT: {
+        instruction_count++;
+        status = STATUS_SUCCESS; // PROGRAM_EXITED → SUCCESS
+        goto _op_done;
+    }
+
+    _op_UNKNOWN: {
+        status = UNKNOWN_INSTRUCTION;
+        goto _op_done;
+    }
+
+    _op_done:
+    #undef DISPATCH
+    #undef _OP_CALL
+    #undef _OP_LABEL
+    #undef _OP_UNKNOWN
+
+#else // !PLCRUNTIME_USE_COMPUTED_GOTO — standard switch dispatch
+
     while (index < prog_size) {
         status = step(program, prog_size, index);
         instruction_count++;
@@ -2263,6 +2975,9 @@ RuntimeError VovkPLCRuntime::run(u8* program, u32 prog_size) {
             break;
         }
     }
+
+#endif // PLCRUNTIME_USE_COMPUTED_GOTO
+
     last_instruction_count = instruction_count;
 
 #ifdef PLCRUNTIME_VARIABLE_REGISTRATION_ENABLED

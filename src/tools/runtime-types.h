@@ -276,6 +276,37 @@
 #endif
 
 // ============================================================================
+// Computed Goto Dispatch — threaded-code interpreter optimization
+// ============================================================================
+// Uses GCC/Clang "labels as values" extension for direct-threaded dispatch.
+// Each instruction handler tails directly into the next via an indirect branch,
+// eliminating the while-loop, step() function call, and switch overhead.
+// Only enabled on targets with branch predictors where it provides a net benefit.
+//
+// Auto-enabled for: Cortex-M3/M4/M7+, Cortex-M33, RISC-V, x86/x64
+// Not enabled for:  AVR, Cortex-M0/M0+, Xtensa (ESP8266/ESP32), WASM
+// Override: #define PLCRUNTIME_NO_COMPUTED_GOTO  to force switch dispatch
+//           #define PLCRUNTIME_FORCE_COMPUTED_GOTO to force computed goto
+// ============================================================================
+#if defined(PLCRUNTIME_FORCE_COMPUTED_GOTO)
+  #if (defined(__GNUC__) || defined(__clang__)) && !defined(__WASM__) && !defined(__wasm__) && !defined(__EMSCRIPTEN__)
+    #define PLCRUNTIME_USE_COMPUTED_GOTO
+  #endif
+#elif !defined(PLCRUNTIME_NO_COMPUTED_GOTO)
+  #if (defined(__GNUC__) || defined(__clang__)) && !defined(__WASM__) && !defined(__wasm__) && !defined(__EMSCRIPTEN__)
+    #if defined(__ARM_ARCH) && __ARM_ARCH >= 7                  /* Cortex-M3/M4/M7, Cortex-A */
+      #define PLCRUNTIME_USE_COMPUTED_GOTO
+    #elif defined(__ARM_ARCH_8M_MAIN__)                         /* Cortex-M33: nRF53, RP2350 */
+      #define PLCRUNTIME_USE_COMPUTED_GOTO
+    #elif defined(__x86_64__) || defined(__i386__)               /* Desktop/server */
+      #define PLCRUNTIME_USE_COMPUTED_GOTO
+    #elif defined(__riscv)                                       /* RISC-V: ESP32-C3/C6 */
+      #define PLCRUNTIME_USE_COMPUTED_GOTO
+    #endif
+  #endif
+#endif
+
+// ============================================================================
 // Endianness detection - detect at compile time
 // ============================================================================
 // Runtime uses native endianness for both stack and memory operations.
