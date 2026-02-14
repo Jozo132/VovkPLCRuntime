@@ -396,6 +396,33 @@ extern "C" {
         if (index < 0 || index >= stLinter.compiler.symbol_count) return false;
         return stLinter.compiler.symbols[index].used;
     }
+
+    // ========================================================================
+    // WASM Exports for ST Shared Symbol Injection (project symbols)
+    // ========================================================================
+
+    // Add a symbol to the ST linter's shared symbol table (pre-populate project symbols)
+    WASM_EXPORT void st_lint_add_shared_symbol(const char* name, const char* type, u32 address, u8 bit, bool is_bit, u8 type_size) {
+        SharedSymbolTable& symbols = stLinter.getSharedSymbols();
+        if (symbols.symbol_count >= SHARED_MAX_SYMBOLS) return;
+        SharedSymbol& sym = symbols.symbols[symbols.symbol_count++];
+        int i = 0;
+        while (name[i] && i < 63) { sym.name[i] = name[i]; i++; }
+        sym.name[i] = '\0';
+        i = 0;
+        while (type[i] && i < 15) { sym.type[i] = type[i]; i++; }
+        sym.type[i] = '\0';
+        sym.address = address;
+        sym.bit = bit;
+        sym.is_bit = is_bit;
+        sym.type_size = type_size;
+        sym.array_size = 0;
+    }
+
+    // Clear all shared symbols from the ST linter
+    WASM_EXPORT void st_lint_clear_shared_symbols() {
+        stLinter.getSharedSymbols().symbol_count = 0;
+    }
 }
 
 #endif // __WASM__

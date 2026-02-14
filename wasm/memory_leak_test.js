@@ -423,6 +423,11 @@ export async function runTests(options = {}) {
         wasm.project_compile(0)
     }))
 
+    log(`${CYAN}Testing Project lint (all languages)...${RESET}`)
+    results.push(runMemoryTest('Project Lint (All)', wasm, () => {
+        runtime.lintProjectFull(PROJECT_ALL_LANGUAGES)
+    }))
+
     // Print results
     log()
     log(`${BOLD}Test Results:${RESET}`)

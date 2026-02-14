@@ -940,6 +940,95 @@ extern "C" {
     WASM_EXPORT void stl_lint_clear() {
         stlLinter.clearProblems();
     }
+
+    // ========================================================================
+    // STL Linter Symbol Table WASM Exports
+    // ========================================================================
+
+    // Get number of symbols resolved by the STL linter
+    WASM_EXPORT int stl_lint_get_symbol_count() {
+        return stlLinter.symbol_count;
+    }
+
+    // Get symbol name by index
+    WASM_EXPORT const char* stl_lint_get_symbol_name(int index) {
+        if (index < 0 || index >= stlLinter.symbol_count) return "";
+        return stlLinter.symbols[index].name;
+    }
+
+    // Get symbol type string by index (e.g. "i32", "u8", "bool", "f32")
+    WASM_EXPORT const char* stl_lint_get_symbol_type(int index) {
+        if (index < 0 || index >= stlLinter.symbol_count) return "";
+        return stlLinter.symbols[index].type;
+    }
+
+    // Get symbol address (byte offset in memory)
+    WASM_EXPORT u32 stl_lint_get_symbol_address(int index) {
+        if (index < 0 || index >= stlLinter.symbol_count) return 0;
+        return stlLinter.symbols[index].address;
+    }
+
+    // Get symbol bit position (0-7, or 255 if not a bit type)
+    WASM_EXPORT u8 stl_lint_get_symbol_bit(int index) {
+        if (index < 0 || index >= stlLinter.symbol_count) return 0;
+        return stlLinter.symbols[index].bit;
+    }
+
+    // Get whether symbol is a bit address
+    WASM_EXPORT bool stl_lint_get_symbol_is_bit(int index) {
+        if (index < 0 || index >= stlLinter.symbol_count) return false;
+        return stlLinter.symbols[index].is_bit;
+    }
+
+    // Get symbol declaration line (1-based)
+    WASM_EXPORT int stl_lint_get_symbol_line(int index) {
+        if (index < 0 || index >= stlLinter.symbol_count) return 0;
+        return stlLinter.symbols[index].line;
+    }
+
+    // Get symbol declaration column (1-based)
+    WASM_EXPORT int stl_lint_get_symbol_column(int index) {
+        if (index < 0 || index >= stlLinter.symbol_count) return 0;
+        return stlLinter.symbols[index].column;
+    }
+
+    // Get symbol type size in bytes
+    WASM_EXPORT u8 stl_lint_get_symbol_type_size(int index) {
+        if (index < 0 || index >= stlLinter.symbol_count) return 0;
+        return stlLinter.symbols[index].type_size;
+    }
+
+    // Get symbol array size (0 = not an array)
+    WASM_EXPORT int stl_lint_get_symbol_array_size(int index) {
+        if (index < 0 || index >= stlLinter.symbol_count) return 0;
+        return stlLinter.symbols[index].array_size;
+    }
+
+    // Add a symbol to the STL linter's symbol table (for pre-populating project symbols)
+    WASM_EXPORT void stl_lint_add_symbol(const char* name, const char* type, u32 address, u8 bit, bool is_bit, u8 type_size) {
+        if (stlLinter.symbol_count >= STL_MAX_SYMBOLS) return;
+        STLSymbol& sym = stlLinter.symbols[stlLinter.symbol_count++];
+        // Clear and copy name
+        int i = 0;
+        while (name[i] && i < 63) { sym.name[i] = name[i]; i++; }
+        sym.name[i] = '\0';
+        // Clear and copy type
+        i = 0;
+        while (type[i] && i < 15) { sym.type[i] = type[i]; i++; }
+        sym.type[i] = '\0';
+        sym.address = address;
+        sym.bit = bit;
+        sym.is_bit = is_bit;
+        sym.type_size = type_size;
+        sym.array_size = 0;
+        sym.line = 0;
+        sym.column = 0;
+    }
+
+    // Clear all symbols from the STL linter's symbol table
+    WASM_EXPORT void stl_lint_clear_symbols() {
+        stlLinter.symbol_count = 0;
+    }
 }
 
 #endif // __WASM__

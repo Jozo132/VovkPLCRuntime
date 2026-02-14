@@ -3359,6 +3359,430 @@ class VovkPLC_class {
     }
 
     /**
+     * @typedef {{
+     *     name: string,
+     *     language: string,
+     *     lang: number,
+     *     program: string,
+     *     file: string,
+     *     offset: number,
+     *     size: number,
+     *     sourceRange: { startLine: number, endLine: number, startCol: number, endCol: number },
+     *     source: string,
+     *     problems: ProjectLinterProblem[],
+     *     intermediate: string | null,
+     *     symbols: { name: string, type: string, address: string, byteAddress: number, isBit: boolean, bit?: number, typeSize: number }[]
+     * }} ProjectBlockLintResult
+     */
+
+    /**
+     * @typedef {{
+     *     success: boolean,
+     *     error?: string,
+     *     project: { name: string, version: string },
+     *     memory: { used: number, available: number },
+     *     flash: { used: number, size: number },
+     *     memoryAreas: { name: string, start: number, end: number, size: number }[],
+     *     symbols: { name: string, type: string, address: string, byteAddress: number, isBit: boolean, bit?: number, typeSize: number }[],
+     *     blocks: ProjectBlockLintResult[],
+     *     problems: ProjectLinterProblem[],
+     *     modifiers: ProjectModifier[],
+     *     warnings: ProjectLinterProblem[]
+     * }} ProjectFullLintResult
+     */
+
+    /**
+     * Full project linting with per-block source mapping, symbol resolution, and intermediate output.
+     * Compiles the project, then re-lints each block individually to extract per-block details at
+     * the native language level. This provides the data needed for an online editor to:
+     * - Show per-block problems at the correct native-language line/col
+     * - Map symbols to memory addresses for online patching
+     * - Display intermediate PLCASM output per block
+     *
+     * @param {string} projectSource - The full project source text.
+     * @param {ProjectCompileOptions} [options] - Compilation options including target device flags.
+     * @returns {ProjectFullLintResult} Structured per-block lint result.
+     *
+     * @example
+     * const result = runtime.lintProjectFull(projectSource)
+     * if (result.success) {
+     *     for (const block of result.blocks) {
+     *         console.log(`Block "${block.name}" (${block.language}) lines ${block.sourceRange.startLine}-${block.sourceRange.endLine}`)
+     *         for (const p of block.problems) {
+     *             console.log(`  ${p.type} at ${p.line}:${p.column}: ${p.message}`)
+     *         }
+     *         if (block.intermediate) console.log(`  PLCASM: ${block.intermediate.split('\\n').length} lines`)
+     *     }
+     *     for (const sym of result.symbols) {
+     *         console.log(`Symbol "${sym.name}" (${sym.type}) at ${sym.address}`)
+     *     }
+     * }
+     */
+    lintProjectFull = (projectSource, options = {}) => {
+        if (!this.wasm_exports) throw new Error('WebAssembly module not initialized')
+        if (!this.wasm_exports.project_compile) throw new Error("'project_compile' function not found - Project compiler not available")
+        if (!this.wasm_exports.project_reset) throw new Error("'project_reset' function not found")
+
+        const wasm = this.wasm_exports
+
+        // Helper to read null-terminated string from WASM memory
+        /** @param {number} ptr */
+        const getString = ptr => {
+            if (!ptr) return ''
+            const memory = new Uint8Array(wasm.memory.buffer)
+            let str = ''
+            let i = ptr
+            while (memory[i] !== 0 && i < memory.length && str.length < 512) {
+                str += String.fromCharCode(memory[i])
+                i++
+            }
+            return str
+        }
+
+        const langNames = VovkPLC_class.LANG_MAP
+
+        // ── Step 1: Compile the project ──
+        wasm.project_reset()
+
+        if (typeof options.targetFlags === 'number') {
+            if (wasm.project_setTargetFlags) wasm.project_setTargetFlags(options.targetFlags)
+        } else {
+            if (wasm.project_clearTargetFlags) wasm.project_clearTargetFlags()
+        }
+
+        if (wasm.streamClear) wasm.streamClear()
+        let ok = true
+        for (let i = 0; i < projectSource.length && ok; i++) {
+            ok = wasm.streamIn(projectSource.charCodeAt(i))
+        }
+        if (!ok) {
+            return {
+                success: false,
+                error: 'Failed to stream project source - buffer overflow',
+                project: { name: '', version: '' },
+                memory: { used: 0, available: 0 },
+                flash: { used: 0, size: 0 },
+                memoryAreas: [],
+                symbols: [],
+                blocks: [],
+                problems: [{
+                    type: 'error', message: 'Failed to stream project source - buffer overflow',
+                    line: 0, column: 0, length: 0, block: undefined, lang: 0,
+                }],
+                modifiers: [],
+                warnings: [],
+            }
+        }
+        wasm.streamIn(0)
+
+        const wasSilent = this.silent
+        this.setSilent(true)
+        const success = wasm.project_compile(false)
+        this.setSilent(wasSilent)
+
+        // ── Step 2: Read all project-level problems ──
+        /** @type {ProjectLinterProblem[]} */
+        const allProblems = this._readProjectProblems()
+
+        // Fallback single-error method (same as lintProject)
+        if ((!success || wasm.project_hasError()) && allProblems.length === 0) {
+            const errorPtr = wasm.project_getError ? wasm.project_getError() : 0
+            const errorLine = wasm.project_getErrorLine ? wasm.project_getErrorLine() : 0
+            const errorColumn = wasm.project_getErrorColumn ? wasm.project_getErrorColumn() : 0
+            const errorBlock = wasm.project_getErrorBlock ? wasm.project_getErrorBlock() : 0
+            const errorToken = wasm.project_getErrorToken ? wasm.project_getErrorToken() : 0
+            const errorTokenLength = wasm.project_getErrorTokenLength ? wasm.project_getErrorTokenLength() : 0
+            const memory = new Uint8Array(wasm.memory.buffer)
+            const readStr = (ptr = 0, maxLen = 512) => {
+                if (!ptr) return ''
+                let str = ''
+                let i = ptr
+                while (memory[i] !== 0 && i < memory.length && str.length < maxLen) {
+                    str += String.fromCharCode(memory[i])
+                    i++
+                }
+                return str
+            }
+            allProblems.push({
+                type: 'error',
+                message: readStr(errorPtr) || 'Unknown compilation error',
+                line: errorLine,
+                column: errorColumn,
+                length: errorTokenLength,
+                lang: 0,
+                block: readStr(errorBlock, 64) || undefined,
+                token: errorToken ? readStr(errorToken, 128) : undefined,
+            })
+        }
+
+        // ── Step 3: Read project info ──
+        const projectName = wasm.project_getName ? getString(wasm.project_getName()) : ''
+        const projectVersion = wasm.project_getVersion ? getString(wasm.project_getVersion()) : ''
+        const memUsed = wasm.project_getMemoryUsed ? wasm.project_getMemoryUsed() : 0
+        const memAvailable = wasm.project_getMemoryAvailable ? wasm.project_getMemoryAvailable() : 0
+        const flashUsed = wasm.project_getFlashUsed ? wasm.project_getFlashUsed() : 0
+        const flashSize = wasm.project_getFlashSize ? wasm.project_getFlashSize() : 32768
+
+        // ── Step 4: Read memory areas ──
+        /** @type {{ name: string, start: number, end: number, size: number }[]} */
+        const memoryAreas = []
+        if (wasm.project_getMemoryAreaCount) {
+            const memAreaCount = wasm.project_getMemoryAreaCount()
+            for (let i = 0; i < memAreaCount; i++) {
+                const name = getString(wasm.project_getMemoryAreaName(i))
+                const start = wasm.project_getMemoryAreaStart(i)
+                const end = wasm.project_getMemoryAreaEnd(i)
+                memoryAreas.push({ name, start, end, size: end - start })
+            }
+        }
+
+        // Address formatting helper
+        const toPartitionedAddress = (byteAddress, bit, isBit) => {
+            for (const area of memoryAreas) {
+                if (byteAddress >= area.start && byteAddress <= area.end) {
+                    const offset = byteAddress - area.start
+                    return isBit ? `${area.name}${offset}.${bit}` : `${area.name}${offset}`
+                }
+            }
+            return isBit ? `${byteAddress}.${bit}` : `${byteAddress}`
+        }
+
+        // ── Step 5: Read project symbols ──
+        /** @type {{ name: string, type: string, address: string, byteAddress: number, isBit: boolean, bit?: number, typeSize: number }[]} */
+        const symbols = []
+        if (wasm.project_getSymbolCount) {
+            const symbolCount = wasm.project_getSymbolCount()
+            for (let i = 0; i < symbolCount; i++) {
+                const name = getString(wasm.project_getSymbolName(i))
+                const type = getString(wasm.project_getSymbolType(i))
+                const byteAddress = wasm.project_getSymbolByteAddress(i)
+                const bit = wasm.project_getSymbolBit(i)
+                const isBit = !!wasm.project_getSymbolIsBit(i)
+                const typeSize = wasm.project_getSymbolTypeSize(i)
+                const address = toPartitionedAddress(byteAddress, bit, isBit)
+                symbols.push({
+                    name, type, address, byteAddress,
+                    ...(isBit && { bit }),
+                    isBit, typeSize,
+                })
+            }
+        }
+
+        // ── Step 6: Read compiled block info from C++ ──
+        /** @type {{ name: string, file: string, program: string, language: string, lang: number, offset: number, size: number }[]} */
+        const compiledBlocks = []
+        if (wasm.project_getBlockCount) {
+            const blockCount = wasm.project_getBlockCount()
+            for (let i = 0; i < blockCount; i++) {
+                const name = getString(wasm.project_getBlockName(i))
+                const filePath = getString(wasm.project_getBlockFilePath(i))
+                const programName = getString(wasm.project_getBlockProgramName(i))
+                const lang = wasm.project_getBlockLanguage(i)
+                const offset = wasm.project_getBlockOffset(i)
+                const size = wasm.project_getBlockSize(i)
+                compiledBlocks.push({
+                    name, file: filePath, program: programName,
+                    language: langNames[lang] || 'UNKNOWN', lang,
+                    offset, size,
+                })
+            }
+        }
+
+        // ── Step 7: Parse source text for block boundaries ──
+        // Parse BLOCK ... LANG=xxx / END_BLOCK markers to find each block's source range
+        const sourceLines = projectSource.split('\n')
+        /** @type {{ name: string, lang: string, program: string, startLine: number, endLine: number, startCol: number, endCol: number, source: string }[]} */
+        const sourceBlocks = []
+        let currentProgram = ''
+
+        for (let lineIdx = 0; lineIdx < sourceLines.length; lineIdx++) {
+            const line = sourceLines[lineIdx]
+            const trimmed = line.trim()
+            const upper = trimmed.toUpperCase()
+
+            // Track PROGRAM context
+            const progMatch = upper.match(/^PROGRAM\s+(\S+)/)
+            if (progMatch) {
+                // Use original case from the actual line
+                const originalMatch = trimmed.match(/^PROGRAM\s+(\S+)/i)
+                currentProgram = originalMatch ? originalMatch[1] : progMatch[1]
+                continue
+            }
+            if (upper === 'END_PROGRAM' || upper.startsWith('END_PROGRAM ')) {
+                currentProgram = ''
+                continue
+            }
+
+            // Match BLOCK lines: BLOCK LANG=<lang> <name> (name may contain spaces, e.g. "Network 1 - STL block")
+            const blockMatch = trimmed.match(/^BLOCK\s+LANG\s*=\s*(\S+)(?:\s+(.+))?$/i)
+            if (blockMatch) {
+                const blockLang = blockMatch[1].toUpperCase()
+                const blockName = (blockMatch[2] || '').trim() || `Block_${sourceBlocks.length + 1}`
+                const blockStartLine = lineIdx + 1 // 1-indexed, this is the BLOCK line itself
+
+                // Find matching END_BLOCK
+                let blockEndLine = blockStartLine
+                let bodyStartLine = lineIdx + 1 // 0-indexed next line = body start
+                let bodyEndLine = lineIdx + 1
+
+                for (let j = lineIdx + 1; j < sourceLines.length; j++) {
+                    const jTrimmed = sourceLines[j].trim().toUpperCase()
+                    if (jTrimmed === 'END_BLOCK' || jTrimmed.startsWith('END_BLOCK ')) {
+                        blockEndLine = j + 1 // 1-indexed
+                        bodyEndLine = j // 0-indexed, exclusive
+                        break
+                    }
+                }
+
+                // Extract block body source (lines between BLOCK and END_BLOCK)
+                const bodyLines = sourceLines.slice(bodyStartLine, bodyEndLine)
+                const source = bodyLines.join('\n')
+
+                sourceBlocks.push({
+                    name: blockName,
+                    lang: blockLang,
+                    program: currentProgram,
+                    startLine: blockStartLine,          // 1-indexed, the BLOCK line
+                    endLine: blockEndLine,               // 1-indexed, the END_BLOCK line
+                    startCol: 1,
+                    endCol: sourceLines[blockEndLine - 1] ? sourceLines[blockEndLine - 1].length + 1 : 1,
+                    source,
+                })
+            }
+        }
+
+        // ── Step 8: Group problems by block ──
+        /** @type {Map<string, ProjectLinterProblem[]>} */
+        const problemsByBlock = new Map()
+        const globalProblems = []
+
+        for (const p of allProblems) {
+            if (p.block) {
+                if (!problemsByBlock.has(p.block)) problemsByBlock.set(p.block, [])
+                problemsByBlock.get(p.block).push(p)
+            } else {
+                globalProblems.push(p)
+            }
+        }
+
+        // ── Step 9: Re-lint each block standalone for intermediate output ──
+        // The standalone linters produce the generated PLCASM (intermediate) output.
+        // We don't use standalone linter problems (they lack project symbol context);
+        // we already have correct problems from the project compiler.
+        /** @type {ProjectBlockLintResult[]} */
+        const blockResults = []
+
+        for (const sb of sourceBlocks) {
+            // Find matching compiled block info
+            const cb = compiledBlocks.find(b => b.name === sb.name && b.program === sb.program)
+
+            // Get intermediate output by re-linting the block standalone
+            let intermediate = null
+            const langUpper = sb.lang.toUpperCase()
+
+            try {
+                if (langUpper === 'STL' && this.lintSTL) {
+                    const result = this.lintSTL(sb.source, false)
+                    intermediate = result.output || null
+                } else if (langUpper === 'ST' && this.lintST) {
+                    const result = this.lintST(sb.source, false)
+                    intermediate = result.output || null
+                } else if (langUpper === 'PLCSCRIPT' && this.lintPLCScript) {
+                    const result = this.lintPLCScript(sb.source, false)
+                    intermediate = result.output || null
+                } else if (langUpper === 'LADDER') {
+                    // Ladder blocks in projects are JSON; try parsing and linting
+                    try {
+                        if (this.lintLadder) {
+                            const result = this.lintLadder(sb.source, false)
+                            intermediate = result.output || null
+                        }
+                    } catch (e) {
+                        // Ladder source might not be standalone-parsable; skip
+                    }
+                } else if (langUpper === 'PLCASM') {
+                    // PLCASM is already the target language, no intermediate
+                    intermediate = sb.source
+                }
+            } catch (e) {
+                // Standalone linting failed (e.g. missing symbols), skip intermediate
+            }
+
+            // Collect per-block symbols that are visible to this block
+            // (For now, all project symbols are visible to all blocks)
+            const blockSymbols = symbols
+
+            blockResults.push({
+                name: sb.name,
+                language: cb ? cb.language : sb.lang,
+                lang: cb ? cb.lang : 0,
+                program: sb.program,
+                file: cb ? cb.file : '',
+                offset: cb ? cb.offset : 0,
+                size: cb ? cb.size : 0,
+                sourceRange: {
+                    startLine: sb.startLine,
+                    endLine: sb.endLine,
+                    startCol: sb.startCol,
+                    endCol: sb.endCol,
+                },
+                source: sb.source,
+                problems: problemsByBlock.get(sb.name) || [],
+                intermediate,
+                symbols: blockSymbols,
+            })
+        }
+
+        // ── Step 10: Read modifiers if available ──
+        /** @type {ProjectModifier[]} */
+        const modifiers = []
+        if (wasm.project_getModifierCount) {
+            const modCount = wasm.project_getModifierCount()
+            for (let i = 0; i < modCount; i++) {
+                const name = getString(wasm.project_getModifierName(i))
+                const locationType = wasm.project_getModifierLocation(i)
+                const byteOffset = wasm.project_getModifierByteOffset(i)
+                const datatype = getString(wasm.project_getModifierDatatype(i))
+                const size = wasm.project_getModifierSize(i)
+                const file = getString(wasm.project_getModifierFile(i))
+                const program = wasm.project_getModifierProgram ? getString(wasm.project_getModifierProgram(i)) : file
+                const block = getString(wasm.project_getModifierBlock(i))
+                const mLine = wasm.project_getModifierLine(i)
+                const mColumn = wasm.project_getModifierColumn(i)
+                const mLength = wasm.project_getModifierLength ? wasm.project_getModifierLength(i) : datatype.length
+                const token = wasm.project_getModifierToken ? getString(wasm.project_getModifierToken(i)) : name
+                const description = getString(wasm.project_getModifierDescription(i))
+                const location = locationType === 0 ? 'memory' : 'program'
+                const offset = location === 'memory' ? toPartitionedAddress(byteOffset, 0, false) : `${byteOffset}`
+
+                modifiers.push({
+                    name, location, offset, byteOffset, datatype, size,
+                    file, program, block,
+                    line: mLine, column: mColumn, length: mLength,
+                    token, description,
+                })
+            }
+        }
+
+        // Separate warnings from errors
+        const errors = allProblems.filter(p => p.type === 'error')
+        const warnings = allProblems.filter(p => p.type === 'warning' || p.type === 'info')
+
+        return {
+            success: errors.length === 0,
+            project: { name: projectName, version: projectVersion },
+            memory: { used: memUsed, available: memAvailable },
+            flash: { used: flashUsed, size: flashSize },
+            memoryAreas,
+            symbols,
+            blocks: blockResults,
+            problems: allProblems,
+            modifiers,
+            warnings,
+        }
+    }
+
+    /**
      * Verifies size and CRC checksum during upload.
      *
      * @param {string | number[]} program - Bytecode as a hex string or array of bytes.
@@ -5331,6 +5755,8 @@ class VovkPLCWorker extends VovkPLCWorkerClient {
     lintProject = (projectSource, options = {}) => this.call('lintProject', projectSource, options)
     /** @type { (projectSource: string) => Promise<ProjectLinterProblem[]> } */
     lintProjectMetadata = (projectSource) => this.call('lintProjectMetadata', projectSource)
+    /** @type { (projectSource: string, options?: ProjectCompileOptions) => Promise<ProjectFullLintResult> } */
+    lintProjectFull = (projectSource, options = {}) => this.call('lintProjectFull', projectSource, options)
     /** @type { (program: string | number[]) => Promise<any> } */
     downloadBytecode = program => this.call('downloadBytecode', program)
     /** @type { () => Promise<any> } */

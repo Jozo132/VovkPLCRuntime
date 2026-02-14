@@ -5356,6 +5356,38 @@ extern "C" {
         return project_compiler.program_blocks[index].bytecode_size;
     }
 
+    // Get block source start position in original project source (byte offset)
+    WASM_EXPORT int project_getBlockSourceStart(int index) {
+        if (index < 0 || index >= project_compiler.program_block_count) {
+            return 0;
+        }
+        return project_compiler.program_blocks[index].source_start;
+    }
+
+    // Get block source end position in original project source (byte offset)
+    WASM_EXPORT int project_getBlockSourceEnd(int index) {
+        if (index < 0 || index >= project_compiler.program_block_count) {
+            return 0;
+        }
+        return project_compiler.program_blocks[index].source_end;
+    }
+
+    // Get block combined PLCASM line start (1-based)
+    WASM_EXPORT int project_getBlockCombinedLineStart(int index) {
+        if (index < 0 || index >= project_compiler.program_block_count) {
+            return 0;
+        }
+        return project_compiler.program_blocks[index].combined_line_start;
+    }
+
+    // Get block combined PLCASM line end (1-based)
+    WASM_EXPORT int project_getBlockCombinedLineEnd(int index) {
+        if (index < 0 || index >= project_compiler.program_block_count) {
+            return 0;
+        }
+        return project_compiler.program_blocks[index].combined_line_end;
+    }
+
     // Get problem count from project linter
     WASM_EXPORT int project_getProblemCount() {
         return project_compiler.problem_count;
@@ -5557,6 +5589,38 @@ extern "C" {
             return 0;
         }
         return project_compiler.symbols[index].type_size;
+    }
+
+    // Get the original address string as written in the SYMBOLS section (e.g. "M10.0", "X0.1")
+    WASM_EXPORT const char* project_getSymbolAddressStr(int index) {
+        if (index < 0 || index >= project_compiler.symbol_count) {
+            return "";
+        }
+        return project_compiler.symbols[index].address_str;
+    }
+
+    // Get symbol array size (0 = not an array, >0 = array element count)
+    WASM_EXPORT int project_getSymbolArraySize(int index) {
+        if (index < 0 || index >= project_compiler.symbol_count) {
+            return 0;
+        }
+        return project_compiler.symbols[index].array_size;
+    }
+
+    // Check if symbol has a default value
+    WASM_EXPORT bool project_getSymbolHasDefault(int index) {
+        if (index < 0 || index >= project_compiler.symbol_count) {
+            return false;
+        }
+        return project_compiler.symbols[index].has_default;
+    }
+
+    // Get the default value string (e.g. "0", "3.14", "true")
+    WASM_EXPORT const char* project_getSymbolDefaultValue(int index) {
+        if (index < 0 || index >= project_compiler.symbol_count) {
+            return "";
+        }
+        return project_compiler.symbols[index].default_value;
     }
 
     // ========== DataBlock accessor functions ==========
