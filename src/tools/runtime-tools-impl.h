@@ -117,7 +117,7 @@ int getTotalMemory() {
     #endif
 #elif defined(ESP8266)
     return 81920; // ~80KB user RAM
-#elif defined(__AIR105_H__)
+#elif defined(AIR105)
     return 655360; // 640KB SRAM (AIR105 / MH1903S)
 #elif defined(__AVR_ATmega328P__) || defined(__AVR_ATmega328__)
     return 2048; // 2KB SRAM
@@ -163,7 +163,7 @@ int freeMemory() {
 #elif defined(ARDUINO_ARCH_NRF52) || defined(NRF52840_XXAA)
     char top;
     return &top - reinterpret_cast<char*>(sbrk(0));
-#elif defined(__AIR105_H__)
+#elif defined(AIR105)
     char top;
     return &top - reinterpret_cast<char*>(sbrk(0));
 #elif defined(__SIMULATOR__)
@@ -185,6 +185,8 @@ void processExit() {
     throw 1;
 #elif defined(ESP8266) || defined(ESP32)
     ESP.restart();
+#elif defined(AIR105)
+    NVIC_SystemReset();
 #elif defined(ARDUINO_ARCH_RP2040)
     watchdog_enable(1, 1);
     while(1);

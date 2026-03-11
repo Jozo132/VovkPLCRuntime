@@ -826,7 +826,7 @@ namespace EEPROMStorage {
     inline void ensureInitialized() {
         if (_eeprom_initialized) return;
         _eeprom_initialized = true;
-#if defined(ESP8266) || defined(ESP32)
+#if defined(ESP8266) || defined(ESP32) || defined(AIR105)
         EEPROM.begin(PLCRUNTIME_EEPROM_SIZE);
 #endif
         // AVR has true EEPROM, no initialization needed
@@ -834,7 +834,7 @@ namespace EEPROMStorage {
     
     inline u32 getAvailableSpace() {
         ensureInitialized();
-#if defined(ESP8266) || defined(ESP32)
+#if defined(ESP8266) || defined(ESP32) || defined(AIR105)
         return PLCRUNTIME_EEPROM_SIZE - PLCRUNTIME_EEPROM_START_ADDRESS;
 #else
         return EEPROM.length() - PLCRUNTIME_EEPROM_START_ADDRESS;
@@ -861,7 +861,7 @@ namespace EEPROMStorage {
         
         // Write bytecode
         for (u32 i = 0; i < prog_size; i++) {
-#if defined(ESP8266) || defined(ESP32)
+#if defined(ESP8266) || defined(ESP32) || defined(AIR105)
             EEPROM.write(addr++, program[i]);
 #else
             EEPROM.update(addr++, program[i]);
@@ -869,13 +869,13 @@ namespace EEPROMStorage {
         }
 
         // Write CRC
-#if defined(ESP8266) || defined(ESP32)
+#if defined(ESP8266) || defined(ESP32) || defined(AIR105)
         EEPROM.write(addr, checksum);
 #else
         EEPROM.update(addr, checksum);
 #endif
 
-#if defined(ESP8266) || defined(ESP32)
+#if defined(ESP8266) || defined(ESP32) || defined(AIR105)
         if (!EEPROM.commit()) {
             Serial.println(F("EEPROM commit failed"));
             return false;

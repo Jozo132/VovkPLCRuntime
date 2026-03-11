@@ -131,6 +131,12 @@ double log10(double x);
 #endif // Serial
 #endif
 
+#if defined(__AIR105_H__)
+#ifndef AIR105
+#define AIR105
+#endif // AIR105
+#endif
+
 #ifdef __WASM__
 #define VOVKPLC_ARCH "WASM"
 #elif defined(AVR) || defined(ARDUINO_ARCH_AVR)
@@ -160,6 +166,8 @@ double log10(double x);
 #define VOVKPLC_ARCH "RA4M1"
 #elif defined(NRF52840) || defined(ARDUINO_ARCH_NRF52) || defined(ARDUINO_NRF52840_FEATHER)
 #define VOVKPLC_ARCH "NRF52840"
+#elif defined(AIR105)
+#define VOVKPLC_ARCH "AIR105"
 #elif defined(STM32) || defined(ARDUINO_ARCH_STM32)
 #define VOVKPLC_ARCH "STM32"
 #elif defined(__SIMULATOR__)
