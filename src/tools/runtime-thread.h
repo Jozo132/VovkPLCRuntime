@@ -38,10 +38,16 @@ void thread_onEvent(thread_handle_t handler) {
 #if defined(STM32F0xx) || defined(STM32F1xx) || defined(STM32F2xx) || defined(STM32F3xx) || \
     defined(STM32F4xx) || defined(STM32F7xx) || defined(STM32G0xx) || defined(STM32G4xx) || \
     defined(STM32H7xx) || defined(STM32L0xx) || defined(STM32L1xx) || defined(STM32L4xx) || \
-    defined(STM32L5xx) || defined(STM32WBxx) || defined(STM32WLxx) || defined(STM32U5xx)
+    defined(STM32L5xx) || defined(STM32WBxx) || defined(STM32WLxx) || defined(STM32U5xx) || \
+    defined(AIR105)
 
 #define THREAD_ARCH_STM32
+
+#ifdef AIR105
+static HardwareTimer _thread_Timer(TIM7);
+#else
 static HardwareTimer _thread_Timer(TIM2);
+#endif
 
 void thread_setup(uint32_t period_us, thread_handle_t handler = nullptr) {
     if (handler) thread_onEvent(handler);
