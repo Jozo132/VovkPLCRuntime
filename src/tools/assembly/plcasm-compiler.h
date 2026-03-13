@@ -3377,6 +3377,60 @@ public:
                         i += 1; line.size = 3; _line_push;
                     }
 
+                    // ---- Ethernet Socket Reservation (0x60-0x64) ----
+                    // eth_sock_acquire #inst #pool -> push u8 (slot, 0xFF=none)
+                    // pool: 0=RT_TCP, 1=BG_TCP, 2=RT_UDP, 3=BG_UDP
+                    if (hasThird && token == "eth_sock_acquire") {
+                        int inst_val = 0, pool_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        if (addressFromToken(token_p2, pool_val)) { return buildError(token_p2, "expected pool (0=RT_TCP, 1=BG_TCP, 2=RT_UDP, 3=BG_UDP)"); }
+                        bytecode[0] = COMMS; bytecode[1] = ETH_SOCK_ACQUIRE;
+                        bytecode[2] = (u8) inst_val; bytecode[3] = (u8) pool_val;
+                        i += 2; line.size = 4; _line_push;
+                    }
+                    // eth_sock_release #inst #slot #type -> push u8 (result)
+                    // type: 0=TCP, 1=UDP
+                    if (i + 3 < token_count && token == "eth_sock_release") {
+                        int inst_val = 0, slot_val = 0, type_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        if (addressFromToken(token_p2, slot_val)) { return buildError(token_p2, "expected slot index"); }
+                        Token& t3 = tokens[i + 3];
+                        if (addressFromToken(t3, type_val)) { return buildError(t3, "expected type (0=TCP, 1=UDP)"); }
+                        bytecode[0] = COMMS; bytecode[1] = ETH_SOCK_RELEASE;
+                        bytecode[2] = (u8) inst_val; bytecode[3] = (u8) slot_val; bytecode[4] = (u8) type_val;
+                        i += 3; line.size = 5; _line_push;
+                    }
+                    // eth_sock_status #inst #slot #type -> push u8 (EthSocketState)
+                    if (i + 3 < token_count && token == "eth_sock_status") {
+                        int inst_val = 0, slot_val = 0, type_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        if (addressFromToken(token_p2, slot_val)) { return buildError(token_p2, "expected slot index"); }
+                        Token& t3 = tokens[i + 3];
+                        if (addressFromToken(t3, type_val)) { return buildError(t3, "expected type (0=TCP, 1=UDP)"); }
+                        bytecode[0] = COMMS; bytecode[1] = ETH_SOCK_STATUS;
+                        bytecode[2] = (u8) inst_val; bytecode[3] = (u8) slot_val; bytecode[4] = (u8) type_val;
+                        i += 3; line.size = 5; _line_push;
+                    }
+                    // eth_sock_set_active #inst #slot #type
+                    if (i + 3 < token_count && token == "eth_sock_set_active") {
+                        int inst_val = 0, slot_val = 0, type_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        if (addressFromToken(token_p2, slot_val)) { return buildError(token_p2, "expected slot index"); }
+                        Token& t3 = tokens[i + 3];
+                        if (addressFromToken(t3, type_val)) { return buildError(t3, "expected type (0=TCP, 1=UDP)"); }
+                        bytecode[0] = COMMS; bytecode[1] = ETH_SOCK_SET_ACTIVE;
+                        bytecode[2] = (u8) inst_val; bytecode[3] = (u8) slot_val; bytecode[4] = (u8) type_val;
+                        i += 3; line.size = 5; _line_push;
+                    }
+                    // eth_sock_info #inst -> push u8 (packed slot counts)
+                    if (hasNext && token == "eth_sock_info") {
+                        int inst_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        bytecode[0] = COMMS; bytecode[1] = ETH_SOCK_INFO;
+                        bytecode[2] = (u8) inst_val;
+                        i += 1; line.size = 3; _line_push;
+                    }
+
                     // ---- Priority / Async Queue ----
                     // comms_set_priority #instance #priority (0=sync, 1=async)
                     if (hasThird && token == "comms_set_priority") {

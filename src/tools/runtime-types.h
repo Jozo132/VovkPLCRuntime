@@ -211,10 +211,10 @@
     #define PLCRUNTIME_BITWISE_OPS_ENABLED
 #endif
 
-// Communication protocols (ModbusRTU, ModbusTCP, raw TCP, raw UDP, Serial RS232)
+// Communication protocols (ModbusRTU, ModbusTCP, raw TCP, raw UDP, Serial RS232, Ethernet W5500)
 // Auto-enabled when any specific protocol is defined
 #ifndef PLCRUNTIME_NO_COMMS
-    #if defined(PLCRUNTIME_MODBUS_RTU) || defined(PLCRUNTIME_MODBUS_TCP) || defined(PLCRUNTIME_RAW_TCP) || defined(PLCRUNTIME_RAW_UDP) || defined(PLCRUNTIME_SERIAL_RS232)
+    #if defined(PLCRUNTIME_MODBUS_RTU) || defined(PLCRUNTIME_MODBUS_TCP) || defined(PLCRUNTIME_RAW_TCP) || defined(PLCRUNTIME_RAW_UDP) || defined(PLCRUNTIME_SERIAL_RS232) || defined(PLCRUNTIME_ETHERNET_W5500)
         #define PLCRUNTIME_COMMS_ENABLED
     #endif
 #endif

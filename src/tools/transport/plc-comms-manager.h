@@ -113,6 +113,15 @@ enum PLCCommsSubFunction : u8 {
 
     // ---- Raw UDP (0x40-0x44) ------------------------------------------------
     UDP_OPEN            = 0x40, // [inst:u8] [port:u16]              -> push bool
+
+    // ---- Ethernet Socket Reservation (0x60-0x67) ----------------------------
+    // Socket pool management for thread-safe realtime/background I/O.
+    // pool: 0=RT_TCP, 1=BG_TCP, 2=RT_UDP, 3=BG_UDP
+    ETH_SOCK_ACQUIRE    = 0x60, // [inst:u8] [pool:u8]              -> push u8 (slot, 0xFF=none)
+    ETH_SOCK_RELEASE    = 0x61, // [inst:u8] [slot:u8] [type:u8]    -> push u8 (result)
+    ETH_SOCK_STATUS     = 0x62, // [inst:u8] [slot:u8] [type:u8]    -> push u8 (EthSocketState)
+    ETH_SOCK_SET_ACTIVE = 0x63, // [inst:u8] [slot:u8] [type:u8]    (set active TCP/UDP slot)
+    ETH_SOCK_INFO       = 0x64, // [inst:u8]                        -> push u8 (packed: rt_tcp|bg_tcp|rt_udp|bg_udp)
     UDP_CLOSE           = 0x41, // [inst:u8]
     UDP_SEND            = 0x42, // [inst:u8] [ip0-3:u8x4] [port:u16] [src_mem:ptr] [len:u16] -> push u16
     UDP_RECV            = 0x43, // [inst:u8] [dest_mem:ptr] [max:u16] -> push u16
@@ -199,6 +208,13 @@ static u8 comms_subfn_param_size(u8 sub_fn) {
         case UDP_RECV:          return 3 + MY_PTR_SIZE_BYTES; // inst + dest(ptr) + max(2)
         case UDP_AVAILABLE:     return 1;
 
+        // Ethernet Socket Reservation
+        case ETH_SOCK_ACQUIRE:  return 2;   // inst + pool
+        case ETH_SOCK_RELEASE:  return 3;   // inst + slot + type(0=tcp,1=udp)
+        case ETH_SOCK_STATUS:   return 3;   // inst + slot + type
+        case ETH_SOCK_SET_ACTIVE: return 3; // inst + slot + type
+        case ETH_SOCK_INFO:     return 1;   // inst
+
         // Serial RS232
         case SER_WRITE:         return 3 + MY_PTR_SIZE_BYTES; // inst + src(ptr) + len(2)
         case SER_READ:          return 3 + MY_PTR_SIZE_BYTES; // inst + dest(ptr) + max(2)
@@ -262,6 +278,11 @@ static const FSH* comms_subfn_name(u8 sub_fn) {
         case UDP_SEND:          return F("UDP_SEND");
         case UDP_RECV:          return F("UDP_RECV");
         case UDP_AVAILABLE:     return F("UDP_AVAILABLE");
+        case ETH_SOCK_ACQUIRE:  return F("ETH_SOCK_ACQUIRE");
+        case ETH_SOCK_RELEASE:  return F("ETH_SOCK_RELEASE");
+        case ETH_SOCK_STATUS:   return F("ETH_SOCK_STATUS");
+        case ETH_SOCK_SET_ACTIVE: return F("ETH_SOCK_SET_ACTIVE");
+        case ETH_SOCK_INFO:     return F("ETH_SOCK_INFO");
         case SER_WRITE:         return F("SER_WRITE");
         case SER_READ:          return F("SER_READ");
         case SER_AVAILABLE:     return F("SER_AVAILABLE");
@@ -432,6 +453,29 @@ public:
         return (SerialRS232*) _instances[index].driver;
     }
 #endif // PLCRUNTIME_SERIAL_RS232
+
+#ifdef PLCRUNTIME_ETHERNET_W5500
+    // Register an EthernetW5500 driver for both TCP and UDP protocols.
+    // The protocol field is set to RAW_TCP by default; the driver handles
+    // both TCP and UDP operations transparently.
+    bool registerEthernet(u8 index, EthernetW5500* driver) {
+        if (index >= PLCRUNTIME_MAX_COMMS_INSTANCES || !driver) return false;
+        _instances[index].protocol = COMMS_PROTO_RAW_TCP;
+        _instances[index].driver = (void*) driver;
+        _instances[index].active = false;
+        _instances[index].lastError = 0;
+        _instances[index].priority = COMMS_PRIORITY_SYNC;
+        _instances[index].asyncQueue.clear();
+        return true;
+    }
+
+    EthernetW5500* getEthernet(u8 index) {
+        if (index >= PLCRUNTIME_MAX_COMMS_INSTANCES) return nullptr;
+        PLCCommsProtocol proto = _instances[index].protocol;
+        if (proto != COMMS_PROTO_RAW_TCP && proto != COMMS_PROTO_RAW_UDP) return nullptr;
+        return (EthernetW5500*) _instances[index].driver;
+    }
+#endif // PLCRUNTIME_ETHERNET_W5500
 };
 
 // Global communication manager instance (like g_ffiRegistry)

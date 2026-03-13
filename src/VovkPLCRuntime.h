@@ -40,4 +40,5 @@
 // The re-include here is safe (#pragma once) and makes IDE discovery easier
 #include "tools/transport/plc-modbus-rtu.h"
 #include "tools/transport/plc-serial-rs232.h"
+#include "tools/transport/plc-ethernet-w5500.h"
 #include "tools/transport/plc-comms-manager.h"

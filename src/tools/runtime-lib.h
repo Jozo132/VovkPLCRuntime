@@ -115,6 +115,9 @@
 #ifdef PLCRUNTIME_SERIAL_RS232
 #include "transport/plc-serial-rs232.h"
 #endif
+#ifdef PLCRUNTIME_ETHERNET_W5500
+#include "transport/plc-ethernet-w5500.h"
+#endif
 #include "transport/plc-comms-manager.h"
 #include "arithmetics/methods-comms.h"
 

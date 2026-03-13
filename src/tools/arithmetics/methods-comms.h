@@ -82,6 +82,17 @@ namespace PLCMethods {
                 return stack.push_bool(true);
             }
 #endif
+#ifdef PLCRUNTIME_ETHERNET_W5500
+            case COMMS_PROTO_RAW_TCP:
+            case COMMS_PROTO_RAW_UDP: {
+                EthernetW5500* eth = (EthernetW5500*) ci->driver;
+                if (!eth) return stack.push_bool(false);
+                if (!eth->isBegun()) eth->begin();
+                ci->active = true;
+                ci->lastError = 0;
+                return stack.push_bool(true);
+            }
+#endif
             default:
                 return stack.push_bool(false);
         }
@@ -98,6 +109,12 @@ namespace PLCMethods {
             if (ci->protocol == COMMS_PROTO_SERIAL) {
                 SerialRS232* ser = (SerialRS232*) ci->driver;
                 if (ser) ser->end();
+            }
+#endif
+#ifdef PLCRUNTIME_ETHERNET_W5500
+            if (ci->protocol == COMMS_PROTO_RAW_TCP || ci->protocol == COMMS_PROTO_RAW_UDP) {
+                EthernetW5500* eth = (EthernetW5500*) ci->driver;
+                if (eth) eth->end();
             }
 #endif
         }
@@ -549,6 +566,316 @@ namespace PLCMethods {
 #endif // PLCRUNTIME_SERIAL_RS232
 
     // ========================================================================
+    // Ethernet W5500 - TCP Operations (0x30-0x37)
+    // ========================================================================
+
+#ifdef PLCRUNTIME_ETHERNET_W5500
+    static RuntimeError handle_TCP_CONNECT(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
+        // [inst:u8] [ip0:u8] [ip1:u8] [ip2:u8] [ip3:u8] [port:u16] -> push bool
+        if (index + 7 > prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 inst = program[index++];
+        u8 ip0 = program[index++];
+        u8 ip1 = program[index++];
+        u8 ip2 = program[index++];
+        u8 ip3 = program[index++];
+        u16 port = read_u16(program + index); index += 2;
+
+        EthernetW5500* eth = g_plcComms.getEthernet(inst);
+        PLCCommsInstance* ci = g_plcComms.getInstance(inst);
+        if (!eth || !ci || !ci->active) {
+            if (ci) ci->lastError = ETH_ERR_NOT_READY;
+            return stack.push_bool(false);
+        }
+        EthernetW5500Result res = eth->tcpConnect(IPAddress(ip0, ip1, ip2, ip3), port);
+        ci->lastError = (u8) res;
+        return stack.push_bool(res == ETH_OK);
+    }
+
+    static RuntimeError handle_TCP_DISCONNECT(u8* program, u32 prog_size, u32& index) {
+        // [inst:u8]
+        if (index + 1 > prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 inst = program[index++];
+
+        EthernetW5500* eth = g_plcComms.getEthernet(inst);
+        if (eth) eth->tcpDisconnect();
+        return STATUS_SUCCESS;
+    }
+
+    static RuntimeError handle_TCP_CONNECTED(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
+        // [inst:u8] -> push bool
+        if (index + 1 > prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 inst = program[index++];
+
+        EthernetW5500* eth = g_plcComms.getEthernet(inst);
+        if (!eth) return stack.push_bool(false);
+        return stack.push_bool(eth->tcpConnected());
+    }
+
+    static RuntimeError handle_TCP_LISTEN(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
+        // [inst:u8] [port:u16] -> push bool
+        if (index + 3 > prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 inst = program[index++];
+        u16 port = read_u16(program + index); index += 2;
+
+        EthernetW5500* eth = g_plcComms.getEthernet(inst);
+        PLCCommsInstance* ci = g_plcComms.getInstance(inst);
+        if (!eth || !ci || !ci->active) {
+            if (ci) ci->lastError = ETH_ERR_NOT_READY;
+            return stack.push_bool(false);
+        }
+        EthernetW5500Result res = eth->tcpListen(port);
+        ci->lastError = (u8) res;
+        return stack.push_bool(res == ETH_OK);
+    }
+
+    static RuntimeError handle_TCP_ACCEPT(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
+        // [inst:u8] -> push bool
+        if (index + 1 > prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 inst = program[index++];
+
+        EthernetW5500* eth = g_plcComms.getEthernet(inst);
+        if (!eth) return stack.push_bool(false);
+        return stack.push_bool(eth->tcpAccept());
+    }
+
+    static RuntimeError handle_TCP_SEND(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
+        // [inst:u8] [src_mem:ptr] [len:u16] -> push u16
+        if (index + 3 + MY_PTR_SIZE_BYTES > prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 inst = program[index++];
+        MY_PTR_t src_mem = read_ptr(program + index); index += MY_PTR_SIZE_BYTES;
+        u16 len = read_u16(program + index); index += 2;
+
+        EthernetW5500* eth = g_plcComms.getEthernet(inst);
+        PLCCommsInstance* ci = g_plcComms.getInstance(inst);
+        if (!eth || !ci || !ci->active) {
+            if (ci) ci->lastError = ETH_ERR_NOT_READY;
+            return stack.push_u16(0);
+        }
+        u16 sent = eth->tcpSend(memory + src_mem, len);
+        ci->lastError = (sent > 0) ? ETH_OK : ETH_ERR_SEND_FAILED;
+        return stack.push_u16(sent);
+    }
+
+    static RuntimeError handle_TCP_RECV(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
+        // [inst:u8] [dest_mem:ptr] [max:u16] -> push u16
+        if (index + 3 + MY_PTR_SIZE_BYTES > prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 inst = program[index++];
+        MY_PTR_t dest_mem = read_ptr(program + index); index += MY_PTR_SIZE_BYTES;
+        u16 max_len = read_u16(program + index); index += 2;
+
+        EthernetW5500* eth = g_plcComms.getEthernet(inst);
+        PLCCommsInstance* ci = g_plcComms.getInstance(inst);
+        if (!eth || !ci || !ci->active) {
+            if (ci) ci->lastError = ETH_ERR_NOT_READY;
+            return stack.push_u16(0);
+        }
+        u16 count = eth->tcpRecv(memory + dest_mem, max_len);
+        ci->lastError = ETH_OK;
+        return stack.push_u16(count);
+    }
+
+    static RuntimeError handle_TCP_AVAILABLE(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
+        // [inst:u8] -> push u16
+        if (index + 1 > prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 inst = program[index++];
+
+        EthernetW5500* eth = g_plcComms.getEthernet(inst);
+        if (!eth) return stack.push_u16(0);
+        return stack.push_u16(eth->tcpAvailable());
+    }
+
+    // ========================================================================
+    // Ethernet W5500 - UDP Operations (0x40-0x44)
+    // ========================================================================
+
+    static RuntimeError handle_UDP_OPEN(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
+        // [inst:u8] [port:u16] -> push bool
+        if (index + 3 > prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 inst = program[index++];
+        u16 port = read_u16(program + index); index += 2;
+
+        EthernetW5500* eth = g_plcComms.getEthernet(inst);
+        PLCCommsInstance* ci = g_plcComms.getInstance(inst);
+        if (!eth || !ci || !ci->active) {
+            if (ci) ci->lastError = ETH_ERR_NOT_READY;
+            return stack.push_bool(false);
+        }
+        EthernetW5500Result res = eth->udpOpen(port);
+        ci->lastError = (u8) res;
+        return stack.push_bool(res == ETH_OK);
+    }
+
+    static RuntimeError handle_UDP_CLOSE(u8* program, u32 prog_size, u32& index) {
+        // [inst:u8]
+        if (index + 1 > prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 inst = program[index++];
+
+        EthernetW5500* eth = g_plcComms.getEthernet(inst);
+        if (eth) eth->udpClose();
+        return STATUS_SUCCESS;
+    }
+
+    static RuntimeError handle_UDP_SEND(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
+        // [inst:u8] [ip0-3:u8x4] [port:u16] [src_mem:ptr] [len:u16] -> push u16
+        if (index + 9 + MY_PTR_SIZE_BYTES > prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 inst = program[index++];
+        u8 ip0 = program[index++];
+        u8 ip1 = program[index++];
+        u8 ip2 = program[index++];
+        u8 ip3 = program[index++];
+        u16 port = read_u16(program + index); index += 2;
+        MY_PTR_t src_mem = read_ptr(program + index); index += MY_PTR_SIZE_BYTES;
+        u16 len = read_u16(program + index); index += 2;
+
+        EthernetW5500* eth = g_plcComms.getEthernet(inst);
+        PLCCommsInstance* ci = g_plcComms.getInstance(inst);
+        if (!eth || !ci || !ci->active) {
+            if (ci) ci->lastError = ETH_ERR_NOT_READY;
+            return stack.push_u16(0);
+        }
+        u16 sent = eth->udpSend(IPAddress(ip0, ip1, ip2, ip3), port, memory + src_mem, len);
+        ci->lastError = (sent > 0) ? ETH_OK : ETH_ERR_UDP_SEND_FAILED;
+        return stack.push_u16(sent);
+    }
+
+    static RuntimeError handle_UDP_RECV(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
+        // [inst:u8] [dest_mem:ptr] [max:u16] -> push u16
+        if (index + 3 + MY_PTR_SIZE_BYTES > prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 inst = program[index++];
+        MY_PTR_t dest_mem = read_ptr(program + index); index += MY_PTR_SIZE_BYTES;
+        u16 max_len = read_u16(program + index); index += 2;
+
+        EthernetW5500* eth = g_plcComms.getEthernet(inst);
+        PLCCommsInstance* ci = g_plcComms.getInstance(inst);
+        if (!eth || !ci || !ci->active) {
+            if (ci) ci->lastError = ETH_ERR_NOT_READY;
+            return stack.push_u16(0);
+        }
+        u16 count = eth->udpRecv(memory + dest_mem, max_len);
+        ci->lastError = ETH_OK;
+        return stack.push_u16(count);
+    }
+
+    static RuntimeError handle_UDP_AVAILABLE(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
+        // [inst:u8] -> push u16
+        if (index + 1 > prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 inst = program[index++];
+
+        EthernetW5500* eth = g_plcComms.getEthernet(inst);
+        if (!eth) return stack.push_u16(0);
+        return stack.push_u16(eth->udpAvailable());
+    }
+
+    // ========================================================================
+    // Ethernet W5500 - Socket Reservation Operations (0x60-0x64)
+    // ========================================================================
+
+    static RuntimeError handle_ETH_SOCK_ACQUIRE(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
+        // [inst:u8] [pool:u8] -> push u8 (slot index, 0xFF=none)
+        // pool: 0=RT_TCP, 1=BG_TCP, 2=RT_UDP, 3=BG_UDP
+        if (index + 2 > prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 inst = program[index++];
+        u8 pool = program[index++];
+
+        EthernetW5500* eth = g_plcComms.getEthernet(inst);
+        PLCCommsInstance* ci = g_plcComms.getInstance(inst);
+        if (!eth || !ci || !ci->active) {
+            if (ci) ci->lastError = ETH_ERR_NOT_READY;
+            return stack.push_u8(0xFF);
+        }
+
+        uint8_t slot = 0xFF;
+        switch (pool) {
+            case 0: slot = eth->acquireTcpSlot(true);  break; // RT TCP
+            case 1: slot = eth->acquireTcpSlot(false); break; // BG TCP
+            case 2: slot = eth->acquireUdpSlot(true);  break; // RT UDP
+            case 3: slot = eth->acquireUdpSlot(false); break; // BG UDP
+            default: break;
+        }
+
+        ci->lastError = (slot != 0xFF) ? ETH_OK : ETH_ERR_NO_SLOT;
+        return stack.push_u8(slot);
+    }
+
+    static RuntimeError handle_ETH_SOCK_RELEASE(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
+        // [inst:u8] [slot:u8] [type:u8] -> push u8 (result)
+        // type: 0=TCP, 1=UDP
+        if (index + 3 > prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 inst = program[index++];
+        u8 slot = program[index++];
+        u8 type = program[index++];
+
+        EthernetW5500* eth = g_plcComms.getEthernet(inst);
+        PLCCommsInstance* ci = g_plcComms.getInstance(inst);
+        if (!eth || !ci || !ci->active) {
+            if (ci) ci->lastError = ETH_ERR_NOT_READY;
+            return stack.push_u8(ETH_ERR_NOT_READY);
+        }
+
+        EthernetW5500Result res;
+        if (type == 0) {
+            res = eth->releaseTcpSlot(slot);
+        } else {
+            res = eth->releaseUdpSlot(slot);
+        }
+        ci->lastError = (u8) res;
+        return stack.push_u8((u8) res);
+    }
+
+    static RuntimeError handle_ETH_SOCK_STATUS(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
+        // [inst:u8] [slot:u8] [type:u8] -> push u8 (EthSocketState)
+        if (index + 3 > prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 inst = program[index++];
+        u8 slot = program[index++];
+        u8 type = program[index++];
+
+        EthernetW5500* eth = g_plcComms.getEthernet(inst);
+        if (!eth) return stack.push_u8(ETH_SOCK_FREE);
+
+        if (type == 0) {
+            return stack.push_u8((u8) eth->tcpSlotState(slot));
+        } else {
+            return stack.push_u8((u8) eth->udpSlotState(slot));
+        }
+    }
+
+    static RuntimeError handle_ETH_SOCK_SET_ACTIVE(u8* program, u32 prog_size, u32& index) {
+        // [inst:u8] [slot:u8] [type:u8]
+        // type: 0=TCP, 1=UDP
+        if (index + 3 > prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 inst = program[index++];
+        u8 slot = program[index++];
+        u8 type = program[index++];
+
+        EthernetW5500* eth = g_plcComms.getEthernet(inst);
+        if (!eth) return STATUS_SUCCESS;
+
+        if (type == 0) {
+            eth->setActiveTcpSlot(slot);
+        } else {
+            eth->setActiveUdpSlot(slot);
+        }
+        return STATUS_SUCCESS;
+    }
+
+    static RuntimeError handle_ETH_SOCK_INFO(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
+        // [inst:u8] -> push u8 (packed: hi nibble = tcp counts, lo nibble = udp counts)
+        // Bits: [rt_tcp:2][bg_tcp:2][rt_udp:2][bg_udp:2]
+        if (index + 1 > prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 inst = program[index++];
+
+        EthernetW5500* eth = g_plcComms.getEthernet(inst);
+        if (!eth) return stack.push_u8(0);
+
+        u8 packed = ((eth->rtTcpSlots() & 0x03) << 6)
+                  | ((eth->bgTcpSlots() & 0x03) << 4)
+                  | ((eth->rtUdpSlots() & 0x03) << 2)
+                  | ((eth->bgUdpSlots() & 0x03));
+        return stack.push_u8(packed);
+    }
+#endif // PLCRUNTIME_ETHERNET_W5500
+
+    // ========================================================================
     // Main COMMS Handler - dispatches to sub-function handlers
     // ========================================================================
 
@@ -607,7 +934,32 @@ namespace PLCMethods {
                 return handle_MB_SLV_ACCESS(stack, sub_fn, program, prog_size, index);
 #endif // PLCRUNTIME_MODBUS_RTU
 
-            // Raw TCP - stub for future implementation
+            // Raw TCP
+#ifdef PLCRUNTIME_ETHERNET_W5500
+            case TCP_CONNECT:    return handle_TCP_CONNECT(stack, program, prog_size, index);
+            case TCP_DISCONNECT: return handle_TCP_DISCONNECT(program, prog_size, index);
+            case TCP_CONNECTED:  return handle_TCP_CONNECTED(stack, program, prog_size, index);
+            case TCP_LISTEN:     return handle_TCP_LISTEN(stack, program, prog_size, index);
+            case TCP_ACCEPT:     return handle_TCP_ACCEPT(stack, program, prog_size, index);
+            case TCP_SEND:       return handle_TCP_SEND(stack, memory, program, prog_size, index);
+            case TCP_RECV:       return handle_TCP_RECV(stack, memory, program, prog_size, index);
+            case TCP_AVAILABLE:  return handle_TCP_AVAILABLE(stack, program, prog_size, index);
+
+            // Raw UDP
+            case UDP_OPEN:       return handle_UDP_OPEN(stack, program, prog_size, index);
+            case UDP_CLOSE:      return handle_UDP_CLOSE(program, prog_size, index);
+            case UDP_SEND:       return handle_UDP_SEND(stack, memory, program, prog_size, index);
+            case UDP_RECV:       return handle_UDP_RECV(stack, memory, program, prog_size, index);
+            case UDP_AVAILABLE:  return handle_UDP_AVAILABLE(stack, program, prog_size, index);
+
+            // Socket Reservation
+            case ETH_SOCK_ACQUIRE:    return handle_ETH_SOCK_ACQUIRE(stack, program, prog_size, index);
+            case ETH_SOCK_RELEASE:    return handle_ETH_SOCK_RELEASE(stack, program, prog_size, index);
+            case ETH_SOCK_STATUS:     return handle_ETH_SOCK_STATUS(stack, program, prog_size, index);
+            case ETH_SOCK_SET_ACTIVE: return handle_ETH_SOCK_SET_ACTIVE(program, prog_size, index);
+            case ETH_SOCK_INFO:       return handle_ETH_SOCK_INFO(stack, program, prog_size, index);
+#else
+            // Raw TCP - stub (skip parameters when W5500 not enabled)
             case TCP_CONNECT:
             case TCP_DISCONNECT:
             case TCP_CONNECTED:
@@ -616,18 +968,24 @@ namespace PLCMethods {
             case TCP_SEND:
             case TCP_RECV:
             case TCP_AVAILABLE:
-            // Raw UDP - stub for future implementation
+            // Raw UDP - stub
             case UDP_OPEN:
             case UDP_CLOSE:
             case UDP_SEND:
             case UDP_RECV:
-            case UDP_AVAILABLE: {
-                // Skip parameters for unimplemented protocols
+            case UDP_AVAILABLE:
+            // Socket reservation - stub
+            case ETH_SOCK_ACQUIRE:
+            case ETH_SOCK_RELEASE:
+            case ETH_SOCK_STATUS:
+            case ETH_SOCK_SET_ACTIVE:
+            case ETH_SOCK_INFO: {
                 u8 param_size = comms_subfn_param_size(sub_fn);
                 if (index + param_size > prog_size) return PROGRAM_SIZE_EXCEEDED;
                 index += param_size;
                 return STATUS_SUCCESS;
             }
+#endif // PLCRUNTIME_ETHERNET_W5500
 
 #ifdef PLCRUNTIME_SERIAL_RS232
             // Serial RS232
