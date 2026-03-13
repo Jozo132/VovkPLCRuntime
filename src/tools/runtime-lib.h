@@ -107,6 +107,14 @@
 // Transport system (optional - define PLCRUNTIME_TRANSPORT to enable)
 #include "transport/plc-transport.h"
 
+// Communication protocols (ModbusRTU, ModbusTCP, TCP, UDP)
+// Include protocol implementations first, then the comms manager and handler
+#ifdef PLCRUNTIME_MODBUS_RTU
+#include "transport/plc-modbus-rtu.h"
+#endif
+#include "transport/plc-comms-manager.h"
+#include "arithmetics/methods-comms.h"
+
 #define SERIAL_TIMEOUT_RETURN if (serial_timeout) return;
 #define SERIAL_TIMEOUT_JOB(task) if (serial_timeout) { task; return; };
 
@@ -3355,6 +3363,13 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
             // FFI not enabled, skip instruction
             return UNKNOWN_INSTRUCTION;
 #endif // PLCRUNTIME_FFI_ENABLED
+
+        // Communication protocol operations
+#ifdef PLCRUNTIME_COMMS_ENABLED
+        case COMMS: return PLCMethods::handle_COMMS(this->stack, this->memory, program, prog_size, index);
+#else
+        case COMMS: return PLCMethods::handle_COMMS_skip(program, prog_size, index);
+#endif // PLCRUNTIME_COMMS_ENABLED
 
         // Runtime configuration instructions
         case CONFIG_DB: {

@@ -34,3 +34,9 @@
 #include "tools/assembly/st-linter.h"
 #include "tools/assembly/project-compiler.h"
 #include "tools/assembly/wcet-analysis.h"
+
+// Modbus RTU RS485 (enable with #define PLCRUNTIME_MODBUS_RTU before this include)
+// Note: plc-modbus-rtu.h and plc-comms-manager.h are included internally by runtime-lib.h
+// The re-include here is safe (#pragma once) and makes IDE discovery easier
+#include "tools/transport/plc-modbus-rtu.h"
+#include "tools/transport/plc-comms-manager.h"

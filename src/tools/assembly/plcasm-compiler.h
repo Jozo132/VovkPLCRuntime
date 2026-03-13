@@ -3049,6 +3049,335 @@ public:
                     }
                 }
 
+                { // Handle communication protocol operations (COMMS opcode with sub-function dispatch)
+                    // Helper: parse a #constant integer from a token (returns true on error)
+                    // Already available: intFromToken (returns true on error)
+                    // Already available: addressFromToken (returns true on error)
+
+                    // ---- Common operations ----
+                    // comms_begin #instance #config -> push bool
+                    if (hasThird && token == "comms_begin") {
+                        int inst_val = 0, cfg_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        if (addressFromToken(token_p2, cfg_val)) { return buildError(token_p2, "expected config value"); }
+                        bytecode[0] = COMMS; bytecode[1] = COMMS_BEGIN;
+                        bytecode[2] = (u8) inst_val; bytecode[3] = (u8) cfg_val;
+                        i += 2; line.size = 4; _line_push;
+                    }
+                    // comms_end #instance
+                    if (hasNext && token == "comms_end") {
+                        int inst_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        bytecode[0] = COMMS; bytecode[1] = COMMS_END;
+                        bytecode[2] = (u8) inst_val;
+                        i += 1; line.size = 3; _line_push;
+                    }
+                    // comms_enabled #instance -> push bool
+                    if (hasNext && token == "comms_enabled") {
+                        int inst_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        bytecode[0] = COMMS; bytecode[1] = COMMS_ENABLED;
+                        bytecode[2] = (u8) inst_val;
+                        i += 1; line.size = 3; _line_push;
+                    }
+                    // comms_status #instance -> push u8
+                    if (hasNext && token == "comms_status") {
+                        int inst_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        bytecode[0] = COMMS; bytecode[1] = COMMS_STATUS;
+                        bytecode[2] = (u8) inst_val;
+                        i += 1; line.size = 3; _line_push;
+                    }
+
+                    // ---- Modbus data area config: mb_add_* #instance #start #count ----
+                    {
+                        PLCCommsSubFunction mb_add_fn = (PLCCommsSubFunction) 0;
+                        if (token == "mb_add_coils") mb_add_fn = MB_ADD_COILS;
+                        else if (token == "mb_add_discrete") mb_add_fn = MB_ADD_DISCRETE;
+                        else if (token == "mb_add_holding") mb_add_fn = MB_ADD_HOLDING;
+                        else if (token == "mb_add_input_reg") mb_add_fn = MB_ADD_INPUT_REG;
+
+                        if (mb_add_fn != 0) {
+                            if (i + 3 >= token_count) { return buildError(token, "expected: mb_add_* #instance #start #count"); }
+                            int inst_val = 0, start_val = 0, count_val = 0;
+                            if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                            if (addressFromToken(token_p2, start_val)) { return buildError(token_p2, "expected start address"); }
+                            Token& tok3 = tokens[i + 3];
+                            if (addressFromToken(tok3, count_val)) { return buildError(tok3, "expected count"); }
+                            bytecode[0] = COMMS; bytecode[1] = (u8) mb_add_fn;
+                            bytecode[2] = (u8) inst_val;
+                            write_u16(bytecode + 3, (u16) start_val);
+                            write_u16(bytecode + 5, (u16) count_val);
+                            i += 3; line.size = 7; _line_push;
+                        }
+                    }
+
+                    // ---- Modbus master read: mb_read_* #instance #slave #start #qty #dest ----
+                    {
+                        PLCCommsSubFunction mb_rd_fn = (PLCCommsSubFunction) 0;
+                        if (token == "mb_read_coils") mb_rd_fn = MB_READ_COILS;
+                        else if (token == "mb_read_discrete") mb_rd_fn = MB_READ_DISCRETE;
+                        else if (token == "mb_read_holding") mb_rd_fn = MB_READ_HOLDING;
+                        else if (token == "mb_read_input") mb_rd_fn = MB_READ_INPUT;
+
+                        if (mb_rd_fn != 0) {
+                            if (i + 5 >= token_count) { return buildError(token, "expected: mb_read_* #instance #slave #start #qty #dest"); }
+                            int inst_val = 0, slave_val = 0, start_val = 0, qty_val = 0, dest_val = 0;
+                            if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                            if (addressFromToken(token_p2, slave_val)) { return buildError(token_p2, "expected slave address"); }
+                            Token& tok3 = tokens[i + 3];
+                            Token& tok4 = tokens[i + 4];
+                            Token& tok5 = tokens[i + 5];
+                            if (addressFromToken(tok3, start_val)) { return buildError(tok3, "expected start address"); }
+                            if (addressFromToken(tok4, qty_val)) { return buildError(tok4, "expected quantity"); }
+                            if (addressFromToken(tok5, dest_val)) { return buildError(tok5, "expected memory address for destination"); }
+                            bytecode[0] = COMMS; bytecode[1] = (u8) mb_rd_fn;
+                            bytecode[2] = (u8) inst_val; bytecode[3] = (u8) slave_val;
+                            write_u16(bytecode + 4, (u16) start_val);
+                            write_u16(bytecode + 6, (u16) qty_val);
+                            write_ptr(bytecode + 8, (MY_PTR_t) dest_val);
+                            i += 5; line.size = 8 + MY_PTR_SIZE_BYTES; _line_push;
+                        }
+                    }
+
+                    // ---- Modbus master write single: mb_write_coil/mb_write_reg #instance #slave #addr ----
+                    // Value is popped from stack (bool for coil, u16 for reg)
+                    {
+                        PLCCommsSubFunction mb_wr_fn = (PLCCommsSubFunction) 0;
+                        if (token == "mb_write_coil") mb_wr_fn = MB_WRITE_COIL;
+                        else if (token == "mb_write_reg") mb_wr_fn = MB_WRITE_REG;
+
+                        if (mb_wr_fn != 0) {
+                            if (i + 3 >= token_count) { return buildError(token, "expected: mb_write_coil/reg #instance #slave #addr"); }
+                            int inst_val = 0, slave_val = 0, addr_val = 0;
+                            if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                            if (addressFromToken(token_p2, slave_val)) { return buildError(token_p2, "expected slave address"); }
+                            Token& tok3 = tokens[i + 3];
+                            if (addressFromToken(tok3, addr_val)) { return buildError(tok3, "expected register/coil address"); }
+                            bytecode[0] = COMMS; bytecode[1] = (u8) mb_wr_fn;
+                            bytecode[2] = (u8) inst_val; bytecode[3] = (u8) slave_val;
+                            write_u16(bytecode + 4, (u16) addr_val);
+                            i += 3; line.size = 6; _line_push;
+                        }
+                    }
+
+                    // ---- Modbus master write multiple: mb_write_coils/mb_write_regs #inst #slave #start #qty #src ----
+                    {
+                        PLCCommsSubFunction mb_wm_fn = (PLCCommsSubFunction) 0;
+                        if (token == "mb_write_coils") mb_wm_fn = MB_WRITE_COILS;
+                        else if (token == "mb_write_regs") mb_wm_fn = MB_WRITE_REGS;
+
+                        if (mb_wm_fn != 0) {
+                            if (i + 5 >= token_count) { return buildError(token, "expected: mb_write_coils/regs #instance #slave #start #qty #src"); }
+                            int inst_val = 0, slave_val = 0, start_val = 0, qty_val = 0, src_val = 0;
+                            if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                            if (addressFromToken(token_p2, slave_val)) { return buildError(token_p2, "expected slave address"); }
+                            Token& tok3 = tokens[i + 3];
+                            Token& tok4 = tokens[i + 4];
+                            Token& tok5 = tokens[i + 5];
+                            if (addressFromToken(tok3, start_val)) { return buildError(tok3, "expected start address"); }
+                            if (addressFromToken(tok4, qty_val)) { return buildError(tok4, "expected quantity"); }
+                            if (addressFromToken(tok5, src_val)) { return buildError(tok5, "expected memory address for source"); }
+                            bytecode[0] = COMMS; bytecode[1] = (u8) mb_wm_fn;
+                            bytecode[2] = (u8) inst_val; bytecode[3] = (u8) slave_val;
+                            write_u16(bytecode + 4, (u16) start_val);
+                            write_u16(bytecode + 6, (u16) qty_val);
+                            write_ptr(bytecode + 8, (MY_PTR_t) src_val);
+                            i += 5; line.size = 8 + MY_PTR_SIZE_BYTES; _line_push;
+                        }
+                    }
+
+                    // ---- Modbus slave: mb_poll #instance -> push bool ----
+                    if (hasNext && token == "mb_poll") {
+                        int inst_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        bytecode[0] = COMMS; bytecode[1] = MB_POLL;
+                        bytecode[2] = (u8) inst_val;
+                        i += 1; line.size = 3; _line_push;
+                    }
+
+                    // ---- Modbus slave data access: mb_slv_* #instance #addr ----
+                    {
+                        PLCCommsSubFunction mb_slv_fn = (PLCCommsSubFunction) 0;
+                        if (token == "mb_slv_get_coil") mb_slv_fn = MB_SLV_GET_COIL;
+                        else if (token == "mb_slv_set_coil") mb_slv_fn = MB_SLV_SET_COIL;
+                        else if (token == "mb_slv_get_reg") mb_slv_fn = MB_SLV_GET_REG;
+                        else if (token == "mb_slv_set_reg") mb_slv_fn = MB_SLV_SET_REG;
+                        else if (token == "mb_slv_get_di") mb_slv_fn = MB_SLV_GET_DI;
+                        else if (token == "mb_slv_set_di") mb_slv_fn = MB_SLV_SET_DI;
+                        else if (token == "mb_slv_get_ir") mb_slv_fn = MB_SLV_GET_IR;
+                        else if (token == "mb_slv_set_ir") mb_slv_fn = MB_SLV_SET_IR;
+
+                        if (mb_slv_fn != 0) {
+                            if (!hasThird) { return buildError(token, "expected: mb_slv_* #instance #addr"); }
+                            int inst_val = 0, addr_val = 0;
+                            if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                            if (addressFromToken(token_p2, addr_val)) { return buildError(token_p2, "expected register/coil address"); }
+                            bytecode[0] = COMMS; bytecode[1] = (u8) mb_slv_fn;
+                            bytecode[2] = (u8) inst_val;
+                            write_u16(bytecode + 3, (u16) addr_val);
+                            i += 2; line.size = 5; _line_push;
+                        }
+                    }
+
+                    // ---- Raw TCP ----
+                    // tcp_connect #instance #ip0 #ip1 #ip2 #ip3 #port -> push bool
+                    if (token == "tcp_connect") {
+                        if (i + 6 >= token_count) { return buildError(token, "expected: tcp_connect #inst #ip0 #ip1 #ip2 #ip3 #port"); }
+                        int inst_val = 0, ip0 = 0, ip1 = 0, ip2 = 0, ip3 = 0, port_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        if (addressFromToken(token_p2, ip0)) { return buildError(token_p2, "expected IP byte 0"); }
+                        Token& t3 = tokens[i + 3]; Token& t4 = tokens[i + 4];
+                        Token& t5 = tokens[i + 5]; Token& t6 = tokens[i + 6];
+                        if (addressFromToken(t3, ip1)) { return buildError(t3, "expected IP byte 1"); }
+                        if (addressFromToken(t4, ip2)) { return buildError(t4, "expected IP byte 2"); }
+                        if (addressFromToken(t5, ip3)) { return buildError(t5, "expected IP byte 3"); }
+                        if (addressFromToken(t6, port_val)) { return buildError(t6, "expected port"); }
+                        bytecode[0] = COMMS; bytecode[1] = TCP_CONNECT;
+                        bytecode[2] = (u8) inst_val;
+                        bytecode[3] = (u8) ip0; bytecode[4] = (u8) ip1;
+                        bytecode[5] = (u8) ip2; bytecode[6] = (u8) ip3;
+                        write_u16(bytecode + 7, (u16) port_val);
+                        i += 6; line.size = 9; _line_push;
+                    }
+                    // tcp_disconnect #instance
+                    if (hasNext && token == "tcp_disconnect") {
+                        int inst_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        bytecode[0] = COMMS; bytecode[1] = TCP_DISCONNECT;
+                        bytecode[2] = (u8) inst_val;
+                        i += 1; line.size = 3; _line_push;
+                    }
+                    // tcp_connected #instance -> push bool
+                    if (hasNext && token == "tcp_connected") {
+                        int inst_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        bytecode[0] = COMMS; bytecode[1] = TCP_CONNECTED;
+                        bytecode[2] = (u8) inst_val;
+                        i += 1; line.size = 3; _line_push;
+                    }
+                    // tcp_listen #instance #port -> push bool
+                    if (hasThird && token == "tcp_listen") {
+                        int inst_val = 0, port_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        if (addressFromToken(token_p2, port_val)) { return buildError(token_p2, "expected port"); }
+                        bytecode[0] = COMMS; bytecode[1] = TCP_LISTEN;
+                        bytecode[2] = (u8) inst_val;
+                        write_u16(bytecode + 3, (u16) port_val);
+                        i += 2; line.size = 5; _line_push;
+                    }
+                    // tcp_accept #instance -> push bool
+                    if (hasNext && token == "tcp_accept") {
+                        int inst_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        bytecode[0] = COMMS; bytecode[1] = TCP_ACCEPT;
+                        bytecode[2] = (u8) inst_val;
+                        i += 1; line.size = 3; _line_push;
+                    }
+                    // tcp_send #instance #src #len -> push u16
+                    if (token == "tcp_send") {
+                        if (i + 3 >= token_count) { return buildError(token, "expected: tcp_send #inst #src #len"); }
+                        int inst_val = 0, src_val = 0, len_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        if (addressFromToken(token_p2, src_val)) { return buildError(token_p2, "expected memory address for source"); }
+                        Token& tok3 = tokens[i + 3];
+                        if (addressFromToken(tok3, len_val)) { return buildError(tok3, "expected length"); }
+                        bytecode[0] = COMMS; bytecode[1] = TCP_SEND;
+                        bytecode[2] = (u8) inst_val;
+                        write_ptr(bytecode + 3, (MY_PTR_t) src_val);
+                        write_u16(bytecode + 3 + MY_PTR_SIZE_BYTES, (u16) len_val);
+                        i += 3; line.size = 5 + MY_PTR_SIZE_BYTES; _line_push;
+                    }
+                    // tcp_recv #instance #dest #max -> push u16
+                    if (token == "tcp_recv") {
+                        if (i + 3 >= token_count) { return buildError(token, "expected: tcp_recv #inst #dest #max"); }
+                        int inst_val = 0, dest_val = 0, max_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        if (addressFromToken(token_p2, dest_val)) { return buildError(token_p2, "expected memory address for destination"); }
+                        Token& tok3 = tokens[i + 3];
+                        if (addressFromToken(tok3, max_val)) { return buildError(tok3, "expected max length"); }
+                        bytecode[0] = COMMS; bytecode[1] = TCP_RECV;
+                        bytecode[2] = (u8) inst_val;
+                        write_ptr(bytecode + 3, (MY_PTR_t) dest_val);
+                        write_u16(bytecode + 3 + MY_PTR_SIZE_BYTES, (u16) max_val);
+                        i += 3; line.size = 5 + MY_PTR_SIZE_BYTES; _line_push;
+                    }
+                    // tcp_available #instance -> push u16
+                    if (hasNext && token == "tcp_available") {
+                        int inst_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        bytecode[0] = COMMS; bytecode[1] = TCP_AVAILABLE;
+                        bytecode[2] = (u8) inst_val;
+                        i += 1; line.size = 3; _line_push;
+                    }
+
+                    // ---- Raw UDP ----
+                    // udp_open #instance #port -> push bool
+                    if (hasThird && token == "udp_open") {
+                        int inst_val = 0, port_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        if (addressFromToken(token_p2, port_val)) { return buildError(token_p2, "expected port"); }
+                        bytecode[0] = COMMS; bytecode[1] = UDP_OPEN;
+                        bytecode[2] = (u8) inst_val;
+                        write_u16(bytecode + 3, (u16) port_val);
+                        i += 2; line.size = 5; _line_push;
+                    }
+                    // udp_close #instance
+                    if (hasNext && token == "udp_close") {
+                        int inst_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        bytecode[0] = COMMS; bytecode[1] = UDP_CLOSE;
+                        bytecode[2] = (u8) inst_val;
+                        i += 1; line.size = 3; _line_push;
+                    }
+                    // udp_send #instance #ip0 #ip1 #ip2 #ip3 #port #src #len -> push u16
+                    if (token == "udp_send") {
+                        if (i + 8 >= token_count) { return buildError(token, "expected: udp_send #inst #ip0 #ip1 #ip2 #ip3 #port #src #len"); }
+                        int inst_val = 0, ip0 = 0, ip1 = 0, ip2 = 0, ip3 = 0, port_val = 0, src_val = 0, len_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        if (addressFromToken(token_p2, ip0)) { return buildError(token_p2, "expected IP byte 0"); }
+                        Token& t3 = tokens[i + 3]; Token& t4 = tokens[i + 4];
+                        Token& t5 = tokens[i + 5]; Token& t6 = tokens[i + 6];
+                        Token& t7 = tokens[i + 7]; Token& t8 = tokens[i + 8];
+                        if (addressFromToken(t3, ip1)) { return buildError(t3, "expected IP byte 1"); }
+                        if (addressFromToken(t4, ip2)) { return buildError(t4, "expected IP byte 2"); }
+                        if (addressFromToken(t5, ip3)) { return buildError(t5, "expected IP byte 3"); }
+                        if (addressFromToken(t6, port_val)) { return buildError(t6, "expected port"); }
+                        if (addressFromToken(t7, src_val)) { return buildError(t7, "expected memory address for source"); }
+                        if (addressFromToken(t8, len_val)) { return buildError(t8, "expected length"); }
+                        bytecode[0] = COMMS; bytecode[1] = UDP_SEND;
+                        bytecode[2] = (u8) inst_val;
+                        bytecode[3] = (u8) ip0; bytecode[4] = (u8) ip1;
+                        bytecode[5] = (u8) ip2; bytecode[6] = (u8) ip3;
+                        write_u16(bytecode + 7, (u16) port_val);
+                        write_ptr(bytecode + 9, (MY_PTR_t) src_val);
+                        write_u16(bytecode + 9 + MY_PTR_SIZE_BYTES, (u16) len_val);
+                        i += 8; line.size = 11 + MY_PTR_SIZE_BYTES; _line_push;
+                    }
+                    // udp_recv #instance #dest #max -> push u16
+                    if (token == "udp_recv") {
+                        if (i + 3 >= token_count) { return buildError(token, "expected: udp_recv #inst #dest #max"); }
+                        int inst_val = 0, dest_val = 0, max_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        if (addressFromToken(token_p2, dest_val)) { return buildError(token_p2, "expected memory address for destination"); }
+                        Token& tok3 = tokens[i + 3];
+                        if (addressFromToken(tok3, max_val)) { return buildError(tok3, "expected max length"); }
+                        bytecode[0] = COMMS; bytecode[1] = UDP_RECV;
+                        bytecode[2] = (u8) inst_val;
+                        write_ptr(bytecode + 3, (MY_PTR_t) dest_val);
+                        write_u16(bytecode + 3 + MY_PTR_SIZE_BYTES, (u16) max_val);
+                        i += 3; line.size = 5 + MY_PTR_SIZE_BYTES; _line_push;
+                    }
+                    // udp_available #instance -> push u16
+                    if (hasNext && token == "udp_available") {
+                        int inst_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        bytecode[0] = COMMS; bytecode[1] = UDP_AVAILABLE;
+                        bytecode[2] = (u8) inst_val;
+                        i += 1; line.size = 3; _line_push;
+                    }
+                }
+
                 { // Handle flow
                     if (hasNext && (token == "jmp" || token == "jump")) { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } i++; line.size = InstructionCompiler::push_jmp(bytecode, label_address); _ir_set_jump(1, label_address); _line_push; }
                     if (hasNext && (token == "jmp_if" || token == "jump_if")) { if (finalPass && e_label) { if (buildErrorUnknownLabel(token_p1)) return true; } i++; line.size = InstructionCompiler::push_jmp_if(bytecode, label_address); _ir_set_jump(1, label_address); _line_push; }
