@@ -39,4 +39,5 @@
 // Note: plc-modbus-rtu.h and plc-comms-manager.h are included internally by runtime-lib.h
 // The re-include here is safe (#pragma once) and makes IDE discovery easier
 #include "tools/transport/plc-modbus-rtu.h"
+#include "tools/transport/plc-serial-rs232.h"
 #include "tools/transport/plc-comms-manager.h"

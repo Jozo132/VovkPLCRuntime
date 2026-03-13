@@ -107,10 +107,13 @@
 // Transport system (optional - define PLCRUNTIME_TRANSPORT to enable)
 #include "transport/plc-transport.h"
 
-// Communication protocols (ModbusRTU, ModbusTCP, TCP, UDP)
+// Communication protocols (ModbusRTU, ModbusTCP, TCP, UDP, Serial RS232)
 // Include protocol implementations first, then the comms manager and handler
 #ifdef PLCRUNTIME_MODBUS_RTU
 #include "transport/plc-modbus-rtu.h"
+#endif
+#ifdef PLCRUNTIME_SERIAL_RS232
+#include "transport/plc-serial-rs232.h"
 #endif
 #include "transport/plc-comms-manager.h"
 #include "arithmetics/methods-comms.h"

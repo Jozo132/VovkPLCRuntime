@@ -3376,6 +3376,144 @@ public:
                         bytecode[2] = (u8) inst_val;
                         i += 1; line.size = 3; _line_push;
                     }
+
+                    // ---- Priority / Async Queue ----
+                    // comms_set_priority #instance #priority (0=sync, 1=async)
+                    if (hasThird && token == "comms_set_priority") {
+                        int inst_val = 0, prio_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        if (addressFromToken(token_p2, prio_val)) { return buildError(token_p2, "expected priority (0=sync, 1=async)"); }
+                        bytecode[0] = COMMS; bytecode[1] = COMMS_SET_PRIORITY;
+                        bytecode[2] = (u8) inst_val; bytecode[3] = (u8) prio_val;
+                        i += 2; line.size = 4; _line_push;
+                    }
+                    // comms_poll_async #instance -> push u8 (0=idle, 1=busy, 0xFF=error)
+                    if (hasNext && token == "comms_poll_async") {
+                        int inst_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        bytecode[0] = COMMS; bytecode[1] = COMMS_POLL_ASYNC;
+                        bytecode[2] = (u8) inst_val;
+                        i += 1; line.size = 3; _line_push;
+                    }
+                    // comms_queue_size #instance -> push u8
+                    if (hasNext && token == "comms_queue_size") {
+                        int inst_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        bytecode[0] = COMMS; bytecode[1] = COMMS_QUEUE_SIZE;
+                        bytecode[2] = (u8) inst_val;
+                        i += 1; line.size = 3; _line_push;
+                    }
+
+                    // ---- Serial RS232 ----
+                    // ser_write #instance #src #len -> push u16 (bytes written)
+                    if (token == "ser_write") {
+                        if (i + 3 >= token_count) { return buildError(token, "expected: ser_write #inst #src #len"); }
+                        int inst_val = 0, src_val = 0, len_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        if (addressFromToken(token_p2, src_val)) { return buildError(token_p2, "expected memory address for source"); }
+                        Token& tok3 = tokens[i + 3];
+                        if (addressFromToken(tok3, len_val)) { return buildError(tok3, "expected length"); }
+                        bytecode[0] = COMMS; bytecode[1] = SER_WRITE;
+                        bytecode[2] = (u8) inst_val;
+                        write_ptr(bytecode + 3, (MY_PTR_t) src_val);
+                        write_u16(bytecode + 3 + MY_PTR_SIZE_BYTES, (u16) len_val);
+                        i += 3; line.size = 5 + MY_PTR_SIZE_BYTES; _line_push;
+                    }
+                    // ser_read #instance #dest #max -> push u16 (bytes read)
+                    if (token == "ser_read") {
+                        if (i + 3 >= token_count) { return buildError(token, "expected: ser_read #inst #dest #max"); }
+                        int inst_val = 0, dest_val = 0, max_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        if (addressFromToken(token_p2, dest_val)) { return buildError(token_p2, "expected memory address for destination"); }
+                        Token& tok3 = tokens[i + 3];
+                        if (addressFromToken(tok3, max_val)) { return buildError(tok3, "expected max length"); }
+                        bytecode[0] = COMMS; bytecode[1] = SER_READ;
+                        bytecode[2] = (u8) inst_val;
+                        write_ptr(bytecode + 3, (MY_PTR_t) dest_val);
+                        write_u16(bytecode + 3 + MY_PTR_SIZE_BYTES, (u16) max_val);
+                        i += 3; line.size = 5 + MY_PTR_SIZE_BYTES; _line_push;
+                    }
+                    // ser_available #instance -> push u16
+                    if (hasNext && token == "ser_available") {
+                        int inst_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        bytecode[0] = COMMS; bytecode[1] = SER_AVAILABLE;
+                        bytecode[2] = (u8) inst_val;
+                        i += 1; line.size = 3; _line_push;
+                    }
+                    // ser_flush #instance
+                    if (hasNext && token == "ser_flush") {
+                        int inst_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        bytecode[0] = COMMS; bytecode[1] = SER_FLUSH;
+                        bytecode[2] = (u8) inst_val;
+                        i += 1; line.size = 3; _line_push;
+                    }
+                    // ser_write_byte #instance (+ pop u8 -> push bool)
+                    if (hasNext && token == "ser_write_byte") {
+                        int inst_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        bytecode[0] = COMMS; bytecode[1] = SER_WRITE_BYTE;
+                        bytecode[2] = (u8) inst_val;
+                        i += 1; line.size = 3; _line_push;
+                    }
+                    // ser_read_byte #instance -> push i16 (-1 if none)
+                    if (hasNext && token == "ser_read_byte") {
+                        int inst_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        bytecode[0] = COMMS; bytecode[1] = SER_READ_BYTE;
+                        bytecode[2] = (u8) inst_val;
+                        i += 1; line.size = 3; _line_push;
+                    }
+                    // ser_poll #instance -> push u16 (bytes available)
+                    if (hasNext && token == "ser_poll") {
+                        int inst_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        bytecode[0] = COMMS; bytecode[1] = SER_POLL;
+                        bytecode[2] = (u8) inst_val;
+                        i += 1; line.size = 3; _line_push;
+                    }
+                    // ser_msg_ready #instance -> push bool
+                    if (hasNext && token == "ser_msg_ready") {
+                        int inst_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        bytecode[0] = COMMS; bytecode[1] = SER_MSG_READY;
+                        bytecode[2] = (u8) inst_val;
+                        i += 1; line.size = 3; _line_push;
+                    }
+                    // ser_read_msg #instance #dest #max -> push u16 (msg length)
+                    if (token == "ser_read_msg") {
+                        if (i + 3 >= token_count) { return buildError(token, "expected: ser_read_msg #inst #dest #max"); }
+                        int inst_val = 0, dest_val = 0, max_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        if (addressFromToken(token_p2, dest_val)) { return buildError(token_p2, "expected memory address for destination"); }
+                        Token& tok3 = tokens[i + 3];
+                        if (addressFromToken(tok3, max_val)) { return buildError(tok3, "expected max length"); }
+                        bytecode[0] = COMMS; bytecode[1] = SER_READ_MSG;
+                        bytecode[2] = (u8) inst_val;
+                        write_ptr(bytecode + 3, (MY_PTR_t) dest_val);
+                        write_u16(bytecode + 3 + MY_PTR_SIZE_BYTES, (u16) max_val);
+                        i += 3; line.size = 5 + MY_PTR_SIZE_BYTES; _line_push;
+                    }
+                    // ser_set_delim #instance #delimiter
+                    if (hasThird && token == "ser_set_delim") {
+                        int inst_val = 0, delim_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        if (addressFromToken(token_p2, delim_val)) { return buildError(token_p2, "expected delimiter byte"); }
+                        bytecode[0] = COMMS; bytecode[1] = SER_SET_DELIM;
+                        bytecode[2] = (u8) inst_val; bytecode[3] = (u8) delim_val;
+                        i += 2; line.size = 4; _line_push;
+                    }
+                    // ser_set_baud #instance #baudrate (u32, auto re-init if active)
+                    if (hasThird && token == "ser_set_baud") {
+                        int inst_val = 0, baud_val = 0;
+                        if (addressFromToken(token_p1, inst_val)) { return buildError(token_p1, "expected instance index"); }
+                        if (addressFromToken(token_p2, baud_val)) { return buildError(token_p2, "expected baud rate"); }
+                        bytecode[0] = COMMS; bytecode[1] = SER_SET_BAUD;
+                        bytecode[2] = (u8) inst_val;
+                        write_u32(bytecode + 3, (u32) baud_val);
+                        i += 2; line.size = 7; _line_push;
+                    }
                 }
 
                 { // Handle flow

@@ -68,6 +68,20 @@ namespace PLCMethods {
                 return stack.push_bool(true);
             }
 #endif
+#ifdef PLCRUNTIME_SERIAL_RS232
+            case COMMS_PROTO_SERIAL: {
+                SerialRS232* ser = (SerialRS232*) ci->driver;
+                if (!ser) return stack.push_bool(false);
+                // config byte selects baud rate from lookup table
+                // 0 = use stored baudrate, 1-11 = standard rates
+                uint32_t baud = serialBaudFromIndex(config);
+                if (baud > 0) ser->setBaudrate(baud);
+                if (!ser->isBegun()) ser->begin();
+                ci->active = true;
+                ci->lastError = 0;
+                return stack.push_bool(true);
+            }
+#endif
             default:
                 return stack.push_bool(false);
         }
@@ -78,7 +92,15 @@ namespace PLCMethods {
         u8 inst = program[index++];
 
         PLCCommsInstance* ci = g_plcComms.getInstance(inst);
-        if (ci) ci->active = false;
+        if (ci) {
+            ci->active = false;
+#ifdef PLCRUNTIME_SERIAL_RS232
+            if (ci->protocol == COMMS_PROTO_SERIAL) {
+                SerialRS232* ser = (SerialRS232*) ci->driver;
+                if (ser) ser->end();
+            }
+#endif
+        }
         return STATUS_SUCCESS;
     }
 
@@ -94,6 +116,64 @@ namespace PLCMethods {
 
         PLCCommsInstance* ci = g_plcComms.getInstance(inst);
         return stack.push_u8(ci ? ci->lastError : 0xFF);
+    }
+
+    // ========================================================================
+    // Priority / Async Queue (0x04-0x06)
+    // ========================================================================
+
+    static RuntimeError handle_COMMS_SET_PRIORITY(u8* program, u32 prog_size, u32& index) {
+        if (index + 2 > prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 inst = program[index++];
+        u8 prio = program[index++];
+
+        PLCCommsInstance* ci = g_plcComms.getInstance(inst);
+        if (ci) ci->priority = prio;
+        return STATUS_SUCCESS;
+    }
+
+    static RuntimeError handle_COMMS_POLL_ASYNC(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
+        if (index + 1 > prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 inst = program[index++];
+
+        PLCCommsInstance* ci = g_plcComms.getInstance(inst);
+        if (!ci || !ci->active) return stack.push_u8(0xFF);
+
+        PLCCommsTxn* txn = ci->asyncQueue.peek();
+        if (!txn) return stack.push_u8(0); // idle - nothing queued
+
+        // Execute the transaction synchronously now
+        // We re-use the existing handlers by constructing a mini program from txn->params
+        // For simplicity, we execute the transaction inline using the stored sub_fn + params
+        // The result is stored in txn->resultError, then dequeued
+        // Note: async poll executes at most one transaction per call
+        u8 mini_prog[20]; // sub_fn params fit in 16 + some overhead
+        u32 mini_size = txn->paramLen;
+        for (u8 j = 0; j < txn->paramLen; j++) mini_prog[j] = txn->params[j];
+        u32 mini_index = 0;
+
+        // Dispatch the stored sub_fn through the main handler
+        // We construct: [sub_fn] [params...] and call handle_COMMS
+        u8 exec_prog[20];
+        exec_prog[0] = txn->sub_fn;
+        for (u8 j = 0; j < txn->paramLen; j++) exec_prog[1 + j] = txn->params[j];
+        u32 exec_size = 1 + txn->paramLen;
+        u32 exec_index = 0;
+
+        RuntimeError err = handle_COMMS(stack, memory, exec_prog, exec_size, exec_index);
+        txn->resultError = (err == STATUS_SUCCESS) ? ci->lastError : 0xFF;
+        ci->asyncQueue.dequeue();
+
+        // Return busy if more transactions remain, idle if done
+        return stack.push_u8(ci->asyncQueue.count > 0 ? 1 : 0);
+    }
+
+    static RuntimeError handle_COMMS_QUEUE_SIZE(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
+        if (index + 1 > prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 inst = program[index++];
+
+        PLCCommsInstance* ci = g_plcComms.getInstance(inst);
+        return stack.push_u8(ci ? ci->asyncQueue.count : 0);
     }
 
     // ========================================================================
@@ -325,6 +405,150 @@ namespace PLCMethods {
 #endif // PLCRUNTIME_MODBUS_RTU
 
     // ========================================================================
+    // Serial RS232 Operations (0x50-0x59)
+    // ========================================================================
+
+#ifdef PLCRUNTIME_SERIAL_RS232
+    static RuntimeError handle_SER_WRITE(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
+        // [inst:u8] [src_mem:ptr] [len:u16] -> push u16 (bytes written)
+        if (index + 3 + MY_PTR_SIZE_BYTES > prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 inst = program[index++];
+        MY_PTR_t src_mem = read_ptr(program + index); index += MY_PTR_SIZE_BYTES;
+        u16 len = read_u16(program + index); index += 2;
+
+        SerialRS232* ser = g_plcComms.getSerial(inst);
+        PLCCommsInstance* ci = g_plcComms.getInstance(inst);
+        if (!ser || !ci || !ci->active) {
+            if (ci) ci->lastError = 0xFF;
+            return stack.push_u16(0);
+        }
+        u16 written = ser->write(memory + src_mem, len);
+        ci->lastError = 0;
+        return stack.push_u16(written);
+    }
+
+    static RuntimeError handle_SER_READ(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
+        // [inst:u8] [dest_mem:ptr] [max:u16] -> push u16 (bytes read)
+        if (index + 3 + MY_PTR_SIZE_BYTES > prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 inst = program[index++];
+        MY_PTR_t dest_mem = read_ptr(program + index); index += MY_PTR_SIZE_BYTES;
+        u16 max_len = read_u16(program + index); index += 2;
+
+        SerialRS232* ser = g_plcComms.getSerial(inst);
+        PLCCommsInstance* ci = g_plcComms.getInstance(inst);
+        if (!ser || !ci || !ci->active) {
+            if (ci) ci->lastError = 0xFF;
+            return stack.push_u16(0);
+        }
+        u16 count = ser->read(memory + dest_mem, max_len);
+        ci->lastError = 0;
+        return stack.push_u16(count);
+    }
+
+    static RuntimeError handle_SER_AVAILABLE(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
+        // [inst:u8] -> push u16
+        if (index + 1 > prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 inst = program[index++];
+
+        SerialRS232* ser = g_plcComms.getSerial(inst);
+        if (!ser) return stack.push_u16(0);
+        return stack.push_u16(ser->available());
+    }
+
+    static RuntimeError handle_SER_FLUSH(u8* program, u32 prog_size, u32& index) {
+        // [inst:u8]
+        if (index + 1 > prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 inst = program[index++];
+
+        SerialRS232* ser = g_plcComms.getSerial(inst);
+        if (ser) ser->flush();
+        return STATUS_SUCCESS;
+    }
+
+    static RuntimeError handle_SER_WRITE_BYTE(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
+        // [inst:u8] + pop u8 -> push bool
+        if (index + 1 > prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 inst = program[index++];
+
+        u8 byte_val = stack.pop();
+        SerialRS232* ser = g_plcComms.getSerial(inst);
+        if (!ser) return stack.push_bool(false);
+        return stack.push_bool(ser->writeByte(byte_val));
+    }
+
+    static RuntimeError handle_SER_READ_BYTE(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
+        // [inst:u8] -> push i16 (-1 if none)
+        if (index + 1 > prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 inst = program[index++];
+
+        SerialRS232* ser = g_plcComms.getSerial(inst);
+        if (!ser) return stack.push_i16(-1);
+        return stack.push_i16(ser->readByte());
+    }
+
+    static RuntimeError handle_SER_POLL(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
+        // [inst:u8] -> push u16 (bytes available after poll)
+        if (index + 1 > prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 inst = program[index++];
+
+        SerialRS232* ser = g_plcComms.getSerial(inst);
+        if (!ser) return stack.push_u16(0);
+        ser->poll();
+        return stack.push_u16(ser->available());
+    }
+
+    static RuntimeError handle_SER_MSG_READY(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
+        // [inst:u8] -> push bool
+        if (index + 1 > prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 inst = program[index++];
+
+        SerialRS232* ser = g_plcComms.getSerial(inst);
+        if (!ser) return stack.push_bool(false);
+        return stack.push_bool(ser->messageReady());
+    }
+
+    static RuntimeError handle_SER_READ_MSG(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
+        // [inst:u8] [dest_mem:ptr] [max:u16] -> push u16 (msg length)
+        if (index + 3 + MY_PTR_SIZE_BYTES > prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 inst = program[index++];
+        MY_PTR_t dest_mem = read_ptr(program + index); index += MY_PTR_SIZE_BYTES;
+        u16 max_len = read_u16(program + index); index += 2;
+
+        SerialRS232* ser = g_plcComms.getSerial(inst);
+        PLCCommsInstance* ci = g_plcComms.getInstance(inst);
+        if (!ser || !ci || !ci->active) {
+            if (ci) ci->lastError = 0xFF;
+            return stack.push_u16(0);
+        }
+        u16 len = ser->readMessage(memory + dest_mem, max_len);
+        ci->lastError = 0;
+        return stack.push_u16(len);
+    }
+
+    static RuntimeError handle_SER_SET_DELIM(u8* program, u32 prog_size, u32& index) {
+        // [inst:u8] [delim:u8]
+        if (index + 2 > prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 inst = program[index++];
+        u8 delim = program[index++];
+
+        SerialRS232* ser = g_plcComms.getSerial(inst);
+        if (ser) ser->setDelimiter(delim);
+        return STATUS_SUCCESS;
+    }
+
+    static RuntimeError handle_SER_SET_BAUD(u8* program, u32 prog_size, u32& index) {
+        // [inst:u8] [baud:u32] -> auto re-init if active
+        if (index + 5 > prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 inst = program[index++];
+        u32 baud = read_u32(program + index); index += 4;
+
+        SerialRS232* ser = g_plcComms.getSerial(inst);
+        if (ser) ser->setBaudrate(baud);
+        return STATUS_SUCCESS;
+    }
+#endif // PLCRUNTIME_SERIAL_RS232
+
+    // ========================================================================
     // Main COMMS Handler - dispatches to sub-function handlers
     // ========================================================================
 
@@ -338,6 +562,11 @@ namespace PLCMethods {
             case COMMS_END:      return handle_COMMS_END(program, prog_size, index);
             case COMMS_ENABLED:  return handle_COMMS_ENABLED(stack, program, prog_size, index);
             case COMMS_STATUS:   return handle_COMMS_STATUS(stack, program, prog_size, index);
+
+            // Priority / Async
+            case COMMS_SET_PRIORITY: return handle_COMMS_SET_PRIORITY(program, prog_size, index);
+            case COMMS_POLL_ASYNC:   return handle_COMMS_POLL_ASYNC(stack, memory, program, prog_size, index);
+            case COMMS_QUEUE_SIZE:   return handle_COMMS_QUEUE_SIZE(stack, program, prog_size, index);
 
 #ifdef PLCRUNTIME_MODBUS_RTU
             // Modbus data area config
@@ -399,6 +628,21 @@ namespace PLCMethods {
                 index += param_size;
                 return STATUS_SUCCESS;
             }
+
+#ifdef PLCRUNTIME_SERIAL_RS232
+            // Serial RS232
+            case SER_WRITE:     return handle_SER_WRITE(stack, memory, program, prog_size, index);
+            case SER_READ:      return handle_SER_READ(stack, memory, program, prog_size, index);
+            case SER_AVAILABLE: return handle_SER_AVAILABLE(stack, program, prog_size, index);
+            case SER_FLUSH:     return handle_SER_FLUSH(program, prog_size, index);
+            case SER_WRITE_BYTE:return handle_SER_WRITE_BYTE(stack, program, prog_size, index);
+            case SER_READ_BYTE: return handle_SER_READ_BYTE(stack, program, prog_size, index);
+            case SER_POLL:      return handle_SER_POLL(stack, program, prog_size, index);
+            case SER_MSG_READY: return handle_SER_MSG_READY(stack, program, prog_size, index);
+            case SER_READ_MSG:  return handle_SER_READ_MSG(stack, memory, program, prog_size, index);
+            case SER_SET_DELIM: return handle_SER_SET_DELIM(program, prog_size, index);
+            case SER_SET_BAUD:  return handle_SER_SET_BAUD(program, prog_size, index);
+#endif // PLCRUNTIME_SERIAL_RS232
 
             default: {
                 // Unknown sub-function - try to skip based on known size

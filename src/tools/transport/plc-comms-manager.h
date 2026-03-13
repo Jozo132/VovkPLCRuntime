@@ -53,6 +53,7 @@ enum PLCCommsProtocol : u8 {
     COMMS_PROTO_MODBUS_TCP = 0x02,
     COMMS_PROTO_RAW_TCP    = 0x03,
     COMMS_PROTO_RAW_UDP    = 0x04,
+    COMMS_PROTO_SERIAL     = 0x05, // Generic serial RS232
 };
 
 // ============================================================================
@@ -67,6 +68,9 @@ enum PLCCommsSubFunction : u8 {
     COMMS_END           = 0x01, // [inst:u8]
     COMMS_ENABLED       = 0x02, // [inst:u8]                         -> push bool
     COMMS_STATUS        = 0x03, // [inst:u8]                         -> push u8
+    COMMS_SET_PRIORITY  = 0x04, // [inst:u8] [priority:u8]           (0=sync/high, 1=async/low)
+    COMMS_POLL_ASYNC    = 0x05, // [inst:u8]                         -> push u8 (0=idle, 1=busy, 0xFF=error)
+    COMMS_QUEUE_SIZE    = 0x06, // [inst:u8]                         -> push u8
 
     // ---- Modbus Data Area Config (0x08-0x0B) --------------------------------
     MB_ADD_COILS        = 0x08, // [inst:u8] [start:u16] [count:u16]
@@ -113,6 +117,19 @@ enum PLCCommsSubFunction : u8 {
     UDP_SEND            = 0x42, // [inst:u8] [ip0-3:u8x4] [port:u16] [src_mem:ptr] [len:u16] -> push u16
     UDP_RECV            = 0x43, // [inst:u8] [dest_mem:ptr] [max:u16] -> push u16
     UDP_AVAILABLE       = 0x44, // [inst:u8]                         -> push u16
+
+    // ---- Serial RS232 (0x50-0x58) -------------------------------------------
+    SER_WRITE           = 0x50, // [inst:u8] [src_mem:ptr] [len:u16] -> push u16 (bytes written)
+    SER_READ            = 0x51, // [inst:u8] [dest_mem:ptr] [max:u16] -> push u16 (bytes read)
+    SER_AVAILABLE       = 0x52, // [inst:u8]                         -> push u16
+    SER_FLUSH           = 0x53, // [inst:u8]
+    SER_WRITE_BYTE      = 0x54, // [inst:u8]                         + pop u8 -> push bool
+    SER_READ_BYTE       = 0x55, // [inst:u8]                         -> push i16 (-1 if none)
+    SER_POLL            = 0x56, // [inst:u8]                         -> push u16 (bytes received)
+    SER_MSG_READY       = 0x57, // [inst:u8]                         -> push bool
+    SER_READ_MSG        = 0x58, // [inst:u8] [dest_mem:ptr] [max:u16] -> push u16 (msg length)
+    SER_SET_DELIM       = 0x59, // [inst:u8] [delim:u8]
+    SER_SET_BAUD        = 0x5A, // [inst:u8] [baud:u32]              (auto re-init if active)
 };
 
 // ============================================================================
@@ -130,6 +147,9 @@ static u8 comms_subfn_param_size(u8 sub_fn) {
         case COMMS_END:         return 1;   // inst
         case COMMS_ENABLED:     return 1;   // inst
         case COMMS_STATUS:      return 1;   // inst
+        case COMMS_SET_PRIORITY:return 2;   // inst + priority
+        case COMMS_POLL_ASYNC:  return 1;   // inst
+        case COMMS_QUEUE_SIZE:  return 1;   // inst
 
         // Modbus data area config
         case MB_ADD_COILS:      return 5;   // inst + start(2) + count(2)
@@ -179,6 +199,19 @@ static u8 comms_subfn_param_size(u8 sub_fn) {
         case UDP_RECV:          return 3 + MY_PTR_SIZE_BYTES; // inst + dest(ptr) + max(2)
         case UDP_AVAILABLE:     return 1;
 
+        // Serial RS232
+        case SER_WRITE:         return 3 + MY_PTR_SIZE_BYTES; // inst + src(ptr) + len(2)
+        case SER_READ:          return 3 + MY_PTR_SIZE_BYTES; // inst + dest(ptr) + max(2)
+        case SER_AVAILABLE:     return 1;
+        case SER_FLUSH:         return 1;
+        case SER_WRITE_BYTE:    return 1;   // + pop u8
+        case SER_READ_BYTE:     return 1;
+        case SER_POLL:          return 1;
+        case SER_MSG_READY:     return 1;
+        case SER_READ_MSG:      return 3 + MY_PTR_SIZE_BYTES; // inst + dest(ptr) + max(2)
+        case SER_SET_DELIM:     return 2;   // inst + delim
+        case SER_SET_BAUD:      return 5;   // inst + baud(4)
+
         default:                return 0;   // Unknown sub-function
     }
 }
@@ -192,6 +225,9 @@ static const FSH* comms_subfn_name(u8 sub_fn) {
         case COMMS_END:         return F("COMMS_END");
         case COMMS_ENABLED:     return F("COMMS_ENABLED");
         case COMMS_STATUS:      return F("COMMS_STATUS");
+        case COMMS_SET_PRIORITY:return F("COMMS_SET_PRIORITY");
+        case COMMS_POLL_ASYNC:  return F("COMMS_POLL_ASYNC");
+        case COMMS_QUEUE_SIZE:  return F("COMMS_QUEUE_SIZE");
         case MB_ADD_COILS:      return F("MB_ADD_COILS");
         case MB_ADD_DISCRETE:   return F("MB_ADD_DISCRETE");
         case MB_ADD_HOLDING:    return F("MB_ADD_HOLDING");
@@ -226,9 +262,99 @@ static const FSH* comms_subfn_name(u8 sub_fn) {
         case UDP_SEND:          return F("UDP_SEND");
         case UDP_RECV:          return F("UDP_RECV");
         case UDP_AVAILABLE:     return F("UDP_AVAILABLE");
+        case SER_WRITE:         return F("SER_WRITE");
+        case SER_READ:          return F("SER_READ");
+        case SER_AVAILABLE:     return F("SER_AVAILABLE");
+        case SER_FLUSH:         return F("SER_FLUSH");
+        case SER_WRITE_BYTE:    return F("SER_WRITE_BYTE");
+        case SER_READ_BYTE:     return F("SER_READ_BYTE");
+        case SER_POLL:          return F("SER_POLL");
+        case SER_MSG_READY:     return F("SER_MSG_READY");
+        case SER_READ_MSG:      return F("SER_READ_MSG");
+        case SER_SET_DELIM:     return F("SER_SET_DELIM");
+        case SER_SET_BAUD:      return F("SER_SET_BAUD");
         default:                return F("COMMS_UNKNOWN");
     }
 }
+
+// ============================================================================
+// Async Transaction Priority
+// ============================================================================
+// Comms instances can operate in two modes:
+//   COMMS_PRIORITY_SYNC  (0): All operations are synchronous (blocking).
+//                              High priority - executes immediately, fastest.
+//   COMMS_PRIORITY_ASYNC (1): I/O operations are queued and executed one per
+//                              poll cycle. Low priority - non-blocking, allows
+//                              other work to proceed between transactions.
+//
+// Priority can be changed at runtime via comms_set_priority instruction.
+// Mixing is supported: set SYNC for critical reads, ASYNC for background polling.
+// ============================================================================
+
+#define COMMS_PRIORITY_SYNC  0  // Blocking: execute immediately
+#define COMMS_PRIORITY_ASYNC 1  // Non-blocking: queue and poll
+
+// ============================================================================
+// Async Transaction Queue
+// ============================================================================
+// When priority=ASYNC, I/O operations (reads, writes, etc.) are enqueued here.
+// Each poll cycle processes at most one transaction from the queue.
+// The queue is per-instance and has a fixed depth.
+// ============================================================================
+
+#ifndef PLCRUNTIME_COMMS_QUEUE_DEPTH
+#define PLCRUNTIME_COMMS_QUEUE_DEPTH 8
+#endif
+
+struct PLCCommsTxn {
+    u8 sub_fn;          // The sub-function to execute
+    u8 params[16];      // Inline parameters (max needed: inst+slave+start(2)+qty(2)+ptr(4)+extra = ~12)
+    u8 paramLen;        // How many bytes in params[]
+    u8 resultError;     // Result code after execution (0 = pending / not yet run)
+    bool pending;       // true if this slot is waiting to be executed
+};
+
+struct PLCCommsTxnQueue {
+    PLCCommsTxn txns[PLCRUNTIME_COMMS_QUEUE_DEPTH];
+    u8 head;    // Next slot to write
+    u8 tail;    // Next slot to execute
+    u8 count;   // Pending count
+
+    PLCCommsTxnQueue() : head(0), tail(0), count(0) {
+        for (u8 i = 0; i < PLCRUNTIME_COMMS_QUEUE_DEPTH; i++) txns[i].pending = false;
+    }
+
+    bool enqueue(u8 sub_fn, const u8* params, u8 paramLen) {
+        if (count >= PLCRUNTIME_COMMS_QUEUE_DEPTH) return false;
+        if (paramLen > sizeof(txns[0].params)) return false;
+        PLCCommsTxn& t = txns[head];
+        t.sub_fn = sub_fn;
+        for (u8 i = 0; i < paramLen; i++) t.params[i] = params[i];
+        t.paramLen = paramLen;
+        t.resultError = 0;
+        t.pending = true;
+        head = (head + 1) % PLCRUNTIME_COMMS_QUEUE_DEPTH;
+        count++;
+        return true;
+    }
+
+    PLCCommsTxn* peek() {
+        if (count == 0) return nullptr;
+        return &txns[tail];
+    }
+
+    void dequeue() {
+        if (count == 0) return;
+        txns[tail].pending = false;
+        tail = (tail + 1) % PLCRUNTIME_COMMS_QUEUE_DEPTH;
+        count--;
+    }
+
+    void clear() {
+        head = 0; tail = 0; count = 0;
+        for (u8 i = 0; i < PLCRUNTIME_COMMS_QUEUE_DEPTH; i++) txns[i].pending = false;
+    }
+};
 
 // ============================================================================
 // Communication Instance
@@ -236,10 +362,13 @@ static const FSH* comms_subfn_name(u8 sub_fn) {
 struct PLCCommsInstance {
     PLCCommsProtocol protocol;
     bool active;
-    void* driver;       // Points to ModbusRTU, etc.
+    void* driver;       // Points to ModbusRTU, SerialRS232, etc.
     u8 lastError;       // Last operation error code
+    u8 priority;        // COMMS_PRIORITY_SYNC or COMMS_PRIORITY_ASYNC
+    PLCCommsTxnQueue asyncQueue; // Transaction queue for async mode
 
-    PLCCommsInstance() : protocol(COMMS_PROTO_NONE), active(false), driver(nullptr), lastError(0) { }
+    PLCCommsInstance() : protocol(COMMS_PROTO_NONE), active(false), driver(nullptr),
+                         lastError(0), priority(COMMS_PRIORITY_SYNC) { }
 };
 
 // ============================================================================
@@ -273,6 +402,8 @@ public:
         _instances[index].driver = (void*) driver;
         _instances[index].active = false;
         _instances[index].lastError = 0;
+        _instances[index].priority = COMMS_PRIORITY_SYNC;
+        _instances[index].asyncQueue.clear();
         return true;
     }
 
@@ -283,8 +414,24 @@ public:
     }
 #endif // PLCRUNTIME_MODBUS_RTU
 
-    // Future: registerModbusTCP, registerTCP, registerUDP
-    // These will be added when the respective protocol libraries are implemented.
+#ifdef PLCRUNTIME_SERIAL_RS232
+    bool registerSerial(u8 index, SerialRS232* driver) {
+        if (index >= PLCRUNTIME_MAX_COMMS_INSTANCES || !driver) return false;
+        _instances[index].protocol = COMMS_PROTO_SERIAL;
+        _instances[index].driver = (void*) driver;
+        _instances[index].active = false;
+        _instances[index].lastError = 0;
+        _instances[index].priority = COMMS_PRIORITY_SYNC;
+        _instances[index].asyncQueue.clear();
+        return true;
+    }
+
+    SerialRS232* getSerial(u8 index) {
+        if (index >= PLCRUNTIME_MAX_COMMS_INSTANCES) return nullptr;
+        if (_instances[index].protocol != COMMS_PROTO_SERIAL) return nullptr;
+        return (SerialRS232*) _instances[index].driver;
+    }
+#endif // PLCRUNTIME_SERIAL_RS232
 };
 
 // Global communication manager instance (like g_ffiRegistry)
