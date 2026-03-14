@@ -3373,8 +3373,10 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
         // Communication protocol operations
 #ifdef PLCRUNTIME_COMMS_ENABLED
         case COMMS: return PLCMethods::handle_COMMS(this->stack, this->memory, program, prog_size, index);
+#elif defined(__WASM__)
+        case COMMS: return PLCMethods::handle_COMMS_wasm(this->stack, this->memory, program, prog_size, index);
 #else
-        case COMMS: return PLCMethods::handle_COMMS_skip(program, prog_size, index);
+        case COMMS: return PLCMethods::handle_COMMS_skip(this->stack, program, prog_size, index);
 #endif // PLCRUNTIME_COMMS_ENABLED
 
         // Runtime configuration instructions

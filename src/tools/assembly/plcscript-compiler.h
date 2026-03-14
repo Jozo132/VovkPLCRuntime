@@ -1552,6 +1552,11 @@ public:
             "type", "struct",
             // PLC function block types
             "ton", "tof", "tp", "ctu", "ctd", "ctud",
+            // COMMS built-in functions
+            "comms_begin", "comms_end", "comms_enabled", "comms_status",
+            "tcp_connect", "tcp_disconnect", "tcp_connected",
+            "tcp_listen", "tcp_accept", "tcp_send", "tcp_recv", "tcp_available",
+            "udp_open", "udp_close", "udp_send", "udp_recv", "udp_available",
             // ST/IEC keywords commonly shared
             "var", "end_var", "program", "end_program",
             "and", "or", "xor", "not", "mod",
@@ -2179,6 +2184,30 @@ public:
         emit(varTypeToPlcasm(type));
         emitLine(".drop");
     }
+
+    // Parse a compile-time integer argument for COMMS instructions.
+    // Only accepts integer literals (COMMS args are immediates baked into bytecode).
+    // Returns the integer value and advances the token. Sets error on failure.
+    bool parseCommsIntArg(int64_t& out) {
+        if (check(PSTOK_INTEGER)) {
+            out = currentToken.intValue;
+            nextToken();
+            return true;
+        }
+        if (check(PSTOK_IDENTIFIER)) {
+            setError("COMMS arguments must be integer literals (variables and consts cannot be used as COMMS parameters)");
+            return false;
+        }
+        setError("Expected integer literal for COMMS argument");
+        return false;
+    }
+
+    // Emit a COMMS mnemonic with # prefixed integer arguments.
+    // Example: emitCommsCall("tcp_listen", {0, 8080}) → "tcp_listen #0 #8080\n"
+    void emitCommsInt(int64_t value) {
+        emit(" #");
+        emitInt(value);
+    }
     
     void emitCopy(PLCScriptVarType type) {
         emit(varTypeToPlcasm(type));
@@ -2568,7 +2597,16 @@ public:
         if (strEqCI(currentToken.text, "TON") || strEqCI(currentToken.text, "TOF") || strEqCI(currentToken.text, "TP") ||
             strEqCI(currentToken.text, "CTU") || strEqCI(currentToken.text, "CTD") ||
             strEqCI(currentToken.text, "risingEdge") || strEqCI(currentToken.text, "FP") ||
-            strEqCI(currentToken.text, "fallingEdge") || strEqCI(currentToken.text, "FN")) {
+            strEqCI(currentToken.text, "fallingEdge") || strEqCI(currentToken.text, "FN") ||
+            strEqCI(currentToken.text, "comms_begin") || strEqCI(currentToken.text, "comms_end") ||
+            strEqCI(currentToken.text, "comms_enabled") || strEqCI(currentToken.text, "comms_status") ||
+            strEqCI(currentToken.text, "tcp_connect") || strEqCI(currentToken.text, "tcp_disconnect") ||
+            strEqCI(currentToken.text, "tcp_connected") || strEqCI(currentToken.text, "tcp_listen") ||
+            strEqCI(currentToken.text, "tcp_accept") || strEqCI(currentToken.text, "tcp_send") ||
+            strEqCI(currentToken.text, "tcp_recv") || strEqCI(currentToken.text, "tcp_available") ||
+            strEqCI(currentToken.text, "udp_open") || strEqCI(currentToken.text, "udp_close") ||
+            strEqCI(currentToken.text, "udp_send") || strEqCI(currentToken.text, "udp_recv") ||
+            strEqCI(currentToken.text, "udp_available")) {
             setError("Function name conflicts with built-in PLC function");
             return;
         }
@@ -6697,6 +6735,256 @@ public:
             return PSTYPE_BOOL;
         }
         
+        // ====================================================================
+        // COMMS Built-in Functions
+        // ====================================================================
+
+        // comms_begin(instance, config) -> bool
+        if (strEqCI(name, "comms_begin")) {
+            int64_t inst = 0, config = 0;
+            if (!parseCommsIntArg(inst)) return PSTYPE_VOID;
+            expect(PSTOK_COMMA, "Expected ','");
+            if (!parseCommsIntArg(config)) return PSTYPE_VOID;
+            expect(PSTOK_RPAREN, "Expected ')'");
+            emit("comms_begin");
+            emitCommsInt(inst);
+            emitCommsInt(config);
+            emit("\n");
+            return PSTYPE_BOOL;
+        }
+
+        // comms_end(instance) -> void
+        if (strEqCI(name, "comms_end")) {
+            int64_t inst = 0;
+            if (!parseCommsIntArg(inst)) return PSTYPE_VOID;
+            expect(PSTOK_RPAREN, "Expected ')'");
+            emit("comms_end");
+            emitCommsInt(inst);
+            emit("\n");
+            return PSTYPE_VOID;
+        }
+
+        // comms_enabled(instance) -> bool
+        if (strEqCI(name, "comms_enabled")) {
+            int64_t inst = 0;
+            if (!parseCommsIntArg(inst)) return PSTYPE_VOID;
+            expect(PSTOK_RPAREN, "Expected ')'");
+            emit("comms_enabled");
+            emitCommsInt(inst);
+            emit("\n");
+            return PSTYPE_BOOL;
+        }
+
+        // comms_status(instance) -> u8
+        if (strEqCI(name, "comms_status")) {
+            int64_t inst = 0;
+            if (!parseCommsIntArg(inst)) return PSTYPE_VOID;
+            expect(PSTOK_RPAREN, "Expected ')'");
+            emit("comms_status");
+            emitCommsInt(inst);
+            emit("\n");
+            return PSTYPE_U8;
+        }
+
+        // tcp_connect(instance, ip0, ip1, ip2, ip3, port) -> bool
+        if (strEqCI(name, "tcp_connect")) {
+            int64_t inst = 0, ip0 = 0, ip1 = 0, ip2 = 0, ip3 = 0, port = 0;
+            if (!parseCommsIntArg(inst)) return PSTYPE_VOID;
+            expect(PSTOK_COMMA, "Expected ','");
+            if (!parseCommsIntArg(ip0)) return PSTYPE_VOID;
+            expect(PSTOK_COMMA, "Expected ','");
+            if (!parseCommsIntArg(ip1)) return PSTYPE_VOID;
+            expect(PSTOK_COMMA, "Expected ','");
+            if (!parseCommsIntArg(ip2)) return PSTYPE_VOID;
+            expect(PSTOK_COMMA, "Expected ','");
+            if (!parseCommsIntArg(ip3)) return PSTYPE_VOID;
+            expect(PSTOK_COMMA, "Expected ','");
+            if (!parseCommsIntArg(port)) return PSTYPE_VOID;
+            expect(PSTOK_RPAREN, "Expected ')'");
+            emit("tcp_connect");
+            emitCommsInt(inst);
+            emitCommsInt(ip0); emitCommsInt(ip1);
+            emitCommsInt(ip2); emitCommsInt(ip3);
+            emitCommsInt(port);
+            emit("\n");
+            return PSTYPE_BOOL;
+        }
+
+        // tcp_disconnect(instance) -> void
+        if (strEqCI(name, "tcp_disconnect")) {
+            int64_t inst = 0;
+            if (!parseCommsIntArg(inst)) return PSTYPE_VOID;
+            expect(PSTOK_RPAREN, "Expected ')'");
+            emit("tcp_disconnect");
+            emitCommsInt(inst);
+            emit("\n");
+            return PSTYPE_VOID;
+        }
+
+        // tcp_connected(instance) -> bool
+        if (strEqCI(name, "tcp_connected")) {
+            int64_t inst = 0;
+            if (!parseCommsIntArg(inst)) return PSTYPE_VOID;
+            expect(PSTOK_RPAREN, "Expected ')'");
+            emit("tcp_connected");
+            emitCommsInt(inst);
+            emit("\n");
+            return PSTYPE_BOOL;
+        }
+
+        // tcp_listen(instance, port) -> bool
+        if (strEqCI(name, "tcp_listen")) {
+            int64_t inst = 0, port = 0;
+            if (!parseCommsIntArg(inst)) return PSTYPE_VOID;
+            expect(PSTOK_COMMA, "Expected ','");
+            if (!parseCommsIntArg(port)) return PSTYPE_VOID;
+            expect(PSTOK_RPAREN, "Expected ')'");
+            emit("tcp_listen");
+            emitCommsInt(inst);
+            emitCommsInt(port);
+            emit("\n");
+            return PSTYPE_BOOL;
+        }
+
+        // tcp_accept(instance) -> bool
+        if (strEqCI(name, "tcp_accept")) {
+            int64_t inst = 0;
+            if (!parseCommsIntArg(inst)) return PSTYPE_VOID;
+            expect(PSTOK_RPAREN, "Expected ')'");
+            emit("tcp_accept");
+            emitCommsInt(inst);
+            emit("\n");
+            return PSTYPE_BOOL;
+        }
+
+        // tcp_send(instance, src_addr, length) -> u16
+        if (strEqCI(name, "tcp_send")) {
+            int64_t inst = 0, src = 0, len = 0;
+            if (!parseCommsIntArg(inst)) return PSTYPE_VOID;
+            expect(PSTOK_COMMA, "Expected ','");
+            if (!parseCommsIntArg(src)) return PSTYPE_VOID;
+            expect(PSTOK_COMMA, "Expected ','");
+            if (!parseCommsIntArg(len)) return PSTYPE_VOID;
+            expect(PSTOK_RPAREN, "Expected ')'");
+            emit("tcp_send");
+            emitCommsInt(inst);
+            emitCommsInt(src);
+            emitCommsInt(len);
+            emit("\n");
+            return PSTYPE_U16;
+        }
+
+        // tcp_recv(instance, dest_addr, max_length) -> u16
+        if (strEqCI(name, "tcp_recv")) {
+            int64_t inst = 0, dest = 0, max = 0;
+            if (!parseCommsIntArg(inst)) return PSTYPE_VOID;
+            expect(PSTOK_COMMA, "Expected ','");
+            if (!parseCommsIntArg(dest)) return PSTYPE_VOID;
+            expect(PSTOK_COMMA, "Expected ','");
+            if (!parseCommsIntArg(max)) return PSTYPE_VOID;
+            expect(PSTOK_RPAREN, "Expected ')'");
+            emit("tcp_recv");
+            emitCommsInt(inst);
+            emitCommsInt(dest);
+            emitCommsInt(max);
+            emit("\n");
+            return PSTYPE_U16;
+        }
+
+        // tcp_available(instance) -> u16
+        if (strEqCI(name, "tcp_available")) {
+            int64_t inst = 0;
+            if (!parseCommsIntArg(inst)) return PSTYPE_VOID;
+            expect(PSTOK_RPAREN, "Expected ')'");
+            emit("tcp_available");
+            emitCommsInt(inst);
+            emit("\n");
+            return PSTYPE_U16;
+        }
+
+        // udp_open(instance, port) -> bool
+        if (strEqCI(name, "udp_open")) {
+            int64_t inst = 0, port = 0;
+            if (!parseCommsIntArg(inst)) return PSTYPE_VOID;
+            expect(PSTOK_COMMA, "Expected ','");
+            if (!parseCommsIntArg(port)) return PSTYPE_VOID;
+            expect(PSTOK_RPAREN, "Expected ')'");
+            emit("udp_open");
+            emitCommsInt(inst);
+            emitCommsInt(port);
+            emit("\n");
+            return PSTYPE_BOOL;
+        }
+
+        // udp_close(instance) -> void
+        if (strEqCI(name, "udp_close")) {
+            int64_t inst = 0;
+            if (!parseCommsIntArg(inst)) return PSTYPE_VOID;
+            expect(PSTOK_RPAREN, "Expected ')'");
+            emit("udp_close");
+            emitCommsInt(inst);
+            emit("\n");
+            return PSTYPE_VOID;
+        }
+
+        // udp_send(instance, ip0, ip1, ip2, ip3, port, src_addr, length) -> u16
+        if (strEqCI(name, "udp_send")) {
+            int64_t inst = 0, ip0 = 0, ip1 = 0, ip2 = 0, ip3 = 0, port = 0, src = 0, len = 0;
+            if (!parseCommsIntArg(inst)) return PSTYPE_VOID;
+            expect(PSTOK_COMMA, "Expected ','");
+            if (!parseCommsIntArg(ip0)) return PSTYPE_VOID;
+            expect(PSTOK_COMMA, "Expected ','");
+            if (!parseCommsIntArg(ip1)) return PSTYPE_VOID;
+            expect(PSTOK_COMMA, "Expected ','");
+            if (!parseCommsIntArg(ip2)) return PSTYPE_VOID;
+            expect(PSTOK_COMMA, "Expected ','");
+            if (!parseCommsIntArg(ip3)) return PSTYPE_VOID;
+            expect(PSTOK_COMMA, "Expected ','");
+            if (!parseCommsIntArg(port)) return PSTYPE_VOID;
+            expect(PSTOK_COMMA, "Expected ','");
+            if (!parseCommsIntArg(src)) return PSTYPE_VOID;
+            expect(PSTOK_COMMA, "Expected ','");
+            if (!parseCommsIntArg(len)) return PSTYPE_VOID;
+            expect(PSTOK_RPAREN, "Expected ')'");
+            emit("udp_send");
+            emitCommsInt(inst);
+            emitCommsInt(ip0); emitCommsInt(ip1);
+            emitCommsInt(ip2); emitCommsInt(ip3);
+            emitCommsInt(port);
+            emitCommsInt(src);
+            emitCommsInt(len);
+            emit("\n");
+            return PSTYPE_U16;
+        }
+
+        // udp_recv(instance, dest_addr, max_length) -> u16
+        if (strEqCI(name, "udp_recv")) {
+            int64_t inst = 0, dest = 0, max = 0;
+            if (!parseCommsIntArg(inst)) return PSTYPE_VOID;
+            expect(PSTOK_COMMA, "Expected ','");
+            if (!parseCommsIntArg(dest)) return PSTYPE_VOID;
+            expect(PSTOK_COMMA, "Expected ','");
+            if (!parseCommsIntArg(max)) return PSTYPE_VOID;
+            expect(PSTOK_RPAREN, "Expected ')'");
+            emit("udp_recv");
+            emitCommsInt(inst);
+            emitCommsInt(dest);
+            emitCommsInt(max);
+            emit("\n");
+            return PSTYPE_U16;
+        }
+
+        // udp_available(instance) -> u16
+        if (strEqCI(name, "udp_available")) {
+            int64_t inst = 0;
+            if (!parseCommsIntArg(inst)) return PSTYPE_VOID;
+            expect(PSTOK_RPAREN, "Expected ')'");
+            emit("udp_available");
+            emitCommsInt(inst);
+            emit("\n");
+            return PSTYPE_U16;
+        }
+
         // Check for user-defined function
         PLCScriptFunction* func = findFunction(name);
         if (func) {

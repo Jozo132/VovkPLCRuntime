@@ -233,6 +233,95 @@ static u8 comms_subfn_param_size(u8 sub_fn) {
 }
 
 // ============================================================================
+// Sub-function result type (for default push when bridge is not connected)
+// ============================================================================
+// Returns the result type code that matches js_comms_invoke convention:
+//   0 = no result (void)    4 = handled, no push
+//   1 = push bool           2 = push u8
+//   3 = push u16
+// ============================================================================
+static u8 comms_subfn_result_type(u8 sub_fn) {
+    switch ((PLCCommsSubFunction) sub_fn) {
+        // Common
+        case COMMS_BEGIN:       return 1;   // -> bool
+        case COMMS_END:         return 0;   // void
+        case COMMS_ENABLED:     return 1;   // -> bool
+        case COMMS_STATUS:      return 2;   // -> u8
+        case COMMS_SET_PRIORITY:return 0;   // void
+        case COMMS_POLL_ASYNC:  return 1;   // -> bool
+        case COMMS_QUEUE_SIZE:  return 3;   // -> u16
+
+        // Modbus data area config
+        case MB_ADD_COILS:      return 1;   // -> bool
+        case MB_ADD_DISCRETE:   return 1;
+        case MB_ADD_HOLDING:    return 1;
+        case MB_ADD_INPUT_REG:  return 1;
+
+        // Modbus master read
+        case MB_READ_COILS:     return 2;   // -> u8
+        case MB_READ_DISCRETE:  return 2;
+        case MB_READ_HOLDING:   return 2;
+        case MB_READ_INPUT:     return 2;
+
+        // Modbus master write
+        case MB_WRITE_COIL:     return 2;   // -> u8 (pops bool first)
+        case MB_WRITE_REG:      return 2;   // -> u8 (pops u16 first)
+        case MB_WRITE_COILS:    return 2;
+        case MB_WRITE_REGS:     return 2;
+
+        // Modbus slave
+        case MB_POLL:           return 1;   // -> bool
+        case MB_SLV_GET_COIL:   return 1;   // -> bool
+        case MB_SLV_SET_COIL:   return 0;   // + pop bool
+        case MB_SLV_GET_REG:    return 3;   // -> u16
+        case MB_SLV_SET_REG:    return 0;   // + pop u16
+        case MB_SLV_GET_DI:     return 1;   // -> bool
+        case MB_SLV_SET_DI:     return 0;   // + pop bool
+        case MB_SLV_GET_IR:     return 3;   // -> u16
+        case MB_SLV_SET_IR:     return 0;   // + pop u16
+
+        // Raw TCP
+        case TCP_CONNECT:       return 1;   // -> bool
+        case TCP_DISCONNECT:    return 0;   // void
+        case TCP_CONNECTED:     return 1;   // -> bool
+        case TCP_LISTEN:        return 1;   // -> bool
+        case TCP_ACCEPT:        return 1;   // -> bool
+        case TCP_SEND:          return 3;   // -> u16
+        case TCP_RECV:          return 3;   // -> u16
+        case TCP_AVAILABLE:     return 3;   // -> u16
+
+        // Raw UDP
+        case UDP_OPEN:          return 1;   // -> bool
+        case UDP_CLOSE:         return 0;   // void
+        case UDP_SEND:          return 3;   // -> u16
+        case UDP_RECV:          return 3;   // -> u16
+        case UDP_AVAILABLE:     return 3;   // -> u16
+
+        // Ethernet Socket Reservation
+        case ETH_SOCK_ACQUIRE:  return 2;   // -> u8
+        case ETH_SOCK_RELEASE:  return 2;   // -> u8
+        case ETH_SOCK_STATUS:   return 2;   // -> u8
+        case ETH_SOCK_SET_ACTIVE: return 0; // void
+        case ETH_SOCK_INFO:     return 2;   // -> u8
+
+        // Serial RS232
+        case SER_WRITE:         return 3;   // -> u16
+        case SER_READ:          return 3;   // -> u16
+        case SER_AVAILABLE:     return 3;   // -> u16
+        case SER_FLUSH:         return 0;   // void
+        case SER_WRITE_BYTE:    return 1;   // -> bool (pops u8 first)
+        case SER_READ_BYTE:     return 3;   // -> i16 (as u16)
+        case SER_POLL:          return 3;   // -> u16
+        case SER_MSG_READY:     return 1;   // -> bool
+        case SER_READ_MSG:      return 3;   // -> u16
+        case SER_SET_DELIM:     return 0;   // void
+        case SER_SET_BAUD:      return 0;   // void
+
+        default:                return 0;   // Unknown
+    }
+}
+
+// ============================================================================
 // Sub-function name for debug/explain output
 // ============================================================================
 static const FSH* comms_subfn_name(u8 sub_fn) {

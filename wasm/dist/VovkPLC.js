@@ -16,6 +16,585 @@
 
 const isNodeRuntime = typeof process !== 'undefined' && !!(process.versions && process.versions.node)
 
+// ============================================================================
+// PLCNetBridge - Node.js TCP/UDP Socket Bridge for WASM COMMS Simulation
+// ============================================================================
+// Provides real network I/O for PLC bytecode running in WASM simulation.
+// Uses Node.js `net` (TCP) and `dgram` (UDP) modules.
+// Disabled by default. Enable via VovkPLC.enableNetworking().
+// NOT available in browser environments.
+//
+// Each COMMS instance maps to a PLCNetBridge instance slot that manages:
+// - TCP client socket (connect, send, recv)
+// - TCP server (listen, accept)
+// - UDP socket (open, send, recv)
+//
+// The bridge operates non-blocking: connect and listen start asynchronously,
+// data is buffered internally, and status queries return current state.
+// ============================================================================
+
+// COMMS sub-function codes (must match plc-comms-manager.h)
+const COMMS_SUB = {
+    COMMS_BEGIN: 0x00, COMMS_END: 0x01, COMMS_ENABLED: 0x02, COMMS_STATUS: 0x03,
+    TCP_CONNECT: 0x30, TCP_DISCONNECT: 0x31, TCP_CONNECTED: 0x32,
+    TCP_LISTEN: 0x33, TCP_ACCEPT: 0x34, TCP_SEND: 0x35, TCP_RECV: 0x36, TCP_AVAILABLE: 0x37,
+    UDP_OPEN: 0x40, UDP_CLOSE: 0x41, UDP_SEND: 0x42, UDP_RECV: 0x43, UDP_AVAILABLE: 0x44,
+}
+
+// MY_PTR_SIZE_BYTES is always 2 in WASM builds (uint16_t pointer)
+const WASM_PTR_SIZE = 2
+
+/**
+ * @typedef {{
+ *     maxInstances?: number,
+ *     maxRecvBuffer?: number,
+ *     onConnect?: (inst: number, host: string, port: number) => void,
+ *     onDisconnect?: (inst: number) => void,
+ *     onError?: (inst: number, err: Error) => void,
+ *     onListening?: (inst: number, port: number) => void,
+ * }} NetBridgeOptions
+ */
+
+class PLCNetBridge {
+    /** @type {import('net') | null} */ _net = null
+    /** @type {import('dgram') | null} */ _dgram = null
+    /** @type {PLCNetInstance[]} */ _instances = []
+    /** @type {boolean} */ _ready = false
+    /** @type {NetBridgeOptions} */ _options
+
+    /**
+     * @param {NetBridgeOptions} [options]
+     */
+    constructor(options = {}) {
+        this._options = {
+            maxInstances: options.maxInstances || 4,
+            maxRecvBuffer: options.maxRecvBuffer || 65535,
+            onConnect: options.onConnect || null,
+            onDisconnect: options.onDisconnect || null,
+            onError: options.onError || null,
+            onListening: options.onListening || null,
+        }
+        this._instances = new Array(this._options.maxInstances).fill(null).map(() => new PLCNetInstance(this._options.maxRecvBuffer))
+    }
+
+    /**
+     * Lazily load Node.js net and dgram modules.
+     * @returns {Promise<boolean>}
+     */
+    async init() {
+        if (this._ready) return true
+        if (!isNodeRuntime) return false
+        try {
+            this._net = await import('net')
+            this._dgram = await import('dgram')
+            this._ready = true
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    /** @returns {boolean} */
+    get ready() { return this._ready }
+
+    /**
+     * Handle a COMMS instruction from the WASM runtime.
+     * Reads params from WASM memory, executes the operation, writes result.
+     *
+     * @param {number} sub_fn - COMMS sub-function code
+     * @param {number} params_ptr - Pointer to parameters in WASM linear memory
+     * @param {number} param_size - Number of parameter bytes
+     * @param {number} memory_ptr - Pointer to PLC data memory start
+     * @param {number} result_buf_ptr - Pointer to result buffer (16 bytes)
+     * @param {DataView} view - DataView over WASM linear memory
+     * @param {Uint8Array} mem - Uint8Array view of WASM memory
+     * @returns {number} - Return type code: 0=skip, 1=bool, 2=u8, 3=u16, 0xFF=error
+     */
+    handleComms(sub_fn, params_ptr, param_size, memory_ptr, result_buf_ptr, view, mem) {
+        if (!this._ready) return 0 // Not initialized, skip
+
+        switch (sub_fn) {
+            case COMMS_SUB.COMMS_BEGIN:    return this._handleBegin(params_ptr, result_buf_ptr, view, mem)
+            case COMMS_SUB.COMMS_END:      return this._handleEnd(params_ptr, view)
+            case COMMS_SUB.COMMS_ENABLED:  return this._handleEnabled(params_ptr, result_buf_ptr, view, mem)
+            case COMMS_SUB.COMMS_STATUS:   return this._handleStatus(params_ptr, result_buf_ptr, view, mem)
+
+            case COMMS_SUB.TCP_CONNECT:    return this._handleTcpConnect(params_ptr, result_buf_ptr, view, mem)
+            case COMMS_SUB.TCP_DISCONNECT: return this._handleTcpDisconnect(params_ptr, view); // no result
+            case COMMS_SUB.TCP_CONNECTED:  return this._handleTcpConnected(params_ptr, result_buf_ptr, view, mem)
+            case COMMS_SUB.TCP_LISTEN:     return this._handleTcpListen(params_ptr, result_buf_ptr, view, mem)
+            case COMMS_SUB.TCP_ACCEPT:     return this._handleTcpAccept(params_ptr, result_buf_ptr, view, mem)
+            case COMMS_SUB.TCP_SEND:       return this._handleTcpSend(params_ptr, memory_ptr, result_buf_ptr, view, mem)
+            case COMMS_SUB.TCP_RECV:       return this._handleTcpRecv(params_ptr, memory_ptr, result_buf_ptr, view, mem)
+            case COMMS_SUB.TCP_AVAILABLE:  return this._handleTcpAvailable(params_ptr, result_buf_ptr, view, mem)
+
+            case COMMS_SUB.UDP_OPEN:       return this._handleUdpOpen(params_ptr, result_buf_ptr, view, mem)
+            case COMMS_SUB.UDP_CLOSE:      return this._handleUdpClose(params_ptr, view); // no result
+            case COMMS_SUB.UDP_SEND:       return this._handleUdpSend(params_ptr, memory_ptr, result_buf_ptr, view, mem)
+            case COMMS_SUB.UDP_RECV:       return this._handleUdpRecv(params_ptr, memory_ptr, result_buf_ptr, view, mem)
+            case COMMS_SUB.UDP_AVAILABLE:  return this._handleUdpAvailable(params_ptr, result_buf_ptr, view, mem)
+
+            default: return 0 // Unknown sub-fn, skip
+        }
+    }
+
+    /** @param {number} inst */
+    _getInst(inst) {
+        if (inst >= this._instances.length) return null
+        return this._instances[inst]
+    }
+
+    /** Write a bool result */
+    _writeBool(result_buf_ptr, mem, value) {
+        mem[result_buf_ptr] = value ? 1 : 0
+        return 1 // type: push_bool
+    }
+
+    /** Write a u8 result */
+    _writeU8(result_buf_ptr, mem, value) {
+        mem[result_buf_ptr] = value & 0xFF
+        return 2 // type: push_u8
+    }
+
+    /** Write a u16 result (little-endian) */
+    _writeU16(result_buf_ptr, mem, value) {
+        mem[result_buf_ptr] = value & 0xFF
+        mem[result_buf_ptr + 1] = (value >> 8) & 0xFF
+        return 3 // type: push_u16
+    }
+
+    /** Read a u16 from params (little-endian) */
+    _readU16(params_ptr, offset, view) {
+        return view.getUint16(params_ptr + offset, true)
+    }
+
+    /** Read a ptr (u16) from params (little-endian) */
+    _readPtr(params_ptr, offset, view) {
+        return view.getUint16(params_ptr + offset, true)
+    }
+
+    // --- Common ---
+
+    _handleBegin(params_ptr, result_buf_ptr, view, mem) {
+        const inst_idx = mem[params_ptr]
+        // config byte ignored for net bridge (no hardware to configure)
+        const ni = this._getInst(inst_idx)
+        if (!ni) return this._writeBool(result_buf_ptr, mem, false)
+        ni.active = true
+        ni.lastError = 0
+        return this._writeBool(result_buf_ptr, mem, true)
+    }
+
+    _handleEnd(params_ptr, view) {
+        const inst_idx = view.getUint8(params_ptr)
+        const ni = this._getInst(inst_idx)
+        if (ni) {
+            ni.close()
+            ni.active = false
+        }
+        return 0 // COMMS_END has no stack result — but we still need to signal handled
+        // Actually COMMS_END doesn't push. But returning 0 means "skip" which is also fine.
+        // Let's use a special code: return > 0 but not 1/2/3 means "handled, no push"
+    }
+
+    _handleEnabled(params_ptr, result_buf_ptr, view, mem) {
+        const inst_idx = mem[params_ptr]
+        const ni = this._getInst(inst_idx)
+        return this._writeBool(result_buf_ptr, mem, ni ? ni.active : false)
+    }
+
+    _handleStatus(params_ptr, result_buf_ptr, view, mem) {
+        const inst_idx = mem[params_ptr]
+        const ni = this._getInst(inst_idx)
+        if (!ni) return this._writeU8(result_buf_ptr, mem, 0)
+        // Status: 0=idle, 1=connecting, 2=connected, 3=listening, 4=error
+        return this._writeU8(result_buf_ptr, mem, ni.getStatus())
+    }
+
+    // --- TCP ---
+
+    _handleTcpConnect(params_ptr, result_buf_ptr, view, mem) {
+        // [inst:u8] [ip0:u8] [ip1:u8] [ip2:u8] [ip3:u8] [port:u16]
+        const inst_idx = mem[params_ptr]
+        const ip = `${mem[params_ptr + 1]}.${mem[params_ptr + 2]}.${mem[params_ptr + 3]}.${mem[params_ptr + 4]}`
+        const port = this._readU16(params_ptr, 5, view)
+
+        const ni = this._getInst(inst_idx)
+        if (!ni || !ni.active || !this._net) return this._writeBool(result_buf_ptr, mem, false)
+
+        // If already connecting or connected, return current state
+        if (ni.tcpState === 'connecting' || ni.tcpState === 'connected') {
+            return this._writeBool(result_buf_ptr, mem, ni.tcpState === 'connected')
+        }
+
+        // Start async connect
+        ni.tcpClose()
+        ni.tcpState = 'connecting'
+        const sock = this._net.createConnection({host: ip, port}, () => {
+            ni.tcpState = 'connected'
+            if (this._options.onConnect) this._options.onConnect(inst_idx, ip, port)
+        })
+        sock.on('data', (data) => {
+            ni.tcpRecvPush(data)
+        })
+        sock.on('error', (err) => {
+            ni.tcpState = 'error'
+            ni.lastError = 1
+            if (this._options.onError) this._options.onError(inst_idx, err)
+        })
+        sock.on('close', () => {
+            ni.tcpState = 'closed'
+            if (this._options.onDisconnect) this._options.onDisconnect(inst_idx)
+        })
+        ni.tcpSocket = sock
+        return this._writeBool(result_buf_ptr, mem, true) // Connection started
+    }
+
+    _handleTcpDisconnect(params_ptr, view) {
+        const inst_idx = view.getUint8(params_ptr)
+        const ni = this._getInst(inst_idx)
+        if (ni) ni.tcpClose()
+        return 4 // handled, no push
+    }
+
+    _handleTcpConnected(params_ptr, result_buf_ptr, view, mem) {
+        const inst_idx = mem[params_ptr]
+        const ni = this._getInst(inst_idx)
+        return this._writeBool(result_buf_ptr, mem, ni ? ni.tcpState === 'connected' : false)
+    }
+
+    _handleTcpListen(params_ptr, result_buf_ptr, view, mem) {
+        // [inst:u8] [port:u16]
+        const inst_idx = mem[params_ptr]
+        const port = this._readU16(params_ptr, 1, view)
+
+        const ni = this._getInst(inst_idx)
+        if (!ni || !ni.active || !this._net) return this._writeBool(result_buf_ptr, mem, false)
+
+        if (ni.tcpServer) {
+            // Already listening
+            return this._writeBool(result_buf_ptr, mem, true)
+        }
+
+        const server = this._net.createServer((client) => {
+            // Accept the connection - store it as the active TCP socket
+            ni.tcpClose() // Close any existing client connection
+            ni.tcpSocket = client
+            ni.tcpState = 'connected'
+            ni._pendingAccept = true
+            client.on('data', (data) => ni.tcpRecvPush(data))
+            client.on('error', (err) => {
+                ni.tcpState = 'error'
+                if (this._options.onError) this._options.onError(inst_idx, err)
+            })
+            client.on('close', () => {
+                ni.tcpState = 'closed'
+                ni._pendingAccept = false
+            })
+        })
+
+        server.on('error', (err) => {
+            ni.lastError = 1
+            if (this._options.onError) this._options.onError(inst_idx, err)
+        })
+
+        server.listen(port, () => {
+            ni.tcpServerListening = true
+            if (this._options.onListening) this._options.onListening(inst_idx, port)
+        })
+
+        ni.tcpServer = server
+        ni.tcpServerListening = false
+        return this._writeBool(result_buf_ptr, mem, true)
+    }
+
+    _handleTcpAccept(params_ptr, result_buf_ptr, view, mem) {
+        const inst_idx = mem[params_ptr]
+        const ni = this._getInst(inst_idx)
+        if (!ni) return this._writeBool(result_buf_ptr, mem, false)
+        const accepted = ni._pendingAccept
+        ni._pendingAccept = false
+        return this._writeBool(result_buf_ptr, mem, accepted)
+    }
+
+    _handleTcpSend(params_ptr, memory_ptr, result_buf_ptr, view, mem) {
+        // [inst:u8] [src_mem:ptr] [len:u16]
+        const inst_idx = mem[params_ptr]
+        const src_mem = this._readPtr(params_ptr, 1, view)
+        const len = this._readU16(params_ptr, 1 + WASM_PTR_SIZE, view)
+
+        const ni = this._getInst(inst_idx)
+        if (!ni || !ni.active || ni.tcpState !== 'connected' || !ni.tcpSocket) {
+            return this._writeU16(result_buf_ptr, mem, 0)
+        }
+
+        // Read data from PLC memory
+        const data = Buffer.from(mem.slice(memory_ptr + src_mem, memory_ptr + src_mem + len))
+        try {
+            ni.tcpSocket.write(data)
+            return this._writeU16(result_buf_ptr, mem, len)
+        } catch {
+            return this._writeU16(result_buf_ptr, mem, 0)
+        }
+    }
+
+    _handleTcpRecv(params_ptr, memory_ptr, result_buf_ptr, view, mem) {
+        // [inst:u8] [dest_mem:ptr] [max:u16]
+        const inst_idx = mem[params_ptr]
+        const dest_mem = this._readPtr(params_ptr, 1, view)
+        const max_len = this._readU16(params_ptr, 1 + WASM_PTR_SIZE, view)
+
+        const ni = this._getInst(inst_idx)
+        if (!ni || !ni.active) return this._writeU16(result_buf_ptr, mem, 0)
+
+        const received = ni.tcpRecvPop(max_len)
+        if (received.length > 0) {
+            mem.set(received, memory_ptr + dest_mem)
+        }
+        return this._writeU16(result_buf_ptr, mem, received.length)
+    }
+
+    _handleTcpAvailable(params_ptr, result_buf_ptr, view, mem) {
+        const inst_idx = mem[params_ptr]
+        const ni = this._getInst(inst_idx)
+        return this._writeU16(result_buf_ptr, mem, ni ? ni.tcpRecvAvailable() : 0)
+    }
+
+    // --- UDP ---
+
+    _handleUdpOpen(params_ptr, result_buf_ptr, view, mem) {
+        // [inst:u8] [port:u16]
+        const inst_idx = mem[params_ptr]
+        const port = this._readU16(params_ptr, 1, view)
+
+        const ni = this._getInst(inst_idx)
+        if (!ni || !ni.active || !this._dgram) return this._writeBool(result_buf_ptr, mem, false)
+
+        if (ni.udpSocket) return this._writeBool(result_buf_ptr, mem, true) // Already open
+
+        const sock = this._dgram.createSocket('udp4')
+        sock.on('message', (msg) => ni.udpRecvPush(msg))
+        sock.on('error', (err) => {
+            ni.lastError = 1
+            if (this._options.onError) this._options.onError(inst_idx, err)
+        })
+
+        try {
+            sock.bind(port)
+            ni.udpSocket = sock
+            ni.udpPort = port
+            return this._writeBool(result_buf_ptr, mem, true)
+        } catch {
+            return this._writeBool(result_buf_ptr, mem, false)
+        }
+    }
+
+    _handleUdpClose(params_ptr, view) {
+        const inst_idx = view.getUint8(params_ptr)
+        const ni = this._getInst(inst_idx)
+        if (ni) ni.udpClose()
+        return 4 // handled, no push
+    }
+
+    _handleUdpSend(params_ptr, memory_ptr, result_buf_ptr, view, mem) {
+        // [inst:u8] [ip0-3:u8x4] [port:u16] [src_mem:ptr] [len:u16]
+        const inst_idx = mem[params_ptr]
+        const ip = `${mem[params_ptr + 1]}.${mem[params_ptr + 2]}.${mem[params_ptr + 3]}.${mem[params_ptr + 4]}`
+        const port = this._readU16(params_ptr, 5, view)
+        const src_mem = this._readPtr(params_ptr, 7, view)
+        const len = this._readU16(params_ptr, 7 + WASM_PTR_SIZE, view)
+
+        const ni = this._getInst(inst_idx)
+        if (!ni || !ni.active || !ni.udpSocket) return this._writeU16(result_buf_ptr, mem, 0)
+
+        const data = Buffer.from(mem.slice(memory_ptr + src_mem, memory_ptr + src_mem + len))
+        try {
+            ni.udpSocket.send(data, port, ip)
+            return this._writeU16(result_buf_ptr, mem, len)
+        } catch {
+            return this._writeU16(result_buf_ptr, mem, 0)
+        }
+    }
+
+    _handleUdpRecv(params_ptr, memory_ptr, result_buf_ptr, view, mem) {
+        // [inst:u8] [dest_mem:ptr] [max:u16]
+        const inst_idx = mem[params_ptr]
+        const dest_mem = this._readPtr(params_ptr, 1, view)
+        const max_len = this._readU16(params_ptr, 1 + WASM_PTR_SIZE, view)
+
+        const ni = this._getInst(inst_idx)
+        if (!ni || !ni.active) return this._writeU16(result_buf_ptr, mem, 0)
+
+        const received = ni.udpRecvPop(max_len)
+        if (received.length > 0) {
+            mem.set(received, memory_ptr + dest_mem)
+        }
+        return this._writeU16(result_buf_ptr, mem, received.length)
+    }
+
+    _handleUdpAvailable(params_ptr, result_buf_ptr, view, mem) {
+        const inst_idx = mem[params_ptr]
+        const ni = this._getInst(inst_idx)
+        return this._writeU16(result_buf_ptr, mem, ni ? ni.udpRecvAvailable() : 0)
+    }
+
+    /** Close all sockets and clean up */
+    destroy() {
+        for (const ni of this._instances) ni.close()
+        this._ready = false
+        this._net = null
+        this._dgram = null
+    }
+
+    /** Get bridge status summary */
+    getStatus() {
+        return {
+            ready: this._ready,
+            instances: this._instances.map((ni, i) => ({
+                index: i,
+                active: ni.active,
+                tcpState: ni.tcpState,
+                tcpServerListening: ni.tcpServerListening,
+                tcpRecvBuffered: ni.tcpRecvAvailable(),
+                udpOpen: !!ni.udpSocket,
+                udpPort: ni.udpPort,
+                udpRecvBuffered: ni.udpRecvAvailable(),
+            })),
+        }
+    }
+}
+
+/** Internal per-instance socket state */
+class PLCNetInstance {
+    /** @type {boolean} */ active = false
+    /** @type {number} */ lastError = 0
+
+    // TCP client
+    /** @type {import('net').Socket | null} */ tcpSocket = null
+    /** @type {string} */ tcpState = 'closed' // closed, connecting, connected, error
+    /** @type {Uint8Array[]} */ _tcpRecvQueue = []
+    /** @type {number} */ _tcpRecvLen = 0
+
+    // TCP server
+    /** @type {import('net').Server | null} */ tcpServer = null
+    /** @type {boolean} */ tcpServerListening = false
+    /** @type {boolean} */ _pendingAccept = false
+
+    // UDP
+    /** @type {import('dgram').Socket | null} */ udpSocket = null
+    /** @type {number} */ udpPort = 0
+    /** @type {Uint8Array[]} */ _udpRecvQueue = []
+    /** @type {number} */ _udpRecvLen = 0
+
+    /** @type {number} */ _maxRecvBuffer
+
+    constructor(maxRecvBuffer = 65535) {
+        this._maxRecvBuffer = maxRecvBuffer
+    }
+
+    /** @returns {number} status code: 0=idle, 1=connecting, 2=connected, 3=listening, 4=error */
+    getStatus() {
+        if (this.tcpState === 'error') return 4
+        if (this.tcpState === 'connected') return 2
+        if (this.tcpState === 'connecting') return 1
+        if (this.tcpServerListening) return 3
+        return 0
+    }
+
+    // TCP receive buffer management
+    /** @param {Buffer | Uint8Array} data */
+    tcpRecvPush(data) {
+        if (this._tcpRecvLen + data.length > this._maxRecvBuffer) return // Drop if full
+        this._tcpRecvQueue.push(new Uint8Array(data))
+        this._tcpRecvLen += data.length
+    }
+
+    /** @param {number} maxLen @returns {Uint8Array} */
+    tcpRecvPop(maxLen) {
+        if (this._tcpRecvLen === 0 || maxLen === 0) return new Uint8Array(0)
+        const out = new Uint8Array(Math.min(maxLen, this._tcpRecvLen))
+        let offset = 0
+        while (offset < out.length && this._tcpRecvQueue.length > 0) {
+            const chunk = this._tcpRecvQueue[0]
+            const take = Math.min(chunk.length, out.length - offset)
+            out.set(chunk.subarray(0, take), offset)
+            offset += take
+            if (take < chunk.length) {
+                this._tcpRecvQueue[0] = chunk.subarray(take)
+            } else {
+                this._tcpRecvQueue.shift()
+            }
+        }
+        this._tcpRecvLen -= offset
+        return out.subarray(0, offset)
+    }
+
+    /** @returns {number} */
+    tcpRecvAvailable() { return this._tcpRecvLen }
+
+    // UDP receive buffer management
+    /** @param {Buffer | Uint8Array} data */
+    udpRecvPush(data) {
+        if (this._udpRecvLen + data.length > this._maxRecvBuffer) return
+        this._udpRecvQueue.push(new Uint8Array(data))
+        this._udpRecvLen += data.length
+    }
+
+    /** @param {number} maxLen @returns {Uint8Array} */
+    udpRecvPop(maxLen) {
+        if (this._udpRecvLen === 0 || maxLen === 0) return new Uint8Array(0)
+        const out = new Uint8Array(Math.min(maxLen, this._udpRecvLen))
+        let offset = 0
+        while (offset < out.length && this._udpRecvQueue.length > 0) {
+            const chunk = this._udpRecvQueue[0]
+            const take = Math.min(chunk.length, out.length - offset)
+            out.set(chunk.subarray(0, take), offset)
+            offset += take
+            if (take < chunk.length) {
+                this._udpRecvQueue[0] = chunk.subarray(take)
+            } else {
+                this._udpRecvQueue.shift()
+            }
+        }
+        this._udpRecvLen -= offset
+        return out.subarray(0, offset)
+    }
+
+    /** @returns {number} */
+    udpRecvAvailable() { return this._udpRecvLen }
+
+    tcpClose() {
+        if (this.tcpSocket) {
+            try { this.tcpSocket.destroy() } catch { /* ignore */ }
+            this.tcpSocket = null
+        }
+        this.tcpState = 'closed'
+        this._tcpRecvQueue = []
+        this._tcpRecvLen = 0
+    }
+
+    udpClose() {
+        if (this.udpSocket) {
+            try { this.udpSocket.close() } catch { /* ignore */ }
+            this.udpSocket = null
+        }
+        this.udpPort = 0
+        this._udpRecvQueue = []
+        this._udpRecvLen = 0
+    }
+
+    close() {
+        this.tcpClose()
+        this.udpClose()
+        if (this.tcpServer) {
+            try { this.tcpServer.close() } catch { /* ignore */ }
+            this.tcpServer = null
+            this.tcpServerListening = false
+        }
+        this._pendingAccept = false
+    }
+}
+
 /**
  * Robust detection for shared memory and decoding capabilities.
  */
@@ -489,6 +1068,9 @@ class VovkPLC_class {
     /** @type { number | null } Override for micros() import. When non-null, WASM micros() returns this value instead of performance.now()*1000. */
     _microsOverride = null
 
+    /** @type { PLCNetBridge | null } Node.js TCP/UDP net bridge for COMMS simulation. Null when disabled (default). */
+    _netBridge = null
+
     /** @type { Uint8Array } */
     crc8_table = new Uint8Array(256)
     crc8_table_loaded = false
@@ -567,6 +1149,16 @@ class VovkPLC_class {
                 // @ts-ignore
                 js_ffi_invoke: (ffi_index, param_types_ptr, param_addrs_ptr, param_count, ret_addr, ret_type) => {
                     return this._ffiInvoke(ffi_index, param_types_ptr, param_addrs_ptr, param_count, ret_addr, ret_type)
+                },
+
+                // COMMS Net Bridge import - called from WASM when runtime executes a COMMS instruction
+                // Returns: 0=skip(no push), 1=push_bool, 2=push_u8, 3=push_u16, 4=handled(no push), 0xFF=error
+                // @ts-ignore
+                js_comms_invoke: (sub_fn, params_ptr, param_size, memory_ptr, result_buf_ptr) => {
+                    if (!this._netBridge) return 0 // Not enabled, skip
+                    const mem = new Uint8Array(this.wasm.exports.memory.buffer)
+                    const view = new DataView(this.wasm.exports.memory.buffer)
+                    return this._netBridge.handleComms(sub_fn, params_ptr, param_size, memory_ptr, result_buf_ptr, view, mem)
                 },
             },
         }
@@ -4699,6 +5291,42 @@ class VovkPLC_class {
         if (this.wasm_exports.ffi_clear) this.wasm_exports.ffi_clear()
         this.ffiCallbacks.clear()
     }
+
+    // ======================================================================
+    // Network Bridge API - Node.js TCP/UDP socket simulation for COMMS
+    // ======================================================================
+
+    /**
+     * Enable networking for COMMS simulation (Node.js only).
+     * When enabled, PLC COMMS instructions (TCP/UDP) will use real Node.js sockets.
+     * @param {NetBridgeOptions} [options] - Bridge configuration
+     * @returns {Promise<PLCNetBridge>} The active net bridge instance
+     */
+    enableNetworking = async (options) => {
+        if (!isNodeRuntime) throw new Error('Networking is only available in Node.js environments')
+        if (this._netBridge) return this._netBridge // Already enabled
+        const bridge = new PLCNetBridge(options)
+        const ok = await bridge.init()
+        if (!ok) throw new Error('Failed to initialize net bridge (could not load net/dgram modules)')
+        this._netBridge = bridge
+        return bridge
+    }
+
+    /**
+     * Disable networking and close all sockets.
+     */
+    disableNetworking = () => {
+        if (this._netBridge) {
+            this._netBridge.destroy()
+            this._netBridge = null
+        }
+    }
+
+    /**
+     * Get the active net bridge instance (null if disabled).
+     * @returns {PLCNetBridge | null}
+     */
+    get networking() { return this._netBridge }
 
     /**
      * Write a string to a static WASM buffer (no allocation).

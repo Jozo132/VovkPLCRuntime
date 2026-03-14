@@ -33,15 +33,93 @@
 
 namespace PLCMethods {
 
-    // Skip a COMMS instruction without executing it (for WASM or disabled builds)
-    static RuntimeError handle_COMMS_skip(u8* program, u32 prog_size, u32& index) {
+    // Skip a COMMS instruction without executing it, pushing default 0/false
+    // for sub-functions that normally push a result. Prevents stack underflow.
+    static RuntimeError handle_COMMS_skip(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
         if (index >= prog_size) return PROGRAM_SIZE_EXCEEDED;
         u8 sub_fn = program[index++];
         u8 param_size = comms_subfn_param_size(sub_fn);
         if (index + param_size > prog_size) return PROGRAM_SIZE_EXCEEDED;
         index += param_size;
-        return STATUS_SUCCESS;
+        u8 rtype = comms_subfn_result_type(sub_fn);
+        switch (rtype) {
+            case 1: return stack.push_bool(false);
+            case 2: return stack.push_u8(0);
+            case 3: return stack.push_u16(0);
+            default: return STATUS_SUCCESS;
+        }
     }
+
+#ifdef __WASM__
+    // ========================================================================
+    // WASM COMMS Handler - delegates to JavaScript via import
+    // ========================================================================
+    // When running in WASM, COMMS instructions are forwarded to JavaScript
+    // via the js_comms_invoke import. If the JS net bridge is enabled, it
+    // handles the operation and returns a result type code + value.
+    // If disabled, returns 0 (skip, no stack push).
+    //
+    // Result buffer layout (16 bytes in WASM linear memory):
+    //   [0..1]  u16 result value (for push_u16 or push_bool/push_u8)
+    //   [2]     reserved
+    //   [3]     reserved
+    //
+    // Return value from js_comms_invoke:
+    //   0    = not handled (skip, no stack push)
+    //   1    = push bool from result_buf[0]
+    //   2    = push u8 from result_buf[0]
+    //   3    = push u16 from result_buf[0..1]
+    //   0xFF = error
+    // ========================================================================
+
+    static u8 js_comms_result_buf[16] __attribute__((aligned(4))) = {0};
+
+    extern "C" {
+        __attribute__((import_module("env"), import_name("js_comms_invoke")))
+        u32 js_comms_invoke(u8 sub_fn, u32 params_ptr, u8 param_size, u32 memory_ptr, u32 result_buf_ptr);
+    }
+
+    static RuntimeError handle_COMMS_wasm(RuntimeStack& stack, u8* memory, u8* program, u32 prog_size, u32& index) {
+        if (index >= prog_size) return PROGRAM_SIZE_EXCEEDED;
+        u8 sub_fn = program[index++];
+        u8 param_size = comms_subfn_param_size(sub_fn);
+        if (index + param_size > prog_size) return PROGRAM_SIZE_EXCEEDED;
+
+        // Clear result buffer
+        js_comms_result_buf[0] = 0;
+        js_comms_result_buf[1] = 0;
+
+        // Call JS handler with pointers into WASM linear memory
+        u32 status = js_comms_invoke(
+            sub_fn,
+            (u32)(uintptr_t)&program[index],
+            param_size,
+            (u32)(uintptr_t)memory,
+            (u32)(uintptr_t)js_comms_result_buf
+        );
+        index += param_size;
+
+        if (status == 0) {
+            // Bridge not connected - push default result to keep stack balanced
+            u8 rtype = comms_subfn_result_type(sub_fn);
+            switch (rtype) {
+                case 1: return stack.push_bool(false);
+                case 2: return stack.push_u8(0);
+                case 3: return stack.push_u16(0);
+                default: return STATUS_SUCCESS;
+            }
+        }
+        if (status == 0xFF) return EXECUTION_ERROR;
+
+        // Push result to stack based on type code
+        switch (status) {
+            case 1: return stack.push_bool(js_comms_result_buf[0] != 0);
+            case 2: return stack.push_u8(js_comms_result_buf[0]);
+            case 3: return stack.push_u16((u16)js_comms_result_buf[0] | ((u16)js_comms_result_buf[1] << 8));
+            default: return STATUS_SUCCESS;
+        }
+    }
+#endif // __WASM__
 
 #ifdef PLCRUNTIME_COMMS_ENABLED
 
