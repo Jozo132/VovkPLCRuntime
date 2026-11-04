@@ -100,6 +100,9 @@
 #include "runtime-program.h"
 #include "runtime-datablock.h"
 #include "runtime-thread.h"
+#ifdef PLCRUNTIME_WIFI_MANAGER
+#include "runtime-wifi.h"
+#endif
 #ifdef PLCRUNTIME_FFI_ENABLED
 #include "runtime-ffi.h"
 #endif // PLCRUNTIME_FFI_ENABLED
@@ -333,6 +336,9 @@ class VovkPLCRuntime {
 private:
     bool started_up = false;
     bool is_first_cycle = true;
+#ifdef PLCRUNTIME_WIFI_MANAGER
+    PLCWiFiManager wifi;
+#endif
 
 #ifdef PLCRUNTIME_TRANSPORT
     // Transport system components
@@ -425,6 +431,9 @@ public:
 #ifdef PLCRUNTIME_TRANSPORT
         _transports.begin();
 #endif // PLCRUNTIME_TRANSPORT
+#ifdef PLCRUNTIME_WIFI_MANAGER
+    wifi.begin();
+#endif
     }
 
 
@@ -1359,6 +1368,9 @@ public:
 #else // __WASM__
         // Production code for microcontrollers
         // Listen for input from [serial, ethernet, wifi, etc.]
+#ifdef PLCRUNTIME_WIFI_MANAGER
+    wifi.poll();
+#endif
 
 #ifdef PLCRUNTIME_TRANSPORT
         // Poll all registered transports for incoming connections/data
@@ -1381,7 +1393,7 @@ public:
         }
 
         // If the serial port is available and the first character is not 'P' or 'M', skip the character
-        while (Serial.available() && Serial.peek() != 'R' && Serial.peek() != 'P' && Serial.peek() != 'M' && Serial.peek() != 'S' && Serial.peek() != 'T' && Serial.peek() != 'D' && Serial.peek() != '?') Serial.read();
+        while (Serial.available() && Serial.peek() != 'R' && Serial.peek() != 'P' && Serial.peek() != 'M' && Serial.peek() != 'S' && Serial.peek() != 'T' && Serial.peek() != 'D' && Serial.peek() != 'W' && Serial.peek() != '?') Serial.read();
         if (Serial.available() > 1 || Serial.peek() == '?') {
             // Command syntax:
             // <command>[<size>][<data>]<checksum>
@@ -1452,6 +1464,51 @@ public:
             bool db_migrate = cmd[0] == 'D' && cmd[1] == 'M';
             bool db_compact = cmd[0] == 'D' && cmd[1] == 'K';
 
+#ifdef PLCRUNTIME_WIFI_MANAGER
+            if (cmd[0] == 'W' && cmd[1] == 'C') {
+                u8 index = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, index);
+                u8 ssidLength = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, ssidLength);
+                u8 passwordLength = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, passwordLength);
+                u8 replacePassword = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, replacePassword);
+                char ssid[33] = {};
+                char password[65] = {};
+                bool valid = index < 3 && ssidLength <= 32 && passwordLength <= 64 && replacePassword <= 1 && (replacePassword || passwordLength == 0);
+                for (u16 i = 0; i < (u16)ssidLength + passwordLength; i++) {
+                    u8 value = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                    crc8_simple(checksum_calc, value);
+                    if (!value) valid = false;
+                    if (i < ssidLength && i < 32) ssid[i] = value;
+                    else if (i >= ssidLength && i - ssidLength < 64) password[i - ssidLength] = value;
+                }
+                checksum = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                if (checksum != checksum_calc) Serial.println(F("Invalid checksum"));
+                else if (valid && wifi.configure(index, ssid, password, replacePassword)) Serial.println(F("OK WIFI"));
+                else Serial.println(F("ERR WIFI CONFIG"));
+                memset(password, 0, sizeof(password));
+            } else if (cmd[0] == 'W' && (cmd[1] == 'M' || cmd[1] == 'F')) {
+                u8 from = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                crc8_simple(checksum_calc, from);
+                u8 to = 0;
+                if (cmd[1] == 'M') {
+                    to = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                    crc8_simple(checksum_calc, to);
+                }
+                checksum = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                if (checksum != checksum_calc) Serial.println(F("Invalid checksum"));
+                else if (cmd[1] == 'M' ? wifi.move(from, to) : wifi.forget(from)) Serial.println(F("OK WIFI"));
+                else Serial.println(F("ERR WIFI CONFIG"));
+            } else if (cmd[0] == 'W' && (cmd[1] == 'G' || cmd[1] == 'S' || cmd[1] == 'R')) {
+                checksum = serialReadHexByteTimeout(); SERIAL_TIMEOUT_RETURN;
+                if (checksum != checksum_calc) Serial.println(F("Invalid checksum"));
+                else if (cmd[1] == 'G') wifi.printStatus();
+                else if (cmd[1] == 'R') wifi.printScan();
+                else Serial.println(wifi.startScan() ? F("OK WIFI SCAN") : F("ERR WIFI SCAN"));
+            } else
+#endif
             if (ping) {
                 Serial.println(F("<VovkPLC>"));
             } else if (plc_info) {
