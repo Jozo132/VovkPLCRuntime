@@ -3,6 +3,11 @@
   "version": "1.0.0",
   "description": "VovkPLC Runtime Library",
   "type": "module",
+  "exports": {
+    "./firmware-builder": "./node/firmware-builder.js",
+    "./firmware-http": "./node/firmware/http.js",
+    "./*": "./*"
+  },
   "scripts": {
     "build": "node wasm/wasm_build.js",
     "build-safe": "node wasm/wasm_build.js --safe",
@@ -13,6 +18,7 @@
     "virtual-plc-manager": "node node/virtual-plc-manager.js",
     "test_virtual_plc": "node --test node/virtual-plc.test.js",
     "test_virtual_plc_manager": "node --test node/virtual-plc-manager.test.js",
+    "test_firmware": "node --test node/firmware-builder.test.js",
     "calibrate": "node --no-warnings wasm/node-test/calibrate.js",
     "update": "git pull",
     "wasm_unit_test": "cd wasm/node-test && node unit_test.js",
@@ -43,6 +49,9 @@
   ],
   "author": "J.Vovk <jozo132@gmail.com>",
   "license": "GPL-3.0-or-later",
+  "dependencies": {
+    "yauzl": "^3.2.0"
+  },
   "devDependencies": {
     "serialport": "^13.0.0"
   }

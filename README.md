@@ -23,6 +23,10 @@ You will also need Node.JS to run the web server that serves the web interface a
 My plan is to have the web interface running as a VS Code extension in the future.
 ```
 
+## Node.js Firmware Builds
+
+The optional firmware builder accepts complete PlatformIO project ZIPs and exposes queued builds, replayable logs, and UUID-addressed artifacts. See [the firmware builder documentation](node/firmware/README.md) for the API, HTTP adapter, and deployment security requirements.
+
 ## Node.js VirtualPLC
 
 The VirtualPLC runs the real WASM VM in Node.js and provides network discovery and PLC programming without physical I/O drivers. Build the runtime WASM first with `npm run build` in this runtime directory. Node.js 20 or newer is required.

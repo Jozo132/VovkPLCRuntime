@@ -18,3 +18,18 @@ PLC programming and monitoring still use USB serial: the runtime's current TCP t
 Program storage uses ESP32 EEPROM emulation in the custom 128 KiB NVS partition. This partition layout is intended for a 4 MiB device and does not provide OTA application slots. Changing partition layouts can invalidate existing stored data; back up anything important first. Verify persistence by downloading a PLC program, power-cycling the board, and checking that it reloads.
 
 The example includes the runtime's core header directly to avoid an unrelated linker error in the current runtime test header. It uses the surrounding runtime through a PlatformIO symlink.
+
+## Firmware builder consumer
+
+Start the authenticated HTTP service shown in the [firmware builder documentation](../../node/firmware/README.md#http-and-sse). The demo requires Node.js 20+, the `zip` command and a service with PlatformIO installed. The service may need to download the `VovkPLCRuntime` library and other dependencies. The ZIP substitutes `lib_deps = VovkPLCRuntime` for this example's local symlink; it does not bundle the local library or pin a library version.
+
+From the repository root, using the same bearer token as the service:
+
+```sh
+export FIRMWARE_API_TOKEN='your-service-token'
+node examples/esp32-c3-supermini-wifi/firmware-consumer.js --url http://127.0.0.1:8080 --output ./firmware-download
+```
+
+The consumer uploads the ZIP, prints build events, downloads all artifacts and verifies their sizes and SHA-256 hashes. The output directory must not already contain files with the same names. For a service on another host, use HTTPS and an appropriately secured and isolated builder.
+
+Add `--port /dev/ttyACM0` to flash with `esptool` installed and on PATH, or provide `--esptool /path/to/esptool`. This explicitly writes to the selected device and can overwrite existing firmware or stored data. Check the board, partition layout and flash settings first. With a complete ESP32-C3 flash manifest, the consumer uses its settings and segment offsets automatically. If the manifest is unavailable, the consumer refuses to flash without explicit, independently verified segments. To supply them, repeat `--segment OFFSET=FILE` for every required image; `FILE` is a downloaded artifact filename or an absolute path to a verified external image. The demo does not infer offsets, missing images, flash settings or OTA compatibility from filenames. Explicit segments use esptool's defaults, so verify they match the device and images before proceeding.
