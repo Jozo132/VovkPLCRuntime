@@ -23,6 +23,66 @@ You will also need Node.JS to run the web server that serves the web interface a
 My plan is to have the web interface running as a VS Code extension in the future.
 ```
 
+## Node.js VirtualPLC
+
+The VirtualPLC runs the real WASM VM in Node.js and provides network discovery and PLC programming without physical I/O drivers. Build the runtime WASM first with `npm run build` in this runtime directory. Node.js 20 or newer is required.
+
+### Multiple PLCs In One Process
+
+Start the manager, then use additional terminals to create and manage PLCs while it is running:
+
+```sh
+node node/virtual-plc-manager.js serve
+node node/virtual-plc-manager.js create --config '{"name":"Line 1","host":"127.0.0.1","port":19616}'
+node node/virtual-plc-manager.js create --config '{"name":"Line 2","host":"127.0.0.2","port":19616}'
+node node/virtual-plc-manager.js create --config '{"name":"Line 3","host":"127.0.0.1","port":19618}'
+node node/virtual-plc-manager.js list
+node node/virtual-plc-manager.js configure --id INSTANCE_ID --config '{"intervalMs":20,"port":19620}'
+node node/virtual-plc-manager.js stop --id INSTANCE_ID
+node node/virtual-plc-manager.js start --id INSTANCE_ID
+node node/virtual-plc-manager.js remove --id INSTANCE_ID
+```
+
+Replace the example IP addresses with addresses configured on the host to make PLCs accessible from the network. A wildcard `0.0.0.0` listener occupies the port on all addresses and cannot share that port with a specific address. Each PLC has a separate worker thread, VM, TCP listener, UID, configuration and saved program. They share the default UDP discovery port 19617 and can be discovered and programmed independently by the editor. Network setting changes on an active PLC rebind its listener and disconnect its clients; on failure the previous settings and listener are restored where possible. Configuration also works while a PLC is stopped.
+
+The manager stores its registry and individual state directories in `~/.vovkplc/manager` by default; `serve --data-dir DIR` changes the location. Use the same directory after restart to restore identities and programs. Running instances automatically restart with the manager; stopped instances remain stopped. `remove` unregisters an instance but deliberately retains its state directory. `list` reports the manager instance ID, PLC UID, settings, active/autostart status and any worker startup error. The manager ID is used by management commands; the UID identifies the PLC on the network.
+
+The manager API is also available to Node.js applications:
+
+```js
+import VirtualPLCManager from './node/VirtualPLCManager.js'
+
+const manager = await new VirtualPLCManager('/path/to/manager-data').initialize()
+const plc = await manager.create({ name: 'Line 1', host: '127.0.0.1', port: 19616 })
+await manager.configure(plc.id, { intervalMs: 20 })
+console.log(manager.list())
+await manager.close()
+```
+
+The service provides a local JSON API at `127.0.0.1:19615`: `GET /instances`, `POST /instances` with a configuration object, `PATCH /instances/<id>`, `POST /instances/<id>/start`, `POST /instances/<id>/stop`, and `DELETE /instances/<id>`. `serve --port PORT` changes the management port; pass the same `--port` to client commands. Management is restricted to loopback and rejects browser-origin requests, but is not authenticated against other local processes. PLC discovery and programming are unauthenticated and unencrypted; use a trusted isolated network or an authenticated encrypted tunnel. Each worker owns its VM and future I/O integrations, but no external I/O drivers or I/O configuration are implemented yet.
+
+### Single PLC
+
+```sh
+node node/virtual-plc.js --instance line1 --port 19616
+node node/virtual-plc.js --instance line2 --port 19618
+```
+
+Instances default to TCP `0.0.0.0:19616` and UDP discovery port `19617`. Use different TCP ports for instances on the same host; they may share the UDP port. The default data directory is `~/.vovkplc/virtualplc/<instance>`; `--data-dir` selects another directory. A UID is created once per directory and the UID, configuration and latest downloaded bytecode are saved atomically in `state.json`. A lock prevents concurrent use of the same directory. Retain the directory to preserve the identity. VM memory, including inputs, outputs, markers and data blocks, is not persisted.
+
+Startup options `--host`, `--port` and `--discovery-port` are saved for that instance and take effect on startup. Restart the instance to change those listener settings. To inspect or change a running instance, use its TCP address and port:
+
+```sh
+node node/virtual-plc.js --inspect --host 127.0.0.1 --port 19616
+node node/virtual-plc.js --configure '{"name":"Line 1","intervalMs":10,"running":true}' --host 127.0.0.1 --port 19616
+```
+
+Live settings are `name`, `intervalMs` (1-60000), `running`, `timerOffset` and `counterOffset`. The editor can also update timer/counter offsets using the standard TC command. System, input, output and marker sizes are fixed by the WASM build. Timer/counter layouts must not overlap these areas, each other, or existing data blocks. The data-block allocation boundary follows their configured ends. Program downloads and configuration changes are saved before acknowledgement; a stopped state is preserved across restart.
+
+The server supports `PI`, `PH`, `RH`, `PD`, `PU`, `PR`, `PS`, `MR`, `MW`, `MM`, `MF`, `TC`, `SL`, `TI` and `DA`. Symbols are not stored with bytecode, so `SL` is empty. Source upload/download, reset, and data-block mutation commands are not implemented. `VG` returns JSON containing UID, configuration and the most recent scan fault; `VC` accepts a big-endian u32 byte length and UTF-8 JSON configuration payload, followed by the same CRC-8 used by other commands. Frames are ASCII hex with a newline terminator. All operations are unauthenticated and unencrypted: use only an isolated trusted network or an authenticated encrypted tunnel, never the public Internet.
+
+The VM runs one scan per configured interval on its Node event loop; timing is not real-time and a blocking program can block that PLC's networking. Managed PLCs run in separate worker threads so one blocked PLC does not block the others. A runtime error stops scanning and is reported by `--inspect`. This is a simulator, not a safety controller: outputs only modify VM memory and no physical outputs or network I/O drivers are connected.
+
 ## Usage
 ### Include the library
 ```cpp

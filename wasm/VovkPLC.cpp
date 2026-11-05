@@ -205,6 +205,12 @@ WASM_EXPORT u32 getMemoryLocation() {
     return (u32) runtime.memory;
 }
 
+WASM_EXPORT bool db_setUserAreaEnd(u32 end) {
+    if (end > 65535 || end > runtime.dataBlocks.lowestAllocatedAddress()) return false;
+    runtime.dataBlocks.user_area_end = (u16)end;
+    return true;
+}
+
 WASM_EXPORT u32 getCommsResultBuffer() {
     return (u32) PLCMethods::js_comms_result_buf;
 }
