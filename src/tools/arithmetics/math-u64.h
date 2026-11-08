@@ -48,6 +48,7 @@ namespace PLCMethods {
     RuntimeError DIV_uint64_t(RuntimeStack& stack) {
         u64 b = stack.pop_u64();
         u64 a = stack.pop_u64();
+        if (b == 0) return EXECUTION_ERROR;
         stack.push_u64(a / b);
         return STATUS_SUCCESS;
     }
@@ -55,6 +56,7 @@ namespace PLCMethods {
     RuntimeError MOD_uint64_t(RuntimeStack& stack) {
         u64 b = stack.pop_u64();
         u64 a = stack.pop_u64();
+        if (b == 0) return EXECUTION_ERROR;
         stack.push_u64(a % b);
         return STATUS_SUCCESS;
     }

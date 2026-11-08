@@ -24,29 +24,30 @@
 namespace PLCMethods {
 
     RuntimeError ADD_int8_t(RuntimeStack& stack) {
-        i8 b = stack.pop_i8();
-        i8 a = stack.pop_i8();
-        stack.push_i8(a + b);
+        u8 b = stack.pop_u8();
+        u8 a = stack.pop_u8();
+        stack.push_u8((u8)((u32)a + (u32)b));
         return STATUS_SUCCESS;
     }
 
     RuntimeError SUB_int8_t(RuntimeStack& stack) {
-        i8 b = stack.pop_i8();
-        i8 a = stack.pop_i8();
-        stack.push_i8(a - b);
+        u8 b = stack.pop_u8();
+        u8 a = stack.pop_u8();
+        stack.push_u8((u8)((u32)a - (u32)b));
         return STATUS_SUCCESS;
     }
 
     RuntimeError MUL_int8_t(RuntimeStack& stack) {
-        i8 b = stack.pop_i8();
-        i8 a = stack.pop_i8();
-        stack.push_i8(a * b);
+        u8 b = stack.pop_u8();
+        u8 a = stack.pop_u8();
+        stack.push_u8((u8)((u32)a * (u32)b));
         return STATUS_SUCCESS;
     }
 
     RuntimeError DIV_int8_t(RuntimeStack& stack) {
         i8 b = stack.pop_i8();
         i8 a = stack.pop_i8();
+        if (b == 0 || (b == -1 && a == -128)) return EXECUTION_ERROR;
         stack.push_i8(a / b);
         return STATUS_SUCCESS;
     }
@@ -54,6 +55,7 @@ namespace PLCMethods {
     RuntimeError MOD_int8_t(RuntimeStack& stack) {
         i8 b = stack.pop_i8();
         i8 a = stack.pop_i8();
+        if (b == 0 || (b == -1 && a == -128)) return EXECUTION_ERROR;
         stack.push_i8(a % b);
         return STATUS_SUCCESS;
     }
@@ -66,14 +68,15 @@ namespace PLCMethods {
     }
 
     RuntimeError NEG_int8_t(RuntimeStack& stack) {
-        i8 a = stack.pop_i8();
-        stack.push_i8(-a);
+        u8 a = stack.pop_u8();
+        stack.push_u8((u8)((u32)0 - (u32)a));
         return STATUS_SUCCESS;
     }
 
     RuntimeError ABS_int8_t(RuntimeStack& stack) {
         i8 a = stack.pop_i8();
-        stack.push_i8(abs(a));
+        u8 value = (u8)a;
+        stack.push_u8(a < 0 ? (u8)((u32)0 - (u32)value) : value);
         return STATUS_SUCCESS;
     }
 

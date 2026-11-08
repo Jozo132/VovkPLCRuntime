@@ -25,29 +25,30 @@
 namespace PLCMethods {
 
     RuntimeError ADD_int64_t(RuntimeStack& stack) {
-        i64 b = stack.pop_i64();
-        i64 a = stack.pop_i64();
-        stack.push_i64(a + b);
+        u64 b = stack.pop_u64();
+        u64 a = stack.pop_u64();
+        stack.push_u64(a + b);
         return STATUS_SUCCESS;
     }
 
     RuntimeError SUB_int64_t(RuntimeStack& stack) {
-        i64 b = stack.pop_i64();
-        i64 a = stack.pop_i64();
-        stack.push_i64(a - b);
+        u64 b = stack.pop_u64();
+        u64 a = stack.pop_u64();
+        stack.push_u64(a - b);
         return STATUS_SUCCESS;
     }
 
     RuntimeError MUL_int64_t(RuntimeStack& stack) {
-        i64 b = stack.pop_i64();
-        i64 a = stack.pop_i64();
-        stack.push_i64(a * b);
+        u64 b = stack.pop_u64();
+        u64 a = stack.pop_u64();
+        stack.push_u64(a * b);
         return STATUS_SUCCESS;
     }
 
     RuntimeError DIV_int64_t(RuntimeStack& stack) {
         i64 b = stack.pop_i64();
         i64 a = stack.pop_i64();
+        if (b == 0 || (b == -1 && a == (-9223372036854775807LL - 1LL))) return EXECUTION_ERROR;
         stack.push_i64(a / b);
         return STATUS_SUCCESS;
     }
@@ -55,6 +56,7 @@ namespace PLCMethods {
     RuntimeError MOD_int64_t(RuntimeStack& stack) {
         i64 b = stack.pop_i64();
         i64 a = stack.pop_i64();
+        if (b == 0 || (b == -1 && a == (-9223372036854775807LL - 1LL))) return EXECUTION_ERROR;
         stack.push_i64(a % b);
         return STATUS_SUCCESS;
     }
@@ -67,14 +69,15 @@ namespace PLCMethods {
     }
 
     RuntimeError NEG_int64_t(RuntimeStack& stack) {
-        i64 a = stack.pop_i64();
-        stack.push_i64(-a);
+        u64 a = stack.pop_u64();
+        stack.push_u64((u64)0 - a);
         return STATUS_SUCCESS;
     }
 
     RuntimeError ABS_int64_t(RuntimeStack& stack) {
         i64 a = stack.pop_i64();
-        stack.push_i64(abs(a));
+        u64 value = (u64)a;
+        stack.push_u64(a < 0 ? (u64)0 - value : value);
         return STATUS_SUCCESS;
     }
 

@@ -43,23 +43,11 @@ namespace PLCMethods {
 
     // Helper to read u32 from memory array
     inline u32 read_u32_from_mem(u8* memory, MY_PTR_t address) {
-        u8A_to_u32 converter;
-        converter.u8A[0] = memory[address + 0];
-        converter.u8A[1] = memory[address + 1];
-        converter.u8A[2] = memory[address + 2];
-        converter.u8A[3] = memory[address + 3];
-        return converter.val;
+        return read_u32(memory + address);
     }
 
     inline void write_u32_to_mem(u8* memory, MY_PTR_t address, u32 value) {
-        u8A_to_u32 converter;
-        converter.val = value;
-        // The array might be optimized out if I assign to val and read val?
-        // No, I need to write FROM val TO memory.
-        memory[address + 0] = converter.u8A[0];
-        memory[address + 1] = converter.u8A[1];
-        memory[address + 2] = converter.u8A[2];
-        memory[address + 3] = converter.u8A[3];
+        write_u32(memory + address, value);
     }
 
     void logic_TON(u8* memory, MY_PTR_t timer_ptr, u32 PT, bool IN, bool& Q_out) {
@@ -76,8 +64,9 @@ namespace PLCMethods {
                 flags |= TIMER_FLAG_RUNNING;
                 write_u32_to_mem(memory, timer_ptr + TIMER_OFFSET_START, start_time);
             }
-            et = interval_millis_now - start_time;
-            if (et >= PT) {
+            if ((flags & TIMER_FLAG_Q) && read_u32_from_mem(memory, timer_ptr + TIMER_OFFSET_ET) >= PT) {
+                et = PT;
+            } else if ((et = interval_millis_now - start_time) >= PT) {
                 flags |= TIMER_FLAG_Q;
                 et = PT;
             } else {

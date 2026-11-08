@@ -176,6 +176,27 @@ export async function runTests(options = {}) {
         return null
     })
 
+    test('TON remains complete after the millisecond clock wraps', () => {
+        const err = compileAndLoad(TON_ASM)
+        if (err) return err
+
+        plc.writeMemoryByte(X, 1)
+        plc.setMillis(100)
+        plc.run()
+        plc.setMillis(1100)
+        plc.run()
+        if ((readByte(Y) & 1) !== 1 || readU32(T) !== 1000) return 'timer did not reach its preset'
+
+        plc.setMillis(100)
+        plc.run()
+        if ((readByte(Y) & 1) !== 1 || readU32(T) !== 1000) return 'completed timer reset after clock wrap'
+
+        plc.writeMemoryByte(X, 0)
+        plc.run()
+        if ((readByte(Y) & 1) !== 0 || readU32(T) !== 0) return 'timer did not reset with input off'
+        return null
+    })
+
     test('TON ─ timer resets on input toggle', () => {
         const err = compileAndLoad(TON_ASM)
         if (err) return err

@@ -1496,10 +1496,12 @@ public:
         
         expect(STTOK_TO, "Expected TO");
         
+        int conditionStart = output_len;
         emit(loopVar);
         int comparisonOffset = output_len;
         emit(" <= ");
         parseExpression();
+        int conditionEnd = output_len;
         emit("; ");
         
         // BY step (optional)
@@ -1508,10 +1510,58 @@ public:
             emit(" += ");
             int stepOffset = output_len;
             parseExpression();
-            if (output[stepOffset] == '-') {
-                int stepEnd = stepOffset + 1;
-                while (output[stepEnd] >= '0' && output[stepEnd] <= '9') stepEnd++;
-                if (stepEnd > stepOffset + 1 && stepEnd == output_len) output[comparisonOffset + 1] = '>';
+            int stepLength = output_len - stepOffset;
+            int valueStart = stepOffset + (output[stepOffset] == '-' ? 1 : 0);
+            bool isLiteral = valueStart < output_len;
+            bool isZero = isLiteral;
+            for (int index = valueStart; index < output_len && isLiteral; index++) {
+                isLiteral = output[index] >= '0' && output[index] <= '9';
+                if (output[index] != '0') isZero = false;
+            }
+            if (isLiteral) {
+                if (isZero) {
+                    setError("FOR step must not be zero");
+                    return;
+                }
+                if (valueStart != stepOffset) output[comparisonOffset + 1] = '>';
+            } else {
+                bool isVariable = valueStart < output_len &&
+                    ((output[valueStart] >= 'A' && output[valueStart] <= 'Z') ||
+                     (output[valueStart] >= 'a' && output[valueStart] <= 'z') || output[valueStart] == '_');
+                for (int index = valueStart + 1; index < output_len && isVariable; index++) {
+                    char character = output[index];
+                    isVariable = (character >= 'A' && character <= 'Z') ||
+                                 (character >= 'a' && character <= 'z') ||
+                                 (character >= '0' && character <= '9') || character == '_';
+                }
+                if (!isVariable) {
+                    setError("FOR step must be an integer literal or a variable");
+                    return;
+                } else {
+                    int conditionLength = conditionEnd - conditionStart;
+                    int prefixLength = stepLength + 8;
+                    int extraLength = prefixLength + conditionLength + 4;
+                    if (output_len + extraLength >= ST_MAX_OUTPUT_SIZE) {
+                        setError("FOR condition exceeds output size");
+                        return;
+                    }
+                    for (int index = output_len; index >= conditionEnd; index--) output[index + extraLength] = output[index];
+                    for (int index = conditionLength - 1; index >= 0; index--)
+                        output[conditionStart + prefixLength + conditionLength + 3 + index] = output[conditionStart + index];
+                    for (int index = conditionLength - 1; index >= 0; index--)
+                        output[conditionStart + prefixLength + index] = output[conditionStart + index];
+                    output[conditionStart] = '(';
+                    for (int index = 0; index < stepLength; index++) output[conditionStart + 1 + index] = output[stepOffset + extraLength + index];
+                    const char* prefix = " < 0 ? ";
+                    for (int index = 0; index < 7; index++) output[conditionStart + 1 + stepLength + index] = prefix[index];
+                    output[comparisonOffset + prefixLength + 1] = '>';
+                    int separator = conditionStart + prefixLength + conditionLength;
+                    output[separator] = ' ';
+                    output[separator + 1] = ':';
+                    output[separator + 2] = ' ';
+                    output[separator + 3 + conditionLength] = ')';
+                    output_len += extraLength;
+                }
             }
         } else {
             emit(loopVar);
@@ -1729,11 +1779,12 @@ public:
                 if (!first) emit(", ");
                 first = false;
                 
-                // Named parameter: name := value
                 if (check(STTOK_IDENTIFIER)) {
-                    // Skip parameter name for PLCScript
-                    nextToken();
-                    expect(STTOK_ASSIGN, "Expected ':='");
+                    STToken& next = peekNextToken();
+                    if (next.type == STTOK_ASSIGN) {
+                        setError("Named function arguments are not supported");
+                        return;
+                    }
                 }
                 parseExpression();
                 
@@ -1888,7 +1939,7 @@ public:
     void parseUnaryExpression() {
         if (check(STTOK_NOT)) {
             nextToken();
-            emit("!");
+            emit("~");
             parseUnaryExpression();
         } else if (check(STTOK_MINUS)) {
             nextToken();
@@ -1959,12 +2010,11 @@ public:
                     if (!first) emit(", ");
                     first = false;
                     
-                    // Handle named parameters: skip name :=
                     if (check(STTOK_IDENTIFIER)) {
                         STToken& next = peekNextToken();
                         if (next.type == STTOK_ASSIGN) {
-                            nextToken(); // skip name
-                            nextToken(); // skip :=
+                            setError("Named function arguments are not supported");
+                            return;
                         }
                     }
                     parseExpression();

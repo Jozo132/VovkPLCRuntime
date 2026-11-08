@@ -144,6 +144,26 @@ END_PROGRAM
     ]
 })
 
+addTest('PLCScript indirect words use little-endian memory', `
+VOVKPLCPROJECT TestProject
+VERSION 1
+PROGRAM main
+BLOCK LANG=PLCSCRIPT main
+    let values: u16[2] @ M0;
+    let index: u16 @ M8 = 1;
+    let result: u16 @ M10;
+    values[index] = 4660;
+    result = values[index];
+END_BLOCK
+END_PROGRAM
+`, {
+    memoryChecks: [
+        { address: M_OFFSET + 2, type: 'u8', expected: 0x34 },
+        { address: M_OFFSET + 3, type: 'u8', expected: 0x12 },
+        { address: M_OFFSET + 10, type: 'u16', expected: 4660 }
+    ]
+})
+
 addTest('PLCScript array dynamic write', `
 VOVKPLCPROJECT TestProject
 VERSION 1

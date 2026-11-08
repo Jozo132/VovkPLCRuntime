@@ -47,6 +47,7 @@ namespace PLCMethods {
     RuntimeError DIV_uint32_t(RuntimeStack& stack) {
         u32 b = stack.pop_u32();
         u32 a = stack.pop_u32();
+        if (b == 0) return EXECUTION_ERROR;
         stack.push_u32(a / b);
         return STATUS_SUCCESS;
     }
@@ -54,6 +55,7 @@ namespace PLCMethods {
     RuntimeError MOD_uint32_t(RuntimeStack& stack) {
         u32 b = stack.pop_u32();
         u32 a = stack.pop_u32();
+        if (b == 0) return EXECUTION_ERROR;
         stack.push_u32(a % b);
         return STATUS_SUCCESS;
     }

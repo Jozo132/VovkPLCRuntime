@@ -100,8 +100,8 @@
 
 // PLCRUNTIME_NANO - For ATmega328P and similar (32KB flash, aggressive stripping)
 // Target: ~18KB flash footprint for basic PLC functionality
-// Disables: strings, FFI, x64, float, counters, transport, advanced math, 32-bit ops, CVT, stack ops
-// Keeps: timers (TON/TOF/TP), basic logic, 8/16-bit arithmetic, memory ops, jumps
+// Disables: strings, FFI, x64, float, timers, counters, transport, advanced math, 32-bit ops, CVT, stack ops, bitwise ops
+// Keeps: basic logic, 8/16-bit arithmetic, memory ops, jumps
 #ifdef PLCRUNTIME_NANO
     #ifndef PLCRUNTIME_NO_STRINGS
         #define PLCRUNTIME_NO_STRINGS
@@ -451,6 +451,11 @@ typedef int64_t   i64;
 
 typedef float     f32;
 typedef double    f64;
+
+static_assert(sizeof(f32) == 4, "PLC REAL requires a 32-bit float");
+#ifdef USE_X64_OPS
+static_assert(sizeof(f64) == 8, "PLC LREAL requires a 64-bit double when x64 operations are enabled");
+#endif
 
 
 constexpr int size_ptr = sizeof(MY_PTR_t);

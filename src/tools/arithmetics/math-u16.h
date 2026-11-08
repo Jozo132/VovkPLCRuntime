@@ -40,13 +40,14 @@ namespace PLCMethods {
     RuntimeError MUL_uint16_t(RuntimeStack& stack) {
         u16 b = stack.pop_u16();
         u16 a = stack.pop_u16();
-        stack.push_u16(a * b);
+        stack.push_u16((u16)((u32)a * (u32)b));
         return STATUS_SUCCESS;
     }
 
     RuntimeError DIV_uint16_t(RuntimeStack& stack) {
         u16 b = stack.pop_u16();
         u16 a = stack.pop_u16();
+        if (b == 0) return EXECUTION_ERROR;
         stack.push_u16(a / b);
         return STATUS_SUCCESS;
     }
@@ -54,6 +55,7 @@ namespace PLCMethods {
     RuntimeError MOD_uint16_t(RuntimeStack& stack) {
         u16 b = stack.pop_u16();
         u16 a = stack.pop_u16();
+        if (b == 0) return EXECUTION_ERROR;
         stack.push_u16(a % b);
         return STATUS_SUCCESS;
     }

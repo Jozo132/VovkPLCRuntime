@@ -24,29 +24,30 @@
 namespace PLCMethods {
 
     RuntimeError ADD_int32_t(RuntimeStack& stack) {
-        i32 b = stack.pop_i32();
-        i32 a = stack.pop_i32();
-        stack.push_i32(a + b);
+        u32 b = stack.pop_u32();
+        u32 a = stack.pop_u32();
+        stack.push_u32(a + b);
         return STATUS_SUCCESS;
     }
     
     RuntimeError SUB_int32_t(RuntimeStack& stack) {
-        i32 b = stack.pop_i32();
-        i32 a = stack.pop_i32();
-        stack.push_i32(a - b);
+        u32 b = stack.pop_u32();
+        u32 a = stack.pop_u32();
+        stack.push_u32(a - b);
         return STATUS_SUCCESS;
     }
 
     RuntimeError MUL_int32_t(RuntimeStack& stack) {
-        i32 b = stack.pop_i32();
-        i32 a = stack.pop_i32();
-        stack.push_i32(a * b);
+        u32 b = stack.pop_u32();
+        u32 a = stack.pop_u32();
+        stack.push_u32(a * b);
         return STATUS_SUCCESS;
     }
 
     RuntimeError DIV_int32_t(RuntimeStack& stack) {
         i32 b = stack.pop_i32();
         i32 a = stack.pop_i32();
+        if (b == 0 || (b == -1 && a == (-2147483647L - 1L))) return EXECUTION_ERROR;
         stack.push_i32(a / b);
         return STATUS_SUCCESS;
     }
@@ -54,6 +55,7 @@ namespace PLCMethods {
     RuntimeError MOD_int32_t(RuntimeStack& stack) {
         i32 b = stack.pop_i32();
         i32 a = stack.pop_i32();
+        if (b == 0 || (b == -1 && a == (-2147483647L - 1L))) return EXECUTION_ERROR;
         stack.push_i32(a % b);
         return STATUS_SUCCESS;
     }
@@ -66,14 +68,15 @@ namespace PLCMethods {
     }
 
     RuntimeError NEG_int32_t(RuntimeStack& stack) {
-        i32 a = stack.pop_i32();
-        stack.push_i32(-a);
+        u32 a = stack.pop_u32();
+        stack.push_u32((u32)0 - a);
         return STATUS_SUCCESS;
     }
 
     RuntimeError ABS_int32_t(RuntimeStack& stack) {
         i32 a = stack.pop_i32();
-        stack.push_i32(abs(a));
+        u32 value = (u32)a;
+        stack.push_u32(a < 0 ? (u32)0 - value : value);
         return STATUS_SUCCESS;
     }
 }

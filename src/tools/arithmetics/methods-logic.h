@@ -25,6 +25,7 @@ namespace PLCMethods {
 
     // Boolean operators
     RuntimeError LOGIC_AND(RuntimeStack& stack) {
+        SAFE_BOUNDS_CHECK(stack.size() < 2, STACK_UNDERFLOW);
         u8 b = stack.pop_u8() != 0;
         u8 a = stack.pop_u8() != 0;
         stack.push_u8(a && b);
@@ -32,6 +33,7 @@ namespace PLCMethods {
     }
 
     RuntimeError LOGIC_OR(RuntimeStack& stack) {
+        SAFE_BOUNDS_CHECK(stack.size() < 2, STACK_UNDERFLOW);
         u8 b = stack.pop_u8() != 0;
         u8 a = stack.pop_u8() != 0;
         stack.push_u8(a || b);
@@ -39,6 +41,7 @@ namespace PLCMethods {
     }
 
     RuntimeError LOGIC_XOR(RuntimeStack& stack) {
+        SAFE_BOUNDS_CHECK(stack.size() < 2, STACK_UNDERFLOW);
         u8 b = stack.pop_u8() != 0;
         u8 a = stack.pop_u8() != 0;
         stack.push_u8(a ^ b);
@@ -46,6 +49,7 @@ namespace PLCMethods {
     }
 
     RuntimeError LOGIC_NOT(RuntimeStack& stack) {
+        SAFE_BOUNDS_CHECK(stack.size() < 1, STACK_UNDERFLOW);
         u8 a = stack.pop_u8() != 0;
         stack.push_u8(!a);
         return STATUS_SUCCESS;

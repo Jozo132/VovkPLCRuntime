@@ -24,29 +24,30 @@
 namespace PLCMethods {
 
     RuntimeError ADD_int16_t(RuntimeStack& stack) {
-        i16 b = stack.pop_i16();
-        i16 a = stack.pop_i16();
-        stack.push_i16(a + b);
+        u16 b = stack.pop_u16();
+        u16 a = stack.pop_u16();
+        stack.push_u16((u16)((u32)a + (u32)b));
         return STATUS_SUCCESS;
     }
     
     RuntimeError SUB_int16_t(RuntimeStack& stack) {
-        i16 b = stack.pop_i16();
-        i16 a = stack.pop_i16();
-        stack.push_i16(a - b);
+        u16 b = stack.pop_u16();
+        u16 a = stack.pop_u16();
+        stack.push_u16((u16)((u32)a - (u32)b));
         return STATUS_SUCCESS;
     }
 
     RuntimeError MUL_int16_t(RuntimeStack& stack) {
-        i16 b = stack.pop_i16();
-        i16 a = stack.pop_i16();
-        stack.push_i16(a * b);
+        u16 b = stack.pop_u16();
+        u16 a = stack.pop_u16();
+        stack.push_u16((u16)((u32)a * (u32)b));
         return STATUS_SUCCESS;
     }
 
     RuntimeError DIV_int16_t(RuntimeStack& stack) {
         i16 b = stack.pop_i16();
         i16 a = stack.pop_i16();
+        if (b == 0 || (b == -1 && a == -32768)) return EXECUTION_ERROR;
         stack.push_i16(a / b);
         return STATUS_SUCCESS;
     }
@@ -54,6 +55,7 @@ namespace PLCMethods {
     RuntimeError MOD_int16_t(RuntimeStack& stack) {
         i16 b = stack.pop_i16();
         i16 a = stack.pop_i16();
+        if (b == 0 || (b == -1 && a == -32768)) return EXECUTION_ERROR;
         stack.push_i16(a % b);
         return STATUS_SUCCESS;
     }
@@ -66,14 +68,15 @@ namespace PLCMethods {
     }
 
     RuntimeError NEG_int16_t(RuntimeStack& stack) {
-        i16 a = stack.pop_i16();
-        stack.push_i16(-a);
+        u16 a = stack.pop_u16();
+        stack.push_u16((u16)((u32)0 - (u32)a));
         return STATUS_SUCCESS;
     }
 
     RuntimeError ABS_int16_t(RuntimeStack& stack) {
         i16 a = stack.pop_i16();
-        stack.push_i16(abs(a));
+        u16 value = (u16)a;
+        stack.push_u16(a < 0 ? (u16)((u32)0 - (u32)value) : value);
         return STATUS_SUCCESS;
     }
 }

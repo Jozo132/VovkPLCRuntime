@@ -726,6 +726,24 @@ IF left OR right THEN result := result + 2; END_IF;
         assert((compiled.plcasm || '').includes('u8.and') && (compiled.plcasm || '').includes('u8.or'), 'Expected basic boolean logic instructions')
     })
 
+    test('NOT preserves WORD width and BOOL semantics', () => {
+        const { compiled, memory } = executeST(`
+VAR
+    left : WORD := 6;
+    right : WORD := 3;
+    flag : BOOL := FALSE;
+    result AT %MW0 : WORD;
+    booleanResult AT %MW2 : INT := 0;
+END_VAR
+result := NOT (left OR right);
+IF NOT flag THEN booleanResult := 1; END_IF;
+`)
+        assert(memory[0] === 248 && memory[1] === 255, 'WORD NOT produced the wrong result')
+        assert(memory[2] === 1 && memory[3] === 0, 'BOOL NOT produced the wrong result')
+        assert((compiled.plcasm || '').includes('bw.not.x16'), 'Expected width-aware NOT')
+        assert((compiled.plcasm || '').includes('u8.not'), 'Expected basic boolean NOT')
+    })
+
     test('Descending FOR executes each iteration', () => {
         const { memory } = executeST(`
 VAR
@@ -739,6 +757,55 @@ END_FOR;
         assert(memory[0] === 3 && memory[1] === 0, 'Descending FOR did not execute three iterations')
     })
 
+    test('FOR uses the direction of a variable step', () => {
+        const { memory } = executeST(`
+VAR
+    counter : INT;
+    step : INT;
+    descending AT %MW0 : INT := 0;
+    ascending AT %MW2 : INT := 0;
+END_VAR
+step := -1;
+FOR counter := 3 TO 1 BY step DO
+    descending := descending + 1;
+END_FOR;
+step := 2;
+FOR counter := 1 TO 5 BY step DO
+    ascending := ascending + 1;
+END_FOR;
+`)
+        assert(memory[0] === 3 && memory[1] === 0, 'Negative variable step produced the wrong iteration count')
+        assert(memory[2] === 3 && memory[3] === 0, 'Positive variable step produced the wrong iteration count')
+    })
+
+    test('FOR supports a negated variable step', () => {
+        const { memory } = executeST(`
+VAR
+    counter : INT;
+    step : INT := 1;
+    result AT %MW0 : INT := 0;
+END_VAR
+FOR counter := 3 TO 1 BY -step DO
+    result := result + 1;
+END_FOR;
+`)
+        assert(memory[0] === 3 && memory[1] === 0, 'Negated variable step produced the wrong iteration count')
+    })
+
+    test('Named arguments are rejected instead of reordered', () => {
+        assertSTError('VAR value : INT; END_VAR\nfunc(second := value, first := 1);', 'Named function arguments are not supported')
+        assertSTError('VAR value : INT; END_VAR\nvalue := func(second := value, first := 1);', 'Named function arguments are not supported')
+        const positional = compileSTDirect('VAR value : INT; END_VAR\nfunc(value);')
+        assert(positional.error === null, 'Positional variable argument should compile')
+    })
+
+    test('FOR rejects unsupported and zero steps', () => {
+        assertSTError(`VAR counter : INT; step : INT; END_VAR
+FOR counter := 1 TO 5 BY step + 1 DO counter := counter; END_FOR;`, 'FOR step must be an integer literal or a variable')
+        assertSTError(`VAR counter : INT; END_VAR
+FOR counter := 1 TO 5 BY 0 DO counter := counter; END_FOR;`, 'FOR step must not be zero')
+    })
+
     test('Discarded direct assignment avoids copy and drop', () => {
         const { compiled, memory } = executeST(`
 VAR
@@ -748,6 +815,36 @@ result := result + 1;
 `)
         assert(memory[0] === 1 && memory[1] === 0, 'Assignment produced the wrong result')
         assert(!(compiled.plcasm || '').includes('i16.copy') && !(compiled.plcasm || '').includes('i16.drop'), 'Assignment still emits copy/drop')
+        assert((compiled.plcasm || '').includes('i16.inc M0'), 'Expected an in-place increment')
+    })
+
+    test('In-place increment and decrement wrap at INT boundaries', () => {
+        const { compiled, memory } = executeST(`
+VAR
+    incremented AT %MW0 : INT := 32767;
+    decremented AT %MW2 : INT;
+END_VAR
+decremented := -32767 - 1;
+incremented := incremented + 1;
+decremented := decremented - 1;
+`)
+        assert(memory[0] === 0 && memory[1] === 128, 'Increment did not wrap to INT minimum')
+        assert(memory[2] === 255 && memory[3] === 127, 'Decrement did not wrap to INT maximum')
+        assert((compiled.plcasm || '').includes('i16.inc M0'), 'Expected an in-place increment')
+        assert((compiled.plcasm || '').includes('i16.dec M2'), 'Expected an in-place decrement')
+    })
+
+    test('Assignment from another address is not optimized in place', () => {
+        const { compiled, memory } = executeST(`
+VAR
+    source AT %MW0 : INT := 8;
+    destination AT %MW2 : INT := 2;
+END_VAR
+destination := source + 1;
+`)
+        assert(memory[0] === 8 && memory[1] === 0, 'Source was modified')
+        assert(memory[2] === 9 && memory[3] === 0, 'Destination produced the wrong result')
+        assert(!(compiled.plcasm || '').includes('i16.inc'), 'Different addresses must not use an in-place increment')
     })
 
     return { name: 'ST Validation', passed, failed, total: passed + failed, tests: testResults, failures }

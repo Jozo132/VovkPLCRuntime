@@ -210,9 +210,8 @@ template <typename T> RuntimeError RuntimeStack::load_from_memory_to_stack(u8* m
     MY_PTR_t address = pop_pointer();
     if (address + sizeof(T) > PLCRUNTIME_MAX_MEMORY_SIZE) return  RuntimeError::INVALID_MEMORY_ADDRESS;
     T value = 0;
-    bool error = readArea_u8(memory, address, reinterpret_cast<u8*>(&value), sizeof(T));
-    if (error) return RuntimeError::INVALID_MEMORY_ADDRESS;
-    error = push_custom(value);
+    for (u32 index = 0; index < sizeof(T); index++) value |= (T)memory[address + index] << (8 * index);
+    bool error = push_custom(value);
     if (error) return RuntimeError::STACK_OVERFLOW;
     return  RuntimeError::STATUS_SUCCESS;
 }
@@ -222,8 +221,8 @@ template <typename T> RuntimeError RuntimeStack::store_from_stack_to_memory(u8* 
     T value = pop_custom<T>();
     MY_PTR_t address = pop_pointer();
     if ((address + sizeof(T)) > PLCRUNTIME_MAX_MEMORY_SIZE) return  RuntimeError::INVALID_MEMORY_ADDRESS;
-    bool error = writeArea_u8(memory, address, reinterpret_cast<u8*>(&value), sizeof(T));
-    if (error) return  RuntimeError::INVALID_MEMORY_ADDRESS;
+    for (u32 index = 0; index < sizeof(T); index++) memory[address + index] = (u8)(value >> (8 * index));
+    bool error = false;
     if (copy) error = push_custom(value);
     return error ? RuntimeError::STACK_OVERFLOW : RuntimeError::STATUS_SUCCESS;
 }

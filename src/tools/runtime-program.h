@@ -976,6 +976,8 @@ public:
         else if (prog_size == 0) {
             this->prog_size = 0;
             status = UNDEFINED_STATE;
+        } else if (program == nullptr) {
+            status = NO_PROGRAM;
         } else {
             format();
             // memcpy(this->program, program, prog_size);
@@ -987,6 +989,14 @@ public:
     }
 
     RuntimeError load(const u8* program, u32 prog_size, u8 checksum) {
+        if (prog_size > MAX_PROGRAM_SIZE || prog_size > PLCRUNTIME_MAX_PROGRAM_SIZE) {
+            status = PROGRAM_SIZE_EXCEEDED;
+            return status;
+        }
+        if (prog_size > 0 && program == nullptr) {
+            status = NO_PROGRAM;
+            return status;
+        }
         u8 calculated_checksum = 0;
         crc8_simple(calculated_checksum, program, prog_size);
         if (calculated_checksum != checksum) {

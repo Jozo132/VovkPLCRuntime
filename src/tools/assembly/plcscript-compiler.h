@@ -3898,9 +3898,47 @@ public:
                 memcmp(output + storeStart, typeName, typeLength) == 0 &&
                 memcmp(output + storeStart + typeLength, ".move_to ", 9) == 0;
             if (directStore) {
-                int removed = storeStart - copyStart;
-                for (int index = storeStart; index <= outputLength; index++) output[index - removed] = output[index];
-                outputLength -= removed;
+                bool integerType = type == PSTYPE_I16 || type == PSTYPE_U16 ||
+                    type == PSTYPE_I32 || type == PSTYPE_U32 || type == PSTYPE_I64 || type == PSTYPE_U64;
+                int addressStart = statementStart + typeLength + 11;
+                int addressEnd = addressStart;
+                bool inPlace = integerType && addressStart < copyStart &&
+                    memcmp(output + statementStart, typeName, typeLength) == 0 &&
+                    memcmp(output + statementStart + typeLength, ".load_from ", 11) == 0;
+                if (inPlace) {
+                    while (addressEnd < copyStart && output[addressEnd] != '\n') addressEnd++;
+                    int addressLength = addressEnd - addressStart;
+                    int constantStart = addressEnd + 1;
+                    int operationStart = constantStart + typeLength + 9;
+                    int destinationStart = storeStart + typeLength + 9;
+                    inPlace = addressLength > 0 && addressLength < 32 &&
+                        operationStart + typeLength + 5 == copyStart &&
+                        outputLength - destinationStart == addressLength + 1 &&
+                        memcmp(output + constantStart, typeName, typeLength) == 0 &&
+                        memcmp(output + constantStart + typeLength, ".const 1\n", 9) == 0 &&
+                        memcmp(output + operationStart, typeName, typeLength) == 0 &&
+                        (memcmp(output + operationStart + typeLength, ".add\n", 5) == 0 ||
+                         memcmp(output + operationStart + typeLength, ".sub\n", 5) == 0) &&
+                        memcmp(output + addressStart, output + destinationStart, addressLength) == 0 &&
+                        output[outputLength - 1] == '\n';
+                    if (inPlace) {
+                        char address[32];
+                        for (int index = 0; index < addressLength; index++) address[index] = output[addressStart + index];
+                        address[addressLength] = '\0';
+                        bool increment = output[operationStart + typeLength + 1] == 'a';
+                        outputLength = statementStart;
+                        output[outputLength] = '\0';
+                        emit(typeName);
+                        emit(increment ? ".inc " : ".dec ");
+                        emit(address);
+                        emit("\n");
+                    }
+                }
+                if (!inPlace) {
+                    int removed = storeStart - copyStart;
+                    for (int index = storeStart; index <= outputLength; index++) output[index - removed] = output[index];
+                    outputLength -= removed;
+                }
             } else {
                 emitDrop(type);
             }
@@ -5424,6 +5462,10 @@ public:
         if (check(PSTOK_TILDE)) {
             nextToken();
             PLCScriptVarType type = parseUnary();
+            if (type == PSTYPE_BOOL) {
+                emitLine("u8.not");
+                return type;
+            }
             emit("bw.not.");
             if (type == PSTYPE_U8 || type == PSTYPE_I8) emitLine("x8");
             else if (type == PSTYPE_U16 || type == PSTYPE_I16) emitLine("x16");

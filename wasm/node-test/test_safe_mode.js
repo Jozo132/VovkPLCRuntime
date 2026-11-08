@@ -105,22 +105,6 @@ const Opcode = {
     EXIT: 0xFF,
 }
 
-// CRC8 checksum (polynomial 0x31)
-function crc8(data) {
-    let crc = 0
-    for (const byte of data) {
-        crc ^= byte
-        for (let i = 0; i < 8; i++) {
-            if (crc & 0x80) {
-                crc = ((crc << 1) ^ 0x31) & 0xFF
-            } else {
-                crc = (crc << 1) & 0xFF
-            }
-        }
-    }
-    return crc
-}
-
 // Test cases: malicious bytecode that should fail with bounds checking
 const testCases = [
     // ===== PROGRAM BOUNDS TESTS (require SAFE_MODE) =====
@@ -246,8 +230,102 @@ const testCases = [
         expectCrashUnsafe: false,
         safeModeOnly: true,
     },
+    ...[
+        { name: 'ADD with one i32 operand', bytecode: [Opcode.type_i32, 1, 0, 0, 0, Opcode.ADD, Opcode.type_i32, Opcode.EXIT] },
+        { name: 'DIV with no i16 operands', bytecode: [Opcode.DIV, Opcode.type_i16, Opcode.EXIT] },
+        { name: 'NEG with no i64 operand', bytecode: [Opcode.NEG, Opcode.type_i64, Opcode.EXIT] },
+        { name: 'logical AND with one operand', bytecode: [Opcode.type_u8, 1, 0xC0, Opcode.EXIT] },
+        { name: 'logical NOT with no operand', bytecode: [0xC3, Opcode.EXIT] },
+    ].map(({ name, bytecode }) => ({
+        name: `Stack Underflow - ${name}`,
+        description: 'Missing operands return stack underflow',
+        bytecode,
+        expectedSafe: RuntimeError.STACK_UNDERFLOW,
+        expectCrashUnsafe: false,
+        safeModeOnly: true,
+    })),
+
+    ...[
+        { name: 'u8', type: Opcode.type_u8, size: 1, signed: false },
+        { name: 'u16', type: Opcode.type_u16, size: 2, signed: false },
+        { name: 'u32', type: Opcode.type_u32, size: 4, signed: false },
+        { name: 'u64', type: Opcode.type_u64, size: 8, signed: false },
+        { name: 'i8', type: Opcode.type_i8, size: 1, signed: true },
+        { name: 'i16', type: Opcode.type_i16, size: 2, signed: true },
+        { name: 'i32', type: Opcode.type_i32, size: 4, signed: true },
+        { name: 'i64', type: Opcode.type_i64, size: 8, signed: true },
+    ].flatMap(({ name, type, size, signed }) => [Opcode.DIV, Opcode.MOD].flatMap(operation => {
+        const one = [1, ...Array(size - 1).fill(0)]
+        const zero = Array(size).fill(0)
+        const minimum = [...Array(size - 1).fill(0), 0x80]
+        const negativeOne = Array(size).fill(0xFF)
+        const opName = operation === Opcode.DIV ? 'DIV' : 'MOD'
+        const cases = [{
+            name: `${name} ${opName} by zero`,
+            description: 'Integer zero divisor returns an execution error',
+            bytecode: [type, ...one, type, ...zero, operation, type, Opcode.EXIT],
+            expectedSafe: RuntimeError.EXECUTION_ERROR,
+            expectCrashUnsafe: false,
+        }]
+        if (signed) cases.push({
+            name: `${name} ${opName} signed minimum by -1`,
+            description: 'Unrepresentable signed quotient returns an execution error',
+            bytecode: [type, ...minimum, type, ...negativeOne, operation, type, Opcode.EXIT],
+            expectedSafe: RuntimeError.EXECUTION_ERROR,
+            expectCrashUnsafe: false,
+        })
+        return cases
+    })),
+
+    ...[
+        { name: 'i8', type: Opcode.type_i8, size: 1 },
+        { name: 'i16', type: Opcode.type_i16, size: 2 },
+        { name: 'i32', type: Opcode.type_i32, size: 4 },
+        { name: 'i64', type: Opcode.type_i64, size: 8 },
+    ].flatMap(({ name, type, size }) => {
+        const minimum = [...Array(size - 1).fill(0), 0x80]
+        const maximum = [...Array(size - 1).fill(0xFF), 0x7F]
+        const one = [1, ...Array(size - 1).fill(0)]
+        const two = [2, ...Array(size - 1).fill(0)]
+        const negativeTwo = [0xFE, ...Array(size - 1).fill(0xFF)]
+        return [
+            { operation: Opcode.ADD, label: 'ADD', left: maximum, right: one, result: minimum },
+            { operation: Opcode.SUB, label: 'SUB', left: minimum, right: one, result: maximum },
+            { operation: Opcode.MUL, label: 'MUL', left: maximum, right: two, result: negativeTwo },
+            { operation: Opcode.NEG, label: 'NEG', left: minimum, result: minimum },
+            { operation: Opcode.ABS, label: 'ABS', left: minimum, result: minimum },
+        ].map(({ operation, label, left, right, result }) => ({
+            name: `${name} ${label} wraps at its boundary`,
+            description: 'Integer arithmetic preserves the low-width result bits',
+            bytecode: [type, ...left, ...(right ? [type, ...right] : []), operation, type, Opcode.MOVE_TO, type, 192, 0, Opcode.EXIT],
+            expectedSafe: RuntimeError.STATUS_SUCCESS,
+            expectedMemory: result,
+            expectCrashUnsafe: false,
+        }))
+    }),
+
+    ...[
+        { name: 'u8', type: Opcode.type_u8, size: 1 },
+        { name: 'u16', type: Opcode.type_u16, size: 2 },
+        { name: 'pointer', type: Opcode.type_pointer, size: 2 },
+    ].map(({ name, type, size }) => ({
+        name: `${name} MUL wraps at its boundary`,
+        description: 'Unsigned multiplication preserves the low-width result bits',
+        bytecode: [type, ...Array(size).fill(0xFF), type, ...Array(size).fill(0xFF), Opcode.MUL, type, Opcode.MOVE_TO, type, 192, 0, Opcode.EXIT],
+        expectedSafe: RuntimeError.STATUS_SUCCESS,
+        expectedMemory: [1, ...Array(size - 1).fill(0)],
+        expectCrashUnsafe: false,
+    })),
 
     // ===== VALID EXECUTION TESTS (should succeed on both) =====
+    {
+        name: 'Raw bytecode download preserves zero bytes',
+        description: 'Download and execute a program containing a zero immediate',
+        bytecode: [Opcode.type_u8, 0x00, Opcode.type_u8, 0x02, Opcode.ADD, Opcode.type_u8, Opcode.EXIT],
+        expectedSafe: RuntimeError.STATUS_SUCCESS,
+        expectCrashUnsafe: false,
+        rawDownload: true,
+    },
     {
         name: 'Valid program - simple add',
         description: 'Push two values, add them',
@@ -266,32 +344,23 @@ function isSafeModeRuntime(runtime) {
     return false
 }
 
-async function loadBytecodeToRuntime(runtime, bytecode) {
-    // Clear stream
-    runtime.wasm_exports.streamClear()
-    
-    // Stream bytes
-    for (const byte of bytecode) {
-        runtime.wasm_exports.streamIn(byte)
+async function loadBytecodeToRuntime(runtime, bytecode, rawDownload) {
+    try {
+        return rawDownload ? runtime.downloadBytecode(bytecode) : runtime.downloadBytecodeHex(bytecode)
+    } catch (error) {
+        return 1
     }
-    
-    // Calculate checksum
-    const checksum = crc8(bytecode)
-    
-    // Download program
-    const loadError = runtime.wasm_exports.downloadProgram(bytecode.length, checksum)
-    return loadError
 }
 
 async function runTest(testCase, runtime, variant) {
-    const { name, bytecode, expectedSafe, expectCrashUnsafe } = testCase
+    const { name, bytecode, expectedSafe, expectCrashUnsafe, rawDownload } = testCase
     
     // Reset runtime
     runtime.wasm_exports.initialize()
     runtime.wasm_exports.clearStack()
     
     // Load bytecode
-    const loadError = await loadBytecodeToRuntime(runtime, bytecode)
+    const loadError = await loadBytecodeToRuntime(runtime, bytecode, rawDownload)
     if (loadError) {
         return {
             name,
@@ -323,6 +392,7 @@ async function runTest(testCase, runtime, variant) {
         variant,
         loaded: true,
         status,
+        memoryMatches: !testCase.expectedMemory || testCase.expectedMemory.every((value, index) => runtime.readMemoryArea(192, testCase.expectedMemory.length)[index] === value),
         statusName: RuntimeErrorName[status] || `UNKNOWN(${status})`,
         expected: expectedSafe,
         expectedName: RuntimeErrorName[expectedSafe],
@@ -381,7 +451,7 @@ async function main() {
         const result = await runTest(testCase, runtime, isSafeMode ? 'safe' : 'production')
         
         // Check if it returned the expected status
-        const caughtExpected = result.status === testCase.expectedSafe
+        const caughtExpected = result.status === testCase.expectedSafe && result.memoryMatches !== false
         
         // Display results
         console.log(`│`)
@@ -392,6 +462,7 @@ async function main() {
         } else {
             console.log(`│    Status: ${result.statusName} (${result.status})`)
             console.log(`│    Expected: ${RuntimeErrorName[testCase.expectedSafe]} (${testCase.expectedSafe})`)
+            if (result.memoryMatches === false) console.log('│    Memory result did not match expected bytes')
         }
         
         // Determine pass/fail
@@ -482,7 +553,7 @@ export async function runTests(options = {}) {
         const result = await runTest(testCase, runtime, isSafeMode ? 'safe' : 'production')
         
         // Check if the runtime returned the expected error/status
-        const caughtExpected = result.status === testCase.expectedSafe
+        const caughtExpected = result.status === testCase.expectedSafe && result.memoryMatches !== false
         
         if (caughtExpected) {
             passed++
@@ -496,7 +567,7 @@ export async function runTests(options = {}) {
             tests.push({
                 name: testCase.name,
                 passed: false,
-                error: `Expected ${RuntimeErrorName[testCase.expectedSafe]} but got ${result.loaded ? result.statusName : `load error ${result.loadError}`}`
+                error: result.memoryMatches === false ? 'Memory result did not match expected bytes' : `Expected ${RuntimeErrorName[testCase.expectedSafe]} but got ${result.loaded ? result.statusName : `load error ${result.loadError}`}`
             })
         }
     }

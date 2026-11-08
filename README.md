@@ -132,6 +132,11 @@ Each scan is limited to 1,000,000 instructions by default, including `EXIT`. Exc
 
 This is an instruction-count limit, not a wall-clock watchdog. It cannot interrupt a blocking native or FFI call, and it does not put outputs into a defined safe state. Applications must handle runtime errors and implement their own safety policy.
 
+### Arithmetic and ST limits
+Signed integer addition, subtraction, multiplication, negation, and absolute value wrap to the operand width; in particular, the absolute value of the minimum signed value remains that value. Integer division and remainder return `EXECUTION_ERROR` for a zero divisor or a minimum signed value divided by `-1`. Floating-point and conversion semantics are separate and are not yet a complete IEC numeric contract.
+
+ST `FOR ... BY` currently accepts a nonzero integer literal, a variable, or a negated variable. Compound step expressions are rejected. A variable step of zero is not detected at compile time and can exhaust the scan instruction limit. Named function arguments are rejected until declaration-based binding is supported.
+
 
 
 ## JavaScript/WASM usage (universal worker)

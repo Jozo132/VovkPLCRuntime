@@ -40,13 +40,14 @@ namespace PLCMethods {
     RuntimeError MUL_uint8_t(RuntimeStack& stack) {
         u8 b = stack.pop_u8();
         u8 a = stack.pop_u8();
-        stack.push_u8(a * b);
+        stack.push_u8((u8)((u32)a * (u32)b));
         return STATUS_SUCCESS;
     }
 
     RuntimeError DIV_uint8_t(RuntimeStack& stack) {
         u8 b = stack.pop_u8();
         u8 a = stack.pop_u8();
+        if (b == 0) return EXECUTION_ERROR;
         stack.push_u8(a / b);
         return STATUS_SUCCESS;
     }
@@ -54,6 +55,7 @@ namespace PLCMethods {
     RuntimeError MOD_uint8_t(RuntimeStack& stack) {
         u8 b = stack.pop_u8();
         u8 a = stack.pop_u8();
+        if (b == 0) return EXECUTION_ERROR;
         stack.push_u8(a % b);
         return STATUS_SUCCESS;
     }

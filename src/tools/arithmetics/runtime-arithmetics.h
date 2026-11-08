@@ -53,6 +53,32 @@
 
 namespace PLCMethods {
 
+#ifdef PLCRUNTIME_SAFE_MODE
+    u8 arithmeticStackWidth(u8 data_type, bool allowPointer, bool signedOnly) {
+        switch (data_type) {
+            case type_pointer: return allowPointer ? sizeof(MY_PTR_t) : 0;
+            case type_bool:
+            case type_u8: return signedOnly ? 0 : 1;
+            case type_i8: return 1;
+            case type_u16: return signedOnly ? 0 : 2;
+            case type_i16: return 2;
+#ifdef PLCRUNTIME_32BIT_OPS_ENABLED
+            case type_u32: return signedOnly ? 0 : 4;
+            case type_i32: return 4;
+#endif
+#ifdef PLCRUNTIME_FLOAT_OPS_ENABLED
+            case type_f32: return 4;
+#endif
+#ifdef USE_X64_OPS
+            case type_u64: return signedOnly ? 0 : 8;
+            case type_i64:
+            case type_f64: return 8;
+#endif
+            default: return 0;
+        }
+    }
+#endif
+
     RuntimeError ADD_pointer(RuntimeStack& stack) {
         MY_PTR_t b = stack.pop_pointer();
         MY_PTR_t a = stack.pop_pointer();
@@ -62,12 +88,13 @@ namespace PLCMethods {
     RuntimeError MUL_pointer(RuntimeStack& stack) {
         MY_PTR_t b = stack.pop_pointer();
         MY_PTR_t a = stack.pop_pointer();
-        return stack.push_pointer(a * b);
+        return stack.push_pointer((MY_PTR_t)((u32)a * (u32)b));
     }
 
     RuntimeError handle_ADD(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
         SAFE_BOUNDS_CHECK(index + 1 > prog_size, PROGRAM_POINTER_OUT_OF_BOUNDS);
         u8 data_type = program[index++];
+        SAFE_BOUNDS_CHECK(stack.size() < 2 * arithmeticStackWidth(data_type, true, false), STACK_UNDERFLOW);
         switch (data_type) {
             case type_bool:
             case type_u8: return ADD_uint8_t(stack);
@@ -96,6 +123,7 @@ namespace PLCMethods {
     RuntimeError handle_SUB(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
         SAFE_BOUNDS_CHECK(index + 1 > prog_size, PROGRAM_POINTER_OUT_OF_BOUNDS);
         u8 data_type = program[index++];
+        SAFE_BOUNDS_CHECK(stack.size() < 2 * arithmeticStackWidth(data_type, false, false), STACK_UNDERFLOW);
         switch (data_type) {
             case type_bool:
             case type_u8: return SUB_uint8_t(stack);
@@ -123,6 +151,7 @@ namespace PLCMethods {
     RuntimeError handle_MUL(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
         SAFE_BOUNDS_CHECK(index + 1 > prog_size, PROGRAM_POINTER_OUT_OF_BOUNDS);
         u8 data_type = program[index++];
+        SAFE_BOUNDS_CHECK(stack.size() < 2 * arithmeticStackWidth(data_type, true, false), STACK_UNDERFLOW);
         switch (data_type) {
             case type_bool:
             case type_u8: return MUL_uint8_t(stack);
@@ -151,6 +180,7 @@ namespace PLCMethods {
     RuntimeError handle_DIV(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
         SAFE_BOUNDS_CHECK(index + 1 > prog_size, PROGRAM_POINTER_OUT_OF_BOUNDS);
         u8 data_type = program[index++];
+        SAFE_BOUNDS_CHECK(stack.size() < 2 * arithmeticStackWidth(data_type, false, false), STACK_UNDERFLOW);
         switch (data_type) {
             case type_bool:
             case type_u8: return DIV_uint8_t(stack);
@@ -178,6 +208,7 @@ namespace PLCMethods {
     RuntimeError handle_MOD(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
         SAFE_BOUNDS_CHECK(index + 1 > prog_size, PROGRAM_POINTER_OUT_OF_BOUNDS);
         u8 data_type = program[index++];
+        SAFE_BOUNDS_CHECK(stack.size() < 2 * arithmeticStackWidth(data_type, false, false), STACK_UNDERFLOW);
         switch (data_type) {
             case type_bool:
             case type_u8: return MOD_uint8_t(stack);
@@ -205,6 +236,7 @@ namespace PLCMethods {
     RuntimeError handle_POW(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
         SAFE_BOUNDS_CHECK(index + 1 > prog_size, PROGRAM_POINTER_OUT_OF_BOUNDS);
         u8 data_type = program[index++];
+        SAFE_BOUNDS_CHECK(stack.size() < 2 * arithmeticStackWidth(data_type, false, false), STACK_UNDERFLOW);
         switch (data_type) {
             case type_bool:
             case type_u8: return POW_uint8_t(stack);
@@ -232,6 +264,7 @@ namespace PLCMethods {
     RuntimeError handle_NEG(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
         SAFE_BOUNDS_CHECK(index + 1 > prog_size, PROGRAM_POINTER_OUT_OF_BOUNDS);
         u8 data_type = program[index++];
+        SAFE_BOUNDS_CHECK(stack.size() < arithmeticStackWidth(data_type, false, true), STACK_UNDERFLOW);
         switch (data_type) {
             case type_i8: return NEG_int8_t(stack);
             case type_i16: return NEG_int16_t(stack);
@@ -252,6 +285,7 @@ namespace PLCMethods {
 RuntimeError handle_ABS(RuntimeStack& stack, u8* program, u32 prog_size, u32& index) {
         SAFE_BOUNDS_CHECK(index + 1 > prog_size, PROGRAM_POINTER_OUT_OF_BOUNDS);
         u8 data_type = program[index++];
+    SAFE_BOUNDS_CHECK(stack.size() < arithmeticStackWidth(data_type, false, true), STACK_UNDERFLOW);
         switch (data_type) {
             case type_i8: return ABS_int8_t(stack);
             case type_i16: return ABS_int16_t(stack);

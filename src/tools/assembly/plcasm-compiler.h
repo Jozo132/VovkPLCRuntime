@@ -4600,8 +4600,9 @@ bool PLCASMCompiler::loadCompiledProgram() {
 
 
 int PLCASMCompiler::downloadProgram(int size, int crc) {
-    streamRead(downloaded_program, downloaded_program_size, MAX_DOWNLOADED_PROGRAM_SIZE);
-    if (downloaded_program_size != size) return 1;
+    if (size < 0 || size > MAX_DOWNLOADED_PROGRAM_SIZE || streamAvailable() != size) return 1;
+    for (int i = 0; i < size; i++) downloaded_program[i] = (u8)__streamInRead();
+    downloaded_program_size = size;
     u8 calculated_crc = 0;
     for (u32 i = 0; i < size; i++) {
         u8 byte = downloaded_program[i];
@@ -4613,8 +4614,9 @@ int PLCASMCompiler::downloadProgram(int size, int crc) {
 }
 
 int PLCASMCompiler::forceDownloadProgram(int size) {
-    streamRead(downloaded_program, downloaded_program_size, MAX_DOWNLOADED_PROGRAM_SIZE);
-    if (downloaded_program_size != size) return 1;
+    if (size < 0 || size > MAX_DOWNLOADED_PROGRAM_SIZE || streamAvailable() != size) return 1;
+    for (int i = 0; i < size; i++) downloaded_program[i] = (u8)__streamInRead();
+    downloaded_program_size = size;
     u8 calculated_crc = 0;
     for (u32 i = 0; i < size; i++) {
         crc8_simple(calculated_crc, downloaded_program[i]);
