@@ -556,6 +556,17 @@ END_PROGRAM
             `Expected reserved word error but got: "${error}"`)
     })
 
+    test('Nested assignment retains its expression value', () => {
+        const compiled = plc.compileAll('let a: i16 @ M0; let b: i16 @ M2; a = (b = 3) + 1;', 'plcscript')
+        plc.wasm_exports.memoryReset()
+        plc.wasm_exports.clearStack()
+        assert(plc.wasm_exports.loadCompiledProgram() === 0, 'Failed to load compiled program')
+        assert(plc.wasm_exports.run() === 0, 'Program execution failed')
+        const memory = plc.readMemoryArea(192, 4)
+        assert(memory[0] === 4 && memory[1] === 0 && memory[2] === 3 && memory[3] === 0, 'Nested assignment produced the wrong values')
+        assert(compiled.plcasm.includes('i16.copy'), 'Nested assignment must retain its value')
+    })
+
     return { name: 'PLCScript Validation', passed, failed, total: passed + failed, tests: testResults, failures }
 }
 

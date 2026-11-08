@@ -1497,6 +1497,7 @@ public:
         expect(STTOK_TO, "Expected TO");
         
         emit(loopVar);
+        int comparisonOffset = output_len;
         emit(" <= ");
         parseExpression();
         emit("; ");
@@ -1505,7 +1506,13 @@ public:
         if (match(STTOK_BY)) {
             emit(loopVar);
             emit(" += ");
+            int stepOffset = output_len;
             parseExpression();
+            if (output[stepOffset] == '-') {
+                int stepEnd = stepOffset + 1;
+                while (output[stepEnd] >= '0' && output[stepEnd] <= '9') stepEnd++;
+                if (stepEnd > stepOffset + 1 && stepEnd == output_len) output[comparisonOffset + 1] = '>';
+            }
         } else {
             emit(loopVar);
             emit("++");
@@ -1769,7 +1776,7 @@ public:
         
         while (check(STTOK_OR) || check(STTOK_PIPE)) {
             nextToken();
-            emit(" || ");
+            emit(" | ");
             parseXorExpression();
         }
     }
@@ -1789,7 +1796,7 @@ public:
         
         while (check(STTOK_AND) || check(STTOK_AMPERSAND)) {
             nextToken();
-            emit(" && ");
+            emit(" & ");
             parseComparisonExpression();
         }
     }

@@ -27,6 +27,10 @@
 #define PLCRUNTIME_MAX_PROGRAM_SIZE 65536
 #endif // __WASM__
 
+#ifndef PLCRUNTIME_MAX_INSTRUCTIONS_PER_CYCLE
+#define PLCRUNTIME_MAX_INSTRUCTIONS_PER_CYCLE 1000000UL
+#endif
+
 #ifndef PLCRUNTIME_NUM_OF_SYSTEMS
 #define PLCRUNTIME_NUM_OF_SYSTEMS 64
 #endif // PLCRUNTIME_NUM_OF_SYSTEMS
@@ -406,6 +410,7 @@ public:
     u32 last_run_timestamp_us = 0;
     u32 previous_period_us = 0;
     u32 last_instruction_count = 0; // Number of instructions executed in last run()
+    u32 instruction_limit = PLCRUNTIME_MAX_INSTRUCTIONS_PER_CYCLE;
 
     static void splash() {
         Serial.println();
@@ -2379,14 +2384,14 @@ RuntimeError VovkPLCRuntime::run(u8* program, u32 prog_size) {
         /* 0x25 */ _OP_LABEL(POW),
         /* 0x26 */ _OP_LABEL(SQRT),
         /* 0x27 */ _OP_LABEL(NEG),
-        /* 0x28 */ _OP_UNKNOWN, // reserved
-        /* 0x29 */ _OP_LABEL(ABS),
-        /* 0x2A */ _OP_UNKNOWN, // reserved
+        /* 0x28 */ _OP_LABEL(ABS),
+        /* 0x29 */ _OP_LABEL(SIN),
+        /* 0x2A */ _OP_LABEL(COS),
         /* 0x2B */ _OP_UNKNOWN, // reserved
         /* 0x2C */ _OP_UNKNOWN, // reserved
         /* 0x2D */ _OP_UNKNOWN, // reserved
-        /* 0x2E */ _OP_LABEL(SIN),
-        /* 0x2F */ _OP_LABEL(COS),
+        /* 0x2E */ _OP_UNKNOWN,
+        /* 0x2F */ _OP_UNKNOWN,
         /* 0x30 */ _OP_LABEL(TON_CONST),
         /* 0x31 */ _OP_LABEL(TON_MEM),
         /* 0x32 */ _OP_LABEL(TOF_CONST),
@@ -2550,8 +2555,8 @@ RuntimeError VovkPLCRuntime::run(u8* program, u32 prog_size) {
         /* 0xD0 */ _OP_LABEL(CMP_EQ),
         /* 0xD1 */ _OP_LABEL(CMP_NEQ),
         /* 0xD2 */ _OP_LABEL(CMP_GT),
-        /* 0xD3 */ _OP_LABEL(CMP_GTE),
-        /* 0xD4 */ _OP_LABEL(CMP_LT),
+        /* 0xD3 */ _OP_LABEL(CMP_LT),
+        /* 0xD4 */ _OP_LABEL(CMP_GTE),
         /* 0xD5 */ _OP_LABEL(CMP_LTE),
         /* 0xD6 */ _OP_UNKNOWN,
         /* 0xD7 */ _OP_UNKNOWN,
@@ -2588,7 +2593,7 @@ RuntimeError VovkPLCRuntime::run(u8* program, u32 prog_size) {
         /* 0xF6 */ _OP_LABEL(CSTR_CPY),
         /* 0xF7 */ _OP_LABEL(CSTR_EQ),
         /* 0xF8 */ _OP_LABEL(CSTR_CAT),
-        /* 0xF9 */ _OP_UNKNOWN,
+        /* 0xF9 */ _OP_LABEL(COMMS),
         /* 0xFA */ _OP_UNKNOWN,
         /* 0xFB */ _OP_LABEL(CONFIG_DB),
         /* 0xFC */ _OP_LABEL(CONFIG_TC),
@@ -2602,6 +2607,7 @@ RuntimeError VovkPLCRuntime::run(u8* program, u32 prog_size) {
     // Handlers that detect an error set `status` and goto `_op_done`.
     #define DISPATCH() do { \
         if (index >= prog_size) goto _op_done; \
+        if (instruction_limit && instruction_count >= instruction_limit) { status = PROGRAM_CYCLE_LIMIT_EXCEEDED; goto _op_done; } \
         instruction_count++; \
         goto *dispatch_table[program[index++]]; \
     } while (0)
@@ -2920,6 +2926,12 @@ RuntimeError VovkPLCRuntime::run(u8* program, u32 prog_size) {
     _op_CMP_LT:  _OP_CALL(PLCMethods::handle_CMP_LT(this->stack, program, prog_size, index));
     _op_CMP_LTE: _OP_CALL(PLCMethods::handle_CMP_LTE(this->stack, program, prog_size, index));
 
+#ifdef PLCRUNTIME_COMMS_ENABLED
+    _op_COMMS: _OP_CALL(PLCMethods::handle_COMMS(this->stack, this->memory, program, prog_size, index));
+#else
+    _op_COMMS: _OP_CALL(PLCMethods::handle_COMMS_skip(this->stack, program, prog_size, index));
+#endif
+
 #ifdef PLCRUNTIME_FFI_ENABLED
     _op_FFI_CALL: {
         if (index + 2 > prog_size) { status = PROGRAM_SIZE_EXCEEDED; goto _op_done; }
@@ -2968,7 +2980,7 @@ RuntimeError VovkPLCRuntime::run(u8* program, u32 prog_size) {
         if (status != STATUS_SUCCESS) goto _op_done;
         if (ret_size > 0) {
             for (u8 j = 0; j < ret_size; j++) {
-                if (!stack.push(memory[ret_addr + j])) { status = STACK_OVERFLOW; goto _op_done; }
+                if (stack.push(memory[ret_addr + j]) != STATUS_SUCCESS) { status = STACK_OVERFLOW; goto _op_done; }
             }
         }
         DISPATCH();
@@ -3019,7 +3031,6 @@ RuntimeError VovkPLCRuntime::run(u8* program, u32 prog_size) {
     }
 
     _op_EXIT: {
-        instruction_count++;
         status = STATUS_SUCCESS; // PROGRAM_EXITED → SUCCESS
         goto _op_done;
     }
@@ -3038,6 +3049,10 @@ RuntimeError VovkPLCRuntime::run(u8* program, u32 prog_size) {
 #else // !PLCRUNTIME_USE_COMPUTED_GOTO — standard switch dispatch
 
     while (index < prog_size) {
+        if (instruction_limit && instruction_count >= instruction_limit) {
+            status = PROGRAM_CYCLE_LIMIT_EXCEEDED;
+            break;
+        }
         status = step(program, prog_size, index);
         instruction_count++;
         if (status != STATUS_SUCCESS) {
@@ -3414,7 +3429,7 @@ RuntimeError VovkPLCRuntime::step(u8* program, u32 prog_size, u32& index) {
             // Push return value to stack if not void
             if (ret_size > 0) {
                 for (u8 j = 0; j < ret_size; j++) {
-                    if (!stack.push(memory[ret_addr + j])) return STACK_OVERFLOW;
+                    if (stack.push(memory[ret_addr + j]) != STATUS_SUCCESS) return STACK_OVERFLOW;
                 }
             }
             

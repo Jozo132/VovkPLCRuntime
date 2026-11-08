@@ -685,6 +685,71 @@ END_VAR
 `, 'reserved keyword')
     })
 
+    /** @param {string} code */
+    function executeST(code) {
+        const runtime = plc
+        if (!runtime) throw new Error('Runtime is not initialized')
+        const compiled = runtime.compileAll(code, 'st')
+        runtime.wasm_exports.memoryReset()
+        runtime.wasm_exports.clearStack()
+        assert(Number(runtime.wasm_exports.loadCompiledProgram()) === 0, 'Failed to load compiled program')
+        assert(runtime.wasm_exports.run() === 0, 'Program execution failed')
+        return { compiled, memory: runtime.readMemoryArea(192, 4) }
+    }
+
+    test('WORD AND and OR execute bitwise', () => {
+        const { memory } = executeST(`
+VAR
+    left : WORD := 6;
+    right : WORD := 3;
+    result AT %MW0 : WORD;
+    combined AT %MW2 : WORD;
+END_VAR
+result := left AND right;
+combined := left OR right;
+`)
+        assert(memory[0] === 2 && memory[1] === 0, 'WORD AND produced the wrong result')
+        assert(memory[2] === 7 && memory[3] === 0, 'WORD OR produced the wrong result')
+    })
+
+    test('BOOL AND and OR use basic logic instructions', () => {
+        const { compiled, memory } = executeST(`
+VAR
+    left : BOOL := TRUE;
+    right : BOOL := FALSE;
+    result AT %MW0 : INT := 0;
+END_VAR
+IF left AND right THEN result := 1; END_IF;
+IF left OR right THEN result := result + 2; END_IF;
+`)
+        assert(memory[0] === 2 && memory[1] === 0, 'BOOL logic produced the wrong result')
+        assert((compiled.plcasm || '').includes('u8.and') && (compiled.plcasm || '').includes('u8.or'), 'Expected basic boolean logic instructions')
+    })
+
+    test('Descending FOR executes each iteration', () => {
+        const { memory } = executeST(`
+VAR
+    counter : INT;
+    result AT %MW0 : INT := 0;
+END_VAR
+FOR counter := 3 TO 1 BY -1 DO
+    result := result + 1;
+END_FOR;
+`)
+        assert(memory[0] === 3 && memory[1] === 0, 'Descending FOR did not execute three iterations')
+    })
+
+    test('Discarded direct assignment avoids copy and drop', () => {
+        const { compiled, memory } = executeST(`
+VAR
+    result AT %MW0 : INT;
+END_VAR
+result := result + 1;
+`)
+        assert(memory[0] === 1 && memory[1] === 0, 'Assignment produced the wrong result')
+        assert(!(compiled.plcasm || '').includes('i16.copy') && !(compiled.plcasm || '').includes('i16.drop'), 'Assignment still emits copy/drop')
+    })
+
     return { name: 'ST Validation', passed, failed, total: passed + failed, tests: testResults, failures }
 }
 

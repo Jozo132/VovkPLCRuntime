@@ -10,6 +10,7 @@
 // - Formatted report output
 
 import VovkPLC from '../dist/VovkPLC.js'
+import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
@@ -196,6 +197,57 @@ export async function runTests(options = {}) {
 
         assert(r.bytecode_size > 0, 'ExitOnly: bytecode_size > 0', `bytecode_size was ${r.bytecode_size}`)
         assert(r.instruction_count >= 1, 'ExitOnly: >= 1 instruction', `instruction_count was ${r.instruction_count}`)
+    }
+
+    {
+        const wasm = plc.wasm_exports
+        const previousLimit = wasm.getInstructionLimit()
+        try {
+            plc.compilePLCASM('start:\njmp start')
+            wasm.loadCompiledProgram()
+            wasm.setInstructionLimit(10)
+            const loopStatus = wasm.run()
+            assert(loopStatus === 23 && wasm.getLastInstructionCount() === 10,
+                'Runtime budget: stops backward jump', `status=${loopStatus}, count=${wasm.getLastInstructionCount()}`)
+
+            plc.compilePLCASM('nop\nexit')
+            wasm.loadCompiledProgram()
+            wasm.setInstructionLimit(2)
+            const exitStatus = wasm.run()
+            assert(exitStatus === 0 && wasm.getLastInstructionCount() === 2,
+                'Runtime budget: permits exact limit', `status=${exitStatus}, count=${wasm.getLastInstructionCount()}`)
+            wasm.setInstructionLimit(1)
+            const limitStatus = wasm.run()
+            assert(limitStatus === 23 && wasm.getLastInstructionCount() === 1,
+                'Runtime budget: rejects next instruction', `status=${limitStatus}, count=${wasm.getLastInstructionCount()}`)
+        } finally {
+            wasm.setInstructionLimit(previousLimit)
+            wasm.clearStack()
+        }
+    }
+
+    {
+        const instructions = fs.readFileSync(path.resolve(__dirname, '../../src/tools/runtime-instructions.h'), 'utf8')
+        const runtime = fs.readFileSync(path.resolve(__dirname, '../../src/tools/runtime-lib.h'), 'utf8')
+        const enumBody = instructions.match(/enum PLCRuntimeInstructionSet\s*\{([\s\S]*?)\};/)[1]
+            .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+        const values = new Map()
+        let value = -1
+        for (const part of enumBody.split(',')) {
+            const declaration = part.trim()
+            if (!declaration) continue
+            const match = declaration.match(/^(\w+)(?:\s*=\s*(0x[\da-f]+|\d+))?$/i)
+            if (!match) throw new Error(`Unsupported opcode declaration: ${declaration}`)
+            value = match[2] ? Number(match[2]) : value + 1
+            values.set(match[1], value)
+        }
+        const table = runtime.match(/dispatch_table\[256\]\s*=\s*\{([\s\S]*?)\};/)[1]
+        const mismatches = []
+        for (const match of table.matchAll(/\/\*\s*(0x[\da-f]+)\s*\*\/\s*_OP_LABEL\((\w+)\)/gi)) {
+            if (Number(match[1]) !== values.get(match[2])) mismatches.push(match[2])
+        }
+        assert(mismatches.length === 0, 'Dispatch: table matches opcode values', mismatches.join(', '))
+        assert(/\/\* 0xF9 \*\/\s*_OP_LABEL\(COMMS\)/.test(table), 'Dispatch: COMMS is mapped', 'COMMS is missing')
     }
 
     return {

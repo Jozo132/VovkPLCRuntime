@@ -219,6 +219,14 @@ WASM_EXPORT u32 getLastInstructionCount() {
     return runtime.last_instruction_count;
 }
 
+WASM_EXPORT u32 getInstructionLimit() {
+    return runtime.instruction_limit;
+}
+
+WASM_EXPORT void setInstructionLimit(u32 limit) {
+    runtime.instruction_limit = limit;
+}
+
 WASM_EXPORT u32 getMillis() {
     return millis();
 }

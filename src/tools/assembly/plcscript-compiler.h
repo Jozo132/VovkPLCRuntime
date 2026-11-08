@@ -3879,13 +3879,31 @@ public:
     }
     
     void parseExpressionStatement() {
+        int statementStart = outputLength;
         PLCScriptVarType type = parseExpression();
-        
-        // Drop the result if not void
+
         if (type != PSTYPE_VOID) {
-            // Check if this was an assignment (result already stored)
-            // For now, always drop
-            emitDrop(type);
+            int storeStart = outputLength - 1;
+            while (storeStart > statementStart && output[storeStart - 1] != '\n') storeStart--;
+            int copyStart = storeStart > statementStart ? storeStart - 1 : storeStart;
+            while (copyStart > statementStart && output[copyStart - 1] != '\n') copyStart--;
+            const char* typeName = varTypeToPlcasm(type);
+            int typeLength = 0;
+            while (typeName[typeLength]) typeLength++;
+            bool directStore = storeStart > copyStart &&
+                storeStart - copyStart == typeLength + 6 &&
+                outputLength - storeStart >= typeLength + 9 &&
+                memcmp(output + copyStart, typeName, typeLength) == 0 &&
+                memcmp(output + copyStart + typeLength, ".copy\n", 6) == 0 &&
+                memcmp(output + storeStart, typeName, typeLength) == 0 &&
+                memcmp(output + storeStart + typeLength, ".move_to ", 9) == 0;
+            if (directStore) {
+                int removed = storeStart - copyStart;
+                for (int index = storeStart; index <= outputLength; index++) output[index - removed] = output[index];
+                outputLength -= removed;
+            } else {
+                emitDrop(type);
+            }
         }
         
         // Semicolon is optional
@@ -5133,8 +5151,9 @@ public:
             targetType = left;
             (void)parseBitwiseXor();
             targetType = savedTarget;
+            if (left == PSTYPE_BOOL) { emitLine("u8.or"); continue; }
             emit("bw.or.");
-            if (left == PSTYPE_U8 || left == PSTYPE_I8 || left == PSTYPE_BOOL) emitLine("x8");
+            if (left == PSTYPE_U8 || left == PSTYPE_I8) emitLine("x8");
             else if (left == PSTYPE_U16 || left == PSTYPE_I16) emitLine("x16");
             else if (left == PSTYPE_U64 || left == PSTYPE_I64) emitLine("x64");
             else emitLine("x32");
@@ -5153,8 +5172,9 @@ public:
             targetType = left;
             (void)parseBitwiseAnd();
             targetType = savedTarget;
+            if (left == PSTYPE_BOOL) { emitLine("u8.xor"); continue; }
             emit("bw.xor.");
-            if (left == PSTYPE_U8 || left == PSTYPE_I8 || left == PSTYPE_BOOL) emitLine("x8");
+            if (left == PSTYPE_U8 || left == PSTYPE_I8) emitLine("x8");
             else if (left == PSTYPE_U16 || left == PSTYPE_I16) emitLine("x16");
             else if (left == PSTYPE_U64 || left == PSTYPE_I64) emitLine("x64");
             else emitLine("x32");
@@ -5173,8 +5193,9 @@ public:
             targetType = left;
             (void)parseEquality();
             targetType = savedTarget;
+            if (left == PSTYPE_BOOL) { emitLine("u8.and"); continue; }
             emit("bw.and.");
-            if (left == PSTYPE_U8 || left == PSTYPE_I8 || left == PSTYPE_BOOL) emitLine("x8");
+            if (left == PSTYPE_U8 || left == PSTYPE_I8) emitLine("x8");
             else if (left == PSTYPE_U16 || left == PSTYPE_I16) emitLine("x16");
             else if (left == PSTYPE_U64 || left == PSTYPE_I64) emitLine("x64");
             else emitLine("x32");

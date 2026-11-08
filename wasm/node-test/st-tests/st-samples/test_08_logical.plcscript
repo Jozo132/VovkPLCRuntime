@@ -2,7 +2,7 @@
 # Auto-generated - edit tokens as needed
 #
 # Required PLCScript tokens (must appear in transpiled output):
-a && b
-a || b
+a & b
+a | b
 a ^ b
 !a

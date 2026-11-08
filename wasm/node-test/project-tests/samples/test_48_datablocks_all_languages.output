@@ -1,9 +1,9 @@
 {
   "success": 1,
   "project": { "name": "DataBlocksAllLanguages", "version": "1.0" },
-  "bytecode": "58 14 00 E2 0C 00 1E 00 80 00 40 01 FD 01 18 08 99 FF 19 08 C0 00 FD 01 03 01 19 03 9F FF FD 02 18 05 9B FF 10 05 09 19 09 C2 00 FD 02 18 05 93 FF 10 05 09 19 09 C6 00 FD 02 03 00 10 03 05 19 05 9B FF FD 03 58 40 00 14 03 E2 58 00 18 05 93 FF 10 05 09 19 09 CA 00 14 03 E2 68 00 18 09 C2 00 10 09 05 19 05 93 FF 60 80 00 FD 08 08 09 03 19 08 D4 00 FF FD 06 08 78 03 14 08 19 08 D6 00 16 08 FF",
-  "bytecodeLength": 131,
-  "checksum": 169,
+  "bytecode": "58 14 00 E2 0C 00 1E 00 80 00 40 01 FD 01 18 08 99 FF 19 08 C0 00 FD 01 03 01 19 03 9F FF FD 02 18 05 9B FF 10 05 09 19 09 C2 00 FD 02 18 05 93 FF 10 05 09 19 09 C6 00 FD 02 03 00 10 03 05 19 05 9B FF FD 03 58 40 00 14 03 E2 58 00 18 05 93 FF 10 05 09 19 09 CA 00 14 03 E2 68 00 18 09 C2 00 10 09 05 19 05 93 FF 60 80 00 FD 08 08 09 03 19 08 D4 00 FF FD 06 08 78 03 19 08 D6 00 FF",
+  "bytecodeLength": 127,
+  "checksum": 44,
   "files": [
     { "path": "main", "firstBlockIndex": 0, "blockCount": 8, "executionOrder": 0 }
   ],
@@ -15,7 +15,7 @@
     { "file": "main", "name": "StlWriteDB", "language": "STL", "offset": 56, "size": 11 },
     { "file": "main", "name": "LadderDB", "language": "LADDER", "offset": 67, "size": 40 },
     { "file": "main", "name": "PlcscriptBlock", "language": "UNKNOWN", "offset": 107, "size": 10 },
-    { "file": "main", "name": "StBlock", "language": "ST", "offset": 117, "size": 13 }
+    { "file": "main", "name": "StBlock", "language": "ST", "offset": 117, "size": 9 }
   ],
   "symbols": [
     { "name": "plcscript_out", "type": "i16", "address": "212" },
@@ -53,7 +53,7 @@
     { "name": "M", "start": 192, "end": 447 }
   ],
   "memory": { "available": 2048, "used": 216 },
-  "flash": { "size": 32768, "used": 131 },
+  "flash": { "size": 32768, "used": 127 },
   "execution": { "steps": 32, "stackSize": 0 },
   "problems": []
 }

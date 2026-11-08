@@ -127,6 +127,11 @@ void loop() {
 - Run PLC program
 - Write outputs
 
+### Scan instruction limit
+Each scan is limited to 1,000,000 instructions by default, including `EXIT`. Exceeding the limit returns `PROGRAM_CYCLE_LIMIT_EXCEEDED`. Native builds can define `PLCRUNTIME_MAX_INSTRUCTIONS_PER_CYCLE` before including the library or set `runtime.instruction_limit` for an instance; set it to `0` to disable the limit. The combined WASM module exposes `getInstructionLimit` and `setInstructionLimit` as raw exports.
+
+This is an instruction-count limit, not a wall-clock watchdog. It cannot interrupt a blocking native or FFI call, and it does not put outputs into a defined safe state. Applications must handle runtime errors and implement their own safety policy.
+
 
 
 ## JavaScript/WASM usage (universal worker)
