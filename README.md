@@ -23,6 +23,44 @@ You will also need Node.JS to run the web server that serves the web interface a
 My plan is to have the web interface running as a VS Code extension in the future.
 ```
 
+## Hardware Benchmarks
+
+The hardware benchmark builds and flashes a dedicated firmware, replacing the device's existing application. Install PlatformIO and run `npm install` first. For example:
+
+```sh
+node benchmark/hardware/benchmark.js --env esp32c3 --port /dev/ttyACM0 --device "ESP32-C3 SuperMini" --output benchmark/hardware/data/esp32c3.json
+node benchmark/hardware/benchmark.js --env avr_nano --port /dev/ttyUSB0 --device "Arduino Nano" --output benchmark/hardware/data/nano.json
+node benchmark/hardware/report-table.js --write-readme benchmark/hardware/data/esp32c3.json benchmark/hardware/data/nano.json
+```
+
+Use `--help` for scan count, sample count, dispatch, baseline comparison, and focused-run options. `avr_nano` uses the Nano configuration from the existing example (`board = uno`) and the `PLCRUNTIME_NANO` feature profile. The 64 KiB F103 Blue Pill uses `PLCRUNTIME_MINIMAL` so the benchmark fits. Unsupported instructions are reported, not timed. For ST-Link, DFU, or another separate programmer, use `--upload-port auto` to let PlatformIO select the programmer, or `--upload-port PORT` to specify it; `--port` remains the device's measurement serial port. A device may need manual bootloader/reset steps or a separate serial connection.
+
+The [hardware benchmark configuration](benchmark/hardware/platformio.ini) includes the AVR, STM32, ESP32, ESP8266, RP2040/RP2350, Renesas RA, nRF52, and Air105 board configurations from the PlatformIO example, using a consistent production benchmark profile. Configuration does not imply that this benchmark firmware has been built or measured on every board. The N76E003 example does not specify an Arduino framework and is not included: this benchmark requires the Arduino C++ API. Version 2 result files use compact property names and contain instruction counts, raw timing samples, feature flags and source fingerprints; they omit Git metadata and reproducible workload bytecode.
+
+Clock variants include `esp8266_d1mini_160mhz` and `rp2040_133mhz`, `rp2040_200mhz`, and `rp2040_240mhz`. The RP2040 firmware switches and checks the system clock; 200 MHz sets 1.20 V and 240 MHz sets 1.30 V. Overclocking and increased voltage can cause instability, overheating, or damage; these builds are not production-safe. The installed Raspberry Pi PlatformIO platform does not provide the Pico 2 board or its RISC-V toolchain, so the old RP2350 overclock and RISC-V variants are not yet available.
+
+The score is the geometric mean of scans per second for eight fixed core workloads: an empty cycle, u8 and u16 addition, u8 comparison, Boolean AND, bit read and write, and a taken jump. Higher is better; incomplete or incompatible runs have no score. `Nano (x)` divides each score by the score of the single complete `avr_nano` report supplied to the table generator, making that Nano 1.00; it is unavailable without an unambiguous valid baseline. This is not the old 82-byte F32 math benchmark, so the two sets of relative scores are not directly comparable. Group values are geometric means of the measured workloads' median microseconds per scan, with measured/total counts. Each workload includes its setup, stack operations and normal scan overhead; group values are not isolated instruction latencies. Groups with different coverage are not directly equivalent.
+
+Flash and RAM are PlatformIO's declared board capacities, not free memory or necessarily the application partition size. VM program, data and stack columns are the limits configured for the benchmark firmware, not the maximum possible on the board. The VM also has a separate call stack. Published results should be compared only with matching workload sources, compiler configuration and comparable feature profiles. Measurements are not real-time guarantees.
+
+AIR105, ESP32-C3 and STM32F401RC use computed-goto dispatch; the published RP2040 and Nano results use switch dispatch. Workload completion does not validate timer accuracy or application behavior.
+
+The F401RC measurement used `--skip-upload` after DFU reported an error while leaving the bootloader; its firmware hash is unavailable.
+The RP2040 Zero measurements used `--skip-upload` after flashing the generated UF2 via the bootloader drive; their firmware hashes are unavailable. Their listed capacities are those of PlatformIO's Pico configuration, not independently verified board capacities.
+
+<!-- hardware-benchmark-table:start -->
+| Platform | CPU (MHz) | Score (scans/s) | Nano (x) | Flash (B) | RAM (B) | VM program (B) | VM data (B) | VM stack (B) | Cycle (us) | Comparison (us) | Bitwise (us) | Bool (us) | u8/i8 (us) | u16/i16 (us) | u32/i32 (us) | u64/i64 (us) | f32 (us) | f64 (us) | Strings (us) | Flow (us) | Stack/memory (us) | Timers (us) | Counters (us) | Edges (us) | Other (us) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AIR105 Core Board | 204 | 80,207 | 33.90 | 4190208 | 655360 | 384 | 384 | 32 | 4.69 (1/1) | 26.85 (60/60) | 13.70 (88/88) | 13.47 (5/5) | 15.69 (16/16) | 29.96 (16/16) | 32.06 (16/16) | 39.36 (16/16) | 30.14 (11/11) | 48.81 (11/11) | 37.18 (19/19) | 11.18 (15/15) | 13.34 (20/20) | 19.52 (6/6) | 22.47 (4/4) | 13.45 (15/15) | 7.99 (8/8) |
+| ESP32-C3 SuperMini | 160 | 59,062 | 24.96 | 4194304 | 327680 | 384 | 384 | 32 | 7.88 (1/1) | 33.35 (60/60) | 17.75 (88/88) | 18.31 (5/5) | 21.36 (16/16) | 37.70 (16/16) | 40.28 (16/16) | 45.49 (16/16) | 57.57 (11/11) | 68.12 (11/11) | 46.01 (19/19) | 15.88 (15/15) | 18.07 (20/20) | 25.63 (6/6) | 28.96 (4/4) | 16.82 (15/15) | 11.99 (8/8) |
+| STM32F401RC Black Pill | 84 | 32,924 | 13.92 | 262144 | 65536 | 384 | 384 | 32 | 10.35 (1/1) | 65.36 (60/60) | 33.26 (88/88) | 34.99 (5/5) | 40.90 (16/16) | 68.91 (16/16) | 75.78 (16/16) | 93.72 (16/16) | 71.36 (11/11) | 118.52 (11/11) | 84.53 (19/19) | 26.92 (15/15) | 31.81 (20/20) | 47.89 (6/6) | 56.98 (4/4) | 33.27 (15/15) | 18.30 (8/8) |
+| RP2040 Zero 240 MHz | 240 | 28,529 | 12.06 | 2097152 | 270336 | 384 | 384 | 32 | 20.40 (1/1) | 52.80 (60/60) | 36.25 (88/88) | 35.33 (5/5) | 40.48 (16/16) | 55.37 (16/16) | 58.67 (16/16) | 74.52 (16/16) | 76.44 (11/11) | 97.77 (11/11) | 66.69 (19/19) | 31.54 (15/15) | 34.90 (20/20) | 42.00 (6/6) | 49.64 (4/4) | 33.71 (15/15) | 26.27 (8/8) |
+| RP2040 Zero 200 MHz | 200 | 23,825 | 10.07 | 2097152 | 270336 | 384 | 384 | 32 | 24.30 (1/1) | 63.30 (60/60) | 43.45 (88/88) | 42.52 (5/5) | 48.50 (16/16) | 66.33 (16/16) | 70.37 (16/16) | 89.39 (16/16) | 91.70 (11/11) | 117.34 (11/11) | 79.97 (19/19) | 37.82 (15/15) | 41.83 (20/20) | 50.48 (6/6) | 59.47 (4/4) | 40.44 (15/15) | 31.52 (8/8) |
+| RP2040 Zero | 125 | 17,727 | 7.49 | 2097152 | 270336 | 384 | 384 | 32 | 29.97 (1/1) | 92.47 (60/60) | 60.68 (88/88) | 58.84 (5/5) | 69.52 (16/16) | 98.21 (16/16) | 109.85 (16/16) | 134.01 (16/16) | 140.66 (11/11) | 172.70 (11/11) | 114.09 (19/19) | 51.06 (15/15) | 56.24 (20/20) | 73.20 (6/6) | 84.56 (4/4) | 55.63 (15/15) | 41.19 (8/8) |
+| RP2040 Zero 133 MHz | 133 | 17,001 | 7.19 | 2097152 | 270336 | 384 | 384 | 32 | 32.46 (1/1) | 91.43 (60/60) | 60.90 (88/88) | 59.68 (5/5) | 69.51 (16/16) | 95.15 (16/16) | 101.21 (16/16) | 129.82 (16/16) | 133.37 (11/11) | 169.58 (11/11) | 114.32 (19/19) | 52.74 (15/15) | 58.46 (20/20) | 73.53 (6/6) | 83.98 (4/4) | 56.69 (15/15) | 43.16 (8/8) |
+| Arduino Nano ATmega328P | 16 | 2,366 | 1.00 | 32256 | 2048 | 128 | 384 | 32 | 72.72 (1/1) | 738.13 (24/60) | 411.06 (64/88) | 616.40 (5/5) | 665.25 (14/16) | 673.41 (14/16) | - (0/16) | - (0/16) | - (0/11) | - (0/11) | - (0/19) | 420.73 (15/15) | 407.62 (16/20) | - (0/6) | - (0/4) | 531.84 (15/15) | 229.04 (6/8) |
+<!-- hardware-benchmark-table:end -->
+
 ## Node.js Firmware Builds
 
 The optional firmware builder accepts complete PlatformIO project ZIPs and exposes queued builds, replayable logs, and UUID-addressed artifacts. See [the firmware builder documentation](node/firmware/README.md) for the API, HTTP adapter, and deployment security requirements.

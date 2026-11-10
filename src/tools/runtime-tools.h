@@ -150,7 +150,6 @@ double log10(double x);
 #define RPI_PICO
 #endif // RPI_PICO
 #include <hardware/watchdog.h>
-#include <String.h>
 #ifdef F
 #undef F
 #endif // F
