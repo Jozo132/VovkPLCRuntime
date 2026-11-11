@@ -1,0 +1,27 @@
+{
+  "build": {
+    "board": "GENERIC_H523RETX",
+    "core": "stm32",
+    "cpu": "cortex-m33",
+    "arduino": {
+      "ldscript": "../H503RBT/ldscript.ld",
+      "variant_h": "variant_generic.h"
+    },
+    "extra_flags": "-DSTM32H5 -DSTM32H5xx -DSTM32H523xx -DARDUINO_GENERIC_H523RETX",
+    "f_cpu": "250000000L",
+    "mcu": "stm32h523cet6",
+    "product_line": "STM32H523xx",
+    "variant": "STM32H5xx/H523R(C-E)T_H533RET"
+  },
+  "frameworks": [
+    "arduino"
+  ],
+  "name": "Generic STM32H523CET6",
+  "upload": {
+    "maximum_ram_size": 278528,
+    "maximum_size": 524288,
+    "protocol": "dfu"
+  },
+  "url": "https://www.st.com/en/microcontrollers-microprocessors/stm32h523ce.html",
+  "vendor": "ST"
+}

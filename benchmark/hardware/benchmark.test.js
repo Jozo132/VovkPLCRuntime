@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs'
 import { createWorkloads } from './workloads.js'
 import { coreCases, summarize } from './summary.js'
 import { renderTable } from './report-table.js'
-import { firmwareFilename, parseReport, serializeReport, uploadArguments } from './benchmark.js'
+import { firmwareFilename, parseReport, parseTimingResponse, serializeReport, uploadArguments, validateTimingHostElapsed, validateTimingMeasurement } from './benchmark.js'
 
 const workloadSourceHash = createHash('sha256').update(readFileSync(new URL('./workloads.js', import.meta.url))).digest('hex')
 
@@ -27,6 +27,22 @@ test('firmware filename follows the target platform', () => {
     assert.equal(firmwareFilename('atmelavr', 'uno'), 'firmware.hex')
     assert.equal(firmwareFilename('https://github.com/Jozo132/PIO-Air105.git', 'air105_coreboard'), 'program.bin')
     assert.equal(firmwareFilename('raspberrypi', 'pico'), 'firmware.bin')
+})
+
+test('H523 timing response parses both delay loops and validates host, micros, and DWT clocks', () => {
+    const parsed = parseTimingResponse('@TIME,10,100000,1002000,64128000,100,10000,999000,63936000')
+    assert.deepEqual(parsed, {
+        delay: { expected_us: 1000000, elapsed_us: 1002000, cycles: 64128000 },
+        micro_delay: { expected_us: 1000000, elapsed_us: 999000, cycles: 63936000 },
+    })
+    for (const measurement of Object.values(parsed)) {
+        assert.ok(Math.abs(validateTimingMeasurement({ ...measurement, clock_hz: 64000000 }).measured_clock_hz - 64000000) < 1)
+    }
+    assert.equal(validateTimingHostElapsed(parsed, 2010000).device_elapsed_us, 2001000)
+    assert.throws(() => parseTimingResponse('@TIME,10,100000,1000000,64000000,100,10000,1000000'), /Invalid timing response/)
+    assert.throws(() => validateTimingMeasurement({ elapsed_us: 100000, cycles: 6400000, expected_us: 1000000, clock_hz: 64000000 }), /expected/)
+    assert.throws(() => validateTimingMeasurement({ elapsed_us: 1000000, host_elapsed_us: 1000000, cycles: 32000000, expected_us: 1000000, clock_hz: 64000000 }), /DWT timing/)
+    assert.throws(() => validateTimingHostElapsed(parsed, 1000000), /Host timing/)
 })
 
 test('benchmark reports serialize compactly without changing their data', () => {

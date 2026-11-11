@@ -15,6 +15,9 @@
 #define PLCRUNTIME_MAX_COMMS_INSTANCES 1
 #define PLCRUNTIME_COMMS_QUEUE_DEPTH 1
 #include <tools/runtime-lib.h>
+#if defined(VOVK_BENCH_STM32H523_250MHZ)
+#include <stm32h5xx_hal.h>
+#endif
 #if defined(ARDUINO_ARCH_MBED) && defined(RP2040)
 #include <hardware/clocks.h>
 #if defined(VOVK_BENCH_RP2040_CLOCK_KHZ)
@@ -35,6 +38,14 @@ int highNibble = -1;
 bool benchmarkClockValid = false;
 #endif
 
+u32 benchmarkCycleCount() {
+#if defined(VOVK_BENCH_STM32H523_250MHZ)
+    return DWT->CYCCNT;
+#else
+    return 0;
+#endif
+}
+
 #ifdef PLCRUNTIME_FFI_ENABLED
 u8 benchmarkFFI() { return 42; }
 #endif
@@ -50,6 +61,8 @@ void printInfo() {
 #if defined(ARDUINO_ARCH_MBED) && defined(RP2040)
     Serial.print((unsigned long)clock_get_hz(clk_sys));
 #elif defined(AIR105)
+    Serial.print((unsigned long)SystemCoreClock);
+#elif defined(VOVK_BENCH_STM32H523_250MHZ)
     Serial.print((unsigned long)SystemCoreClock);
 #else
     Serial.print((unsigned long)F_CPU);
@@ -115,7 +128,93 @@ void runBenchmark() {
     Serial.println((unsigned long)runtime.last_instruction_count);
 }
 
+#if defined(VOVK_BENCH_STM32H523_250MHZ)
+void configureBenchmarkClock() {
+    RCC_OscInitTypeDef oscillator = {};
+    RCC_ClkInitTypeDef clocks = {};
+    RCC_PeriphCLKInitTypeDef peripheralClocks = {};
+
+    __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE0);
+    while (!__HAL_PWR_GET_FLAG(PWR_FLAG_VOSRDY)) {}
+
+    clocks.ClockType = RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_PCLK1
+        | RCC_CLOCKTYPE_PCLK2 | RCC_CLOCKTYPE_PCLK3;
+    clocks.AHBCLKDivider = RCC_SYSCLK_DIV1;
+    clocks.APB1CLKDivider = RCC_HCLK_DIV1;
+    clocks.APB2CLKDivider = RCC_HCLK_DIV1;
+    clocks.APB3CLKDivider = RCC_HCLK_DIV1;
+
+#if defined(VOVK_BENCH_STM32H523_HSE)
+    oscillator.OscillatorType = RCC_OSCILLATORTYPE_HSE | RCC_OSCILLATORTYPE_HSI48;
+    oscillator.HSEState = RCC_HSE_ON;
+#else
+    oscillator.OscillatorType = RCC_OSCILLATORTYPE_CSI | RCC_OSCILLATORTYPE_HSI48;
+    oscillator.CSIState = RCC_CSI_ON;
+    oscillator.CSICalibrationValue = RCC_CSICALIBRATION_DEFAULT;
+#endif
+    oscillator.HSI48State = RCC_HSI48_ON;
+    oscillator.PLL.PLLState = RCC_PLL_ON;
+#if defined(VOVK_BENCH_STM32H523_HSE)
+    oscillator.PLL.PLLSource = RCC_PLL1_SOURCE_HSE;
+    oscillator.PLL.PLLM = 4;
+#else
+    oscillator.PLL.PLLSource = RCC_PLL1_SOURCE_CSI;
+    oscillator.PLL.PLLM = 2;
+#endif
+    oscillator.PLL.PLLN = 250;
+    oscillator.PLL.PLLP = 2;
+    oscillator.PLL.PLLQ = 10;
+    oscillator.PLL.PLLR = 2;
+    oscillator.PLL.PLLRGE = RCC_PLL1_VCIRANGE_1;
+    oscillator.PLL.PLLVCOSEL = RCC_PLL1_VCORANGE_WIDE;
+    oscillator.PLL.PLLFRACN = 0;
+    if (HAL_RCC_OscConfig(&oscillator) != HAL_OK) Error_Handler();
+    clocks.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+    if (HAL_RCC_ClockConfig(&clocks, FLASH_LATENCY_5) != HAL_OK) Error_Handler();
+
+    peripheralClocks.PeriphClockSelection = RCC_PERIPHCLK_USB;
+    peripheralClocks.UsbClockSelection = RCC_USBCLKSOURCE_HSI48;
+    if (HAL_RCCEx_PeriphCLKConfig(&peripheralClocks) != HAL_OK) Error_Handler();
+
+#if defined(VOVK_BENCH_STM32H523_250MHZ)
+    __HAL_FLASH_SET_PROGRAM_DELAY(FLASH_PROGRAMMING_DELAY_2);
+#endif
+}
+#endif
+
+void runTimingTest() {
+    const u32 delayStart = micros();
+    const u32 delayCyclesStart = benchmarkCycleCount();
+    for (u8 iteration = 0; iteration < 10; ++iteration) delay(100);
+    const u32 delayCycles = benchmarkCycleCount() - delayCyclesStart;
+    const u32 delayElapsed = (u32)micros() - delayStart;
+
+    const u32 microDelayStart = micros();
+    const u32 microDelayCyclesStart = benchmarkCycleCount();
+    for (u8 iteration = 0; iteration < 100; ++iteration) delayMicroseconds(10000);
+    const u32 microDelayCycles = benchmarkCycleCount() - microDelayCyclesStart;
+    const u32 microDelayElapsed = (u32)micros() - microDelayStart;
+
+    Serial.print(F("@TIME,10,100000,"));
+    Serial.print((unsigned long)delayElapsed);
+    Serial.print(',');
+    Serial.print((unsigned long)delayCycles);
+    Serial.print(F(",100,10000,"));
+    Serial.print((unsigned long)microDelayElapsed);
+    Serial.print(',');
+    Serial.println((unsigned long)microDelayCycles);
+}
+
 void setup() {
+#if defined(VOVK_BENCH_STM32H523_ICACHE)
+    HAL_ICACHE_Enable();
+#endif
+#if defined(VOVK_BENCH_STM32H523_250MHZ)
+    configureBenchmarkClock();
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+    DWT->CYCCNT = 0;
+    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+#endif
 #if defined(ARDUINO_ARCH_MBED) && defined(RP2040) && defined(VOVK_BENCH_RP2040_CLOCK_KHZ)
 #if VOVK_BENCH_RP2040_CLOCK_KHZ > 200000
     vreg_set_voltage(VREG_VOLTAGE_1_30);
@@ -165,6 +264,7 @@ void loop() {
         if (character == '\n') {
             if (commandType == 'I' && commandPhase == 0 && !commandInvalid) printInfo();
             else if (commandType == 'B' && commandPhase == 2 && !commandInvalid && haveScanDigit && scanCount && programLength && highNibble < 0) runBenchmark();
+            else if (commandType == 'T' && commandPhase == 0 && !commandInvalid) runTimingTest();
             else Serial.println(F("@ERROR,command"));
             commandType = 0;
             commandPhase = 0;

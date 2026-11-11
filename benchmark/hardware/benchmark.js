@@ -3,6 +3,7 @@ import { SerialPort } from 'serialport'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createHash } from 'node:crypto'
+import { performance } from 'node:perf_hooks'
 import fs from 'node:fs'
 import path from 'node:path'
 import { createWorkloads } from './workloads.js'
@@ -88,6 +89,44 @@ export function firmwareFilename(platform, boardId) {
     return 'firmware.bin'
 }
 
+export function parseTimingResponse(response) {
+    const fields = response.split(',')
+    if (fields.length !== 9 || fields[0] !== '@TIME' || fields[1] !== '10' || fields[2] !== '100000' || fields[5] !== '100' || fields[6] !== '10000') {
+        throw new Error(`Invalid timing response: ${response}`)
+    }
+    const values = [fields[3], fields[4], fields[7], fields[8]].map(Number)
+    if (!values.every(value => Number.isSafeInteger(value) && value > 0)) throw new Error(`Invalid timing measurements: ${response}`)
+    return {
+        delay: { expected_us: 1000000, elapsed_us: values[0], cycles: values[1] },
+        micro_delay: { expected_us: 1000000, elapsed_us: values[2], cycles: values[3] },
+    }
+}
+
+export function validateTimingMeasurement({ elapsed_us, host_elapsed_us, cycles, expected_us, clock_hz }) {
+    if (![elapsed_us, cycles, expected_us, clock_hz].every(Number.isFinite)
+        || [elapsed_us, cycles, expected_us, clock_hz].some(value => value <= 0)) {
+        throw new Error('Timing measurements must be positive finite numbers')
+    }
+    const expectedToleranceUs = Math.max(25000, expected_us * 0.05)
+    if (Math.abs(elapsed_us - expected_us) > expectedToleranceUs) {
+        throw new Error(`Device timer reported ${elapsed_us} us for an expected ${expected_us} us delay`)
+    }
+    const measured_clock_hz = cycles * 1000000 / elapsed_us
+    if (Math.abs(measured_clock_hz - clock_hz) / clock_hz > 0.05) {
+        throw new Error(`DWT timing implies ${Math.round(measured_clock_hz)} Hz; device reports ${clock_hz} Hz`)
+    }
+    return { measured_clock_hz }
+}
+
+export function validateTimingHostElapsed(timing, host_elapsed_us) {
+    const device_elapsed_us = Object.values(timing).reduce((total, measurement) => total + measurement.elapsed_us, 0)
+    const tolerance_us = Math.max(100000, device_elapsed_us * 0.1)
+    if (!Number.isFinite(host_elapsed_us) || host_elapsed_us <= 0 || Math.abs(host_elapsed_us - device_elapsed_us) > tolerance_us) {
+        throw new Error(`Host timing ${host_elapsed_us} us differs from device total ${device_elapsed_us} us`)
+    }
+    return { device_elapsed_us, host_difference_us: host_elapsed_us - device_elapsed_us }
+}
+
 async function main() {
     if (args.includes('--help')) {
         console.log('Usage: node benchmark/hardware/benchmark.js --env esp32c3 --port /dev/ttyACM0 [--upload-port PORT|auto] [--device NAME] [--scans 1000] [--samples 3] [--dispatch auto|switch|goto] [--output FILE] [--compare FILE] [--only NAME] [--skip-upload]')
@@ -153,6 +192,17 @@ async function main() {
         const [, version, clock, flagsValue, actualDispatch, mask, programLimit, memoryLimit, stackLimit] = info.split(',')
         if (version !== '2' || !/^\d+$/.test(clock) || !/^\d+$/.test(flagsValue) || !/^[0-9A-F]{64}$/.test(mask) || ![programLimit, memoryLimit, stackLimit].every(value => /^\d+$/.test(value))) throw new Error(`Invalid device information: ${info}`)
         if (dispatch !== 'auto' && actualDispatch !== dispatch) throw new Error(`Requested ${dispatch}, device reports ${actualDispatch}`)
+        if (environment.startsWith('stm32h523ce_')) {
+            const timingStart = performance.now()
+            const timing = parseTimingResponse(await request('T', '@TIME,', 10000))
+            const hostElapsedUs = Math.round((performance.now() - timingStart) * 1000)
+            const hostCheck = validateTimingHostElapsed(timing, hostElapsedUs)
+            for (const [name, measurement] of Object.entries(timing)) {
+                const check = validateTimingMeasurement({ ...measurement, clock_hz: Number(clock) })
+                console.log(`${name}: device ${measurement.elapsed_us} us, DWT ${Math.round(check.measured_clock_hz / 1000000)} MHz`)
+            }
+            console.log(`timing total: host ${hostElapsedUs} us, device ${hostCheck.device_elapsed_us} us`)
+        }
         const flagsValueNumber = Number(flagsValue)
         const supported = opcode => (parseInt(mask[Math.floor(opcode / 4)], 16) & (1 << (opcode % 4))) !== 0
         const workloads = createWorkloads()
